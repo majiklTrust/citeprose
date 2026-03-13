@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn AI Agent — Command Center</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: #1a2233;
+      --bg-card-hover: #1f2a3d;
+      --border: #2a3548;
+      --border-active: #3b82f6;
+      --text-primary: #e8ecf4;
+      --text-secondary: #8899b0;
+      --text-muted: #5a6a80;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+      --glow-blue: rgba(59, 130, 246, 0.15);
+      --glow-green: rgba(16, 185, 129, 0.15);
+      --glow-amber: rgba(245, 158, 11, 0.15);
+      --glow-red: rgba(239, 68, 68, 0.15);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-body: 'DM Sans', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient background glow */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -20%;
+      left: -10%;
+      width: 60%;
+      height: 60%;
+      background: radial-gradient(ellipse, rgba(59,130,246,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -20%;
+      right: -10%;
+      width: 50%;
+      height: 50%;
+      background: radial-gradient(ellipse, rgba(6,182,212,0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .app-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+      font-family: var(--font-mono);
+    }
+
+    .mode-switch {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .mode-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .toggle-track {
+      width: 52px;
+      height: 28px;
+      border-radius: 14px;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-track.active {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    .toggle-track .toggle-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s ease;
+    }
+
+    .toggle-track.active .toggle-thumb {
+      transform: translateX(24px);
+    }
+
+    .mode-value {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      min-width: 60px;
+    }
+
+    .mode-auto { color: var(--accent-green); }
+    .mode-manual { color: var(--accent-amber); }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .stat-card:hover { border-color: var(--border-active); }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+    }
+
+    .stat-card:nth-child(1)::before { background: var(--accent-blue); }
+    .stat-card:nth-child(2)::before { background: var(--accent-green); }
+    .stat-card:nth-child(3)::before { background: var(--accent-amber); }
+    .stat-card:nth-child(4)::before { background: var(--accent-cyan); }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      margin-top: 0.5rem;
+    }
+
+    .stat-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+      font-family: var(--font-mono);
+    }
+
+    /* Main content layout */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-title .badge {
+      background: var(--accent-blue);
+      color: white;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+    }
+
+    /* Post cards */
+    .post-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .post-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .post-card:hover {
+      border-color: var(--border-active);
+      background: var(--bg-card-hover);
+    }
+
+    .post-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+
+    .post-topic-badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .topic-ai-benefit { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+    .topic-ai-guardrails { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
+    .topic-cyber-incidents { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+    .topic-cyber-advances { background: rgba(6,182,212,0.15); color: var(--accent-cyan); }
+
+    .post-status {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .status-posted { background: var(--glow-green); color: var(--accent-green); }
+    .status-pending_approval { background: var(--glow-amber); color: var(--accent-amber); }
+    .status-draft { background: rgba(90,106,128,0.2); color: var(--text-secondary); }
+    .status-rejected { background: var(--glow-red); color: var(--accent-red); }
+    .status-failed { background: var(--glow-red); color: var(--accent-red); }
+
+    .post-title-text {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .post-preview {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .post-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .post-date {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .post-actions { display: flex; gap: 0.5rem; }
+
+    /* Buttons */
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: all 0.2s;
+    }
+
+    .btn-approve {
+      background: var(--accent-green);
+      color: white;
+    }
+    .btn-approve:hover { background: #0ea574; }
+
+    .btn-reject {
+      background: transparent;
+      border: 1px solid var(--accent-red);
+      color: var(--accent-red);
+    }
+    .btn-reject:hover { background: var(--glow-red); }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: white;
+    }
+    .btn-primary:hover { background: #2563eb; }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+    .btn-ghost:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+    /* Sidebar panels */
+    .sidebar-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Activity log */
+    .log-entry {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(42,53,72,0.5);
+      font-size: 0.8rem;
+    }
+
+    .log-entry:last-child { border-bottom: none; }
+
+    .log-time {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 0.7rem;
+    }
+
+    .log-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .log-dot.info { background: var(--accent-blue); }
+    .log-dot.warn { background: var(--accent-amber); }
+    .log-dot.error { background: var(--accent-red); }
+
+    .log-text { color: var(--text-secondary); line-height: 1.4; }
+
+    /* Connection status */
+    .conn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+    }
+
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .conn-dot.connected { background: var(--accent-green); }
+    .conn-dot.disconnected { background: var(--accent-red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Cadence meter */
+    .cadence-bar {
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .cadence-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    /* Expanded post modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      max-width: 640px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      white-space: pre-wrap;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+    }
+
+    .modal-hashtags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .hashtag {
+      background: var(--bg-secondary);
+      color: var(--accent-cyan);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+    }
+
+    /* Loading state */
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    const API = '';  // same-origin
+
+    const TOPIC_STYLES = {
+      'ai-practical-benefit': { class: 'topic-ai-benefit', label: 'AI Benefits' },
+      'ai-guardrails': { class: 'topic-ai-guardrails', label: 'AI Guardrails' },
+      'cybersecurity-incidents': { class: 'topic-cyber-incidents', label: 'Cyber Incidents' },
+      'cybersecurity-advances': { class: 'topic-cyber-advances', label: 'Cyber Advances' },
+    };
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function App() {
+      const [status, setStatus] = useState(null);
+      const [posts, setPosts] = useState([]);
+      const [logs, setLogs] = useState([]);
+      const [selectedPost, setSelectedPost] = useState(null);
+      const [loading, setLoading] = useState({});
+      const [error, setError] = useState(null);
+
+      const fetchAll = useCallback(async () => {
+        try {
+          const [statusRes, postsRes, logsRes] = await Promise.all([
+            fetch(`${API}/api/status`).then(r => r.json()),
+            fetch(`${API}/api/posts?limit=30`).then(r => r.json()),
+            fetch(`${API}/api/logs?limit=40`).then(r => r.json()),
+          ]);
+          setStatus(statusRes);
+          setPosts(postsRes.posts || []);
+          setLogs(logsRes.logs || []);
+          setError(null);
+        } catch (err) {
+          setError('Cannot connect to agent backend. Is it running?');
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchAll();
+        const interval = setInterval(fetchAll, 15000);
+        return () => clearInterval(interval);
+      }, [fetchAll]);
+
+      async function toggleMode() {
+        const newMode = status.mode === 'auto' ? 'manual' : 'auto';
+        await fetch(`${API}/api/mode`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: newMode })
+        });
+        fetchAll();
+      }
+
+      async function handleApprove(id, e) {
+        e.stopPropagation();
+        setLoading(l => ({ ...l, [`approve-${id}`]: true }));
+        try {
+          await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          fetchAll();
+        } catch (err) {
+          alert('Failed to approve: ' + err.message);
+        }
+        setLoading(l => ({ ...l, [`approve-${id}`]: false }));
+      }
+
+      async function handleReject(id, e) {
+        e.stopPropagation();
+        await fetch(`${API}/api/posts/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Manually rejected from dashboard' })
+        });
+        fetchAll();
+      }
+
+      async function handleForceCycle() {
+        setLoading(l => ({ ...l, forceCycle: true }));
+        await fetch(`${API}/api/force-cycle`, { method: 'POST' });
+        setTimeout(fetchAll, 2000);
+        setLoading(l => ({ ...l, forceCycle: false }));
+      }
+
+      async function handlePreview() {
+        setLoading(l => ({ ...l, preview: true }));
+        try {
+          const res = await fetch(`${API}/api/generate-preview`, { method: 'POST' });
+          const data = await res.json();
+          setSelectedPost({
+            ...data.post,
+            quality: data.quality,
+            isPreview: true,
+            title: data.post.title,
+            content: data.post.content,
+            hashtags: data.post.hashtags,
+            topic_id: data.post.topicId,
+          });
+        } catch (err) {
+          alert('Preview generation failed: ' + err.message);
+        }
+        setLoading(l => ({ ...l, preview: false }));
+      }
+
+      const pendingPosts = posts.filter(p => p.status === 'pending_approval');
+      const recentPosts = posts.filter(p => p.status !== 'pending_approval');
+
+      if (error) {
+        return (
+          <div className="app-container">
+            <div className="header">
+              <div>
+                <div className="header-title">LinkedIn AI Agent</div>
+                <div className="header-subtitle">Command Center</div>
+              </div>
+            </div>
+            <div className="sidebar-panel" style={{ textAlign: 'center', padding: '3rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚡</div>
+              <div style={{ color: 'var(--accent-amber)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Agent Offline
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{error}</div>
+              <div style={{ marginTop: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Start with: <code style={{ color: 'var(--accent-cyan)' }}>npm run dev</code>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (!status) {
+        return (
+          <div className="app-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
+            <div className="loading-spinner" style={{ width: 32, height: 32 }}></div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="app-container">
+          {/* Header */}
+          <div className="header">
+            <div>
+              <div className="header-title">LinkedIn AI Agent</div>
+              <div className="header-subtitle">v1.0 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+            </div>
+            <div className="mode-switch">
+              <span className="mode-label">Mode</span>
+              <div className={`toggle-track ${status.mode === 'auto' ? 'active' : ''}`} onClick={toggleMode}>
+                <div className="toggle-thumb"></div>
+              </div>
+              <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
+                {status.mode.toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-label">Total Published</div>
+              <div className="stat-value">{status.stats.totalPosted}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Posts (10-day)</div>
+              <div className="stat-value">{status.stats.postsLast10Days}</div>
+              <div className="cadence-bar">
+                <div className="cadence-fill" style={{
+                  width: `${(status.stats.postsLast10Days / 4) * 100}%`,
+                  background: status.stats.postsLast10Days >= 4 ? 'var(--accent-amber)' : 'var(--accent-green)'
+                }}></div>
+              </div>
+              <div className="stat-meta">max {status.cadence?.allowed ? '— ready to post' : `— ${status.cadence?.reason?.substring(0, 30)}`}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Pending Approval</div>
+              <div className="stat-value" style={{ color: pendingPosts.length > 0 ? 'var(--accent-amber)' : 'inherit' }}>
+                {status.stats.pendingApproval}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">LinkedIn</div>
+              <div className="stat-value" style={{ fontSize: '1rem', marginTop: '0.75rem' }}>
+                <span className={`conn-dot ${status.linkedinConnected ? 'connected' : 'disconnected'}`}
+                  style={{ display: 'inline-block', marginRight: '0.5rem', verticalAlign: 'middle' }}></span>
+                {status.linkedinConnected ? 'Connected' : 'Not Connected'}
+              </div>
+              {!status.linkedinConnected && (
+                <div className="stat-meta">
+                  <a href="/auth/linkedin" style={{ color: 'var(--accent-blue)' }}>Connect now →</a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Main content */}
+          <div className="main-grid">
+            {/* Posts column */}
+            <div>
+              {/* Pending approval section */}
+              {pendingPosts.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <div className="section-title">
+                    Awaiting Approval
+                    <span className="badge">{pendingPosts.length}</span>
+                  </div>
+                  <div className="post-list">
+                    {pendingPosts.map(post => (
+                      <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
+                        style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
+                        <div className="post-card-header">
+                          <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
+                            {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
+                          </span>
+                          <span className="post-status status-pending_approval">PENDING</span>
+                        </div>
+                        <div className="post-title-text">{post.title}</div>
+                        <div className="post-preview">{post.content}</div>
+                        <div className="post-footer">
+                          <span className="post-date">{formatDate(post.created_at)}</span>
+                          <div className="post-actions">
+                            <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
+                              {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
+                            </button>
+                            <button className="btn btn-reject" onClick={(e) => handleReject(post.id, e)}>
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent posts */}
+              <div className="section-title">Recent Posts</div>
+              <div className="post-list">
+                {recentPosts.length === 0 ? (
+                  <div className="sidebar-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                    No posts yet. Generate your first one below.
+                  </div>
+                ) : recentPosts.slice(0, 15).map(post => (
+                  <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}>
+                    <div className="post-card-header">
+                      <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
+                        {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
+                      </span>
+                      <span className={`post-status status-${post.status}`}>
+                        {post.status.replace('_', ' ').toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="post-title-text">{post.title}</div>
+                    <div className="post-preview">{post.content}</div>
+                    <div className="post-footer">
+                      <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div>
+              {/* Quick Actions */}
+              <div className="sidebar-panel">
+                <div className="section-title">Quick Actions</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <button className="btn btn-primary" style={{ width: '100%' }} onClick={handlePreview}>
+                    {loading.preview ? <span className="loading-spinner"></span> : '✦ Preview New Post'}
+                  </button>
+                  <button className="btn btn-ghost" style={{ width: '100%' }} onClick={handleForceCycle}>
+                    {loading.forceCycle ? <span className="loading-spinner"></span> : '⟳ Force Scheduler Cycle'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Topic Coverage */}
+              <div className="sidebar-panel">
+                <div className="section-title">Topic Coverage</div>
+                {(status.stats.byTopic || []).map(t => (
+                  <div key={t.topic_id} style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span className={`post-topic-badge ${TOPIC_STYLES[t.topic_id]?.class || ''}`} style={{ fontSize: '0.65rem' }}>
+                        {TOPIC_STYLES[t.topic_id]?.label || t.topic_id}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {t.count} posts
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {(!status.stats.byTopic || status.stats.byTopic.length === 0) && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No posts yet</div>
+                )}
+              </div>
+
+              {/* Activity Log */}
+              <div className="sidebar-panel">
+                <div className="section-title">Activity Log</div>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {logs.slice(0, 20).map(log => (
+                    <div key={log.id} className="log-entry">
+                      <div className={`log-dot ${log.level}`}></div>
+                      <div>
+                        <div className="log-text">{log.action.replace(/_/g, ' ')}</div>
+                        <div className="log-time">{formatDate(log.timestamp)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {logs.length === 0 && (
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No activity yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Post Detail Modal */}
+          {selectedPost && (
+            <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <button className="modal-close" onClick={() => setSelectedPost(null)}>✕</button>
+                <span className={`post-topic-badge ${TOPIC_STYLES[selectedPost.topic_id]?.class || ''}`}>
+                  {TOPIC_STYLES[selectedPost.topic_id]?.label || selectedPost.topic_id}
+                </span>
+                {selectedPost.isPreview && (
+                  <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)', marginLeft: '0.5rem' }}>
+                    PREVIEW
+                  </span>
+                )}
+                <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
+                <div className="modal-body">{selectedPost.content}</div>
+                <div className="modal-hashtags">
+                  {(selectedPost.hashtags || []).map((tag, i) => (
+                    <span key={i} className="hashtag">{tag}</span>
+                  ))}
+                </div>
+                {selectedPost.quality && (
+                  <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>Quality Assessment</div>
+                    {Object.entries(selectedPost.quality.scores || {}).map(([key, val]) => (
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', width: '140px', fontFamily: 'var(--font-mono)' }}>
+                          {key.replace(/_/g, ' ')}
+                        </span>
+                        <div style={{ flex: 1, height: '6px', background: 'var(--bg-primary)', borderRadius: '3px' }}>
+                          <div style={{
+                            width: `${val * 10}%`,
+                            height: '100%',
+                            borderRadius: '3px',
+                            background: val >= 7 ? 'var(--accent-green)' : val >= 5 ? 'var(--accent-amber)' : 'var(--accent-red)'
+                          }}></div>
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{val}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Overall: <strong style={{ color: selectedPost.quality.pass ? 'var(--accent-green)' : 'var(--accent-amber)' }}>
+                        {selectedPost.quality.overall}/10 {selectedPost.quality.pass ? '✓ Pass' : '⚠ Needs work'}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+                {selectedPost.status === 'pending_approval' && (
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
+                      Approve & Publish
+                    </button>
+                    <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>

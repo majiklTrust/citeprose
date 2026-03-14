@@ -1,9 +1,12 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",

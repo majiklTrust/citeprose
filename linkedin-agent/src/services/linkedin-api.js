@@ -6,9 +6,7 @@ import axios from "axios";
 import { logActivity } from "./database.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
-const LINKEDIN_REST = "https://api.linkedin.com/rest";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
-const LINKEDIN_VERSION = "202504";
 
 // ── OAuth 2.0 Flow ───────────────────────────────────────────
 
@@ -79,38 +77,39 @@ export async function publishPost(content, hashtags = []) {
   const hashtagString = hashtags.length > 0 ? `\n\n${hashtags.join(" ")}` : "";
   const fullContent = `${content}${hashtagString}`;
 
-  // Posts API payload (replaces deprecated ugcPosts API)
+  // ugcPosts API payload — works with "Share on LinkedIn" product (w_member_social scope)
+  // Note: The newer /rest/posts endpoint requires Community Management API access
   const payload = {
     author: personUrn,
-    commentary: fullContent,
-    visibility: "PUBLIC",
-    distribution: {
-      feedDistribution: "MAIN_FEED",
-      targetEntities: [],
-      thirdPartyDistributionChannels: []
+    lifecycleState: "PUBLISHED",
+    specificContent: {
+      "com.linkedin.ugc.ShareContent": {
+        shareCommentary: {
+          text: fullContent
+        },
+        shareMediaCategory: "NONE"
+      }
     },
-    lifecycleState: "PUBLISHED"
+    visibility: {
+      "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+    }
   };
 
   try {
-    const response = await axios.post(`${LINKEDIN_REST}/posts`, payload, {
+    const response = await axios.post(`${LINKEDIN_API}/ugcPosts`, payload, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "LinkedIn-Version": LINKEDIN_VERSION,
         "X-Restli-Protocol-Version": "2.0.0"
       }
     });
 
-    // Posts API returns the post URN in the x-restli-id header
     const postId = response.headers["x-restli-id"] || response.data?.id || null;
 
-    // Verify we got a real post ID back
     if (!postId) {
       logActivity("warn", "linkedin_post_no_id", {
         status: response.status,
-        headers: JSON.stringify(response.headers),
-        data: JSON.stringify(response.data)
+        headers: JSON.stringify(response.headers)
       });
     }
 

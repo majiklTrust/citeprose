@@ -109,10 +109,10 @@ maturity level, and who should be paying attention.`,
 // and ensures all topics get coverage over a 2-week window.
 export const ROTATION_CONFIG = {
   weights: {
-    "ai-practical-benefit": 0.30,
-    "ai-guardrails": 0.25,
+    "ai-practical-benefit": 0.10,
+    "ai-guardrails": 0.40,
     "cybersecurity-incidents": 0.25,
-    "cybersecurity-advances": 0.20
+    "cybersecurity-advances": 0.25
   },
   maxConsecutiveSameTopic: 1,
   lookbackWindow: 8  // posts

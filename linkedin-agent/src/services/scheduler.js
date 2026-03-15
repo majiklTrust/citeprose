@@ -89,31 +89,58 @@ async function schedulerTick() {
     return;
   }
 
-  // Step 3: Generate content
-  logActivity("info", "scheduler_generating", "Generating new post content");
+  // Step 3: Generate content (includes research phase)
+  logActivity("info", "scheduler_generating", "Generating new post content with research");
 
   try {
     const generated = await generatePost();
 
-    // Step 4: Quality check
-    const quality = await qualityCheck(generated.content);
-    logActivity("info", "quality_check", { overall: quality.overall, pass: quality.pass });
+    // Step 3a: Check if post was blocked due to insufficient sources
+    if (generated.blocked) {
+      logActivity("info", "post_blocked", {
+        topicId: generated.topicId,
+        angle: generated.angle,
+        reason: generated.reason
+      });
+      return;  // Skip this cycle — scheduler will try again next tick
+    }
+
+    // Step 4: Quality check (includes source grounding verification)
+    const quality = await qualityCheck(generated.content, generated.researchSummary);
+    logActivity("info", "quality_check", {
+      overall: quality.overall,
+      pass: quality.pass,
+      sourceGrounding: quality.scores?.source_grounding,
+      factualCaution: quality.scores?.factual_caution,
+      factualFlags: quality.factual_flags
+    });
 
     // If quality is below threshold, regenerate once
     if (!quality.pass || quality.overall < 6) {
       logActivity("warn", "quality_below_threshold", {
         score: quality.overall,
-        feedback: quality.feedback
+        feedback: quality.feedback,
+        factualFlags: quality.factual_flags
       });
-      // Try once more
       const retry = await generatePost(null);
-      const retryQuality = await qualityCheck(retry.content);
-
-      if (retryQuality.overall > quality.overall) {
-        Object.assign(generated, retry);
-        logActivity("info", "quality_retry_improved", { newScore: retryQuality.overall });
+      // Retry may also be blocked — check before quality checking
+      if (!retry.blocked) {
+        const retryQuality = await qualityCheck(retry.content, retry.researchSummary);
+        if (retryQuality.overall > quality.overall) {
+          Object.assign(generated, retry);
+          logActivity("info", "quality_retry_improved", { newScore: retryQuality.overall });
+        }
       }
     }
+
+    // Build research context for storage
+    const storedContext = JSON.stringify({
+      angle: generated.angle,
+      sourcesUsed: generated.sourcesUsed || [],
+      researchSummary: generated.researchSummary || null,
+      qualityScores: quality.scores,
+      factualFlags: quality.factual_flags
+    });
 
     // Step 5: Save to database
     const postId = createPost({
@@ -121,7 +148,7 @@ async function schedulerTick() {
       title: generated.title,
       content: generated.content,
       hashtags: generated.hashtags,
-      newsContext: generated.angle
+      newsContext: storedContext
     });
 
     // Step 6: Route based on mode

@@ -517,6 +517,45 @@
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .main-grid { grid-template-columns: 1fr; }
     }
+
+    /* Research & Sources */
+    .source-list {
+      margin-top: 1rem; padding: 1rem;
+      background: var(--bg-secondary); border-radius: var(--radius-sm);
+      border-left: 3px solid var(--accent-cyan);
+    }
+    .source-item {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 0.35rem 0; border-bottom: 1px solid rgba(42,53,72,0.3); font-size: 0.8rem;
+    }
+    .source-item:last-child { border-bottom: none; }
+    .source-name { color: var(--text-primary); font-weight: 500; }
+    .source-tier {
+      font-family: var(--font-mono); font-size: 0.65rem;
+      padding: 0.1rem 0.4rem; border-radius: 4px;
+    }
+    .tier-authoritative { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+    .tier-primary { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+    .tier-secondary { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
+    .source-url { color: var(--accent-cyan); text-decoration: none; font-size: 0.7rem; word-break: break-all; }
+    .source-url:hover { text-decoration: underline; }
+    .factual-flags {
+      margin-top: 0.75rem; padding: 0.75rem;
+      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+      border-radius: var(--radius-sm);
+    }
+    .flag-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.8rem; color: var(--accent-amber); }
+    .corroboration-badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-family: var(--font-mono); font-size: 0.7rem;
+      padding: 0.2rem 0.6rem; border-radius: 6px; margin-left: 0.5rem;
+    }
+    .corroboration-strong { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+    .corroboration-weak { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+    .corroboration-none { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+    .research-summary { display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .research-stat { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
+    .research-stat strong { color: var(--text-primary); }
   </style>
 </head>
 <body>
@@ -538,6 +577,26 @@
       const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
+
+    function parseNewsContext(post) {
+      if (!post.news_context) return null;
+      try { return typeof post.news_context === 'string' ? JSON.parse(post.news_context) : post.news_context; }
+      catch { return null; }
+    }
+
+    function getCorroborationLevel(ctx) {
+      if (!ctx || !ctx.researchSummary) return 'none';
+      const v = ctx.researchSummary.independentSources || 0;
+      if (v >= 3) return 'strong';
+      if (v >= 1) return 'weak';
+      return 'none';
+    }
+
+    const CORROB_LABELS = {
+      strong: { cls: 'corroboration-strong', text: 'Well sourced' },
+      weak: { cls: 'corroboration-weak', text: 'Limited sources' },
+      none: { cls: 'corroboration-none', text: 'No sources' },
+    };
 
     function App() {
       const [status, setStatus] = useState(null);
@@ -613,6 +672,13 @@
         try {
           const res = await fetch(`${API}/api/generate-preview`, { method: 'POST' });
           const data = await res.json();
+
+          if (data.blocked) {
+            alert(`Post blocked — insufficient sources.\n\nTopic: ${TOPIC_STYLES[data.topicId]?.label || data.topicId}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
+            setLoading(l => ({ ...l, preview: false }));
+            return;
+          }
+
           setSelectedPost({
             ...data.post,
             quality: data.quality,
@@ -621,11 +687,28 @@
             content: data.post.content,
             hashtags: data.post.hashtags,
             topic_id: data.post.topicId,
+            news_context: JSON.stringify({
+              sourcesUsed: data.post.sourcesUsed || [],
+              researchSummary: data.post.researchSummary || null,
+              qualityScores: data.quality?.scores,
+              factualFlags: data.quality?.factual_flags
+            })
           });
         } catch (err) {
           alert('Preview generation failed: ' + err.message);
         }
         setLoading(l => ({ ...l, preview: false }));
+      }
+
+      async function handleRefreshFeeds() {
+        setLoading(l => ({ ...l, feeds: true }));
+        try {
+          await fetch(`${API}/api/research/poll`, { method: 'POST' });
+          fetchAll();
+        } catch (err) {
+          alert('Feed refresh failed: ' + err.message);
+        }
+        setLoading(l => ({ ...l, feeds: false }));
       }
 
       const pendingPosts = posts.filter(p => p.status === 'pending_approval');
@@ -668,7 +751,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.5.2 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.1 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
@@ -731,13 +814,22 @@
                     <span className="badge">{pendingPosts.length}</span>
                   </div>
                   <div className="post-list">
-                    {pendingPosts.map(post => (
+                    {pendingPosts.map(post => {
+                      const pCtx = parseNewsContext(post);
+                      const pLevel = getCorroborationLevel(pCtx);
+                      const pLabel = CORROB_LABELS[pLevel];
+                      return (
                       <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
                         <div className="post-card-header">
-                          <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
-                            {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
+                              {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
+                            </span>
+                            <span className={`corroboration-badge ${pLabel.cls}`}>
+                              {pLevel === 'strong' ? '◉' : pLevel === 'weak' ? '◎' : '○'} {pLabel.text}
+                            </span>
+                          </div>
                           <span className="post-status status-pending_approval">PENDING</span>
                         </div>
                         <div className="post-title-text">{post.title}</div>
@@ -754,7 +846,8 @@
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -801,6 +894,50 @@
                 </div>
               </div>
 
+              {/* Research Monitor */}
+              <div className="sidebar-panel">
+                <div className="section-title">
+                  Research Monitor
+                  <span className="badge" style={{ background: 'var(--accent-cyan)' }}>
+                    {status.researchStats?.totalArticles || 0}
+                  </span>
+                </div>
+                {status.researchStats ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Articles (7 days)</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>
+                        {status.researchStats.last7Days}
+                      </span>
+                    </div>
+                    <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                      {(status.researchStats.byFeed || []).slice(0, 8).map((f, i) => (
+                        <div key={i} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '0.25rem 0', fontSize: '0.75rem'
+                        }}>
+                          <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                            {f.feed_name}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span className={`source-tier tier-${f.feed_tier}`}>{f.feed_tier}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                              {f.count}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn btn-ghost" style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem' }}
+                      onClick={handleRefreshFeeds}>
+                      {loading.feeds ? <span className="loading-spinner"></span> : '↻ Refresh Feeds Now'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Monitor starting...</div>
+                )}
+              </div>
+
               {/* Topic Coverage */}
               <div className="sidebar-panel">
                 <div className="section-title">Topic Coverage</div>
@@ -843,25 +980,80 @@
           </div>
 
           {/* Post Detail Modal */}
-          {selectedPost && (
+          {selectedPost && (() => {
+            const ctx = parseNewsContext(selectedPost);
+            const corrobLevel = getCorroborationLevel(ctx);
+            const corrobLabel = CORROB_LABELS[corrobLevel];
+            return (
             <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <button className="modal-close" onClick={() => setSelectedPost(null)}>✕</button>
-                <span className={`post-topic-badge ${TOPIC_STYLES[selectedPost.topic_id]?.class || ''}`}>
-                  {TOPIC_STYLES[selectedPost.topic_id]?.label || selectedPost.topic_id}
-                </span>
-                {selectedPost.isPreview && (
-                  <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)', marginLeft: '0.5rem' }}>
-                    PREVIEW
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                  <span className={`post-topic-badge ${TOPIC_STYLES[selectedPost.topic_id]?.class || ''}`}>
+                    {TOPIC_STYLES[selectedPost.topic_id]?.label || selectedPost.topic_id}
                   </span>
-                )}
+                  {selectedPost.isPreview && (
+                    <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)' }}>PREVIEW</span>
+                  )}
+                  <span className={`corroboration-badge ${corrobLabel.cls}`}>
+                    {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
+                  </span>
+                </div>
+
                 <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
+
+                {ctx?.researchSummary && (
+                  <div className="research-summary">
+                    <span className="research-stat"><strong>{ctx.researchSummary.independentSources}</strong> independent sources</span>
+                    <span className="research-stat"><strong>{ctx.researchSummary.totalSourceItems}</strong> source items</span>
+                    <span className="research-stat"><strong>{ctx.researchSummary.sourceList?.length || 0}</strong> cited</span>
+                  </div>
+                )}
+
                 <div className="modal-body">{selectedPost.content}</div>
                 <div className="modal-hashtags">
                   {(selectedPost.hashtags || []).map((tag, i) => (
                     <span key={i} className="hashtag">{tag}</span>
                   ))}
                 </div>
+
+                {ctx?.researchSummary?.sourceList && ctx.researchSummary.sourceList.length > 0 && (
+                  <div className="source-list">
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-cyan)' }}>
+                      Sources ({ctx.researchSummary.sourceList.length})
+                    </div>
+                    {ctx.researchSummary.sourceList.map((src, i) => (
+                      <div key={i} className="source-item">
+                        <div>
+                          <span className="source-name">{src.name}</span>
+                          {src.url && (<div><a href={src.url} target="_blank" rel="noopener" className="source-url">{src.url}</a></div>)}
+                        </div>
+                        <span className={`source-tier tier-${src.tier}`}>{src.tier}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!ctx?.researchSummary?.sourceList && ctx?.sourcesUsed && ctx.sourcesUsed.length > 0 && (
+                  <div className="source-list">
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-cyan)' }}>Sources Referenced</div>
+                    {ctx.sourcesUsed.map((name, i) => (
+                      <div key={i} className="source-item"><span className="source-name">{name}</span></div>
+                    ))}
+                  </div>
+                )}
+
+                {ctx?.factualFlags && ctx.factualFlags.length > 0 && ctx.factualFlags[0] !== '' && (
+                  <div className="factual-flags">
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-red)' }}>
+                      Factual Flags — Review Before Approving
+                    </div>
+                    {ctx.factualFlags.map((flag, i) => (
+                      <div key={i} className="flag-item"><span>⚠</span><span>{flag}</span></div>
+                    ))}
+                  </div>
+                )}
+
                 {selectedPost.quality && (
                   <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>Quality Assessment</div>
@@ -872,9 +1064,7 @@
                         </span>
                         <div style={{ flex: 1, height: '6px', background: 'var(--bg-primary)', borderRadius: '3px' }}>
                           <div style={{
-                            width: `${val * 10}%`,
-                            height: '100%',
-                            borderRadius: '3px',
+                            width: `${val * 10}%`, height: '100%', borderRadius: '3px',
                             background: val >= 7 ? 'var(--accent-green)' : val >= 5 ? 'var(--accent-amber)' : 'var(--accent-red)'
                           }}></div>
                         </div>
@@ -900,7 +1090,8 @@
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       );
     }

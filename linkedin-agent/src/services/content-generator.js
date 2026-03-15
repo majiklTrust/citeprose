@@ -94,16 +94,69 @@ export async function generatePost(topic = null) {
   const recentPosts = getRecentPosts(14);
   const angle = selectContentAngle(topic, recentPosts);
 
+  // ── Research phase: gather sources ──────────────────────────
+  let researchBrief = null;
+  try {
+    const { conductResearch } = await import("./research.js");
+    researchBrief = await conductResearch(topic.id, angle);
+
+    logActivity("info", "research_integrated", {
+      topicId: topic.id,
+      independentSources: researchBrief.independentSourceCount,
+      totalItems: researchBrief.summary.totalSourceItems,
+      hasEnoughMaterial: researchBrief.hasEnoughMaterial
+    });
+  } catch (err) {
+    logActivity("warn", "research_unavailable", {
+      topicId: topic.id,
+      error: err.message
+    });
+  }
+
+  // ── Block if sources are insufficient ──────────────────────
+  if (!researchBrief || !researchBrief.hasEnoughMaterial) {
+    const reason = !researchBrief
+      ? "Research service unavailable"
+      : `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`;
+
+    logActivity("info", "post_blocked_insufficient_sources", {
+      topicId: topic.id,
+      angle,
+      reason
+    });
+
+    return {
+      blocked: true,
+      reason,
+      topicId: topic.id,
+      angle
+    };
+  }
+
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
     `- [${p.topic_id}] "${p.title}"`
   ).join("\n");
 
+  // ── Source-grounded prompt ─────────────────────────────────
+  const researchBlock = `
+SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources):
+${researchBrief.context}
+
+ATTRIBUTION RULES:
+- Base ALL factual claims on the source material above. Do not invent or embellish.
+- Reference source names naturally in the post body (e.g., "according to Krebs on Security" or "as reported by CISA").
+- If a claim comes from a single source, use hedging: "one report suggests" or "according to [source]".
+- Claims appearing in multiple sources can be stated more directly, with attribution.
+- At the end of the post body (before hashtags), include a "Sources:" line listing the key references by name.
+- Do NOT state anything as fact that is not in the source material.
+`;
+
   const userPrompt = `Write a LinkedIn post about the following topic area and angle.
 
 TOPIC AREA: ${topic.name}
 SPECIFIC ANGLE: ${angle}
-
+${researchBlock}
 RECENT POSTS (avoid repeating these themes):
 ${recentSummaries || "(no recent posts)"}
 
@@ -111,20 +164,22 @@ REQUIREMENTS:
 1. Length: 150–280 words. LinkedIn truncates at ~210 characters with a "see more" — 
    make the first 1–2 sentences count as a compelling hook.
 2. Write in first person. Sound like a thoughtful practitioner, not a thought-leadership bot.
-3. Include ONE concrete example, analogy, or mini-case-study.
+3. Include ONE concrete example, analogy, or mini-case-study grounded in the research provided.
 4. End with a question or call-to-reflection (not a hard CTA).
 5. Do NOT use emoji. Do NOT use bullet points in excess — 
    at most 3–4 short bullets if listing is genuinely the clearest format.
 6. Avoid clichés: "game-changer", "in today's rapidly evolving landscape", 
    "it's not a matter of if but when", "the future is here".
 7. Do NOT include hashtags in the body — they will be appended separately.
+8. Include natural source attribution within the post and a "Sources:" line at the end.
 
 Respond in this exact JSON format:
 {
   "title": "A short internal title for this post (not published, just for tracking)",
   "hook": "The opening 1-2 sentences designed to appear before the fold",
-  "body": "The full post content including the hook",
-  "hashtags": ["#Tag1", "#Tag2", "#Tag3"]
+  "body": "The full post content including the hook and Sources: line",
+  "hashtags": ["#Tag1", "#Tag2", "#Tag3"],
+  "sources_used": ["Source Name 1", "Source Name 2"]
 }
 
 Return ONLY valid JSON. No markdown fencing, no preamble.`;
@@ -134,7 +189,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1200,
+      max_tokens: 1500,
       system: topic.systemContext,
       messages: [{ role: "user", content: userPrompt }]
     });
@@ -161,7 +216,13 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       title: parsed.title,
       content: parsed.body,
       hashtags: allHashtags,
-      angle
+      angle,
+      sourcesUsed: parsed.sources_used || [],
+      researchSummary: {
+        independentSources: researchBrief.independentSourceCount,
+        totalSourceItems: researchBrief.summary.totalSourceItems,
+        sourceList: researchBrief.sourceList || []
+      }
     };
   } catch (err) {
     logActivity("error", "content_generation_failed", {
@@ -174,18 +235,23 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
 // ── Content Quality Check ────────────────────────────────────
 
-export async function qualityCheck(content) {
+export async function qualityCheck(content, researchSummary = null) {
+  const sourceContext = researchSummary
+    ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nIndependent sources: ${researchSummary.independentSources || 0}`
+    : "\n(No research brief was provided — post should avoid specific factual claims)";
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 600,
+    max_tokens: 800,
     messages: [{
       role: "user",
-      content: `You are a LinkedIn content quality reviewer. Evaluate this post and respond with ONLY valid JSON.
+      content: `You are a LinkedIn content quality and accuracy reviewer. Evaluate this post and respond with ONLY valid JSON.
 
 POST:
 """
 ${content}
 """
+${sourceContext}
 
 Evaluate on these criteria (1-10 each):
 - hook_strength: Will the first 2 lines make someone click "see more"?
@@ -193,6 +259,8 @@ Evaluate on these criteria (1-10 each):
 - actionability: Does the reader walk away with something useful?
 - engagement_potential: Will people comment or share?
 - professionalism: Appropriate for a cybersecurity/AI professional audience?
+- source_grounding: Are claims attributed to named sources? Does the post include a Sources line? (Score 1 if no sources and post makes specific claims)
+- factual_caution: Does the post avoid stating unverified claims as fact? (Score 1 if it presents speculation as established fact)
 
 {
   "scores": {
@@ -200,12 +268,17 @@ Evaluate on these criteria (1-10 each):
     "authenticity": 0,
     "actionability": 0,
     "engagement_potential": 0,
-    "professionalism": 0
+    "professionalism": 0,
+    "source_grounding": 0,
+    "factual_caution": 0
   },
   "overall": 0,
   "pass": true,
+  "factual_flags": ["List any specific claims that appear unverified or unsupported"],
   "feedback": "Brief constructive note if score < 7"
 }
+
+IMPORTANT: Set "pass" to false if source_grounding < 5 OR factual_caution < 5, regardless of other scores.
 
 Return ONLY valid JSON.`
     }]

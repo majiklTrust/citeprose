@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.5.2",
+  "version": "1.9.1",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -8,9 +8,12 @@
     "node": "22.x"
   },
   "scripts": {
-    "build": "npm version patch && VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
+    "timesync":"sudo ntpdate -u pool.ntp.org",
+    "build": "npm version patch && npm run build_html && npm run build_js",
+    "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
+    "build_js": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" src_templates/index.js >src/index.js",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "dev": "npm version minor && npm run timesync && npm run build && node --watch src/index.js",
     "dashboard": "node src/dashboard-server.js",
     "setup": "node scripts/setup.js",
     "test-post": "node scripts/test-post.js",
@@ -24,6 +27,7 @@
     "express": "^4.18.0",
     "node-cron": "^3.0.3",
     "better-sqlite3": "^11.0.0",
+    "rss-parser": "^3.13.0",
     "winston": "^3.11.0",
     "open": "^10.0.0"
   }

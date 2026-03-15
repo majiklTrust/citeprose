@@ -20,6 +20,7 @@ import {
 } from "../services/scheduler.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
+import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
 
 const router = Router();
 
@@ -33,11 +34,17 @@ router.get("/api/status", async (req, res) => {
     const cadence = canPostNow();
     const tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
 
+    let researchStats = null;
+    try {
+      researchStats = getArticleStats();
+    } catch { /* monitor may not be initialized yet */ }
+
     res.json({
       mode,
       paused: paused === "true",
       cadence,
       stats,
+      researchStats,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
     });
@@ -104,7 +111,12 @@ router.post("/api/pause", (req, res) => {
 router.post("/api/generate-preview", async (req, res) => {
   try {
     const generated = await generatePost();
-    const quality = await qualityCheck(generated.content);
+
+    if (generated.blocked) {
+      return res.json({ blocked: true, reason: generated.reason, topicId: generated.topicId, angle: generated.angle });
+    }
+
+    const quality = await qualityCheck(generated.content, generated.researchSummary);
     res.json({ post: generated, quality });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -115,6 +127,43 @@ router.post("/api/force-cycle", async (req, res) => {
   try {
     await forceCycle();
     res.json({ success: true, message: "Scheduler cycle executed" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Research & News Monitor ──────────────────────────────────
+
+router.get("/api/research/stats", (req, res) => {
+  try {
+    const stats = getArticleStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/api/research/articles", (req, res) => {
+  try {
+    const topicId = req.query.topic;
+    const maxAge = parseInt(req.query.maxAge || "14");
+    const limit = parseInt(req.query.limit || "20");
+
+    if (!topicId) {
+      return res.status(400).json({ error: "topic query parameter required" });
+    }
+
+    const articles = getArticlesForTopic(topicId, maxAge, limit);
+    res.json({ articles });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/api/research/poll", async (req, res) => {
+  try {
+    const newArticles = await pollAllFeeds();
+    res.json({ success: true, newArticles });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

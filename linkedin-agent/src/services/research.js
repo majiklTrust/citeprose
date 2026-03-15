@@ -43,12 +43,12 @@ function gatherRSSMaterial(topicId, angle) {
 // Step 2: Gather material from web search (1 API call)
 // ═══════════════════════════════════════════════════════════════
 
-async function gatherWebSearchMaterial(topicId, angle) {
+async function gatherWebSearchMaterial(topicId, angle, cycleId) {
   const topic = TOPICS.find(t => t.id === topicId);
   const topicName = topic?.name || topicId;
   const searchQueries = buildSearchQueries(topicId, angle);
 
-  logActivity("info", "web_search_started", { topicId, queries: searchQueries });
+  logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
 
   try {
     const response = await client.messages.create({
@@ -93,20 +93,21 @@ Rules:
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
 
     if (!jsonMatch) {
-      logActivity("warn", "web_search_no_json", { rawLength: rawText.length });
+      logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
 
     const claims = JSON.parse(jsonMatch[0]);
 
     logActivity("info", "web_search_complete", {
+      cycleId,
       claimsFound: claims.length,
       sources: [...new Set(claims.map(c => c.source_name))].length
     });
 
     return claims;
   } catch (err) {
-    logActivity("error", "web_search_failed", { error: err.message });
+    logActivity("error", "web_search_failed", { cycleId, error: err.message });
     return [];
   }
 }
@@ -237,16 +238,17 @@ function buildSourceBrief(rssArticles, webClaims) {
 // Main entry point
 // ═══════════════════════════════════════════════════════════════
 
-export async function conductResearch(topicId, angle) {
-  logActivity("info", "research_started", { topicId, angle });
+export async function conductResearch(topicId, angle, cycleId = null) {
+  logActivity("info", "research_started", { cycleId, topicId, angle });
 
   // Step 1: RSS (instant, no API call)
   const rssArticles = gatherRSSMaterial(topicId, angle);
 
   // Step 2: Web search (1 API call)
-  const webClaims = await gatherWebSearchMaterial(topicId, angle);
+  const webClaims = await gatherWebSearchMaterial(topicId, angle, cycleId);
 
   logActivity("info", "research_material_gathered", {
+    cycleId,
     rssArticles: rssArticles.length,
     webClaims: webClaims.length
   });
@@ -255,6 +257,7 @@ export async function conductResearch(topicId, angle) {
   const brief = buildSourceBrief(rssArticles, webClaims);
 
   logActivity("info", "research_complete", {
+    cycleId,
     topicId,
     independentSources: brief.independentSourceCount,
     hasEnoughMaterial: brief.hasEnoughMaterial,

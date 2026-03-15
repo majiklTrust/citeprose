@@ -24,7 +24,7 @@ mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
 console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.9.1               ║
+║           LinkedIn AI Content Agent  v1.9.4               ║
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

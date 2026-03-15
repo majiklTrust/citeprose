@@ -94,10 +94,12 @@ async function schedulerTick() {
 
   try {
     const generated = await generatePost();
+    const cycleId = generated.cycleId || null;
 
     // Step 3a: Check if post was blocked due to insufficient sources
     if (generated.blocked) {
       logActivity("info", "post_blocked", {
+        cycleId,
         topicId: generated.topicId,
         angle: generated.angle,
         reason: generated.reason
@@ -106,8 +108,9 @@ async function schedulerTick() {
     }
 
     // Step 4: Quality check (includes source grounding verification)
-    const quality = await qualityCheck(generated.content, generated.researchSummary);
+    const quality = await qualityCheck(generated.content, generated.researchSummary, cycleId);
     logActivity("info", "quality_check", {
+      cycleId,
       overall: quality.overall,
       pass: quality.pass,
       sourceGrounding: quality.scores?.source_grounding,
@@ -118,6 +121,7 @@ async function schedulerTick() {
     // If quality is below threshold, regenerate once
     if (!quality.pass || quality.overall < 6) {
       logActivity("warn", "quality_below_threshold", {
+        cycleId,
         score: quality.overall,
         feedback: quality.feedback,
         factualFlags: quality.factual_flags
@@ -125,16 +129,17 @@ async function schedulerTick() {
       const retry = await generatePost(null);
       // Retry may also be blocked — check before quality checking
       if (!retry.blocked) {
-        const retryQuality = await qualityCheck(retry.content, retry.researchSummary);
+        const retryQuality = await qualityCheck(retry.content, retry.researchSummary, retry.cycleId);
         if (retryQuality.overall > quality.overall) {
           Object.assign(generated, retry);
-          logActivity("info", "quality_retry_improved", { newScore: retryQuality.overall });
+          logActivity("info", "quality_retry_improved", { cycleId: retry.cycleId, newScore: retryQuality.overall });
         }
       }
     }
 
     // Build research context for storage
     const storedContext = JSON.stringify({
+      cycleId,
       angle: generated.angle,
       sourcesUsed: generated.sourcesUsed || [],
       researchSummary: generated.researchSummary || null,
@@ -156,7 +161,7 @@ async function schedulerTick() {
       await executePost(postId);
     } else {
       updatePostStatus(postId, "pending_approval");
-      logActivity("info", "post_queued_for_approval", { postId, title: generated.title });
+      logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
     }
 
   } catch (err) {

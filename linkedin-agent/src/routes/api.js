@@ -10,7 +10,10 @@ import {
   getAgentState,
   setAgentState,
   getActivityLog,
-  getPost
+  getPost,
+  createPost,
+  updatePostStatus,
+  logActivity
 } from "../services/database.js";
 import {
   approvePost,
@@ -118,6 +121,39 @@ router.post("/api/generate-preview", async (req, res) => {
 
     const quality = await qualityCheck(generated.content, generated.researchSummary);
     res.json({ post: generated, quality });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/api/save-preview", (req, res) => {
+  try {
+    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
+
+    if (!topicId || !title || !content) {
+      return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
+    }
+
+    const storedContext = JSON.stringify({
+      angle: angle || "",
+      sourcesUsed: sourcesUsed || [],
+      researchSummary: researchSummary || null,
+      qualityScores: quality?.scores,
+      factualFlags: quality?.factual_flags
+    });
+
+    const postId = createPost({
+      topicId,
+      title,
+      content,
+      hashtags: hashtags || [],
+      newsContext: storedContext
+    });
+
+    updatePostStatus(postId, "pending_approval");
+    logActivity("info", "preview_saved_to_queue", { postId, title });
+
+    res.json({ success: true, postId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

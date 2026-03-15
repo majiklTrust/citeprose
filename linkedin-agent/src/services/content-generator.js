@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import Anthropic from "@anthropic-ai/sdk";
+import crypto from "crypto";
 import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
 import { getLastPostedTopic, getRecentPosts, logActivity } from "./database.js";
 
@@ -91,6 +92,9 @@ function selectContentAngle(topic, recentPosts) {
 export async function generatePost(topic = null) {
   if (!topic) topic = selectNextTopic();
 
+  // Generate a short correlation ID for this entire cycle
+  const cycleId = crypto.randomBytes(4).toString("hex");
+
   const recentPosts = getRecentPosts(14);
   const angle = selectContentAngle(topic, recentPosts);
 
@@ -98,9 +102,10 @@ export async function generatePost(topic = null) {
   let researchBrief = null;
   try {
     const { conductResearch } = await import("./research.js");
-    researchBrief = await conductResearch(topic.id, angle);
+    researchBrief = await conductResearch(topic.id, angle, cycleId);
 
     logActivity("info", "research_integrated", {
+      cycleId,
       topicId: topic.id,
       independentSources: researchBrief.independentSourceCount,
       totalItems: researchBrief.summary.totalSourceItems,
@@ -108,6 +113,7 @@ export async function generatePost(topic = null) {
     });
   } catch (err) {
     logActivity("warn", "research_unavailable", {
+      cycleId,
       topicId: topic.id,
       error: err.message
     });
@@ -120,6 +126,7 @@ export async function generatePost(topic = null) {
       : `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`;
 
     logActivity("info", "post_blocked_insufficient_sources", {
+      cycleId,
       topicId: topic.id,
       angle,
       reason
@@ -129,9 +136,14 @@ export async function generatePost(topic = null) {
       blocked: true,
       reason,
       topicId: topic.id,
-      angle
+      angle,
+      cycleId
     };
   }
+
+  // ── Rate limit cooldown ────────────────────────────────────
+  logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s for API rate limit window to reset" });
+  await new Promise(resolve => setTimeout(resolve, 65000));
 
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
@@ -184,7 +196,7 @@ Respond in this exact JSON format:
 
 Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
-  logActivity("info", "content_generation_started", { topicId: topic.id, angle });
+  logActivity("info", "content_generation_started", { cycleId, topicId: topic.id, angle });
 
   try {
     const response = await client.messages.create({
@@ -206,12 +218,14 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     ])].slice(0, 6);
 
     logActivity("info", "content_generation_success", {
+      cycleId,
       topicId: topic.id,
       title: parsed.title,
       wordCount: parsed.body.split(/\s+/).length
     });
 
     return {
+      cycleId,
       topicId: topic.id,
       title: parsed.title,
       content: parsed.body,
@@ -226,6 +240,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     };
   } catch (err) {
     logActivity("error", "content_generation_failed", {
+      cycleId,
       topicId: topic.id,
       error: err.message
     });
@@ -235,7 +250,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
 // ── Content Quality Check ────────────────────────────────────
 
-export async function qualityCheck(content, researchSummary = null) {
+export async function qualityCheck(content, researchSummary = null, cycleId = null) {
   const sourceContext = researchSummary
     ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nIndependent sources: ${researchSummary.independentSources || 0}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";

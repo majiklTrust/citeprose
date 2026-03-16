@@ -19,6 +19,7 @@
       --text-primary: #e8ecf4;
       --text-secondary: #8899b0;
       --text-muted: #5a6a80;
+      --text-toggle-inactive: #c53a30;
       --accent-blue: #3b82f6;
       --accent-cyan: #06b6d4;
       --accent-green: #10b981;
@@ -47,7 +48,6 @@
 
     /* Ambient background glow */
     body::before {
-      content: '';
       position: fixed;
       top: -20%;
       left: -10%;
@@ -58,7 +58,6 @@
     }
 
     body::after {
-      content: '';
       position: fixed;
       bottom: -20%;
       right: -10%;
@@ -178,7 +177,6 @@
     .stat-card:hover { border-color: var(--border-active); }
 
     .stat-card::before {
-      content: '';
       position: absolute;
       top: 0;
       left: 0;
@@ -617,7 +615,7 @@
       color: var(--text-secondary);
     }
     .toggle-label-active { color: var(--accent-green); }
-    .toggle-label-inactive { color: var(--text-muted); }
+    .toggle-label-inactive { color: var(--text-toggle-inactive); }
     .toggle-switch {
       position: relative;
       width: 36px;
@@ -630,15 +628,15 @@
       height: 0;
     }
     .toggle-track {
-      position: absolute;
+      position: relative;
       top: 0; left: 0; right: 0; bottom: 0;
       background: var(--bg-primary);
       border: 1px solid var(--border);
+      border-color: var(--text-toggle-inactive);
       border-radius: 10px;
       transition: background 0.2s, border-color 0.2s;
     }
     .toggle-track::after {
-      content: '';
       position: absolute;
       width: 14px;
       height: 14px;
@@ -945,7 +943,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.10.5 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.10.22 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="mode-switch">
               <span className="mode-label">Mode</span>

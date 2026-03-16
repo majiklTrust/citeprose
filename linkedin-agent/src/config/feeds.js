@@ -70,7 +70,7 @@ export const FEEDS = [
     refreshMinutes: 360
   },
   {
-    url: "https://msrc.microsoft.com/blog/feed",
+    url: "https://api.msrc.microsoft.com/update-guide/rss",
     name: "Microsoft Security Response Center",
     topicIds: ["cybersecurity-advances", "cybersecurity-incidents"],
     tier: "authoritative",
@@ -93,11 +93,11 @@ export const FEEDS = [
     refreshMinutes: 360
   },
   {
-    url: "https://www.anthropic.com/rss.xml",
-    name: "Anthropic Blog",
+    url: "https://www.technologyreview.com/feed/",
+    name: "MIT Technology Review",
     topicIds: ["ai-practical-benefit", "ai-guardrails"],
     tier: "primary",
-    refreshMinutes: 360
+    refreshMinutes: 240
   },
   {
     url: "https://techcrunch.com/category/artificial-intelligence/feed/",

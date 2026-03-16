@@ -65,7 +65,7 @@ Every published post includes this line at the end:
 Configured in `src/config/feeds.js`:
 
 - **Cybersecurity**: CISA Alerts, Krebs on Security, BleepingComputer, Dark Reading, The Record, The Hacker News, Securelist, Schneier on Security, MSRC, Google Security Blog
-- **AI**: Google AI Blog, OpenAI Blog, Anthropic Blog, TechCrunch AI, Simon Willison
+- **AI**: Google AI Blog, OpenAI Blog, MIT Technology Review, TechCrunch AI, Simon Willison
 
 ## Architecture
 

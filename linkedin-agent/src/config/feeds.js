@@ -127,6 +127,10 @@ export const SOURCE_RULES = {
   // Minimum number of distinct, independent source names required
   minIndependentSources: 2,
 
+  // Minimum cumulative trust weight for corroboration to pass
+  // e.g., 3 = two primary sources, or one authoritative + one secondary
+  minTrustWeight: 3,
+
   // Maximum age of articles considered "current" for each topic
   maxAgeDays: {
     "cybersecurity-incidents": 14,

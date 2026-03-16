@@ -402,6 +402,26 @@
 
     .log-text { color: var(--text-secondary); line-height: 1.4; }
 
+    .log-meta {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+      margin-top: 0.15rem;
+    }
+    .log-id {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: var(--text-muted);
+    }
+    .log-cycle {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--accent-blue);
+    }
+
     /* Connection status */
     .conn-indicator {
       display: flex;
@@ -559,6 +579,102 @@
     .research-summary { display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap; }
     .research-stat { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
     .research-stat strong { color: var(--text-primary); }
+
+    /* Topic selector */
+    .topic-selector {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238899b0' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 5.5l6.5 6 6.5-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+    }
+    .topic-selector:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+    .topic-selector option {
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    /* Toggle switch */
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0;
+    }
+    .toggle-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    .toggle-label-active { color: var(--accent-green); }
+    .toggle-label-inactive { color: var(--text-muted); }
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-track {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      top: 2px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-track {
+      background: var(--glow-green);
+      border-color: var(--accent-green);
+    }
+    .toggle-switch input:checked + .toggle-track::after {
+      transform: translateX(16px);
+      background: var(--accent-green);
+    }
+    .toggle-switch.toggle-busy .toggle-track {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: var(--accent-amber);
+    }
+    .toggle-switch.toggle-busy .toggle-track::after {
+      background: var(--accent-amber);
+      animation: toggle-pulse 0.8s ease-in-out infinite;
+    }
+    .toggle-switch.toggle-busy input:checked + .toggle-track {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: var(--accent-amber);
+    }
+    .toggle-switch.toggle-busy input:checked + .toggle-track::after {
+      background: var(--accent-amber);
+    }
+    @keyframes toggle-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
   </style>
 </head>
 <body>
@@ -589,16 +705,18 @@
 
     function getCorroborationLevel(ctx) {
       if (!ctx || !ctx.researchSummary) return 'none';
-      const v = ctx.researchSummary.independentSources || 0;
+      if (ctx.researchSummary.corroborationSkipped) return 'skipped';
+      const v = ctx.researchSummary.verifiedClaims || 0;
       if (v >= 3) return 'strong';
       if (v >= 1) return 'weak';
       return 'none';
     }
 
     const CORROB_LABELS = {
-      strong: { cls: 'corroboration-strong', text: 'Well sourced' },
-      weak: { cls: 'corroboration-weak', text: 'Limited sources' },
-      none: { cls: 'corroboration-none', text: 'No sources' },
+      strong: { cls: 'corroboration-strong', text: 'Well corroborated' },
+      weak: { cls: 'corroboration-weak', text: 'Limited corroboration' },
+      skipped: { cls: 'corroboration-weak', text: 'Corroboration skipped' },
+      none: { cls: 'corroboration-none', text: 'Uncorroborated' },
     };
 
     function App() {
@@ -608,6 +726,7 @@
       const [selectedPost, setSelectedPost] = useState(null);
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
+      const [selectedTopic, setSelectedTopic] = useState('');
 
       const fetchAll = useCallback(async () => {
         try {
@@ -665,7 +784,11 @@
 
       async function handleForceCycle() {
         setLoading(l => ({ ...l, forceCycle: true }));
-        await fetch(`${API}/api/force-cycle`, { method: 'POST' });
+        await fetch(`${API}/api/force-cycle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topicId: selectedTopic || undefined })
+        });
         setTimeout(fetchAll, 2000);
         setLoading(l => ({ ...l, forceCycle: false }));
       }
@@ -673,11 +796,31 @@
       async function handlePreview() {
         setLoading(l => ({ ...l, preview: true }));
         try {
-          const res = await fetch(`${API}/api/generate-preview`, { method: 'POST' });
+          const res = await fetch(`${API}/api/generate-preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topicId: selectedTopic || undefined })
+          });
           const data = await res.json();
 
+          // Blocked due to insufficient sources
           if (data.blocked) {
             alert(`Post blocked — insufficient sources.\n\nTopic: ${TOPIC_STYLES[data.topicId]?.label || data.topicId}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
+            setLoading(l => ({ ...l, preview: false }));
+            return;
+          }
+
+          // Server returned an error (429, 500, etc.)
+          if (data.error) {
+            alert('Preview failed: ' + data.error);
+            setLoading(l => ({ ...l, preview: false }));
+            return;
+          }
+
+          // Unexpected response shape
+          if (!data.post || !data.post.title) {
+            alert('Preview returned an unexpected response. Check the activity log for details.');
+            console.error('Unexpected preview response:', data);
             setLoading(l => ({ ...l, preview: false }));
             return;
           }
@@ -712,6 +855,23 @@
           alert('Feed refresh failed: ' + err.message);
         }
         setLoading(l => ({ ...l, feeds: false }));
+      }
+
+      async function toggleCorroboration() {
+        setLoading(l => ({ ...l, corroboration: true }));
+        const current = status.corroboration || 'enabled';
+        const newValue = current === 'enabled' ? false : true;
+        try {
+          await fetch(`${API}/api/corroboration`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: newValue })
+          });
+          await fetchAll();
+        } catch (err) {
+          alert('Toggle failed: ' + err.message);
+        }
+        setLoading(l => ({ ...l, corroboration: false }));
       }
 
       async function handleSavePreview() {
@@ -918,15 +1078,26 @@
               <div className="sidebar-panel">
                 <div className="section-title">Activity Log</div>
                 <div style={{ maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {logs.slice(0, 30).map(log => (
+                  {logs.slice(0, 30).map(log => {
+                    let cycleId = null;
+                    try {
+                      const d = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                      if (d && d.cycleId) cycleId = d.cycleId;
+                    } catch {}
+                    return (
                     <div key={log.id} className="log-entry">
                       <div className={`log-dot ${log.level}`}></div>
                       <div>
                         <div className="log-text">{log.action.replace(/_/g, ' ')}</div>
-                        <div className="log-time">{formatDate(log.timestamp)}</div>
+                        <div className="log-meta">
+                          <span className="log-id">#{log.id}</span>
+                          {cycleId && <span className="log-cycle">{cycleId}</span>}
+                          <span className="log-time">{formatDate(log.timestamp)}</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {logs.length === 0 && (
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No activity yet</div>
                   )}
@@ -940,6 +1111,26 @@
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <select className="topic-selector" value={selectedTopic}
+                    onChange={e => setSelectedTopic(e.target.value)}>
+                    <option value="">Auto-select topic</option>
+                    <option value="ai-practical-benefit">AI Benefits</option>
+                    <option value="ai-guardrails">AI Guardrails</option>
+                    <option value="cybersecurity-incidents">Cyber Incidents</option>
+                    <option value="cybersecurity-advances">Cyber Advances</option>
+                  </select>
+                  <div className="toggle-row">
+                    <span className={`toggle-label ${loading.corroboration ? 'toggle-label-inactive' : (status.corroboration || 'enabled') === 'enabled' ? 'toggle-label-active' : 'toggle-label-inactive'}`}>
+                      {loading.corroboration ? 'Working...' : `Corroboration ${(status.corroboration || 'enabled') === 'enabled' ? 'ON' : 'OFF'}`}
+                    </span>
+                    <label className={`toggle-switch ${loading.corroboration ? 'toggle-busy' : ''}`}>
+                      <input type="checkbox"
+                        checked={(status.corroboration || 'enabled') === 'enabled'}
+                        onChange={toggleCorroboration}
+                        disabled={loading.corroboration} />
+                      <span className="toggle-track"></span>
+                    </label>
+                  </div>
                   <button className="btn btn-primary" style={{ width: '100%' }} onClick={handlePreview}>
                     {loading.preview ? <span className="loading-spinner"></span> : '✦ Preview New Post'}
                   </button>
@@ -1040,6 +1231,7 @@
 
                 {ctx?.researchSummary && (
                   <div className="research-summary">
+                    <span className="research-stat"><strong>{ctx.researchSummary.verifiedClaims}</strong> verified claims</span>
                     <span className="research-stat"><strong>{ctx.researchSummary.independentSources}</strong> independent sources</span>
                     <span className="research-stat"><strong>{ctx.researchSummary.totalSourceItems}</strong> source items</span>
                     <span className="research-stat"><strong>{ctx.researchSummary.sourceList?.length || 0}</strong> cited</span>

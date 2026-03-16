@@ -34,6 +34,7 @@ router.get("/api/status", async (req, res) => {
     const stats = getPostStats();
     const mode = getAgentState("mode");
     const paused = getAgentState("paused");
+    const corroboration = getAgentState("corroboration") || "enabled";
     const cadence = canPostNow();
     const tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
 
@@ -45,6 +46,7 @@ router.get("/api/status", async (req, res) => {
     res.json({
       mode,
       paused: paused === "true",
+      corroboration,
       cadence,
       stats,
       researchStats,
@@ -109,11 +111,20 @@ router.post("/api/pause", (req, res) => {
   res.json({ paused: !!paused });
 });
 
+router.post("/api/corroboration", (req, res) => {
+  const { enabled } = req.body;
+  const value = enabled === false ? "disabled" : "enabled";
+  setAgentState("corroboration", value);
+  logActivity("info", "corroboration_toggled", { corroboration: value });
+  res.json({ corroboration: value });
+});
+
 // ── Manual Triggers ──────────────────────────────────────────
 
 router.post("/api/generate-preview", async (req, res) => {
   try {
-    const generated = await generatePost();
+    const topicId = req.body.topicId || null;
+    const generated = await generatePost(topicId);
 
     if (generated.blocked) {
       return res.json({ blocked: true, reason: generated.reason, topicId: generated.topicId, angle: generated.angle });
@@ -161,8 +172,9 @@ router.post("/api/save-preview", (req, res) => {
 
 router.post("/api/force-cycle", async (req, res) => {
   try {
-    await forceCycle();
-    res.json({ success: true, message: "Scheduler cycle executed" });
+    const topicId = req.body.topicId || null;
+    await forceCycle(topicId);
+    res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

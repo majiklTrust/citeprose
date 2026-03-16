@@ -64,7 +64,7 @@ function estimateNextWindow(recentPosts) {
 
 // ── Core Scheduling Loop ─────────────────────────────────────
 
-async function schedulerTick() {
+async function schedulerTick(topicId = null) {
   const mode = getAgentState("mode");
   const paused = getAgentState("paused");
 
@@ -93,7 +93,7 @@ async function schedulerTick() {
   logActivity("info", "scheduler_generating", "Generating new post content with research");
 
   try {
-    const generated = await generatePost();
+    const generated = await generatePost(topicId || null);
     const cycleId = generated.cycleId || null;
 
     // Step 3a: Check if post was blocked due to insufficient sources
@@ -243,7 +243,7 @@ export function stopScheduler() {
 
 // ── Force a cycle (for testing/manual trigger) ───────────────
 
-export async function forceCycle() {
-  logActivity("info", "force_cycle", "Manual scheduler cycle triggered");
-  return schedulerTick();
+export async function forceCycle(topicId = null) {
+  logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" });
+  return schedulerTick(topicId);
 }

@@ -5,7 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
-import { getLastPostedTopic, getRecentPosts, logActivity } from "./database.js";
+import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -13,37 +13,27 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export function selectNextTopic() {
   const lastTopicId = getLastPostedTopic();
-  const recentPosts = getRecentPosts(14);  // 2-week lookback
+  const recentPosts = getRecentPosts(14);
 
-  // Count recent posts per topic
   const recentCounts = {};
   for (const post of recentPosts) {
     recentCounts[post.topic_id] = (recentCounts[post.topic_id] || 0) + 1;
   }
 
-  // Build weighted candidates, excluding consecutive same-topic
   const candidates = TOPICS.filter(t => t.id !== lastTopicId).map(topic => {
     const baseWeight = ROTATION_CONFIG.weights[topic.id] || 0.25;
     const recentCount = recentCounts[topic.id] || 0;
-
-    // Boost topics that have been underrepresented recently
     const totalRecent = recentPosts.length || 1;
     const expectedShare = baseWeight;
     const actualShare = recentCount / totalRecent;
     const balanceFactor = expectedShare / Math.max(actualShare, 0.05);
-
-    return {
-      topic,
-      weight: baseWeight * Math.min(balanceFactor, 3.0)
-    };
+    return { topic, weight: baseWeight * Math.min(balanceFactor, 3.0) };
   });
 
-  // If all topics were excluded (edge case), allow any
   if (candidates.length === 0) {
     candidates.push(...TOPICS.map(t => ({ topic: t, weight: 0.25 })));
   }
 
-  // Weighted random selection
   const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
   let roll = Math.random() * totalWeight;
 
@@ -58,14 +48,12 @@ export function selectNextTopic() {
 // ── Content Angle Selection ──────────────────────────────────
 
 function selectContentAngle(topic, recentPosts) {
-  // Avoid repeating recent angles by checking content similarity
   const recentSameTopic = recentPosts
     .filter(p => p.topic_id === topic.id)
     .slice(0, 5);
 
   const usedAngles = new Set();
   for (const post of recentSameTopic) {
-    // Simple heuristic: mark angles whose keywords appear in recent posts
     for (let i = 0; i < topic.contentAngles.length; i++) {
       const angleWords = topic.contentAngles[i].toLowerCase().split(/\s+/);
       const postWords = post.content.toLowerCase();
@@ -74,14 +62,13 @@ function selectContentAngle(topic, recentPosts) {
     }
   }
 
-  // Pick a random unused angle
   const availableIndices = topic.contentAngles
     .map((_, i) => i)
     .filter(i => !usedAngles.has(i));
 
   const pool = availableIndices.length > 0
     ? availableIndices
-    : topic.contentAngles.map((_, i) => i);  // fallback: all angles
+    : topic.contentAngles.map((_, i) => i);
 
   const idx = pool[Math.floor(Math.random() * pool.length)];
   return topic.contentAngles[idx];
@@ -89,33 +76,46 @@ function selectContentAngle(topic, recentPosts) {
 
 // ── Post Generation ──────────────────────────────────────────
 
+export function getTopicById(topicId) {
+  return TOPICS.find(t => t.id === topicId) || null;
+}
+
+export function getAllTopicIds() {
+  return TOPICS.map(t => ({ id: t.id, name: t.name }));
+}
+
 export async function generatePost(topic = null) {
+  if (typeof topic === "string") {
+    topic = getTopicById(topic);
+  }
   if (!topic) topic = selectNextTopic();
 
-  // Generate a short correlation ID for this entire cycle
   const cycleId = crypto.randomBytes(4).toString("hex");
+
+  // Read corroboration toggle from agent state
+  const skipCorroboration = getAgentState("corroboration") === "disabled";
 
   const recentPosts = getRecentPosts(14);
   const angle = selectContentAngle(topic, recentPosts);
 
-  // ── Research phase: gather sources ──────────────────────────
+  // ── Research phase ─────────────────────────────────────────
   let researchBrief = null;
   try {
     const { conductResearch } = await import("./research.js");
-    researchBrief = await conductResearch(topic.id, angle, cycleId);
+    researchBrief = await conductResearch(topic.id, angle, cycleId, skipCorroboration);
 
     logActivity("info", "research_integrated", {
       cycleId,
       topicId: topic.id,
+      corroborationSkipped: skipCorroboration,
+      verifiedClaims: researchBrief.verifiedClaimCount,
       independentSources: researchBrief.independentSourceCount,
       totalItems: researchBrief.summary.totalSourceItems,
       hasEnoughMaterial: researchBrief.hasEnoughMaterial
     });
   } catch (err) {
     logActivity("warn", "research_unavailable", {
-      cycleId,
-      topicId: topic.id,
-      error: err.message
+      cycleId, topicId: topic.id, error: err.message
     });
   }
 
@@ -123,26 +123,19 @@ export async function generatePost(topic = null) {
   if (!researchBrief || !researchBrief.hasEnoughMaterial) {
     const reason = !researchBrief
       ? "Research service unavailable"
-      : `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`;
+      : skipCorroboration
+        ? `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`
+        : `Only ${researchBrief.verifiedClaimCount || 0} verified claim(s) found; minimum is 1 from 2+ independent sources`;
 
     logActivity("info", "post_blocked_insufficient_sources", {
-      cycleId,
-      topicId: topic.id,
-      angle,
-      reason
+      cycleId, topicId: topic.id, angle, reason
     });
 
-    return {
-      blocked: true,
-      reason,
-      topicId: topic.id,
-      angle,
-      cycleId
-    };
+    return { blocked: true, reason, topicId: topic.id, angle, cycleId };
   }
 
-  // ── Rate limit cooldown ────────────────────────────────────
-  logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s for API rate limit window to reset" });
+  // ── Rate limit cooldown before generation ──────────────────
+  logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before content generation" });
   await new Promise(resolve => setTimeout(resolve, 65000));
 
   // Build context about what was recently posted to avoid repetition
@@ -150,9 +143,29 @@ export async function generatePost(topic = null) {
     `- [${p.topic_id}] "${p.title}"`
   ).join("\n");
 
-  // ── Source-grounded prompt ─────────────────────────────────
-  const researchBlock = `
-SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources):
+  // ── Prompt: different rules based on corroboration toggle ──
+  let researchBlock;
+
+  if (!skipCorroboration) {
+    // Corroboration ON — strict verified-facts-only prompt
+    researchBlock = `
+RESEARCH BRIEF (use ONLY these verified facts as the basis for your post):
+${researchBrief.context}
+
+CRITICAL SOURCE RULES:
+- You may ONLY state facts that appear in the "VERIFIED FACTS" section above.
+- For claims marked "UNCORROBORATED", DO NOT include them. Omit entirely.
+- Do NOT invent, embellish, or extrapolate beyond what the sources state.
+- Do NOT use any specific statistic, percentage, or number that is not in the verified facts.
+- Reference source names naturally in the post body (e.g., "according to Krebs on Security" or "as reported by CISA").
+- At the end of the post body, include a "Sources:" line listing key references by name.
+- After the Sources line, include this exact attestation on its own line:
+  "Sources verified through multi-source corroboration. Full source list available upon request."
+`;
+  } else {
+    // Corroboration OFF — attribution-based prompt (less strict)
+    researchBlock = `
+SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources — corroboration step was skipped):
 ${researchBrief.context}
 
 ATTRIBUTION RULES:
@@ -160,9 +173,10 @@ ATTRIBUTION RULES:
 - Reference source names naturally in the post body (e.g., "according to Krebs on Security" or "as reported by CISA").
 - If a claim comes from a single source, use hedging: "one report suggests" or "according to [source]".
 - Claims appearing in multiple sources can be stated more directly, with attribution.
-- At the end of the post body (before hashtags), include a "Sources:" line listing the key references by name.
-- Do NOT state anything as fact that is not in the source material.
+- Do NOT use any specific statistic, percentage, or number unless it appears in the source material.
+- At the end of the post body, include a "Sources:" line listing the key references by name.
 `;
+  }
 
   const userPrompt = `Write a LinkedIn post about the following topic area and angle.
 
@@ -183,13 +197,13 @@ REQUIREMENTS:
 6. Avoid clichés: "game-changer", "in today's rapidly evolving landscape", 
    "it's not a matter of if but when", "the future is here".
 7. Do NOT include hashtags in the body — they will be appended separately.
-8. Include natural source attribution within the post and a "Sources:" line at the end.
+8. Include natural source attribution within the post and a "Sources:" line at the end.${!skipCorroboration ? '\n9. Include the attestation line after the Sources line.' : ''}
 
 Respond in this exact JSON format:
 {
   "title": "A short internal title for this post (not published, just for tracking)",
   "hook": "The opening 1-2 sentences designed to appear before the fold",
-  "body": "The full post content including the hook and Sources: line",
+  "body": "The full post content including the hook and Sources: line${!skipCorroboration ? ' and attestation line' : ''}",
   "hashtags": ["#Tag1", "#Tag2", "#Tag3"],
   "sources_used": ["Source Name 1", "Source Name 2"]
 }
@@ -207,19 +221,16 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     });
 
     const raw = response.content[0].text.trim();
-    // Strip potential markdown fencing
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    // Merge topic hashtags with generated ones, deduplicate
     const allHashtags = [...new Set([
       ...parsed.hashtags,
       ...topic.hashtags
     ])].slice(0, 6);
 
     logActivity("info", "content_generation_success", {
-      cycleId,
-      topicId: topic.id,
+      cycleId, topicId: topic.id,
       title: parsed.title,
       wordCount: parsed.body.split(/\s+/).length
     });
@@ -233,16 +244,16 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       angle,
       sourcesUsed: parsed.sources_used || [],
       researchSummary: {
+        verifiedClaims: researchBrief.verifiedClaimCount,
         independentSources: researchBrief.independentSourceCount,
         totalSourceItems: researchBrief.summary.totalSourceItems,
+        corroborationSkipped: skipCorroboration,
         sourceList: researchBrief.sourceList || []
       }
     };
   } catch (err) {
     logActivity("error", "content_generation_failed", {
-      cycleId,
-      topicId: topic.id,
-      error: err.message
+      cycleId, topicId: topic.id, error: err.message
     });
     throw err;
   }
@@ -252,7 +263,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
 export async function qualityCheck(content, researchSummary = null, cycleId = null) {
   const sourceContext = researchSummary
-    ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nIndependent sources: ${researchSummary.independentSources || 0}`
+    ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nVerified claims (corroborated by 2+ sources): ${researchSummary.verifiedClaims || 0}\nIndependent sources consulted: ${researchSummary.independentSources || 0}\nCorroboration step: ${researchSummary.corroborationSkipped ? 'SKIPPED' : 'COMPLETED'}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";
 
   const response = await client.messages.create({

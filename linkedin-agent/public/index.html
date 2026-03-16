@@ -19,12 +19,13 @@
       --text-primary: #e8ecf4;
       --text-secondary: #8899b0;
       --text-muted: #5a6a80;
-      --text-toggle-inactive: #c53a30;
+      --accent-primary: #e8ecf4;
       --accent-blue: #3b82f6;
       --accent-cyan: #06b6d4;
       --accent-green: #10b981;
       --accent-amber: #f59e0b;
       --accent-red: #ef4444;
+      --accent-deep_red: #90261f;
       --accent-purple: #8b5cf6;
       --glow-blue: rgba(59, 130, 246, 0.15);
       --glow-green: rgba(16, 185, 129, 0.15);
@@ -615,7 +616,7 @@
       color: var(--text-secondary);
     }
     .toggle-label-active { color: var(--accent-green); }
-    .toggle-label-inactive { color: var(--text-toggle-inactive); }
+    .toggle-label-inactive { color: var(--accent-primary); }
     .toggle-switch {
       position: relative;
       width: 36px;
@@ -632,7 +633,7 @@
       top: 0; left: 0; right: 0; bottom: 0;
       background: var(--bg-primary);
       border: 1px solid var(--border);
-      border-color: var(--text-toggle-inactive);
+      border-color: var(--accent-primary);
       border-radius: 10px;
       transition: background 0.2s, border-color 0.2s;
     }
@@ -943,7 +944,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v0.10.23 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v0.10.27 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="mode-switch">
               <span className="mode-label">Mode</span>

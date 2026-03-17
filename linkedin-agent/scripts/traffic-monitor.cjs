@@ -30,11 +30,46 @@ try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch {}
 
 const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 
+// ── LinkedIn domain filter (console only) ────────────────────
+
+const WATCH_DOMAINS = [
+  'linkedin.com',
+  'api.linkedin.com',
+  'www.linkedin.com',
+  'licdn.com',
+  'platform.linkedin.com',
+  'media.licdn.com'
+];
+
+function isWatchedDomain(host) {
+  if (!host) return false;
+  const h = host.toLowerCase();
+  return WATCH_DOMAINS.some(d => h === d || h.endsWith('.' + d));
+}
+
+function isWatchedIngress(url) {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.includes('/auth/linkedin') || u.includes('/api/linkedin');
+}
+
 function log(direction, entry) {
   const ts = new Date().toISOString();
-  const line = `[${ts}] ${direction} ${JSON.stringify(entry)}`;
-  console.log(`\x1b[${direction === 'EGRESS' ? '33' : '36'}m${line}\x1b[0m`);
-  logStream.write(line + '\n');
+  const payload = `${direction} ${JSON.stringify(entry)}`;
+  const fileLine = `[${ts}] ${payload}`;
+
+  // Always write to file
+  logStream.write(fileLine + '\n');
+
+  // Console: only LinkedIn-related traffic, timestamp in default color
+  const showOnConsole =
+    (direction === 'EGRESS' && isWatchedDomain(entry.host)) ||
+    (direction === 'INGRESS' && isWatchedIngress(entry.url));
+
+  if (showOnConsole) {
+    const color = direction === 'EGRESS' ? '33' : '36';
+    process.stdout.write(`[${ts}] \x1b[${color}m${payload}\x1b[0m\n`);
+  }
 }
 
 // ── Mask sensitive headers ───────────────────────────────────
@@ -173,5 +208,5 @@ http.createServer = function patchedCreateServer(requestListener) {
 
 // ── Startup notice ───────────────────────────────────────────
 
-console.log('\x1b[32m[TRAFFIC MONITOR] Active — logging to console + data/traffic.log\x1b[0m');
-console.log('\x1b[32m[TRAFFIC MONITOR] EGRESS = outbound (yellow) | INGRESS = inbound (cyan)\x1b[0m');
+console.log('\x1b[32m[TRAFFIC MONITOR] Active — all traffic logged to data/traffic.log\x1b[0m');
+console.log('\x1b[32m[TRAFFIC MONITOR] Console shows LinkedIn traffic only (yellow=egress, cyan=ingress)\x1b[0m');

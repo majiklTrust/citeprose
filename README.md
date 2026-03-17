@@ -2,6 +2,7 @@
 
 An autonomous AI agent that generates and publishes LinkedIn content on four constrained topics. All posts are grounded in research from curated RSS feeds and live web search, verified through multi-source corroboration, and subject to automated quality checks before publishing.
 
+![Dashboard](linkedin-agent/docs/dashboard.png)
 ## Topics
 
 | Topic | Focus |

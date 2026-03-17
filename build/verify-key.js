@@ -1,4 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
+/******* THIS FILE MOVED AND MAY NOT WORK AS DESCRIBED - bindia 3/17/2026 ******/
 // verify-key.js — Isolate decryption failures
 //
 // Usage: node scripts/verify-key.js

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "0.23.3",
+  "version": "0.23.5",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -13,7 +13,7 @@
     "build": "npm version patch && npm run build_html && npm run build_js",
     "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
     "build_js": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" src_templates/index.js >src/index.js",
-    "start": "nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
+    "start": "npm run timesync && nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "dev": "npm version minor && npm run timesync && npm run build && nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "dashboard": "node src/dashboard-server.js",
     "setup": "node scripts/setup.js",

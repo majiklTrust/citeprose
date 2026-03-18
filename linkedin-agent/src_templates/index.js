@@ -78,13 +78,9 @@ async function start() {
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile }                   = await import("./services/linkedin-api.js");
-
-  // ── XSS prevention ────────────────────────────────────────
-  const _esc = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-  function escapeHtml(str) {
-    if (typeof str !== "string") return "";
-    return str.replace(/[&<>"']/g, c => _esc[c]);
-  }
+  const { escapeHtml,
+          generateOAuthState,
+          validateOAuthState }           = await import("./services/security.js");
 
   // Ensure data directory exists
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
@@ -121,7 +117,15 @@ async function start() {
   // ── LinkedIn OAuth Callback ──────────────────────────────────
 
   app.get("/auth/linkedin/callback", async (req, res) => {
-    const { code, error } = req.query;
+    const { code, error, state } = req.query;
+
+    if (!validateOAuthState(state)) {
+      return res.status(403).send(`
+        <h2>Authorization Failed</h2>
+        <p>Invalid or expired OAuth state. Please try again.</p>
+        <a href="/">Back to Dashboard</a>
+      `);
+    }
 
     if (error) {
       return res.send(`
@@ -174,9 +178,9 @@ async function start() {
     }
   });
 
-  // LinkedIn auth initiation
   app.get("/auth/linkedin", (req, res) => {
-    res.redirect(getAuthorizationUrl());
+    const state = generateOAuthState();
+    res.redirect(getAuthorizationUrl(state));
   });
 
   // SPA fallback

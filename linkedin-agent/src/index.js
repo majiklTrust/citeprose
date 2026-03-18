@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // ═══════════════════════════════════════════════════════════════
-// v0.23.6
+// v0.23.7
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -89,7 +89,7 @@ async function start() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.23.6
+║           LinkedIn AI Content Agent  v0.23.7
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
@@ -105,6 +105,26 @@ async function start() {
   // ── Express Server ───────────────────────────────────────────
 
   const app = express();
+
+  // Security headers
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "0");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Content-Security-Policy",
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "connect-src 'self'; " +
+      "img-src 'self' data:; " +
+      "font-src 'self';"
+    );
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    next();
+  });
 
   // CORS — restrict to configured origins (default: localhost only)
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || `http://localhost:${process.env.DASHBOARD_PORT || 3001}`)

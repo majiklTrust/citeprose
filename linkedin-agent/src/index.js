@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // ═══════════════════════════════════════════════════════════════
-// v0.23.11
+// v0.26.3
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -89,7 +89,7 @@ async function start() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.23.11
+║           LinkedIn AI Content Agent  v0.26.3
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
@@ -105,8 +105,6 @@ async function start() {
   // ── Express Server ───────────────────────────────────────────
 
   const app = express();
-  app.disable('x-powered-by');
-  app.disable('etag');
 
   // Security headers
   app.use((req, res, next) => {
@@ -122,9 +120,6 @@ async function start() {
       "img-src 'self' data:; " +
       "font-src 'self';"
     );
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()");
-    res.setHeader("X-DNS-Prefetch-Control", "off");
-    res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     if (process.env.NODE_ENV === "production") {
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
@@ -145,7 +140,7 @@ async function start() {
     }
   }));
 
-  app.use(express.json());
+  app.use(express.json({ limit: "16kb" }));
 
   // Serve the dashboard frontend
   app.use(express.static(path.join(__dirname, "../public")));

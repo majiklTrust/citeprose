@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // ═══════════════════════════════════════════════════════════════
-// v0.22.1
+// v0.23.3
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -79,6 +79,13 @@ async function start() {
           exchangeCodeForToken,
           getProfile }                   = await import("./services/linkedin-api.js");
 
+  // ── XSS prevention ────────────────────────────────────────
+  const _esc = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function escapeHtml(str) {
+    if (typeof str !== "string") return "";
+    return str.replace(/[&<>"']/g, c => _esc[c]);
+  }
+
   // Ensure data directory exists
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -86,7 +93,7 @@ async function start() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.22.1
+║           LinkedIn AI Content Agent  v0.23.3
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
@@ -119,7 +126,7 @@ async function start() {
     if (error) {
       return res.send(`
         <h2>LinkedIn Authorization Failed</h2>
-        <p>${error}: ${req.query.error_description}</p>
+        <p>${escapeHtml(String(error))}: ${escapeHtml(String(req.query.error_description || ""))}</p>
         <a href="/">Back to Dashboard</a>
       `);
     }
@@ -128,26 +135,40 @@ async function start() {
       const tokens = await exchangeCodeForToken(code);
       process.env.LINKEDIN_ACCESS_TOKEN = tokens.accessToken;
 
-      // Fetch and store profile URN
-      const profile = await getProfile(tokens.accessToken);
-      process.env.LINKEDIN_PERSON_URN = `urn:li:person:${profile.sub}`;
+      let profileName = "(unknown)";
+      let personSub = null;
+
+      try {
+        const profile = await getProfile(tokens.accessToken);
+        personSub = profile.sub;
+        profileName = profile.name || "(unknown)";
+        process.env.LINKEDIN_PERSON_URN = `urn:li:person:${profile.sub}`;
+      } catch (profileErr) {
+        logActivity("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
+      }
 
       res.send(`
         <h2>LinkedIn Connected Successfully!</h2>
-        <p>Logged in as: <strong>${profile.name}</strong></p>
-        <p>Add these to your <code>.env</code> file:</p>
-        <pre>
-LINKEDIN_ACCESS_TOKEN=${tokens.accessToken}
-LINKEDIN_PERSON_URN=urn:li:person:${profile.sub}
-        </pre>
+        <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
+        ${!personSub ? '<p><em>Profile lookup failed. Token is valid. Set LINKEDIN_PERSON_URN in .env manually or retry auth.</em></p>' : ''}
+        <p>Token saved to session. Add credentials to your <code>.env</code> file via the server console.</p>
         <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
         <br>
-        <a href="/">Go to Dashboard →</a>
+        <a href="/">Go to Dashboard</a>
       `);
+
+      console.log("[AUTH] LinkedIn token obtained. Add to .env:");
+      console.log(`  LINKEDIN_ACCESS_TOKEN=${tokens.accessToken}`);
+      if (personSub) {
+        console.log(`  LINKEDIN_PERSON_URN=urn:li:person:${personSub}`);
+      } else {
+        console.log("  LINKEDIN_PERSON_URN=(profile fetch failed — set manually or retry auth)");
+      }
     } catch (err) {
+      logActivity("error", "oauth_token_exchange_failed", { error: err.message });
       res.status(500).send(`
         <h2>Token Exchange Failed</h2>
-        <p>${err.message}</p>
+        <p>An error occurred during authentication. Check the activity log.</p>
         <a href="/">Back to Dashboard</a>
       `);
     }

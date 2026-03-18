@@ -105,7 +105,21 @@ async function start() {
   // ── Express Server ───────────────────────────────────────────
 
   const app = express();
-  app.use(cors());
+
+  // CORS — restrict to configured origins (default: localhost only)
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || `http://localhost:${process.env.DASHBOARD_PORT || 3001}`)
+    .split(",").map(o => o.trim());
+
+  app.use(cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS: origin not allowed"));
+      }
+    }
+  }));
+
   app.use(express.json());
 
   // Serve the dashboard frontend

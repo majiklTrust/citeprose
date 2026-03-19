@@ -35,3 +35,23 @@ export function validateOAuthState(state) {
   pendingStates.delete(state);
   return (Date.now() - ts) <= STATE_TTL_MS;
 }
+
+// ── Error Handling ───────────────────────────────────────────
+
+export function safeErrorResponse(res, statusCode, logFn, action, err) {
+  const ref = Date.now().toString(36);
+  const detail = {
+    ref,
+    error: err.message,
+    stack: err.stack?.split("\n").slice(0, 2).join(" | ")
+  };
+
+  if (logFn) {
+    try { logFn("error", action, detail); } catch { /* logging must not throw */ }
+  }
+
+  res.status(statusCode).json({
+    error: "An internal error occurred.",
+    ref
+  });
+}

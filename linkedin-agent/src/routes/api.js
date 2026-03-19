@@ -24,6 +24,7 @@ import {
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
+import { safeErrorResponse } from "../services/security.js";
 
 const router = Router();
 
@@ -54,24 +55,31 @@ router.get("/api/status", async (req, res) => {
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_status_error", err);
   }
 });
 
 // ── Posts ─────────────────────────────────────────────────────
 
 router.get("/api/posts", (req, res) => {
-  const limit = parseInt(req.query.limit || "50");
-  const status = req.query.status;
-
-  const posts = status ? getPostsByStatus(status) : getAllPosts(limit);
-  res.json({ posts });
+  try {
+    const limit = parseInt(req.query.limit || "50");
+    const status = req.query.status;
+    const posts = status ? getPostsByStatus(status) : getAllPosts(limit);
+    res.json({ posts });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_posts_list_error", err);
+  }
 });
 
 router.get("/api/posts/:id", (req, res) => {
-  const post = getPost(parseInt(req.params.id));
-  if (!post) return res.status(404).json({ error: "Post not found" });
-  res.json({ post });
+  try {
+    const post = getPost(parseInt(req.params.id));
+    if (!post) return res.status(404).json({ error: "Post not found." });
+    res.json({ post });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_post_get_error", err);
+  }
 });
 
 // ── Approval Flow ────────────────────────────────────────────
@@ -81,7 +89,7 @@ router.post("/api/posts/:id/approve", async (req, res) => {
     const result = await approvePost(parseInt(req.params.id));
     res.json({ success: true, result });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_post_approve_error", err);
   }
 });
 
@@ -90,33 +98,45 @@ router.post("/api/posts/:id/reject", (req, res) => {
     rejectPost(parseInt(req.params.id), req.body.reason || "");
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_post_reject_error", err);
   }
 });
 
 // ── Mode Control ─────────────────────────────────────────────
 
 router.post("/api/mode", (req, res) => {
-  const { mode } = req.body;
-  if (!["auto", "manual"].includes(mode)) {
-    return res.status(400).json({ error: "Mode must be 'auto' or 'manual'" });
+  try {
+    const { mode } = req.body;
+    if (!["auto", "manual"].includes(mode)) {
+      return res.status(400).json({ error: "Mode must be 'auto' or 'manual'." });
+    }
+    setAgentState("mode", mode);
+    res.json({ mode });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_mode_error", err);
   }
-  setAgentState("mode", mode);
-  res.json({ mode });
 });
 
 router.post("/api/pause", (req, res) => {
-  const { paused } = req.body;
-  setAgentState("paused", String(!!paused));
-  res.json({ paused: !!paused });
+  try {
+    const { paused } = req.body;
+    setAgentState("paused", String(!!paused));
+    res.json({ paused: !!paused });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_pause_error", err);
+  }
 });
 
 router.post("/api/corroboration", (req, res) => {
-  const { enabled } = req.body;
-  const value = enabled === false ? "disabled" : "enabled";
-  setAgentState("corroboration", value);
-  logActivity("info", "corroboration_toggled", { corroboration: value });
-  res.json({ corroboration: value });
+  try {
+    const { enabled } = req.body;
+    const value = enabled === false ? "disabled" : "enabled";
+    setAgentState("corroboration", value);
+    logActivity("info", "corroboration_toggled", { corroboration: value });
+    res.json({ corroboration: value });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_corroboration_error", err);
+  }
 });
 
 // ── Manual Triggers ──────────────────────────────────────────
@@ -133,7 +153,7 @@ router.post("/api/generate-preview", async (req, res) => {
     const quality = await qualityCheck(generated.content, generated.researchSummary);
     res.json({ post: generated, quality });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_generate_preview_error", err);
   }
 });
 
@@ -142,7 +162,7 @@ router.post("/api/save-preview", (req, res) => {
     const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
 
     if (!topicId || !title || !content) {
-      return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
+      return res.status(400).json({ error: "Missing required fields: topicId, title, content." });
     }
 
     const storedContext = JSON.stringify({
@@ -166,7 +186,7 @@ router.post("/api/save-preview", (req, res) => {
 
     res.json({ success: true, postId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_save_preview_error", err);
   }
 });
 
@@ -174,9 +194,9 @@ router.post("/api/force-cycle", async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
     await forceCycle(topicId);
-    res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
+    res.json({ success: true, message: "Scheduler cycle executed." });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_force_cycle_error", err);
   }
 });
 
@@ -187,7 +207,7 @@ router.get("/api/research/stats", (req, res) => {
     const stats = getArticleStats();
     res.json(stats);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_research_stats_error", err);
   }
 });
 
@@ -198,13 +218,13 @@ router.get("/api/research/articles", (req, res) => {
     const limit = parseInt(req.query.limit || "20");
 
     if (!topicId) {
-      return res.status(400).json({ error: "topic query parameter required" });
+      return res.status(400).json({ error: "topic query parameter required." });
     }
 
     const articles = getArticlesForTopic(topicId, maxAge, limit);
     res.json({ articles });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_research_articles_error", err);
   }
 });
 
@@ -213,23 +233,31 @@ router.post("/api/research/poll", async (req, res) => {
     const newArticles = await pollAllFeeds();
     res.json({ success: true, newArticles });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    safeErrorResponse(res, 500, logActivity, "api_research_poll_error", err);
   }
 });
 
 // ── Activity Log ─────────────────────────────────────────────
 
 router.get("/api/logs", (req, res) => {
-  const limit = parseInt(req.query.limit || "100");
-  const logs = getActivityLog(limit);
-  res.json({ logs });
+  try {
+    const limit = parseInt(req.query.limit || "100");
+    const logs = getActivityLog(limit);
+    res.json({ logs });
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_logs_error", err);
+  }
 });
 
 // ── LinkedIn Auth ────────────────────────────────────────────
 
 router.get("/api/linkedin/status", async (req, res) => {
-  const status = await validateToken().catch(() => ({ valid: false }));
-  res.json(status);
+  try {
+    const status = await validateToken().catch(() => ({ valid: false }));
+    res.json(status);
+  } catch (err) {
+    safeErrorResponse(res, 500, logActivity, "api_linkedin_status_error", err);
+  }
 });
 
 export default router;

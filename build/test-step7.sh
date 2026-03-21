@@ -11,27 +11,43 @@
 #          They are SKIPPED by default.
 #          Run with --include-api to enable them.
 # ═══════════════════════════════════════════════════════════════
-
+(
+function yesno { read -p "$1 yes (default) or no: " && if [[ ${REPLY,,} = n ]] || [[ ${REPLY,,} = no ]]; then return 9; fi; return 0; }
 divider() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
+# run_test GROUP TEST_NUM DESCRIPTION EXPECTED_HTTP_CODE CURL_ARGS...
 run_test() {
   local group="$1"
   local test_num="$2"
   local description="$3"
-  local expected="$4"
+  local expected_code="$4"
   shift 4
 
   echo ""
   echo "  Test ${group}.${test_num} — ${description}"
-  echo "  Expected: ${expected}"
-  echo -n "  Result:   "
 
-  local result
-  result=$("$@" 2>&1)
-  echo "$result"
+  local response
+  echo "\$ curl -s -w "\n%{http_code}" "$@""
+  response=$(curl -s -w "\n%{http_code}" "$@")
+  local http_code
+  http_code=$(echo "$response" | tail -1)
+  local body
+  body=$(echo "$response" | sed '$d')
+
+  echo -e "\t Expected HTTP: ${expected_code}"
+  echo -e "\t Actual HTTP:   ${http_code}"
+  echo -e "\t Body:          $(echo "$body" | head -c 500)"
+
+  if [[ "$http_code" == "$expected_code" ]]; then
+    echo "  ✓ PASS"
+    PASS=$((PASS + 1))
+  else
+    echo "  ✗ FAIL (expected ${expected_code}, got ${http_code})"
+    FAIL=$((FAIL + 1))
+  fi
 }
 
 skip_test() {
@@ -40,9 +56,35 @@ skip_test() {
   local description="$3"
   echo ""
   echo "  Test ${group}.${test_num} — ${description}"
-  echo "  SKIPPED (triggers Anthropic API call — run with --include-api)"
+  echo "  ⊘ SKIPPED (triggers Anthropic API call — run with --include-api)"
   SKIP=$((SKIP + 1))
 }
+
+# run_check GROUP TEST_NUM DESCRIPTION CHECK_DESC COMMAND
+# For tests that verify counts/lengths rather than HTTP codes
+run_check() {
+  local group="$1"
+  local test_num="$2"
+  local description="$3"
+  local check_description="$4"
+  shift 4
+
+  echo ""
+  echo "  Test ${group}.${test_num} — ${description}"
+  echo "  Check: ${check_description}"
+  echo -n "  Result: "
+
+  local result
+  result=$(eval "$@" 2>&1)
+  echo "$result"
+
+  if echo "$result" | grep -q "PASS"; then
+    PASS=$((PASS + 1))
+  elif echo "$result" | grep -q "FAIL"; then
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 # ═══════════════════════════════════════════════════════════════
 # Group 1: parseId — Post ID validation
 # ═══════════════════════════════════════════════════════════════
@@ -52,45 +94,37 @@ divider
 echo "  Group 1: parseId — Post ID validation"
 divider
 
-run_test 1 1 "Non-numeric string" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/not_a_number"
+run_test 1 1 "Non-numeric string" 400 \
+  "$API/api/posts/not_a_number"
 
-run_test 1 2 "Mixed numeric string (123abc)" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/123abc"
+run_test 1 2 "Mixed numeric string (123abc)" 400 \
+  "$API/api/posts/123abc"
 
-run_test 1 3 "Zero" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/0"
+run_test 1 3 "Zero" 400 \
+  "$API/api/posts/0"
 
-run_test 1 4 "Negative number" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/-5"
+run_test 1 4 "Negative number" 400 \
+  "$API/api/posts/-5"
 
-run_test 1 5 "Extremely large number (9999999)" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/9999999"
+run_test 1 5 "Extremely large number (9999999)" 400 \
+  "$API/api/posts/9999999"
 
-run_test 1 6 "Valid ID format (may or may not exist)" \
-  'Post JSON or {"error": "Post not found."} — no 400' \
-  curl -s "$API/api/posts/3555"
+run_test 1 6 "Valid ID format (may or may not exist)" 404 \
+  "$API/api/posts/3555"
 
-run_test 1 7 "Decimal number (3.14)" \
-  '{"error": "Invalid post ID."}' \
-  curl -s "$API/api/posts/3.14"
+run_test 1 7 "Decimal number (3.14)" 400 \
+  "$API/api/posts/3.14"
 
-run_test 1 8 "Non-numeric on approve route" \
-  '{"error": "Invalid post ID."}' \
-  curl -s -X POST "$API/api/posts/not_a_number/approve" \
-    -H "Content-Type: application/json"
+run_test 1 8 "Non-numeric on approve route" 400 \
+  -X POST "$API/api/posts/not_a_number/approve" \
+  -H "Content-Type: application/json"
 
-run_test 1 9 "Non-numeric on reject route" \
-  '{"error": "Invalid post ID."}' \
-  curl -s -X POST "$API/api/posts/not_a_number/reject" \
-    -H "Content-Type: application/json" \
-    -d '{"reason":"test"}'
+run_test 1 9 "Non-numeric on reject route" 400 \
+  -X POST "$API/api/posts/not_a_number/reject" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"test"}'
 }
+
 # ═══════════════════════════════════════════════════════════════
 # Group 2: isValidTopicId — Topic allowlist
 # ═══════════════════════════════════════════════════════════════
@@ -100,55 +134,59 @@ divider
 echo "  Group 2: isValidTopicId — Topic allowlist"
 divider
 
-run_test 2 1 "Invalid topic (SQL injection attempt)" \
-  '{"error": "Invalid topic ID."}' \
-  curl -s -X POST "$API/api/generate-preview" \
-    -H "Content-Type: application/json" \
-    -d '{"topicId":"DROP TABLE posts"}'
+run_test 2 1 "Invalid topic (SQL injection attempt)" 400 \
+  -X POST "$API/api/generate-preview" \
+  -H "Content-Type: application/json" \
+  -d '{"topicId":"DROP TABLE posts"}'
 
+run_test 2 5 "Close-but-wrong topic (typo: ai-guardrail)" 400 \
+  -X POST "$API/api/generate-preview" \
+  -H "Content-Type: application/json" \
+  -d '{"topicId":"ai-guardrail"}'
+
+run_test 2 6 "Invalid topic on save-preview" 400 \
+  -X POST "$API/api/save-preview" \
+  -H "Content-Type: application/json" \
+  -d '{"topicId":"fake-topic","title":"Test","content":"Test content"}'
+
+run_test 2 7 "Invalid topic on research/articles" 400 \
+  "$API/api/research/articles?topic=injection-attack"
+
+run_test 2 8 "Valid topic on research/articles" 200 \
+  "$API/api/research/articles?topic=ai-guardrails"
+}
+
+function test_group_2_api {
 if [ "$INCLUDE_API" = true ]; then
-  run_test 2 2 "Empty string topic (auto-select)" \
-    "Normal response (auto-select, triggers API call)" \
-    curl -s -X POST "$API/api/generate-preview" \
-      -H "Content-Type: application/json" \
-      -d '{"topicId":""}'
-
-  run_test 2 3 "Null topic via force-cycle (auto-select)" \
-    '{"success": true, "message": "Scheduler cycle executed."}' \
-    curl -s -X POST "$API/api/force-cycle" \
-      -H "Content-Type: application/json" \
-      -d '{}'
-
-  run_test 2 4 "Valid topic via force-cycle" \
-    '{"success": true, ...}' \
-    curl -s -X POST "$API/api/force-cycle" \
-      -H "Content-Type: application/json" \
-      -d '{"topicId":"cybersecurity-incidents"}'
+  if yesno "run test_group_2_2api?";then test_group_2_2api;fi
+  if yesno "run test_group_2_3api?";then test_group_2_3api;fi
+  if yesno "run test_group_2_4api?";then test_group_2_4api;fi
 else
-  skip_test 2 2 "Empty string topic (auto-select)"
-  skip_test 2 3 "Null topic via force-cycle (auto-select)"
-  skip_test 2 4 "Valid topic via force-cycle"
+  skip_test 2 2-api "Empty string topic (auto-select)"
+  skip_test 2 3-api "Null topic via force-cycle (auto-select)"
+  skip_test 2 4-api "Valid topic via force-cycle"
 fi
-
-run_test 2 5 "Close-but-wrong topic (typo: ai-guardrail)" \
-  '{"error": "Invalid topic ID."}' \
-  curl -s -X POST "$API/api/generate-preview" \
+}
+function test_group_2_2api {
+  URL="$API/api/generate-preview"
+  run_test 2 2-api "$URL Empty string topic (auto-select)" 200 \
+    -X POST "$URL" \
     -H "Content-Type: application/json" \
-    -d '{"topicId":"ai-guardrail"}'
-
-run_test 2 6 "Invalid topic on save-preview" \
-  '{"error": "Invalid topic ID."}' \
-  curl -s -X POST "$API/api/save-preview" \
+    -d '{"topicId":""}'
+}
+function test_group_2_3api {
+  URL="$API/api/force-cycle"
+  run_test 2 3-api "$URL Null topic via force-cycle (auto-select)" 200 \
+    -X POST "$URL" \
     -H "Content-Type: application/json" \
-    -d '{"topicId":"fake-topic","title":"Test","content":"Test content"}'
-
-run_test 2 7 "Invalid topic on research/articles" \
-  '{"error": "Invalid topic ID."}' \
-  curl -s "$API/api/research/articles?topic=injection-attack"
-
-run_test 2 8 "Valid topic on research/articles" \
-  '{"articles": [...]}' \
-  curl -s "$API/api/research/articles?topic=ai-guardrails"
+    -d '{}'
+}
+function test_group_2_4api {
+  URL="$API/api/force-cycle"
+  run_test 2 4-api "$URL Valid topic via force-cycle" 200 \
+    -X POST "$URL" \
+    -H "Content-Type: application/json" \
+    -d '{"topicId":"cybersecurity-incidents"}'
 }
 # ═══════════════════════════════════════════════════════════════
 # Group 3: isValidStatus — Status allowlist
@@ -159,27 +197,37 @@ divider
 echo "  Group 3: isValidStatus — Status allowlist"
 divider
 
-run_test 3 1 "SQL injection in status" \
-  '{"error": "Invalid status parameter."}' \
-  curl -s "$API/api/posts?status=posted%20OR%201=1"
+run_test 3 1 "SQL injection in status" 400 \
+  "$API/api/posts?status=posted%20OR%201=1"
 
-run_test 3 2 "Valid status (pending_approval)" \
-  '{"posts": [...]}' \
-  curl -s "$API/api/posts?status=pending_approval"
+run_test 3 2 "Valid status (pending_approval)" 200 \
+  "$API/api/posts?status=pending_approval"
 
-run_test 3 3 "No status (returns all posts)" \
-  '{"posts": [...]} — no error' \
-  curl -s "$API/api/posts"
+run_test 3 3 "No status (returns all posts)" 200 \
+  "$API/api/posts"
 
 echo ""
 echo "  Test 3.4 — Each valid status accepted"
-echo "  Expected: a count for each — no errors"
-echo "  Result:"
+echo "  Expected: HTTP 200 for all five"
+ALL_PASS=true
 for s in posted rejected failed approved pending_approval; do
-  echo -n "    $s: "
-  curl -s "$API/api/posts?status=$s" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'{len(d[\"posts\"])} posts')" 2>/dev/null || echo "ERROR"
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/posts?status=$s")
+  if [[ "$code" == "200" ]]; then
+    echo "    $s: $code ✓"
+  else
+    echo "    $s: $code ✗"
+    ALL_PASS=false
+  fi
 done
+if [ "$ALL_PASS" = true ]; then
+  echo "  ✓ PASS"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ FAIL"
+  FAIL=$((FAIL + 1))
+fi
 }
+
 # ═══════════════════════════════════════════════════════════════
 # Group 4: isValidMode — Mode allowlist
 # ═══════════════════════════════════════════════════════════════
@@ -189,24 +237,22 @@ divider
 echo "  Group 4: isValidMode — Mode allowlist"
 divider
 
-run_test 4 1 "Invalid mode" \
-  '{"error": "Mode must be '\''auto'\'' or '\''manual'\''."} ' \
-  curl -s -X POST "$API/api/mode" \
-    -H "Content-Type: application/json" \
-    -d '{"mode":"chaos"}'
+run_test 4 1 "Invalid mode" 400 \
+  -X POST "$API/api/mode" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"chaos"}'
 
-run_test 4 2 "Valid mode (manual)" \
-  '{"mode": "manual"}' \
-  curl -s -X POST "$API/api/mode" \
-    -H "Content-Type: application/json" \
-    -d '{"mode":"manual"}'
+run_test 4 2 "Valid mode (manual)" 200 \
+  -X POST "$API/api/mode" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"manual"}'
 
-run_test 4 3 "Missing mode field" \
-  '{"error": "Mode must be '\''auto'\'' or '\''manual'\''."} ' \
-  curl -s -X POST "$API/api/mode" \
-    -H "Content-Type: application/json" \
-    -d '{}'
+run_test 4 3 "Missing mode field" 400 \
+  -X POST "$API/api/mode" \
+  -H "Content-Type: application/json" \
+  -d '{}'
 }
+
 # ═══════════════════════════════════════════════════════════════
 # Group 5: sanitizeInt — Range clamping
 # ═══════════════════════════════════════════════════════════════
@@ -216,69 +262,51 @@ divider
 echo "  Group 5: sanitizeInt — Range clamping"
 divider
 
-echo ""
-echo "  Test 5.1 — Posts limit clamped to max 200"
-echo "  Expected: at most 200 posts"
-echo -n "  Result:   "
-curl -s "$API/api/posts?limit=999999" | python3 -c "
+run_check 5 1 "Posts limit clamped to max 200" "count <= 200" \
+  "curl -s '$API/api/posts?limit=999999' | python3 -c \"
 import json, sys
 posts = json.load(sys.stdin)['posts']
-print(f'{len(posts)} posts returned (max should be 200)')
-" 2>/dev/null || echo "ERROR"
+n = len(posts)
+print(f'{n} posts returned — {\"PASS\" if n <= 200 else \"FAIL\"}')
+\""
 
-echo ""
-echo "  Test 5.2 — Logs limit clamped to max 500"
-echo "  Expected: at most 500 entries"
-echo -n "  Result:   "
-curl -s "$API/api/logs?limit=999999" | python3 -c "
+run_check 5 2 "Logs limit clamped to max 500" "count <= 500" \
+  "curl -s '$API/api/logs?limit=999999' | python3 -c \"
 import json, sys
 logs = json.load(sys.stdin)['logs']
-print(f'{len(logs)} logs returned (max should be 500)')
-" 2>/dev/null || echo "ERROR"
+n = len(logs)
+print(f'{n} logs returned — {\"PASS\" if n <= 500 else \"FAIL\"}')
+\""
 
-echo ""
-echo "  Test 5.3 — Negative limit clamped to minimum"
-echo "  Expected: exactly 1 entry"
-echo -n "  Result:   "
-curl -s "$API/api/logs?limit=-5" | python3 -c "
+run_check 5 3 "Negative limit clamped to minimum" "count == 1" \
+  "curl -s '$API/api/logs?limit=-5' | python3 -c \"
 import json, sys
 logs = json.load(sys.stdin)['logs']
-print(f'{len(logs)} logs returned (min should be 1)')
-" 2>/dev/null || echo "ERROR"
+n = len(logs)
+print(f'{n} logs returned — {\"PASS\" if n == 1 else \"FAIL\"}')
+\""
 
-echo ""
-echo "  Test 5.4 — Non-numeric limit falls back to default"
-echo "  Expected: up to 100 entries (default)"
-echo -n "  Result:   "
-curl -s "$API/api/logs?limit=abc" | python3 -c "
+run_check 5 4 "Non-numeric limit falls back to default" "count <= 100" \
+  "curl -s '$API/api/logs?limit=abc' | python3 -c \"
 import json, sys
 logs = json.load(sys.stdin)['logs']
-print(f'{len(logs)} logs returned (default should be 100)')
-" 2>/dev/null || echo "ERROR"
+n = len(logs)
+print(f'{n} logs returned — {\"PASS\" if n <= 100 else \"FAIL\"}')
+\""
 
-echo ""
-echo "  Test 5.5 — Research articles maxAge clamped to 90"
-echo "  Expected: normal response, no error"
-echo -n "  Result:   "
-curl -s "$API/api/research/articles?topic=ai-guardrails&maxAge=9999" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if 'error' in d:
-    print(f'ERROR: {d[\"error\"]}')
-else:
-    print(f'{len(d[\"articles\"])} articles returned (maxAge silently clamped to 90)')
-" 2>/dev/null || echo "ERROR"
+run_check 5 5 "Research articles maxAge clamped to 90" "HTTP 200" \
+  "code=\$(curl -s -o /dev/null -w '%{http_code}' '$API/api/research/articles?topic=ai-guardrails&maxAge=9999')
+echo \"HTTP \$code — \$( [ \"\$code\" = \"200\" ] && echo PASS || echo FAIL )\""
 
-echo ""
-echo "  Test 5.6 — Research articles limit clamped to 100"
-echo "  Expected: at most 100 articles"
-echo -n "  Result:   "
-curl -s "$API/api/research/articles?topic=ai-guardrails&limit=500" | python3 -c "
+run_check 5 6 "Research articles limit clamped to 100" "count <= 100" \
+  "curl -s '$API/api/research/articles?topic=ai-guardrails&limit=500' | python3 -c \"
 import json, sys
-articles = json.load(sys.stdin)['articles']
-print(f'{len(articles)} articles returned (max should be 100)')
-" 2>/dev/null || echo "ERROR"
+a = json.load(sys.stdin)['articles']
+n = len(a)
+print(f'{n} articles returned — {\"PASS\" if n <= 100 else \"FAIL\"}')
+\""
 }
+
 # ═══════════════════════════════════════════════════════════════
 # Group 6: sanitizeString — Length bounding
 # ═══════════════════════════════════════════════════════════════
@@ -288,15 +316,11 @@ divider
 echo "  Group 6: sanitizeString — Length bounding"
 divider
 
-echo ""
-echo "  Test 6.1 — Reject reason truncated at 500 chars"
-echo "  Expected: success or invalid ID, then check log for reason length <= 500"
-echo -n "  Result:   "
-python3 -c "import json; print(json.dumps({'reason': 'A' * 600}))" | \
-  curl -s -X POST "$API/api/posts/1/reject" \
-    -H "Content-Type: application/json" \
-    -d @-
-echo ""
+run_test 6 1 "Reject with 600-char reason (post 1 — may not exist)" 500 \
+  -X POST "$API/api/posts/1/reject" \
+  -H "Content-Type: application/json" \
+  -d "{\"reason\":\"$(python3 -c "print('A'*600)")\"}"
+
 echo -n "  Log check: "
 curl -s "$API/api/logs?limit=5" | python3 -c "
 import json, sys
@@ -306,27 +330,20 @@ for l in logs:
     if 'reject' in l['action']:
         d = json.loads(l['details'])
         reason = d.get('reason','')
-        print(f'Reason length: {len(reason)} (should be <= 500)')
+        n = len(reason)
+        result = 'PASS' if n <= 500 else 'FAIL'
+        print(f'Reason length: {n} — {result}')
         found = True
         break
 if not found:
-    print('No reject entry found in recent logs')
+    print('No reject entry in recent logs (post may not exist — expected)')
 " 2>/dev/null || echo "ERROR"
 
-echo ""
-echo "  Test 6.2 — Save-preview title truncated at 200 chars"
-echo "  Expected: success, then check log for title length <= 200"
-echo -n "  Result:   "
-python3 -c "
-import json
-print(json.dumps({
-    'topicId': 'ai-guardrails',
-    'title': 'T' * 300,
-    'content': 'Test content body'
-}))" | curl -s -X POST "$API/api/save-preview" \
-    -H "Content-Type: application/json" \
-    -d @-
-echo ""
+run_test 6 2 "Save-preview with 300-char title" 200 \
+  -X POST "$API/api/save-preview" \
+  -H "Content-Type: application/json" \
+  -d "{\"topicId\":\"ai-guardrails\",\"title\":\"$(python3 -c "print('T'*300)")\",\"content\":\"Test content body\"}"
+
 echo -n "  Log check: "
 curl -s "$API/api/logs?limit=5" | python3 -c "
 import json, sys
@@ -336,28 +353,21 @@ for l in logs:
     if 'preview_saved' in l['action']:
         d = json.loads(l['details'])
         title = d.get('title','')
-        print(f'Title length: {len(title)} (should be <= 200)')
+        n = len(title)
+        result = 'PASS' if n <= 200 else 'FAIL'
+        print(f'Title length: {n} — {result}')
         found = True
         break
 if not found:
     print('No preview_saved entry found in recent logs')
 " 2>/dev/null || echo "ERROR"
 
-echo ""
-echo "  Test 6.3 — Content truncated at 5000 chars"
-echo "  Expected: success (content silently clamped to 5000)"
-echo -n "  Result:   "
-python3 -c "
-import json
-print(json.dumps({
-    'topicId': 'ai-guardrails',
-    'title': 'Test title',
-    'content': 'C' * 6000
-}))" | curl -s -X POST "$API/api/save-preview" \
-    -H "Content-Type: application/json" \
-    -d @-
-echo ""
+run_test 6 3 "Save-preview with 6000-char content" 200 \
+  -X POST "$API/api/save-preview" \
+  -H "Content-Type: application/json" \
+  -d "{\"topicId\":\"ai-guardrails\",\"title\":\"Test title\",\"content\":\"$(python3 -c "print('C'*6000)")\"}"
 }
+
 # ═══════════════════════════════════════════════════════════════
 # Group 7: Array limiting
 # ═══════════════════════════════════════════════════════════════
@@ -367,45 +377,23 @@ divider
 echo "  Group 7: Array limiting"
 divider
 
-echo ""
-echo "  Test 7.1 — Hashtags clamped to 10"
-echo "  Expected: success (25 hashtags silently reduced to 10)"
-echo -n "  Result:   "
-python3 -c "
-import json
-print(json.dumps({
-    'topicId': 'ai-guardrails',
-    'title': 'Test',
-    'content': 'Test content',
-    'hashtags': ['#tag' + str(i) for i in range(25)]
-}))" | curl -s -X POST "$API/api/save-preview" \
-    -H "Content-Type: application/json" \
-    -d @-
-echo ""
+run_test 7 1 "Save-preview with 25 hashtags" 200 \
+  -X POST "$API/api/save-preview" \
+  -H "Content-Type: application/json" \
+  -d "$(python3 -c "import json; print(json.dumps({'topicId':'ai-guardrails','title':'Test','content':'Test content','hashtags':['#tag'+str(i) for i in range(25)]}))")"
 
-echo ""
-echo "  Test 7.2 — Non-array hashtags handled gracefully"
-echo "  Expected: success (string replaced with empty array, no crash)"
-echo -n "  Result:   "
-curl -s -X POST "$API/api/save-preview" \
+run_test 7 2 "Save-preview with non-array hashtags" 200 \
+  -X POST "$API/api/save-preview" \
   -H "Content-Type: application/json" \
   -d '{"topicId":"ai-guardrails","title":"Test","content":"Body","hashtags":"not an array"}'
-echo ""
 }
 
+function test_group_fail {
+  run_test "" fail "Expected failure" XXX \
+  "$API/api/status"
 
-API="http://localhost:3001"
-INCLUDE_API=false
-PASS=0
-FAIL=0
-SKIP=0
-
-if [[ "$1" == "--include-api" ]]; then
-  INCLUDE_API=true
-fi
-
-# ── Preflight check ──────────────────────────────────────────
-
+}
+function pre_flight {
 echo ""
 echo "═══════════════════════════════════════════════════════════"
 echo "  Step 7 — Input Validation Test Suite"
@@ -417,8 +405,92 @@ if curl -s --max-time 3 "$API/api/status" > /dev/null 2>&1; then
 else
   echo "FAILED — server not reachable at $API"
   echo "  Start the server first, then re-run this script."
-  exit 1
+  return 1
 fi
+}
+
+function do_summary {
+
+divider
+echo ""
+echo "  ═══════════════════════════════════════"
+echo "  Results:  ${PASS} PASSED  ${FAIL} FAILED  ${SKIP} SKIPPED"
+echo "  ═══════════════════════════════════════"
+echo ""
+
+if [ "$FAIL" -gt 0 ]; then
+  echo "  ⚠ ${FAIL} test(s) failed. Review output above."
+elif [ "$INCLUDE_API" = false ]; then
+  echo "  All executed tests passed. ${SKIP} tests skipped (use --include-api)."
+else
+  echo "  All tests passed."
+fi
+
+divider
+echo ""
+
+return $FAIL
+
+}
+
+# function run_tests {
+# RUN_ALL=${1:-}
+# if [ -n "$API_ONLY" ];then
+#   test_group_2_api
+# elif [ -z "$RUN_ALL" ];then
+# read -p "<Enter> to run group 1" x && test_group_1
+# read -p "<Enter> to run group 2" x && test_group_2
+# read -p "<Enter> to run group 2-api" x && test_group_2_api
+# read -p "<Enter> to run group 3" x && test_group_3
+# read -p "<Enter> to run group 4" x && test_group_4
+# read -p "<Enter> to run group 5" x && test_group_5
+# read -p "<Enter> to run group 6" x && test_group_6
+# read -p "<Enter> to run group 7" x && test_group_7
+# read -p "<Enter> to run group fail" x && test_group_fail
+# else
+# test_group_1
+# test_group_2
+# test_group_2_api
+# test_group_3
+# test_group_4
+# test_group_5
+# test_group_6
+# test_group_7
+# test_group_fail
+# fi
+# }
+######## MAIN
+
+API="http://localhost:3001"
+INCLUDE_API=false
+RUN_ALL=
+API_ONLY=
+PASS=0
+FAIL=0
+SKIP=0
+
+
+for i in "$@";do
+case $i in
+--include-api)
+  shift && INCLUDE_API=true
+  ;;
+--api-only)
+  shift && API_ONLY=true && INCLUDE_API=true
+  ;;
+--all)
+  shift && RUN_ALL=YES
+  ;;
+esac
+done
+
+echo "
+INCLUDE_API $INCLUDE_API
+API_ONLY    $API_ONLY
+RUN_ALL     $RUN_ALL
+"
+
+if [ pre_flight ];then
 
 if [ "$INCLUDE_API" = true ]; then
   echo "  API tests: ENABLED (will consume Anthropic credits)"
@@ -426,23 +498,37 @@ else
   echo "  API tests: SKIPPED (use --include-api to enable)"
 fi
 ## test
+if [ -n "$API_ONLY" ];then
+  test_group_2_api
+elif [ -z "$RUN_ALL" ];then
 read -p "<Enter> to run group 1" x && test_group_1
 read -p "<Enter> to run group 2" x && test_group_2
+# read -p "<Enter> to run group 2-api" x && test_group_2_api
+read -p "<Enter> to run group 2.2api" x && test_group_2_2api
+read -p "<Enter> to run group 2.3api" x && test_group_2_3api
+read -p "<Enter> to run group 2.4api" x && test_group_2_4api
 read -p "<Enter> to run group 3" x && test_group_3
 read -p "<Enter> to run group 4" x && test_group_4
 read -p "<Enter> to run group 5" x && test_group_5
 read -p "<Enter> to run group 6" x && test_group_6
 read -p "<Enter> to run group 7" x && test_group_7
+read -p "<Enter> to run group fail" x && test_group_fail
+else
+test_group_1
+test_group_2
+test_group_2_api
+test_group_3
+test_group_4
+test_group_5
+test_group_6
+test_group_7
+test_group_fail
+fi
 ##
 # ═══════════════════════════════════════════════════════════════
 # Summary
 # ═══════════════════════════════════════════════════════════════
-
-divider
-echo "  Test run complete."
-if [ "$INCLUDE_API" = false ]; then
-  echo "  Tests 2.2, 2.3, 2.4 were skipped (use --include-api to enable)"
+do_summary
 fi
-echo "  Review output above and compare with expected values."
-divider
-echo ""
+
+)

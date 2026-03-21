@@ -24,7 +24,15 @@ import {
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
-import { safeErrorResponse } from "../services/security.js";
+import {
+  safeErrorResponse,
+  isValidTopicId,
+  isValidStatus,
+  isValidMode,
+  sanitizeInt,
+  sanitizeString,
+  parseId
+} from "../services/security.js";
 
 const router = Router();
 
@@ -52,7 +60,8 @@ router.get("/api/status", async (req, res) => {
       stats,
       researchStats,
       linkedinConnected: tokenStatus.valid,
-      linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
+      linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
+      logLimit: sanitizeInt(process.env.DASHBOARD_LOG_LIMIT, 40, 10, 500)
     });
   } catch (err) {
     safeErrorResponse(res, 500, logActivity, "api_status_error", err);
@@ -63,8 +72,13 @@ router.get("/api/status", async (req, res) => {
 
 router.get("/api/posts", (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || "50");
+    const limit = sanitizeInt(req.query.limit, 50, 1, 200);
     const status = req.query.status;
+
+    if (status && !isValidStatus(status)) {
+      return res.status(400).json({ error: "Invalid status parameter." });
+    }
+
     const posts = status ? getPostsByStatus(status) : getAllPosts(limit);
     res.json({ posts });
   } catch (err) {
@@ -74,7 +88,10 @@ router.get("/api/posts", (req, res) => {
 
 router.get("/api/posts/:id", (req, res) => {
   try {
-    const post = getPost(parseInt(req.params.id));
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid post ID." });
+
+    const post = getPost(id);
     if (!post) return res.status(404).json({ error: "Post not found." });
     res.json({ post });
   } catch (err) {
@@ -86,7 +103,10 @@ router.get("/api/posts/:id", (req, res) => {
 
 router.post("/api/posts/:id/approve", async (req, res) => {
   try {
-    const result = await approvePost(parseInt(req.params.id));
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid post ID." });
+
+    const result = await approvePost(id);
     res.json({ success: true, result });
   } catch (err) {
     safeErrorResponse(res, 500, logActivity, "api_post_approve_error", err);
@@ -95,7 +115,11 @@ router.post("/api/posts/:id/approve", async (req, res) => {
 
 router.post("/api/posts/:id/reject", (req, res) => {
   try {
-    rejectPost(parseInt(req.params.id), req.body.reason || "");
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid post ID." });
+
+    const reason = sanitizeString(req.body.reason || "", 500);
+    rejectPost(id, reason);
     res.json({ success: true });
   } catch (err) {
     safeErrorResponse(res, 500, logActivity, "api_post_reject_error", err);
@@ -107,7 +131,7 @@ router.post("/api/posts/:id/reject", (req, res) => {
 router.post("/api/mode", (req, res) => {
   try {
     const { mode } = req.body;
-    if (!["auto", "manual"].includes(mode)) {
+    if (!isValidMode(mode)) {
       return res.status(400).json({ error: "Mode must be 'auto' or 'manual'." });
     }
     setAgentState("mode", mode);
@@ -144,6 +168,11 @@ router.post("/api/corroboration", (req, res) => {
 router.post("/api/generate-preview", async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
+
+    if (topicId && !isValidTopicId(topicId)) {
+      return res.status(400).json({ error: "Invalid topic ID." });
+    }
+
     const generated = await generatePost(topicId);
 
     if (generated.blocked) {
@@ -159,15 +188,23 @@ router.post("/api/generate-preview", async (req, res) => {
 
 router.post("/api/save-preview", (req, res) => {
   try {
-    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
+    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, cycleId } = req.body;
 
     if (!topicId || !title || !content) {
       return res.status(400).json({ error: "Missing required fields: topicId, title, content." });
     }
 
+    if (!isValidTopicId(topicId)) {
+      return res.status(400).json({ error: "Invalid topic ID." });
+    }
+
+    const safeTitle = sanitizeString(title, 200);
+    const safeContent = sanitizeString(content, 5000);
+
     const storedContext = JSON.stringify({
-      angle: angle || "",
-      sourcesUsed: sourcesUsed || [],
+      cycleId: sanitizeString(cycleId || "", 16),
+      angle: sanitizeString(angle || "", 500),
+      sourcesUsed: Array.isArray(sourcesUsed) ? sourcesUsed.slice(0, 20) : [],
       researchSummary: researchSummary || null,
       qualityScores: quality?.scores,
       factualFlags: quality?.factual_flags
@@ -175,14 +212,14 @@ router.post("/api/save-preview", (req, res) => {
 
     const postId = createPost({
       topicId,
-      title,
-      content,
-      hashtags: hashtags || [],
+      title: safeTitle,
+      content: safeContent,
+      hashtags: Array.isArray(hashtags) ? hashtags.slice(0, 10) : [],
       newsContext: storedContext
     });
 
     updatePostStatus(postId, "pending_approval");
-    logActivity("info", "preview_saved_to_queue", { postId, title });
+    logActivity("info", "preview_saved_to_queue", { postId, title: safeTitle });
 
     res.json({ success: true, postId });
   } catch (err) {
@@ -193,6 +230,11 @@ router.post("/api/save-preview", (req, res) => {
 router.post("/api/force-cycle", async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
+
+    if (topicId && !isValidTopicId(topicId)) {
+      return res.status(400).json({ error: "Invalid topic ID." });
+    }
+
     await forceCycle(topicId);
     res.json({ success: true, message: "Scheduler cycle executed." });
   } catch (err) {
@@ -214,12 +256,16 @@ router.get("/api/research/stats", (req, res) => {
 router.get("/api/research/articles", (req, res) => {
   try {
     const topicId = req.query.topic;
-    const maxAge = parseInt(req.query.maxAge || "14");
-    const limit = parseInt(req.query.limit || "20");
 
     if (!topicId) {
       return res.status(400).json({ error: "topic query parameter required." });
     }
+    if (!isValidTopicId(topicId)) {
+      return res.status(400).json({ error: "Invalid topic ID." });
+    }
+
+    const maxAge = sanitizeInt(req.query.maxAge, 14, 1, 90);
+    const limit = sanitizeInt(req.query.limit, 20, 1, 100);
 
     const articles = getArticlesForTopic(topicId, maxAge, limit);
     res.json({ articles });
@@ -241,7 +287,7 @@ router.post("/api/research/poll", async (req, res) => {
 
 router.get("/api/logs", (req, res) => {
   try {
-    const limit = parseInt(req.query.limit || "100");
+    const limit = sanitizeInt(req.query.limit, 100, 1, 500);
     const logs = getActivityLog(limit);
     res.json({ logs });
   } catch (err) {

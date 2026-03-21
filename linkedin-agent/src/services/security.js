@@ -55,3 +55,47 @@ export function safeErrorResponse(res, statusCode, logFn, action, err) {
     ref
   });
 }
+
+// ── Input Validation ─────────────────────────────────────────
+
+const VALID_TOPICS = new Set([
+  "ai-practical-benefit", "ai-guardrails",
+  "cybersecurity-incidents", "cybersecurity-advances"
+]);
+
+const VALID_STATUSES = new Set([
+  "pending_approval", "posted", "rejected", "failed", "approved"
+]);
+
+const VALID_MODES = new Set(["auto", "manual"]);
+
+export function isValidTopicId(topicId) {
+  return topicId === null || topicId === undefined || VALID_TOPICS.has(topicId);
+}
+
+export function isValidStatus(status) {
+  return !status || VALID_STATUSES.has(status);
+}
+
+export function isValidMode(mode) {
+  return VALID_MODES.has(mode);
+}
+
+export function parseId(value) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed < 1 || parsed > 999999) return null;
+  if (String(parsed) !== String(value).trim()) return null;  // reject "123abc"
+  return parsed;
+}
+
+export function sanitizeInt(value, defaultVal, min = 1, max = 1000) {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) return defaultVal;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+export function sanitizeString(str, maxLength = 500) {
+  if (typeof str !== "string") return "";
+  return str.slice(0, maxLength);
+}

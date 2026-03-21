@@ -215,7 +215,7 @@
     /* Main content layout */
     .main-grid {
       display: grid;
-      grid-template-columns: 1fr 300px 220px;
+      grid-template-columns: minmax(0, 1fr) 300px 220px;
       gap: 1.5rem;
     }
 
@@ -239,7 +239,7 @@
     }
 
     /* Post cards */
-    .post-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .post-list { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; overflow: hidden; }
 
     .post-card {
       background: var(--bg-card);
@@ -248,6 +248,8 @@
       padding: 1.25rem;
       cursor: pointer;
       transition: all 0.2s;
+      overflow: hidden;
+      min-width: 0;
     }
 
     .post-card:hover {
@@ -293,6 +295,9 @@
       font-weight: 600;
       font-size: 0.95rem;
       margin-bottom: 0.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .post-preview {
@@ -301,8 +306,10 @@
       line-height: 1.5;
       display: -webkit-box;
       -webkit-line-clamp: 3;
+      line-clamp: 3;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      word-break: break-word;
     }
 
     .post-footer {
@@ -318,6 +325,13 @@
       font-size: 0.75rem;
       color: var(--text-muted);
       font-family: var(--font-mono);
+    }
+
+    .post-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
     }
 
     .post-actions { display: flex; gap: 0.5rem; }
@@ -533,11 +547,11 @@
 
     /* Responsive */
     @media (max-width: 1100px) {
-      .main-grid { grid-template-columns: 1fr 260px; }
+      .main-grid { grid-template-columns: minmax(0, 1fr) 260px; }
     }
     @media (max-width: 900px) {
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .main-grid { grid-template-columns: 1fr; }
+      .main-grid { grid-template-columns: minmax(0, 1fr); }
     }
 
     /* Research & Sources */
@@ -726,22 +740,26 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
+      const [logLimit, setLogLimit] = useState(40);
 
       const fetchAll = useCallback(async () => {
         try {
           const [statusRes, postsRes, logsRes] = await Promise.all([
             fetch(`${API}/api/status`).then(r => r.json()),
             fetch(`${API}/api/posts?limit=30`).then(r => r.json()),
-            fetch(`${API}/api/logs?limit=40`).then(r => r.json()),
+            fetch(`${API}/api/logs?limit=${logLimit}`).then(r => r.json()),
           ]);
           setStatus(statusRes);
+          if (statusRes.logLimit && statusRes.logLimit !== logLimit) {
+            setLogLimit(statusRes.logLimit);
+          }
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
           setError(null);
         } catch (err) {
           setError('Cannot connect to agent backend. Is it running?');
         }
-      }, []);
+      }, [logLimit]);
 
       useEffect(() => {
         fetchAll();
@@ -886,6 +904,7 @@
               content: selectedPost.content,
               hashtags: selectedPost.hashtags,
               angle: selectedPost.angle,
+              cycleId: selectedPost.cycleId,
               sourcesUsed: selectedPost.sourcesUsed,
               researchSummary: selectedPost.researchSummary,
               quality: selectedPost.quality
@@ -998,7 +1017,7 @@
           {/* Main content */}
           <div className="main-grid">
             {/* Posts column */}
-            <div>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
               {/* Pending approval section */}
               {pendingPosts.length > 0 && (
                 <div style={{ marginBottom: '2rem' }}>
@@ -1011,6 +1030,7 @@
                       const pCtx = parseNewsContext(post);
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
+                      const pCycleId = pCtx?.cycleId || null;
                       return (
                       <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
@@ -1028,7 +1048,11 @@
                         <div className="post-title-text">{post.title}</div>
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
+                          <div className="post-meta">
+                            <span className="log-id">#{post.id}</span>
+                            {pCycleId && <span className="log-cycle">{pCycleId}</span>}
                           <span className="post-date">{formatDate(post.created_at)}</span>
+                          </div>
                           <div className="post-actions">
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
@@ -1052,7 +1076,10 @@
                   <div className="sidebar-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No posts yet. Generate your first one below.
                   </div>
-                ) : recentPosts.slice(0, 15).map(post => (
+                ) : recentPosts.slice(0, 15).map(post => {
+                  const rCtx = parseNewsContext(post);
+                  const rCycleId = rCtx?.cycleId || null;
+                  return (
                   <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}>
                     <div className="post-card-header">
                       <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
@@ -1065,10 +1092,15 @@
                     <div className="post-title-text">{post.title}</div>
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
+                      <div className="post-meta">
+                        <span className="log-id">#{post.id}</span>
+                        {rCycleId && <span className="log-cycle">{rCycleId}</span>}
                       <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
                     </div>
                   </div>
-                ))}
+                  </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1077,7 +1109,7 @@
               <div className="sidebar-panel">
                 <div className="section-title">Activity Log</div>
                 <div style={{ maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {logs.slice(0, 30).map(log => {
+                  {logs.map(log => {
                     let cycleId = null;
                     try {
                       const d = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;

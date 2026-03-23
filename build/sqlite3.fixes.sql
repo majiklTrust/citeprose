@@ -5,6 +5,8 @@ sqlite3 data/agent.db "SELECT id, substr(title, 1, 40), length(content) FROM pos
 sqlite3 data/agent.db "SELECT id, substr(title, 1, 40), status FROM posts WHERE status = 'pending_approval';"
 -- sqlite3 data/agent.db "UPDATE posts SET status = 'rejected' WHERE title IN ('Test', 'Test title') OR title LIKE 'TTT%';"
 
+sqlite3 -batch data/agent.db "DELETE FROM articles WHERE feed_name='TEST-FEED';"
+sqlite3 -batch data/agent.db "SELECT title,link FROM articles WHERE feed_name='TEST-FEED';"
 -- posts with cycleId
 SELECT id, json_extract(news_context, '$.cycleId') AS cycleId, topic_id, title, status FROM posts ORDER BY id DESC;
 

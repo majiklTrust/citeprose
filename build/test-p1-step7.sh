@@ -462,12 +462,12 @@ return $FAIL
 ######## MAIN
 
 API="http://localhost:3001"
-INCLUDE_API=false
-RUN_ALL=
-API_ONLY=
 PASS=0
 FAIL=0
 SKIP=0
+INCLUDE_API=false
+RUN_ALL=
+API_ONLY=
 
 
 for i in "$@";do

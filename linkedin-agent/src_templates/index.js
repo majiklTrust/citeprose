@@ -30,8 +30,7 @@ async function start() {
   const envResult = dotenv.config({ path: envPath, override: true });
 
   if (envResult.error) {
-    console.error(`[WARN] dotenv could not load ${envPath}: ${envResult.error.message}`);
-    console.error("       Falling back to OS environment variables only.");
+    console.error("[WARN] Could not load .env — falling back to OS environment variables.");
   }
 
   // ═════════════════════════════════════════════════════════════
@@ -49,14 +48,7 @@ async function start() {
     process.env.ANTHROPIC_API_KEY = apiKey;
     console.log("[OK] API key decrypted.");
   } catch (err) {
-    console.error(`[FATAL] ${err.message}`);
-    console.error("");
-    console.error("  Diagnostic:");
-    console.error(`    .env path:                   ${envPath}`);
-    console.error(`    dotenv loaded:               ${!envResult.error}`);
-    console.error(`    ANTHROPIC_API_KEY_ENCRYPTED: ${encryptedKey ? `set (${encryptedKey.length} chars)` : "NOT SET"}`);
-    console.error(`    ENCRYPTION_SECRET:           ${encSecret ? `set (${encSecret.length} chars)` : "NOT SET"}`);
-    console.error(`    ENCRYPTION_SALT:             ${encSalt ? `set (${encSalt.length} chars)` : "NOT SET"}`);
+    console.error("[FATAL] API key decryption failed. Run: node scripts/verify-key.js");
     process.exit(1);
   }
 
@@ -94,6 +86,7 @@ async function start() {
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
 ║                                                           ║
+║    Env: ${(process.env.NODE_ENV || "NODE_ENV not set").toUpperCase().padEnd(0)}
 ║   Mode: ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ╚═══════════════════════════════════════════════════════════╝
 `);
@@ -105,6 +98,8 @@ async function start() {
   // ── Express Server ───────────────────────────────────────────
 
   const app = express();
+  app.disable("x-powered-by");
+  app.disable("etag");
 
   // Security headers
   app.use((req, res, next) => {
@@ -112,6 +107,9 @@ async function start() {
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("X-XSS-Protection", "0");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()");
+    res.setHeader("X-DNS-Prefetch-Control", "off");
+    res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     res.setHeader("Content-Security-Policy",
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com; " +
@@ -243,6 +241,6 @@ async function start() {
 // ═══════════════════════════════════════════════════════════════
 
 start().catch(err => {
-  console.error("[FATAL] Startup failed:", err.message);
+  console.error("[FATAL] Startup failed.");
   process.exit(1);
 });

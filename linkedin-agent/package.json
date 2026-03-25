@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "0.28.3",
+  "version": "0.30.1",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -14,14 +14,17 @@
     "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
     "build_js": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" src_templates/index.js >src/index.js",
     "start": "node src/index.js",
+    "preprod": "NODE_ENV=preprod npm run start",
     "production": "NODE_ENV=production npm run start",
-    "int_4_2": "ENCRYPTION_SECRET=garbage NODE_ENV=production npm run start",
+    "nonprod": "NODE_ENV=nonprod nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "integration": "npm run timesync && NODE_ENV=nonprod nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "dev": "npm version minor && npm run timesync && npm run build && NODE_ENV=nonprod nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "dashboard": "node src/dashboard-server.js",
     "setup": "node scripts/setup.js",
     "test-post": "node scripts/test-post.js",
-    "auth": "node scripts/linkedin-auth.js"
+    "auth": "node scripts/linkedin-auth.js",
+    "refresh": "rm -rf ./node_modules && npm install",
+    "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
@@ -30,6 +33,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
+    "jose": "^6.2.2",
     "node-cron": "^3.0.3",
     "open": "^10.0.0",
     "rss-parser": "^3.13.0",

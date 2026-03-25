@@ -59,7 +59,7 @@ function estimateNextWindow(recentPosts) {
   if (recentPosts.length < MAX_PER_10_DAYS()) return "now";
   // Find when the oldest post in the window will "age out"
   const oldest = recentPosts[recentPosts.length - 1];
-  const agesOut = new Date(new Date(oldest.posted_at + "Z").getTime() + 10 * 24 * 60 * 60 * 1000);
+  const agesOut = new Date(new Date(oldest.posted_at.endsWith("Z") ? oldest.posted_at : oldest.posted_at + "Z").getTime() + 10 * 24 * 60 * 60 * 1000);
   return agesOut.toISOString();
 }
 

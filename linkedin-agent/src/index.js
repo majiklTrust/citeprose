@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // ═══════════════════════════════════════════════════════════════
-// v0.28.3
+// v0.30.3
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -81,7 +81,7 @@ async function start() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.28.3
+║           LinkedIn AI Content Agent  v0.30.3
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

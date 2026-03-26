@@ -33,6 +33,14 @@ function getJwksSet(jwksUri) {
 
 // ── Public API ───────────────────────────────────────────────
 
+// ── FIX 3.3.3.3-A | MEDIUM ──────────────────────────────────
+// Threat closed: An attacker can no longer submit oversized JWTs
+// (e.g., 1MB) to consume server CPU and memory during signature
+// verification. Tokens exceeding this limit are rejected before
+// any cryptographic operations occur. Auth0 tokens are typically
+// 1-2KB; 16KB provides generous headroom for custom claims.
+const MAX_TOKEN_BYTES = 16_384;
+
 /**
  * Verify a JWT token against a specific issuer's JWKS endpoint.
  *
@@ -46,6 +54,10 @@ function getJwksSet(jwksUri) {
 export async function verifyToken(token, issuer, jwksUri, audience) {
   if (!token) {
     throw new Error("TOKEN_MISSING");
+  }
+
+  if (typeof token === "string" && Buffer.byteLength(token, "utf8") > MAX_TOKEN_BYTES) {
+    throw new Error("TOKEN_INVALID");
   }
 
   if (!issuer || !jwksUri) {

@@ -63,6 +63,7 @@ select count(*) AS articles from articles;
 
 .header on
 .mode column
+sqlite3  data/agent.db ".header on" ".mode column" "SELECT id, status, created_at, posted_at, scheduled_for FROM posts ORDER BY id DESC LIMIT 10;"
 PRAGMA table_info('posts');
 PRAGMA table_info('activity_log');
 PRAGMA table_info('agent_state');

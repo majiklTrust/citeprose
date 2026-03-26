@@ -16,7 +16,7 @@
 // and validates the token against that provider's JWKS.
 // ═══════════════════════════════════════════════════════════════
 
-import { isAuthEnabled, getProviders, getJwksMap, getIssuers } from "./index.js";
+import { isAuthEnabled, getProviders, getJwksMap, getIssuers, getSnapshotByIssuer } from "./index.js";
 import { verifyToken } from "./jwt-verifier.js";
 
 // ── Error Responses ──────────────────────────────────────────
@@ -117,9 +117,11 @@ export function createAuthMiddleware(logFn) {
       return res.status(ERR_ISSUER_UNKNOWN.status).json({ error: ERR_ISSUER_UNKNOWN.error });
     }
 
-    // Find the audience from the provider that matches this issuer
-    const provider = getProviders().find(p => p.issuer === issuer);
-    const audience = provider?.audience || null;
+    // Find the audience from the frozen registration snapshot.
+    // Uses getSnapshotByIssuer to read immutable values — a provider
+    // that mutated its issuer/audience after init cannot affect this.
+    const snapshot = getSnapshotByIssuer(issuer);
+    const audience = snapshot?.audience || null;
 
     // Verify token signature and claims
     try {
@@ -136,7 +138,7 @@ export function createAuthMiddleware(logFn) {
         raw: payload
       };
 
-      req.authProvider = provider?.name || "unknown";
+      req.authProvider = snapshot?.name || "unknown";
       return next();
 
     } catch (err) {
@@ -197,8 +199,8 @@ export function createAuthMiddleware(logFn) {
       return next();
     }
 
-    const provider = getProviders().find(p => p.issuer === issuer);
-    const audience = provider?.audience || null;
+    const snapshot = getSnapshotByIssuer(issuer);
+    const audience = snapshot?.audience || null;
 
     try {
       const payload = await verifyToken(token, issuer, jwksUri, audience);
@@ -211,7 +213,7 @@ export function createAuthMiddleware(logFn) {
         expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
         raw: payload
       };
-      req.authProvider = provider?.name || "unknown";
+      req.authProvider = snapshot?.name || "unknown";
     } catch {
       req.user = null;
     }

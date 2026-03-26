@@ -59,6 +59,23 @@ const activeProviders = new Map();
 let registryInitialized = false;
 let authRequired = false;
 
+// ── FIX 3.1.6.1-A | CRITICAL ────────────────────────────────
+// Threat closed: A hostile provider whose init() never resolves
+// can no longer block server startup indefinitely. Each provider
+// init() is wrapped in a race against this timeout. If the
+// provider does not complete within the limit, it is marked as
+// failed and the registry continues loading remaining providers.
+const INIT_TIMEOUT_MS = 10_000;
+
+// ── FIX 3.1.4.3-A / 3.1.4.4-A | CRITICAL ───────────────────
+// Threat closed: A provider that mutates its issuer or jwksUri
+// after registration can no longer redirect token validation to
+// attacker-controlled keys. Provider fields are frozen at
+// registration time. getJwksMap() and getIssuers() read from
+// the snapshot, not the live provider object. The attacker's
+// post-init mutation has no effect on token verification.
+const providerSnapshots = new Map();
+
 // ── Validation ───────────────────────────────────────────────
 
 function validateProviderInterface(provider, filename) {
@@ -165,16 +182,76 @@ export async function initRegistry(logFn) {
     results.push(result);
 
     if (result.status === "ready") {
+      const providerName = result.provider.name;
+
+      // ── FIX 3.1.3.2-A | MEDIUM ──────────────────────────────
+      // Threat closed: A hostile provider file that exports the
+      // same name as a legitimate provider can no longer hijack
+      // the name by sorting alphabetically first. When two files
+      // claim the same name, BOTH are evicted — the first one
+      // already registered is removed, and the second is rejected.
+      // Neither can be trusted because the operator cannot tell
+      // which is legitimate from file scan order alone. This
+      // forces manual resolution of the naming conflict.
+      if (activeProviders.has(providerName)) {
+        // Evict the previously registered provider — it may be hostile
+        activeProviders.delete(providerName);
+        providerSnapshots.delete(providerName);
+
+        result.status = "duplicate";
+        result.reason = `duplicate provider name "${providerName}" — both providers evicted for safety`;
+
+        if (logFn) {
+          logFn("error", "auth_provider_duplicate", {
+            filename: result.filename,
+            name: providerName,
+            reason: result.reason
+          });
+        }
+        continue;
+      }
+
       try {
-        await result.provider.init();
-        activeProviders.set(result.provider.name, result.provider);
+        // ── FIX 3.1.6.1-A + 3.1.2.1-A | CRITICAL + MEDIUM ────
+        // Threat closed: A provider whose init() hangs (never
+        // resolves) can no longer block server startup. The init
+        // call races against INIT_TIMEOUT_MS. If the provider does
+        // not complete in time, it is marked as failed and the
+        // registry continues with remaining providers. This also
+        // addresses the hang scenario in 3.1.2.1-A.
+        await Promise.race([
+          result.provider.init(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("INIT_TIMEOUT")), INIT_TIMEOUT_MS)
+          )
+        ]);
+
+        // ── FIX 3.1.4.3-A / 3.1.4.4-A | CRITICAL ─────────────
+        // Snapshot immutable copies of security-critical fields at
+        // registration time. getJwksMap() and getIssuers() read
+        // from the snapshot, not the live provider object. A
+        // provider that mutates its issuer or jwksUri via getters
+        // backed by mutable variables cannot affect token
+        // validation after this point.
+        const snapshot = Object.freeze({
+          issuer: result.provider.issuer,
+          jwksUri: result.provider.jwksUri,
+          audience: result.provider.audience,
+          clientId: result.provider.clientId,
+          name: result.provider.name,
+          type: result.provider.type,
+          priority: result.provider.priority
+        });
+        providerSnapshots.set(providerName, snapshot);
+
+        activeProviders.set(providerName, result.provider);
 
         if (logFn) {
           logFn("info", "auth_provider_loaded", {
-            name: result.provider.name,
-            type: result.provider.type,
-            issuer: result.provider.issuer,
-            priority: result.provider.priority
+            name: snapshot.name,
+            type: snapshot.type,
+            issuer: snapshot.issuer,
+            priority: snapshot.priority
           });
         }
       } catch (err) {
@@ -247,20 +324,33 @@ export function getDefaultProvider() {
 /**
  * Get all registered JWKS URIs (for JWT middleware to validate against).
  * Returns Map<issuer, jwksUri>
+ * Reads from frozen snapshots — immune to post-init provider mutation.
  */
 export function getJwksMap() {
   const map = new Map();
-  for (const provider of activeProviders.values()) {
-    map.set(provider.issuer, provider.jwksUri);
+  for (const snapshot of providerSnapshots.values()) {
+    map.set(snapshot.issuer, snapshot.jwksUri);
   }
   return map;
 }
 
 /**
  * Get all registered issuers (for JWT validation allowlist).
+ * Reads from frozen snapshots — immune to post-init provider mutation.
  */
 export function getIssuers() {
-  return [...activeProviders.values()].map(p => p.issuer);
+  return [...providerSnapshots.values()].map(s => s.issuer);
+}
+
+/**
+ * Get a frozen snapshot by issuer (for middleware audience lookup).
+ * Returns the immutable registration-time copy, not the live provider.
+ */
+export function getSnapshotByIssuer(issuer) {
+  for (const snapshot of providerSnapshots.values()) {
+    if (snapshot.issuer === issuer) return snapshot;
+  }
+  return null;
 }
 
 /**
@@ -293,6 +383,7 @@ export async function shutdownRegistry(logFn) {
     }
   }
   activeProviders.clear();
+  providerSnapshots.clear();
   registryInitialized = false;
 }
 
@@ -301,8 +392,32 @@ export async function shutdownRegistry(logFn) {
  */
 export function _resetForTesting() {
   activeProviders.clear();
+  providerSnapshots.clear();
   registryInitialized = false;
   authRequired = false;
+}
+
+/**
+ * Patch a frozen snapshot with test-specific values (testing only).
+ * The middleware reads from snapshots, not live providers. When tests
+ * monkey-patch a provider's jwksUri to point at a local JWKS server,
+ * the snapshot still holds the original value. This function replaces
+ * the frozen snapshot so the middleware uses the test values.
+ *
+ * Refuses to run in production.
+ *
+ * @param {string} providerName — name of the provider to patch
+ * @param {object} overrides — fields to replace in the snapshot
+ */
+export function _patchSnapshotForTesting(providerName, overrides) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("_patchSnapshotForTesting cannot be used in production");
+  }
+  const existing = providerSnapshots.get(providerName);
+  if (!existing) {
+    throw new Error(`No snapshot found for provider "${providerName}"`);
+  }
+  providerSnapshots.set(providerName, Object.freeze({ ...existing, ...overrides }));
 }
 
 // ── Exports for validation (used by test scripts) ────────────

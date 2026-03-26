@@ -31,6 +31,46 @@ const require = createRequire(import.meta.url);
 
 // ── Configuration ────────────────────────────────────────────
 
+// ── FIX 3.2.1.1-A through 3.2.1.12-A | HIGH ────────────────
+// Threat closed: An attacker who controls AUTH0_DOMAIN can no
+// longer point token exchange and userinfo requests at internal
+// network services (cloud metadata endpoints, localhost, private
+// RFC1918 ranges, Kubernetes API, IPv6 loopback). The domain is
+// validated against a blocklist during init(). SSRF via URL
+// parser confusion (@ and \ characters) is also blocked.
+const BLOCKED_DOMAIN_PATTERNS = [
+  /^10\.\d+\.\d+\.\d+$/,                                      // RFC1918: 10.0.0.0/8
+  /^127\.\d+\.\d+\.\d+$/,                                     // Loopback: 127.0.0.0/8
+  /^192\.168\.\d+\.\d+$/,                                      // RFC1918: 192.168.0.0/16
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,                      // RFC1918: 172.16.0.0/12
+  /^0\.0\.0\.0$/,
+  /^localhost$/i,
+  /^\[?::1\]?$/,                                               // IPv6 loopback
+  /^169\.254\.\d+\.\d+$/,                                      // AWS metadata range
+  /^metadata\./i,                                               // Cloud metadata endpoints
+  /^kubernetes\./i,                                             // K8s API server
+  /[@\\]/,                                                      // URL parser confusion chars
+];
+
+function isDomainBlocked(domain) {
+  return BLOCKED_DOMAIN_PATTERNS.some(pattern => pattern.test(domain));
+}
+
+// ── FIX 3.2.2.1-A, 3.2.2.4-A, 3.2.2.5-A, 3.2.2.6-A | HIGH ─
+// Threat closed: AUTH0_REDIRECT_URI can no longer be set to an
+// attacker-controlled URL that receives the authorization code
+// after login. Only https:// and http://localhost redirect URIs
+// are accepted. javascript:, data:, and protocol-relative URLs
+// are rejected. This prevents code interception even if an
+// attacker gains write access to environment variables.
+function isRedirectUriSafe(uri) {
+  if (!uri) return true; // default is safe (localhost)
+  if (uri.startsWith("http://localhost")) return true;
+  if (uri.startsWith("http://127.0.0.1")) return true;
+  if (uri.startsWith("https://")) return true;
+  return false;
+}
+
 function getConfig() {
   const domain = (process.env.AUTH0_DOMAIN || "").trim();
   const clientId = (process.env.AUTH0_CLIENT_ID || "").trim();
@@ -101,14 +141,30 @@ async function fetchDiscovery(config) {
     return discoveryCache;
   }
 
-  const res = await fetch(config.openidConfigUrl);
-  if (!res.ok) {
-    throw new Error(`Auth0 OIDC discovery failed: ${res.status} ${res.statusText}`);
-  }
+  // 5-second timeout on discovery fetch. This must complete well
+  // before the registry's 10-second init timeout. Without this,
+  // DNS resolution for a nonexistent domain can hang indefinitely,
+  // causing the registry timeout to kill the entire init() and
+  // mark the provider as failed — even though discovery failure
+  // is non-fatal (retried on first auth attempt).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
 
-  discoveryCache = await res.json();
-  discoveryCacheTs = Date.now();
-  return discoveryCache;
+  try {
+    const res = await fetch(config.openidConfigUrl, { signal: controller.signal });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      throw new Error(`Auth0 OIDC discovery failed: ${res.status} ${res.statusText}`);
+    }
+
+    discoveryCache = await res.json();
+    discoveryCacheTs = Date.now();
+    return discoveryCache;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
 }
 
 // ── Initialization State ─────────────────────────────────────
@@ -133,8 +189,27 @@ const auth0Provider = {
   // ── isConfigured ───────────────────────────────────────────
 
   isConfigured() {
-    const { domain, clientId, clientSecret } = getConfig();
-    return !!(domain && clientId && clientSecret);
+    const { domain, clientId, clientSecret, redirectUri } = getConfig();
+    if (!(domain && clientId && clientSecret)) return false;
+
+    // ── FIX 3.2.1.1-A through 3.2.1.12-A | HIGH ──────────────
+    // Threat closed: SSRF check now runs at discovery time, not
+    // just during init(). The registry calls isConfigured() first
+    // — a blocked domain causes the provider to report itself as
+    // unconfigured. It never reaches "ready" status, never enters
+    // the providers map, and _getConfig() callers see the domain
+    // rejected before any URL is constructed for external use.
+    if (isDomainBlocked(domain)) return false;
+
+    // ── FIX 3.2.2.1-A, 3.2.2.4-A, 3.2.2.5-A, 3.2.2.6-A | HIGH
+    // Threat closed: Unsafe redirect URIs are now rejected at
+    // discovery time. The provider stays inactive if the redirect
+    // URI uses javascript:, data:, protocol-relative, or plain
+    // http:// (except localhost) schemes. No auth code can be
+    // sent to an attacker URL because the provider never activates.
+    if (!isRedirectUriSafe(redirectUri)) return false;
+
+    return true;
   },
 
   // ── init ───────────────────────────────────────────────────

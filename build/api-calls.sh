@@ -1,3 +1,31 @@
+# The status route calls four things in sequence: getPostStats(), canPostNow(), validateToken(), and getArticleStats(). Test them individually:
+curl -s http://localhost:3001/api/status | python3 -m json.tool
+node -e "
+  import('./src/services/database.js').then(db => {
+    db.initDatabase();
+    try { console.log('getPostStats:', JSON.stringify(db.getPostStats())); }
+    catch(e) { console.log('getPostStats FAILED:', e.message); }
+  });
+"
+node -e "
+  import('./src/services/database.js').then(db => {
+    db.initDatabase();
+    import('./src/services/scheduler.js').then(s => {
+      try { console.log('canPostNow:', JSON.stringify(s.canPostNow())); }
+      catch(e) { console.log('canPostNow FAILED:', e.message); }
+    });
+  });
+"
+node -e "
+  import('./src/services/database.js').then(db => {
+    db.initDatabase();
+    import('./src/services/scheduler.js').then(s => {
+      try { console.log(JSON.stringify(s.canPostNow())); }
+      catch(e) { console.log(e.stack); }
+    });
+  });
+"
+
 
 Test 2.2 — /api/generate-preview
 # curl -s -w n%{http_code} -X POST http://localhost:3001/api/generate-preview -H Content-Type: application/json -d {"topicId":""}

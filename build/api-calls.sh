@@ -26,6 +26,14 @@ node -e "
   });
 "
 
+# This tells you exactly how many posts count against the window and whether the scheduler thinks you can post.
+curl -s http://localhost:3001/api/status | node -e "
+  const d=require('fs').readFileSync('/dev/stdin','utf8');
+  const j=JSON.parse(d);
+  console.log('Posts last 10 days:', j.stats.postsLast10Days);
+  console.log('Cadence allowed:', j.cadence.allowed);
+  console.log('Cadence reason:', j.cadence.reason || 'ready');
+"
 
 Test 2.2 — /api/generate-preview
 # curl -s -w n%{http_code} -X POST http://localhost:3001/api/generate-preview -H Content-Type: application/json -d {"topicId":""}

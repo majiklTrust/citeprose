@@ -24,10 +24,20 @@ import {
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
+import { createAuthMiddleware } from "../auth/middleware.js";
 
 const router = Router();
 
-// ── Dashboard Data ───────────────────────────────────────────
+// ── Auth Middleware ──────────────────────────────────────────
+// createAuthMiddleware returns { requireAuth, optionalAuth }.
+// In dev mode (zero providers configured), requireAuth passes
+// all requests through with req.user = null.
+
+const { requireAuth } = createAuthMiddleware(logActivity);
+
+// ── Public Routes (no auth required) ────────────────────────
+// Routes defined BEFORE the auth middleware are accessible
+// without authentication. Only health check belongs here.
 
 router.get("/api/status", async (req, res) => {
   try {
@@ -49,6 +59,7 @@ router.get("/api/status", async (req, res) => {
       corroboration,
       cadence,
       stats,
+      maxPostsPer10Days: parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10),
       researchStats,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
@@ -57,6 +68,13 @@ router.get("/api/status", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Protected Routes (auth required) ────────────────────────
+// Everything below this line requires a valid Bearer token.
+// Adding a new route? Place it BELOW this middleware.
+// Making a route public? Move it ABOVE this middleware.
+
+router.use(requireAuth);
 
 // ── Posts ─────────────────────────────────────────────────────
 

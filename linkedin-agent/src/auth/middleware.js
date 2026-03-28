@@ -6,18 +6,20 @@
 // in the auth registry. Does not import jose directly — all
 // token verification is delegated to jwt-verifier.js.
 //
+// Authentication priority:
+//   1. Session cookie (browser path) — readSession()
+//   2. Authorization: Bearer header (programmatic path) — verifyToken()
+//   3. Neither present → 401
+//
 // Usage in index.js:
 //   import { createAuthMiddleware } from "./auth/middleware.js";
 //   const { requireAuth, optionalAuth } = createAuthMiddleware(logActivity);
 //   app.use("/api", requireAuth);
-//
-// The middleware reads the Authorization header, decodes the
-// JWT header to find the issuer, looks up the matching provider,
-// and validates the token against that provider's JWKS.
 // ═══════════════════════════════════════════════════════════════
 
 import { isAuthEnabled, getProviders, getJwksMap, getIssuers, getSnapshotByIssuer } from "./index.js";
 import { verifyToken } from "./jwt-verifier.js";
+import { readSession } from "./session.js";
 
 // ── Error Responses ──────────────────────────────────────────
 // Generic messages — never leak token details or internal state.
@@ -86,8 +88,10 @@ export function createAuthMiddleware(logFn) {
   }
 
   /**
-   * requireAuth — blocks requests without a valid token.
-   * Attaches req.user (decoded JWT payload) on success.
+   * requireAuth — blocks requests without a valid token or session.
+   * Attaches req.user (decoded JWT payload or session user) on success.
+   *
+   * Priority: session cookie → Bearer header → 401
    */
   async function requireAuth(req, res, next) {
     // If no auth providers are configured, pass through
@@ -98,6 +102,28 @@ export function createAuthMiddleware(logFn) {
       return next();
     }
 
+    // ── Path 1: Session cookie ─────────────────────────────
+    // Browser requests include the session cookie automatically.
+    // readSession decrypts and validates. Returns null on any failure.
+    try {
+      const session = readSession(req);
+      if (session && session.user && session.user.sub) {
+        req.user = {
+          sub: session.user.sub,
+          email: session.user.email || null,
+          name: session.user.name || null,
+          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+          authMethod: 'session',
+        };
+        return next();
+      }
+    } catch {
+      // Session read failed — fall through to Bearer check.
+      // This is not an error — the cookie may be absent or invalid.
+    }
+
+    // ── Path 2: Bearer token ───────────────────────────────
+    // Programmatic clients (curl, scripts, CI) send Authorization: Bearer <token>.
     const token = extractBearerToken(req);
 
     // No Authorization header
@@ -131,8 +157,6 @@ export function createAuthMiddleware(logFn) {
     }
 
     // Find the audience from the frozen registration snapshot.
-    // Uses getSnapshotByIssuer to read immutable values — a provider
-    // that mutated its issuer/audience after init cannot affect this.
     const snapshot = getSnapshotByIssuer(issuer);
     const audience = snapshot?.audience || null;
 
@@ -148,7 +172,8 @@ export function createAuthMiddleware(logFn) {
         issuer: payload.iss,
         audience: payload.aud,
         expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
-        raw: payload
+        raw: payload,
+        authMethod: 'bearer',
       };
 
       req.authProvider = snapshot?.name || "unknown";
@@ -179,15 +204,32 @@ export function createAuthMiddleware(logFn) {
   }
 
   /**
-   * optionalAuth — attempts to validate token if present,
+   * optionalAuth — attempts to validate token or session if present,
    * but allows the request through even without one.
-   * Attaches req.user if token is valid, null otherwise.
+   * Attaches req.user if valid, null otherwise.
    */
   async function optionalAuth(req, res, next) {
     if (!isAuthEnabled()) {
       req.user = null;
       req.authSkipped = true;
       return next();
+    }
+
+    // Try session cookie first
+    try {
+      const session = readSession(req);
+      if (session && session.user && session.user.sub) {
+        req.user = {
+          sub: session.user.sub,
+          email: session.user.email || null,
+          name: session.user.name || null,
+          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+          authMethod: 'session',
+        };
+        return next();
+      }
+    } catch {
+      // Fall through to Bearer check
     }
 
     const token = extractBearerToken(req);
@@ -224,7 +266,8 @@ export function createAuthMiddleware(logFn) {
         issuer: payload.iss,
         audience: payload.aud,
         expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
-        raw: payload
+        raw: payload,
+        authMethod: 'bearer',
       };
       req.authProvider = snapshot?.name || "unknown";
     } catch {

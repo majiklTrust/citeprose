@@ -19,13 +19,11 @@
       --text-primary: #e8ecf4;
       --text-secondary: #8899b0;
       --text-muted: #5a6a80;
-      --accent-primary: #e8ecf4;
       --accent-blue: #3b82f6;
       --accent-cyan: #06b6d4;
       --accent-green: #10b981;
       --accent-amber: #f59e0b;
       --accent-red: #ef4444;
-      --accent-deep_red: #90261f;
       --accent-purple: #8b5cf6;
       --glow-blue: rgba(59, 130, 246, 0.15);
       --glow-green: rgba(16, 185, 129, 0.15);
@@ -49,6 +47,7 @@
 
     /* Ambient background glow */
     body::before {
+      content: '';
       position: fixed;
       top: -20%;
       left: -10%;
@@ -59,6 +58,7 @@
     }
 
     body::after {
+      content: '';
       position: fixed;
       bottom: -20%;
       right: -10%;
@@ -116,7 +116,7 @@
       font-weight: 600;
     }
 
-    .toggle-track {
+    .mode-switch .toggle-track {
       width: 52px;
       height: 28px;
       border-radius: 14px;
@@ -127,12 +127,12 @@
       transition: all 0.3s ease;
     }
 
-    .toggle-track.active {
+    .mode-switch .toggle-track.active {
       background: var(--accent-green);
       border-color: var(--accent-green);
     }
 
-    .toggle-track .toggle-thumb {
+    .mode-switch .toggle-track .toggle-thumb {
       width: 20px;
       height: 20px;
       border-radius: 50%;
@@ -143,7 +143,7 @@
       transition: transform 0.3s ease;
     }
 
-    .toggle-track.active .toggle-thumb {
+    .mode-switch .toggle-track.active .toggle-thumb {
       transform: translateX(24px);
     }
 
@@ -178,6 +178,7 @@
     .stat-card:hover { border-color: var(--border-active); }
 
     .stat-card::before {
+      content: '';
       position: absolute;
       top: 0;
       left: 0;
@@ -215,7 +216,7 @@
     /* Main content layout */
     .main-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 300px 220px;
+      grid-template-columns: 1fr 300px 220px;
       gap: 1.5rem;
     }
 
@@ -239,7 +240,7 @@
     }
 
     /* Post cards */
-    .post-list { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; overflow: hidden; }
+    .post-list { display: flex; flex-direction: column; gap: 0.75rem; }
 
     .post-card {
       background: var(--bg-card);
@@ -248,8 +249,6 @@
       padding: 1.25rem;
       cursor: pointer;
       transition: all 0.2s;
-      overflow: hidden;
-      min-width: 0;
     }
 
     .post-card:hover {
@@ -295,9 +294,6 @@
       font-weight: 600;
       font-size: 0.95rem;
       margin-bottom: 0.5rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     .post-preview {
@@ -306,10 +302,8 @@
       line-height: 1.5;
       display: -webkit-box;
       -webkit-line-clamp: 3;
-      line-clamp: 3;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      word-break: break-word;
     }
 
     .post-footer {
@@ -325,13 +319,6 @@
       font-size: 0.75rem;
       color: var(--text-muted);
       font-family: var(--font-mono);
-    }
-
-    .post-meta {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      flex-wrap: wrap;
     }
 
     .post-actions { display: flex; gap: 0.5rem; }
@@ -547,11 +534,11 @@
 
     /* Responsive */
     @media (max-width: 1100px) {
-      .main-grid { grid-template-columns: minmax(0, 1fr) 260px; }
+      .main-grid { grid-template-columns: 1fr 260px; }
     }
     @media (max-width: 900px) {
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .main-grid { grid-template-columns: minmax(0, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
     }
 
     /* Research & Sources */
@@ -623,35 +610,45 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.4rem 0;
+      padding: 0.35rem 0.75rem;
+      min-width: 0;
+      box-sizing: border-box;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
     }
     .toggle-label {
       font-size: 0.8rem;
       color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
     .toggle-label-active { color: var(--accent-green); }
-    .toggle-label-inactive { color: var(--accent-primary); }
+    .toggle-label-inactive { color: var(--text-muted); }
     .toggle-switch {
       position: relative;
       width: 36px;
       height: 20px;
       cursor: pointer;
+      flex-shrink: 0;
     }
     .toggle-switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-    .toggle-track {
-      position: relative;
+    .toggle-switch .toggle-track {
+      position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
       background: var(--bg-primary);
       border: 1px solid var(--border);
-      border-color: var(--accent-primary);
       border-radius: 10px;
       transition: background 0.2s, border-color 0.2s;
     }
-    .toggle-track::after {
+    .toggle-switch .toggle-track::after {
+      content: '';
       position: absolute;
       width: 14px;
       height: 14px;
@@ -740,26 +737,22 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
-      const [logLimit, setLogLimit] = useState(40);
 
       const fetchAll = useCallback(async () => {
         try {
           const [statusRes, postsRes, logsRes] = await Promise.all([
             fetch(`${API}/api/status`).then(r => r.json()),
             fetch(`${API}/api/posts?limit=30`).then(r => r.json()),
-            fetch(`${API}/api/logs?limit=${logLimit}`).then(r => r.json()),
+            fetch(`${API}/api/logs?limit=40`).then(r => r.json()),
           ]);
           setStatus(statusRes);
-          if (statusRes.logLimit && statusRes.logLimit !== logLimit) {
-            setLogLimit(statusRes.logLimit);
-          }
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
           setError(null);
         } catch (err) {
           setError('Cannot connect to agent backend. Is it running?');
         }
-      }, [logLimit]);
+      }, []);
 
       useEffect(() => {
         fetchAll();
@@ -820,24 +813,8 @@
           });
           const data = await res.json();
 
-          // Blocked due to insufficient sources
           if (data.blocked) {
             alert(`Post blocked — insufficient sources.\n\nTopic: ${TOPIC_STYLES[data.topicId]?.label || data.topicId}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
-            setLoading(l => ({ ...l, preview: false }));
-            return;
-          }
-
-          // Server returned an error (429, 500, etc.)
-          if (data.error) {
-            alert('Preview failed: ' + data.error);
-            setLoading(l => ({ ...l, preview: false }));
-            return;
-          }
-
-          // Unexpected response shape
-          if (!data.post || !data.post.title) {
-            alert('Preview returned an unexpected response. Check the activity log for details.');
-            console.error('Unexpected preview response:', data);
             setLoading(l => ({ ...l, preview: false }));
             return;
           }
@@ -904,7 +881,6 @@
               content: selectedPost.content,
               hashtags: selectedPost.hashtags,
               angle: selectedPost.angle,
-              cycleId: selectedPost.cycleId,
               sourcesUsed: selectedPost.sourcesUsed,
               researchSummary: selectedPost.researchSummary,
               quality: selectedPost.quality
@@ -963,7 +939,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v0.30.3 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v0.37.1 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
@@ -987,11 +963,11 @@
               <div className="stat-value">{status.stats.postsLast10Days}</div>
               <div className="cadence-bar">
                 <div className="cadence-fill" style={{
-                  width: `${(status.stats.postsLast10Days / 4) * 100}%`,
-                  background: status.stats.postsLast10Days >= 4 ? 'var(--accent-amber)' : 'var(--accent-green)'
+                  width: `${(status.stats.postsLast10Days / (status.maxPostsPer10Days || 4)) * 100}%`,
+                  background: status.stats.postsLast10Days >= (status.maxPostsPer10Days || 4) ? 'var(--accent-amber)' : 'var(--accent-green)'
                 }}></div>
               </div>
-              <div className="stat-meta">max {status.cadence?.allowed ? '— ready to post' : `— ${status.cadence?.reason?.substring(0, 30)}`}</div>
+              <div className="stat-meta">max {status.maxPostsPer10Days || 4} {status.cadence?.allowed ? '— ready to post' : `— ${status.cadence?.reason?.substring(0, 30)}`}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Pending Approval</div>
@@ -1017,7 +993,7 @@
           {/* Main content */}
           <div className="main-grid">
             {/* Posts column */}
-            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div>
               {/* Pending approval section */}
               {pendingPosts.length > 0 && (
                 <div style={{ marginBottom: '2rem' }}>
@@ -1030,7 +1006,6 @@
                       const pCtx = parseNewsContext(post);
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
-                      const pCycleId = pCtx?.cycleId || null;
                       return (
                       <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
@@ -1048,11 +1023,7 @@
                         <div className="post-title-text">{post.title}</div>
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
-                          <div className="post-meta">
-                            <span className="log-id">#{post.id}</span>
-                            {pCycleId && <span className="log-cycle">{pCycleId}</span>}
                           <span className="post-date">{formatDate(post.created_at)}</span>
-                          </div>
                           <div className="post-actions">
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
@@ -1076,10 +1047,7 @@
                   <div className="sidebar-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No posts yet. Generate your first one below.
                   </div>
-                ) : recentPosts.slice(0, 15).map(post => {
-                  const rCtx = parseNewsContext(post);
-                  const rCycleId = rCtx?.cycleId || null;
-                  return (
+                ) : recentPosts.slice(0, 15).map(post => (
                   <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}>
                     <div className="post-card-header">
                       <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
@@ -1092,15 +1060,10 @@
                     <div className="post-title-text">{post.title}</div>
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
-                      <div className="post-meta">
-                        <span className="log-id">#{post.id}</span>
-                        {rCycleId && <span className="log-cycle">{rCycleId}</span>}
                       <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
                     </div>
                   </div>
-                  </div>
-                  );
-                })}
+                ))}
               </div>
             </div>
 
@@ -1109,7 +1072,7 @@
               <div className="sidebar-panel">
                 <div className="section-title">Activity Log</div>
                 <div style={{ maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {logs.map(log => {
+                  {logs.slice(0, 30).map(log => {
                     let cycleId = null;
                     try {
                       const d = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;

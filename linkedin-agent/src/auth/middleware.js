@@ -72,6 +72,19 @@ function decodeTokenIssuer(token) {
  */
 export function createAuthMiddleware(logFn) {
 
+  // Safe logging wrapper — a logging failure must never crash
+  // auth enforcement. If logFn throws (e.g. database not
+  // initialized), the auth decision is unaffected.
+  function safeLog(level, action, details) {
+    if (!logFn) return;
+    try {
+      logFn(level, action, details);
+    } catch {
+      // Logging failed — swallow silently.
+      // Auth enforcement continues regardless.
+    }
+  }
+
   /**
    * requireAuth — blocks requests without a valid token.
    * Attaches req.user (decoded JWT payload) on success.
@@ -100,7 +113,7 @@ export function createAuthMiddleware(logFn) {
     // Decode issuer from token (pre-verification)
     const issuer = decodeTokenIssuer(token);
     if (!issuer) {
-      if (logFn) logFn("warn", "auth_token_unreadable", { path: req.path });
+      safeLog("warn", "auth_token_unreadable", { path: req.path });
       return res.status(ERR_TOKEN_INVALID.status).json({ error: ERR_TOKEN_INVALID.error });
     }
 
@@ -109,7 +122,7 @@ export function createAuthMiddleware(logFn) {
     const jwksUri = jwksMap.get(issuer);
 
     if (!jwksUri) {
-      if (logFn) logFn("warn", "auth_issuer_unknown", {
+      safeLog("warn", "auth_issuer_unknown", {
         path: req.path,
         issuer,
         knownIssuers: getIssuers()
@@ -145,17 +158,17 @@ export function createAuthMiddleware(logFn) {
       const code = err.message;
 
       if (code === "TOKEN_EXPIRED") {
-        if (logFn) logFn("info", "auth_token_expired", { path: req.path, issuer });
+        safeLog("info", "auth_token_expired", { path: req.path, issuer });
         return res.status(ERR_TOKEN_EXPIRED.status).json({ error: ERR_TOKEN_EXPIRED.error });
       }
 
       if (code === "JWKS_FETCH_FAILED") {
-        if (logFn) logFn("error", "auth_jwks_fetch_failed", { path: req.path, issuer, jwksUri });
+        safeLog("error", "auth_jwks_fetch_failed", { path: req.path, issuer, jwksUri });
         return res.status(ERR_INTERNAL.status).json({ error: ERR_INTERNAL.error });
       }
 
       // All other verification failures
-      if (logFn) logFn("warn", "auth_token_rejected", {
+      safeLog("warn", "auth_token_rejected", {
         path: req.path,
         issuer,
         reason: code

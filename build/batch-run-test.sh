@@ -1,7 +1,7 @@
 (
 d=$(date +%Y%m%dT%H%M)
 suite=test-p3
-step=step5
+step=step6
 outfile=/vol_share/LinkedIn_Agent_drop/drop/testing/$suite-$step-results.$d.out
 >$outfile
 (

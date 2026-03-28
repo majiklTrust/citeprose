@@ -70,7 +70,7 @@ export const FEEDS = [
     refreshMinutes: 360
   },
   {
-    url: "https://msrc.microsoft.com/blog/feed",
+    url: "https://api.msrc.microsoft.com/update-guide/rss",
     name: "Microsoft Security Response Center",
     topicIds: ["cybersecurity-advances", "cybersecurity-incidents"],
     tier: "authoritative",
@@ -93,11 +93,11 @@ export const FEEDS = [
     refreshMinutes: 360
   },
   {
-    url: "https://www.anthropic.com/rss.xml",
-    name: "Anthropic Blog",
+    url: "https://www.technologyreview.com/feed/",
+    name: "MIT Technology Review",
     topicIds: ["ai-practical-benefit", "ai-guardrails"],
     tier: "primary",
-    refreshMinutes: 360
+    refreshMinutes: 240
   },
   {
     url: "https://techcrunch.com/category/artificial-intelligence/feed/",
@@ -126,6 +126,10 @@ export const TRUST_TIERS = {
 export const SOURCE_RULES = {
   // Minimum number of distinct, independent source names required
   minIndependentSources: 2,
+
+  // Minimum cumulative trust weight for corroboration to pass
+  // e.g., 3 = two primary sources, or one authoritative + one secondary
+  minTrustWeight: 3,
 
   // Maximum age of articles considered "current" for each topic
   maxAgeDays: {

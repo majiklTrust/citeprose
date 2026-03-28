@@ -24,16 +24,27 @@ import {
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
+import { createAuthMiddleware } from "../auth/middleware.js";
 
 const router = Router();
 
-// ── Dashboard Data ───────────────────────────────────────────
+// ── Auth Middleware ──────────────────────────────────────────
+// createAuthMiddleware returns { requireAuth, optionalAuth }.
+// In dev mode (zero providers configured), requireAuth passes
+// all requests through with req.user = null.
+
+const { requireAuth } = createAuthMiddleware(logActivity);
+
+// ── Public Routes (no auth required) ────────────────────────
+// Routes defined BEFORE the auth middleware are accessible
+// without authentication. Only health check belongs here.
 
 router.get("/api/status", async (req, res) => {
   try {
     const stats = getPostStats();
     const mode = getAgentState("mode");
     const paused = getAgentState("paused");
+    const corroboration = getAgentState("corroboration") || "enabled";
     const cadence = canPostNow();
     const tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
 
@@ -45,8 +56,10 @@ router.get("/api/status", async (req, res) => {
     res.json({
       mode,
       paused: paused === "true",
+      corroboration,
       cadence,
       stats,
+      maxPostsPer10Days: parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10),
       researchStats,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
@@ -55,6 +68,13 @@ router.get("/api/status", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Protected Routes (auth required) ────────────────────────
+// Everything below this line requires a valid Bearer token.
+// Adding a new route? Place it BELOW this middleware.
+// Making a route public? Move it ABOVE this middleware.
+
+router.use(requireAuth);
 
 // ── Posts ─────────────────────────────────────────────────────
 
@@ -109,11 +129,20 @@ router.post("/api/pause", (req, res) => {
   res.json({ paused: !!paused });
 });
 
+router.post("/api/corroboration", (req, res) => {
+  const { enabled } = req.body;
+  const value = enabled === false ? "disabled" : "enabled";
+  setAgentState("corroboration", value);
+  logActivity("info", "corroboration_toggled", { corroboration: value });
+  res.json({ corroboration: value });
+});
+
 // ── Manual Triggers ──────────────────────────────────────────
 
 router.post("/api/generate-preview", async (req, res) => {
   try {
-    const generated = await generatePost();
+    const topicId = req.body.topicId || null;
+    const generated = await generatePost(topicId);
 
     if (generated.blocked) {
       return res.json({ blocked: true, reason: generated.reason, topicId: generated.topicId, angle: generated.angle });
@@ -161,8 +190,9 @@ router.post("/api/save-preview", (req, res) => {
 
 router.post("/api/force-cycle", async (req, res) => {
   try {
-    await forceCycle();
-    res.json({ success: true, message: "Scheduler cycle executed" });
+    const topicId = req.body.topicId || null;
+    await forceCycle(topicId);
+    res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

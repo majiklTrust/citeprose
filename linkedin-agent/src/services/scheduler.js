@@ -11,7 +11,8 @@ import {
   createPost,
   updatePostStatus,
   logActivity,
-  getPostStats
+  getPostStats,
+  getPost
 } from "./database.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-api.js";
@@ -64,7 +65,7 @@ function estimateNextWindow(recentPosts) {
 
 // ── Core Scheduling Loop ─────────────────────────────────────
 
-async function schedulerTick() {
+async function schedulerTick(topicId = null) {
   const mode = getAgentState("mode");
   const paused = getAgentState("paused");
 
@@ -93,7 +94,7 @@ async function schedulerTick() {
   logActivity("info", "scheduler_generating", "Generating new post content with research");
 
   try {
-    const generated = await generatePost();
+    const generated = await generatePost(topicId || null);
     const cycleId = generated.cycleId || null;
 
     // Step 3a: Check if post was blocked due to insufficient sources
@@ -172,7 +173,7 @@ async function schedulerTick() {
 // ── Post Execution ───────────────────────────────────────────
 
 export async function executePost(postId) {
-  const post = (await import("./database.js")).getPost(postId);
+  const post = getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
 
   try {
@@ -200,12 +201,18 @@ export async function executePost(postId) {
 // ── Manual Mode Actions ──────────────────────────────────────
 
 export async function approvePost(postId) {
+  const post = getPost(postId);
+  if (!post) throw new Error(`Post ${postId} not found`);
+  if (post.status !== "pending_approval") throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
   updatePostStatus(postId, "approved");
   logActivity("info", "post_approved", { postId });
   return executePost(postId);
 }
 
 export function rejectPost(postId, reason = "") {
+  const post = getPost(postId);
+  if (!post) throw new Error(`Post ${postId} not found`);
+  if (post.status !== "pending_approval") throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
   updatePostStatus(postId, "rejected", { errorMessage: reason });
   logActivity("info", "post_rejected", { postId, reason });
 }
@@ -243,7 +250,7 @@ export function stopScheduler() {
 
 // ── Force a cycle (for testing/manual trigger) ───────────────
 
-export async function forceCycle() {
-  logActivity("info", "force_cycle", "Manual scheduler cycle triggered");
-  return schedulerTick();
+export async function forceCycle(topicId = null) {
+  logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" });
+  return schedulerTick(topicId);
 }

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.9.4",
+  "version": "0.37.1",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -8,27 +8,52 @@
     "node": "22.x"
   },
   "scripts": {
+    "encrypt-key": "node scripts/encrypt-key.js",
     "timesync": "sudo ntpdate -u pool.ntp.org",
     "build": "npm version patch && npm run build_html && npm run build_js",
     "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
     "build_js": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" src_templates/index.js >src/index.js",
-    "start": "node src/index.js",
-    "dev": "npm version minor && npm run timesync && npm run build && node --watch src/index.js",
+    "start": "npm run timesync && node src/index.js",
+    "dev": "npm run timesync && nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
+    "preprod": "NODE_ENV=preprod npm run start",
+    "production": "NODE_ENV=production npm run start",
+    "nonprod": "NODE_ENV=nonprod npm run dev",
+    "integration": "npm version minor && npm run build && NODE_ENV=dev npm run dev",
     "dashboard": "node src/dashboard-server.js",
     "setup": "node scripts/setup.js",
     "test-post": "node scripts/test-post.js",
-    "auth": "node scripts/linkedin-auth.js"
+    "auth": "node scripts/linkedin-auth.js",
+    "refresh": "rm -rf ./node_modules && npm install",
+    "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
+    "extract-l": "unzip -l \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\"",
+    "extract": "unzip -o \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" -d .. || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\" -d ..",
+    "qa_p3s1": "bash scripts/testing/test-p3-step1.sh --all",
+    "qa_p3s1-d": "bash scripts/testing/test-p3-step1-design.sh --all",
+    "qa_p3s1-a": "bash scripts/testing/test-p3-step1-adversarial.sh --all",
+    "qa_p3s2": "bash scripts/testing/test-p3-step2.sh --all",
+    "qa_p3s2-d": "bash scripts/testing/test-p3-step2-design.sh --all",
+    "qa_p3s2-a": "bash scripts/testing/test-p3-step2-adversarial.sh --all",
+    "qa_p3s3": "bash scripts/testing/test-p3-step3.sh --all",
+    "qa_p3s3-d": "bash scripts/testing/test-p3-step3-design.sh --all",
+    "qa_p3s3-a": "bash scripts/testing/test-p3-step3-adversarial.sh --all",
+    "qa_p3s4": "bash scripts/testing/test-p3-step4.sh --all",
+    "qa_p3s4-d": "bash scripts/testing/test-p3-step4-design.sh --all",
+    "qa_p3s4-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "axios": "^1.7.0",
+    "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
+    "jose": "^6.2.2",
     "node-cron": "^3.0.3",
-    "better-sqlite3": "^11.0.0",
+    "open": "^10.0.0",
     "rss-parser": "^3.13.0",
-    "winston": "^3.11.0",
-    "open": "^10.0.0"
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

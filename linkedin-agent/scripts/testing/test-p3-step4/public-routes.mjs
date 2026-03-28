@@ -43,6 +43,7 @@ async function GET(path, token) {
 var validToken = await helper.signToken({ sub: 'test_user' });
 
 // ── Group 5: Public routes remain accessible ─────────────────
+console.log('  File: test-p3-step4/public-routes.mjs');
 group('Group 5: Public routes remain accessible', `
   If these tests fail, load balancers and uptime monitors
   cannot reach the health check. Automated infrastructure
@@ -51,7 +52,7 @@ group('Group 5: Public routes remain accessible', `
 
 var before5 = getCounters();
 
-await testAsync('3.4.5.1', '', async () => {
+await testAsync('3.4.5.1', ' GET /api/status — no Authorization header', async () => {
   console.log('  GET /api/status — no Authorization header');
   console.log('  This is the only public route. Load balancers poll it every 30 seconds');
   console.log('  If it requires auth, the balancer marks the app as unhealthy');
@@ -60,7 +61,7 @@ await testAsync('3.4.5.1', '', async () => {
     'not 401/403', String(r.status));
 });
 
-await testAsync('3.4.5.2', '', async () => {
+await testAsync('3.4.5.2', ' GET /api/status — should not return an auth error', async () => {
   console.log('  GET /api/status — should not return an auth error');
   console.log('  The handler may return 500 if the database is not initialized in tests');
   console.log('  What matters: the request was not blocked by auth (not 401/403)');
@@ -69,14 +70,14 @@ await testAsync('3.4.5.2', '', async () => {
     'not 401/403', String(r.status));
 });
 
-await testAsync('3.4.5.3', '', async () => {
+await testAsync('3.4.5.3', ' Response has body', async () => {
   console.log('  GET /api/status — response body should contain status information');
   console.log('  The health check needs to return something meaningful, not an empty response');
   var r = await GET('/api/status');
   check('Response has body', r.body !== null, 'JSON body', 'null');
 });
 
-await testAsync('3.4.5.4', '', async () => {
+await testAsync('3.4.5.4', ' GET /api/status — with a valid token should also work', async () => {
   console.log('  GET /api/status — with a valid token should also work');
   console.log('  A public route must accept both authenticated and anonymous requests');
   console.log('  The handler may return 500 without a database — auth pass-through is the test');
@@ -85,14 +86,14 @@ await testAsync('3.4.5.4', '', async () => {
     'not 401/403', String(r.status));
 });
 
-await testAsync('3.4.5.5', '', async () => {
+await testAsync('3.4.5.5', ' GET /api/status — with an INVALID token should still work', async () => {
   console.log('  GET /api/status — with an INVALID token should still work');
   console.log('  The route is public. A bad token should not cause a 401 on a public endpoint');
   var r = await GET('/api/status', 'this.is.garbage');
   check('/api/status ignores bad token', r.status !== 401, 'not 401', String(r.status));
 });
 
-await testAsync('3.4.5.6', '', async () => {
+await testAsync('3.4.5.6', ' /api/posts still requires auth', async () => {
   console.log('  Verifying that a protected route on the same server still requires auth');
   console.log('  This confirms the public exception is route-specific, not server-wide');
   var r = await GET('/api/posts');

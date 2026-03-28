@@ -10,6 +10,7 @@ import { PROVIDER_INTERFACE, initRegistry, getProviders, getDefaultProvider,
 
 // ── Group 1: Interface contract ──────────────────────────────
 
+console.log('  File: test-p3-step1/registry-basics.mjs');
 group('Group 1: Interface contract', `
   If these tests fail, new authentication providers (Auth0, WorkOS,
   or any future IDP) cannot be integrated. The platform is locked
@@ -22,14 +23,14 @@ var before = getCounters();
 var expectedFields = ['name','type','priority','issuer','jwksUri','audience','clientId'];
 var expectedMethods = ['isConfigured','init','getRoutes','getLoginUrl','exchangeCode','getUserInfo','getLogoutUrl'];
 
-test('3.1.1.1', '', () => {
+test('3.1.1.1', '  PROVIDER_INTERFACE.fields from registry export', () => {
   console.log('  Reading PROVIDER_INTERFACE.fields from registry export');
   console.log('  The contract must define exactly 7 fields for provider identity and config');
   check('Contract defines exactly 7 required fields',
     PROVIDER_INTERFACE.fields.length === 7, '7 fields', PROVIDER_INTERFACE.fields.length + ' fields');
 });
 
-test('3.1.1.2', '', () => {
+test('3.1.1.2', '  PROVIDER_INTERFACE.methods from registry export', () => {
   console.log('  Reading PROVIDER_INTERFACE.methods from registry export');
   console.log('  The contract must define exactly 7 methods for auth lifecycle');
   check('Contract defines exactly 7 required methods',
@@ -77,6 +78,7 @@ groupEnd(after1.pass - before.pass, after1.fail - before.fail);
 
 // ── Group 2: Dev mode — no providers ─────────────────────────
 
+console.log('  File: test-p3-step1/registry-basics.mjs');
 group('Group 2: Dev mode — no providers', `
   If these tests fail, developers cannot run the application
   locally without configuring a full auth provider. This blocks
@@ -90,54 +92,54 @@ delete process.env.MOCK_AUTH_ENABLED;
 delete process.env.NODE_ENV;
 var result = await initRegistry(() => {});
 
-test('3.1.2.1', '', () => {
+test('3.1.2.1', ' Initialized registry with no provider env vars set', () => {
   console.log('  Initialized registry with no provider env vars set');
   console.log('  In dev mode, the app should start with auth off — not crash');
   check('App starts without auth when no providers configured',
     result.authEnabled === false, 'authEnabled === false', 'authEnabled === ' + result.authEnabled);
 });
 
-test('3.1.2.2', '', () => {
+test('3.1.2.2', ' Providers map size — should be empty', () => {
   console.log('  Checking providers map size — should be empty');
   check('No providers in the registry',
     result.providers.size === 0, '0 providers', result.providers.size + ' providers');
 });
 
-test('3.1.2.3', '', () => {
+test('3.1.2.3', ' isAuthEnabled() confirms auth is off', () => {
   console.log('  Calling isAuthEnabled() — returns the runtime auth enforcement state');
   console.log('  With no providers, this must be false so middleware passes requests through');
   check('isAuthEnabled() confirms auth is off',
     isAuthEnabled() === false, 'false', String(isAuthEnabled()));
 });
 
-test('3.1.2.4', '', () => {
+test('3.1.2.4', ' Without NODE_ENV=production, auth should not be mandatory', () => {
   console.log('  Calling isAuthRequired() — reflects NODE_ENV enforcement policy');
   console.log('  Without NODE_ENV=production, auth should not be mandatory');
   check('isAuthRequired() confirms auth not mandatory',
     isAuthRequired() === false, 'false', String(isAuthRequired()));
 });
 
-test('3.1.2.5', '', () => {
+test('3.1.2.5', '  getProviders() — sorted list of active providers', () => {
   console.log('  Calling getProviders() — sorted list of active providers');
   check('getProviders() returns empty list',
     getProviders().length === 0, 'empty array', getProviders().length + ' providers');
 });
 
-test('3.1.2.6', '', () => {
+test('3.1.2.6', ' getDefaultProvider() returns null', () => {
   console.log('  Calling getDefaultProvider() — the highest-priority active provider');
   console.log('  With no providers loaded, must return null (not undefined or throw)');
   check('getDefaultProvider() returns null',
     getDefaultProvider() === null, 'null', String(getDefaultProvider()));
 });
 
-test('3.1.2.7', '', () => {
+test('3.1.2.7', '  getJwksMap() — maps issuers to JWKS endpoints', () => {
   console.log('  Calling getJwksMap() — maps issuers to JWKS endpoints');
   console.log('  Empty map means the middleware has no keys to validate against');
   check('getJwksMap() returns empty map',
     getJwksMap().size === 0, 'empty map', getJwksMap().size + ' entries');
 });
 
-test('3.1.2.8', '', () => {
+test('3.1.2.8', '  getIssuers() — list of trusted token issuers', () => {
   console.log('  Calling getIssuers() — list of trusted token issuers');
   console.log('  Empty means no issuer is trusted — all tokens rejected if auth is on');
   check('getIssuers() returns empty list',

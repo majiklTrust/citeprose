@@ -24,6 +24,7 @@ async function expectReject(label, token) {
 
 // ── Group 1: Algorithm confusion ─────────────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-tokens.mjs');
 group('Group 1: Algorithm confusion', `
   The #1 JWT attack in the wild. If alg:none or alg:HS256 tokens
   are accepted, ANY person can forge a valid-looking token without
@@ -32,26 +33,26 @@ group('Group 1: Algorithm confusion', `
 
 var before1 = getCounters();
 
-await testAsync('3.3.1.1-A', '', async () => {
+await testAsync('3.3.1.1-A', ' JWT with alg:none and empty signature', async () => {
   console.log('  JWT with alg:none and empty signature');
   console.log('  alg:none = "no signature required" — token is self-asserted');
   var h = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
   await expectReject('alg:none empty sig', h + '.' + pl + '.');
 });
 
-await testAsync('3.3.1.2-A', '', async () => {
+await testAsync('3.3.1.2-A', ' Alg:none with signature segment omitted entirely', async () => {
   console.log('  alg:none with signature segment omitted entirely');
   var h = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
   await expectReject('alg:none no sig segment', h + '.' + pl);
 });
 
-await testAsync('3.3.1.3-A', '', async () => {
+await testAsync('3.3.1.3-A', ' Alg:none with legitimate kid — contradictory state', async () => {
   console.log('  alg:none with legitimate kid — contradictory state');
   var h = Buffer.from(JSON.stringify({ alg: 'none', kid: helper.kid })).toString('base64url');
   await expectReject('alg:none with legit kid', h + '.' + pl + '.');
 });
 
-await testAsync('3.3.1.4-A', '', async () => {
+await testAsync('3.3.1.4-A', ' Alg:HS256 with arbitrary HMAC secret', async () => {
   console.log('  alg:HS256 with arbitrary HMAC secret');
   console.log('  If verifier uses RSA public key as HMAC secret, attacker forges tokens');
   var h = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -59,25 +60,25 @@ await testAsync('3.3.1.4-A', '', async () => {
   await expectReject('alg:HS256 arbitrary secret', h + '.' + pl + '.' + sig);
 });
 
-await testAsync('3.3.1.5-A', '', async () => {
+await testAsync('3.3.1.5-A', ' alg:HS384 rejected', async () => {
   var h = Buffer.from(JSON.stringify({ alg: 'HS384' })).toString('base64url');
   var sig = crypto.createHmac('sha384', 'secret').update(h + '.' + pl).digest('base64url');
   await expectReject('alg:HS384 rejected', h + '.' + pl + '.' + sig);
 });
 
-await testAsync('3.3.1.6-A', '', async () => {
+await testAsync('3.3.1.6-A', ' alg:HS512 rejected', async () => {
   var h = Buffer.from(JSON.stringify({ alg: 'HS512' })).toString('base64url');
   var sig = crypto.createHmac('sha512', 'secret').update(h + '.' + pl).digest('base64url');
   await expectReject('alg:HS512 rejected', h + '.' + pl + '.' + sig);
 });
 
-await testAsync('3.3.1.7-A', '', async () => {
+await testAsync('3.3.1.7-A', ' RS384 — valid RSA algorithm but JWKS only has RS256 keys', async () => {
   console.log('  RS384 — valid RSA algorithm but JWKS only has RS256 keys');
   var h = Buffer.from(JSON.stringify({ alg: 'RS384', kid: helper.kid })).toString('base64url');
   await expectReject('alg:RS384 with RS256 key', h + '.' + pl + '.' + crypto.randomBytes(64).toString('base64url'));
 });
 
-await testAsync('3.3.1.8-A', '', async () => {
+await testAsync('3.3.1.8-A', ' PS256 (RSA-PSS) — different padding scheme than RS256', async () => {
   console.log('  PS256 (RSA-PSS) — different padding scheme than RS256');
   var h = Buffer.from(JSON.stringify({ alg: 'PS256', kid: helper.kid })).toString('base64url');
   await expectReject('alg:PS256 with RS256 key', h + '.' + pl + '.' + crypto.randomBytes(64).toString('base64url'));
@@ -88,6 +89,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: JWT header injection ────────────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-tokens.mjs');
 group('Group 2: JWT header injection (jku/jwk/x5u)', `
   If the verifier follows jku or jwk headers in the token, an
   attacker signs with their own keys and tells the verifier where
@@ -100,7 +102,7 @@ var attackerJwk = await exportJWK(attacker.publicKey);
 attackerJwk.kid = 'attacker-kid'; attackerJwk.use = 'sig'; attackerJwk.alg = 'RS256';
 var now = Math.floor(Date.now() / 1000);
 
-await testAsync('3.3.2.1-A', '', async () => {
+await testAsync('3.3.2.1-A', ' Token with jku pointing to attacker JWKS endpoint', async () => {
   console.log('  Token with jku pointing to attacker JWKS endpoint');
   var t = await new SignJWT({ sub: 'attacker', iss: helper.issuer, aud: helper.audience })
     .setProtectedHeader({ alg: 'RS256', kid: 'attacker-kid', jku: 'https://evil.com/.well-known/jwks.json' })
@@ -108,7 +110,7 @@ await testAsync('3.3.2.1-A', '', async () => {
   await expectReject('jku header injection', t);
 });
 
-await testAsync('3.3.2.2-A', '', async () => {
+await testAsync('3.3.2.2-A', ' Token with embedded attacker public key in jwk header', async () => {
   console.log('  Token with embedded attacker public key in jwk header');
   var t = await new SignJWT({ sub: 'attacker', iss: helper.issuer, aud: helper.audience })
     .setProtectedHeader({ alg: 'RS256', kid: 'attacker-kid', jwk: attackerJwk })
@@ -116,7 +118,7 @@ await testAsync('3.3.2.2-A', '', async () => {
   await expectReject('jwk header injection', t);
 });
 
-await testAsync('3.3.2.3-A', '', async () => {
+await testAsync('3.3.2.3-A', ' Token with x5u pointing to attacker certificate URL', async () => {
   console.log('  Token with x5u pointing to attacker certificate URL');
   var t = await new SignJWT({ sub: 'attacker', iss: helper.issuer, aud: helper.audience })
     .setProtectedHeader({ alg: 'RS256', kid: 'attacker-kid', x5u: 'https://evil.com/cert.pem' })
@@ -124,7 +126,7 @@ await testAsync('3.3.2.3-A', '', async () => {
   await expectReject('x5u header injection', t);
 });
 
-await testAsync('3.3.2.4-A', '', async () => {
+await testAsync('3.3.2.4-A', ' Spoofed kid — attacker key but using our legitimate kid', async () => {
   console.log('  Spoofed kid — attacker key but using our legitimate kid');
   var t = await new SignJWT({ sub: 'attacker', iss: helper.issuer, aud: helper.audience })
     .setProtectedHeader({ alg: 'RS256', kid: helper.kid })
@@ -137,6 +139,7 @@ groupEnd(after2.pass - before2.pass, after2.fail - before2.fail);
 
 // ── Group 3: Token manipulation ──────────────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-tokens.mjs');
 group('Group 3: Token manipulation', `
   If tampered tokens pass verification, an attacker modifies
   their valid token to escalate privileges, change identity,
@@ -145,7 +148,7 @@ group('Group 3: Token manipulation', `
 
 var before3 = getCounters();
 
-await testAsync('3.3.3.1-A', '', async () => {
+await testAsync('3.3.3.1-A', ' Signing valid token, then changing sub to "attacker"', async () => {
   console.log('  Signing valid token, then changing sub to "attacker"');
   var valid = await helper.signToken({ sub: 'legit_user' });
   var parts = valid.split('.');
@@ -155,7 +158,7 @@ await testAsync('3.3.3.1-A', '', async () => {
   await expectReject('Tampered payload', parts.join('.'));
 });
 
-await testAsync('3.3.3.2-A', '', async () => {
+await testAsync('3.3.3.2-A', ' Token with multiple audiences', async () => {
   console.log('  Token with multiple audiences');
   var multiAud = await helper.signToken({}, { audience: ['https://linkedin-agent-api', 'https://other-api'] });
   try {
@@ -165,7 +168,7 @@ await testAsync('3.3.3.2-A', '', async () => {
   } catch (e) { check('Multiple aud rejected: ' + e.message, true, 'documented', 'documented'); }
 });
 
-await testAsync('3.3.3.3-A', '', async () => {
+await testAsync('3.3.3.3-A', ' 1MB token — oversized payload as DoS vector', async () => {
   console.log('  1MB token — oversized payload as DoS vector');
   try {
     var huge = await helper.signToken({ sub: 'a', data: 'x'.repeat(1000000) });
@@ -173,14 +176,14 @@ await testAsync('3.3.3.3-A', '', async () => {
   } catch (e) { check('1MB token errored: ' + e.message?.substring(0, 40), true, 'rejected', 'rejected'); }
 });
 
-await testAsync('3.3.3.4-A', '', async () => {
+await testAsync('3.3.3.4-A', ' Empty JSON header and payload', async () => {
   console.log('  Empty JSON header and payload');
   var h = Buffer.from('{}').toString('base64url');
   var p = Buffer.from('{}').toString('base64url');
   await expectReject('Empty JSON', h + '.' + p + '.' + crypto.randomBytes(32).toString('base64url'));
 });
 
-await testAsync('3.3.3.5-A', '', async () => {
+await testAsync('3.3.3.5-A', ' Token with kid removed from header', async () => {
   console.log('  Token with kid removed from header');
   var valid = await helper.signToken({ sub: 'test' });
   var parts = valid.split('.');
@@ -189,11 +192,11 @@ await testAsync('3.3.3.5-A', '', async () => {
   await expectReject('kid removed', parts.join('.'));
 });
 
-await testAsync('3.3.3.6-A', '', async () => {
+await testAsync('3.3.3.6-A', ' Null bytes', async () => {
   await expectReject('Null bytes', 'eyJ\x00.eyJ\x00.sig');
 });
 
-await testAsync('3.3.3.7-A', '', async () => {
+await testAsync('3.3.3.7-A', ' Four segments', async () => {
   await expectReject('Four segments', 'a.b.c.d');
 });
 

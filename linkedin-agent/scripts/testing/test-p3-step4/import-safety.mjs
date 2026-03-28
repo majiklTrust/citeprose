@@ -16,6 +16,7 @@
 
 import { group, groupEnd, test, testAsync, check, getCounters } from '../lib/test-harness.mjs';
 
+console.log('  File: test-p3-step4/import-safety.mjs');
 group('Group 8: api.js import safety', `
   If these tests fail, the test suite cannot even load api.js.
   Every other Step 4 test group is blocked. The root cause is
@@ -28,7 +29,7 @@ var before8 = getCounters();
 var importError = null;
 var appModule = null;
 
-await testAsync('3.4.8.1', '', async () => {
+await testAsync('3.4.8.1', ' Attempting to import src/routes/api.js', async () => {
   console.log('  Attempting to import src/routes/api.js');
   console.log('  This is the critical gate — if this fails, nothing else can run');
   console.log('  Common causes of failure:');
@@ -46,7 +47,7 @@ await testAsync('3.4.8.1', '', async () => {
   }
 });
 
-test('3.4.8.2', '', () => {
+test('3.4.8.2', ' That api.js exports a usable router', () => {
   console.log('  Checking that api.js exports a usable router');
   console.log('  The export must be either: export default router, export { router },');
   console.log('  or module.exports = router');
@@ -59,7 +60,7 @@ test('3.4.8.2', '', () => {
     'function or object', typeof router);
 });
 
-test('3.4.8.3', '', () => {
+test('3.4.8.3', ' That the router has route handlers registered', () => {
   console.log('  Checking that the router has route handlers registered');
   console.log('  An empty router means routes were not added — middleware has nothing to protect');
   if (importError) {
@@ -77,7 +78,7 @@ test('3.4.8.3', '', () => {
     'empty router or unrecognized format');
 });
 
-test('3.4.8.4', '', () => {
+test('3.4.8.4', ' That express module is available', () => {
   console.log('  Checking that express module is available');
   console.log('  The test server needs express to mount the router');
   try {
@@ -87,7 +88,7 @@ test('3.4.8.4', '', () => {
   check('express is importable', true, 'available', 'missing');
 });
 
-await testAsync('3.4.8.5', '', async () => {
+await testAsync('3.4.8.5', ' Attempting to mount the router in a test Express app', async () => {
   console.log('  Attempting to mount the router in a test Express app');
   console.log('  If the router has middleware that crashes on mount, this catches it');
   if (importError) {
@@ -107,7 +108,7 @@ await testAsync('3.4.8.5', '', async () => {
   }
 });
 
-await testAsync('3.4.8.6', '', async () => {
+await testAsync('3.4.8.6', ' Attempting to start the test server and send one request', async () => {
   console.log('  Attempting to start the test server and send one request');
   console.log('  This is the final gate — if the server starts and responds, all other');
   console.log('  test groups can run');

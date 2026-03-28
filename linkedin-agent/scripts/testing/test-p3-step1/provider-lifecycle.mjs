@@ -10,6 +10,7 @@ import { initRegistry, getProviders, getProvider, getDefaultProvider,
 
 // ── Group 3: Mock provider activation ────────────────────────
 
+console.log('  File: test-p3-step1/provider-lifecycle.mjs');
 group('Group 3: Mock provider activation', `
   If these tests fail, the test infrastructure is broken. No
   automated auth testing can run without external IDP credentials,
@@ -22,19 +23,19 @@ _resetForTesting();
 process.env.MOCK_AUTH_ENABLED = 'true';
 var result = await initRegistry(() => {});
 
-test('3.1.3.1', '', () => {
+test('3.1.3.1', ' Auth enabled with provider configured', () => {
   console.log('  MOCK_AUTH_ENABLED=true — registry should discover and load mock.js');
   check('Auth enabled with provider configured',
     result.authEnabled === true, 'true', String(result.authEnabled));
 });
 
-test('3.1.3.2', '', () => {
+test('3.1.3.2', ' Providers map — should contain exactly 1 provider', () => {
   console.log('  Checking providers map — should contain exactly 1 provider');
   check('Exactly 1 provider loaded',
     result.providers.size === 1, '1', String(result.providers.size));
 });
 
-test('3.1.3.3', '', () => {
+test('3.1.3.3', ' Auth enforcement is active', () => {
   console.log('  isAuthEnabled() should now be true — middleware will enforce tokens');
   check('Auth enforcement is active',
     isAuthEnabled() === true, 'true', String(isAuthEnabled()));
@@ -42,68 +43,68 @@ test('3.1.3.3', '', () => {
 
 var mock = getProvider('mock');
 
-test('3.1.3.4', '', () => {
+test('3.1.3.4', '  getProvider("mock") — lookup by registered name', () => {
   console.log('  Calling getProvider("mock") — lookup by registered name');
   check('Provider retrievable by name', mock !== null, 'non-null', String(mock));
 });
 
-test('3.1.3.5', '', () => {
+test('3.1.3.5', ' Verifying the returned provider name matches registration', () => {
   console.log('  Verifying the returned provider name matches registration');
   check('Provider name matches', mock?.name === 'mock', 'mock', String(mock?.name));
 });
 
-test('3.1.3.6', '', () => {
+test('3.1.3.6', ' Provider type determines which protocol the middleware uses', () => {
   console.log('  Provider type determines which protocol the middleware uses');
   check('Provider type is OIDC', mock?.type === 'oidc', 'oidc', String(mock?.type));
 });
 
-test('3.1.3.7', '', () => {
+test('3.1.3.7', ' A mismatch means all tokens from this provider are rejected', () => {
   console.log('  The issuer URL is compared against the iss claim in every JWT');
   console.log('  A mismatch means all tokens from this provider are rejected');
   check('Issuer URL set', mock?.issuer === 'https://mock-auth.test/', 'https://mock-auth.test/', String(mock?.issuer));
 });
 
-test('3.1.3.8', '', () => {
+test('3.1.3.8', ' The JWKS URI is where the middleware fetches public keys', () => {
   console.log('  The JWKS URI is where the middleware fetches public keys');
   check('JWKS URI set', mock?.jwksUri === 'https://mock-auth.test/.well-known/jwks.json',
     'https://mock-auth.test/.well-known/jwks.json', String(mock?.jwksUri));
 });
 
-test('3.1.3.9', '', () => {
+test('3.1.3.9', ' Audience set', () => {
   console.log('  The audience must match the aud claim — ensures token is for our API');
   check('Audience set', mock?.audience === 'https://linkedin-agent-api',
     'https://linkedin-agent-api', String(mock?.audience));
 });
 
-test('3.1.3.10', '', () => {
+test('3.1.3.10', ' Client ID identifies our application to the IDP', () => {
   console.log('  Client ID identifies our application to the IDP');
   check('Client ID set', mock?.clientId === 'mock_client_001', 'mock_client_001', String(mock?.clientId));
 });
 
-test('3.1.3.11', '', () => {
+test('3.1.3.11', ' Priority determines default when multiple providers active', () => {
   console.log('  Priority determines default when multiple providers active');
   console.log('  Mock uses 999 (low) so real providers always take precedence');
   check('Priority is 999', mock?.priority === 999, '999', String(mock?.priority));
 });
 
-test('3.1.3.12', '', () => {
+test('3.1.3.12', ' Default provider is mock', () => {
   console.log('  getDefaultProvider() returns the highest-priority (lowest number) provider');
   check('Default provider is mock', getDefaultProvider()?.name === 'mock', 'mock', String(getDefaultProvider()?.name));
 });
 
-test('3.1.3.13', '', () => {
+test('3.1.3.13', ' Issuers list includes mock', () => {
   console.log('  getIssuers() builds the allowlist the middleware checks tokens against');
   check('Issuers list includes mock', getIssuers().includes('https://mock-auth.test/'),
     'includes mock issuer', JSON.stringify(getIssuers()));
 });
 
-test('3.1.3.14', '', () => {
+test('3.1.3.14', ' JWKS map contains mock issuer', () => {
   console.log('  getJwksMap() maps each issuer to its JWKS endpoint for key retrieval');
   check('JWKS map contains mock issuer', getJwksMap().has('https://mock-auth.test/'),
     'has mock issuer', JSON.stringify([...getJwksMap().keys()]));
 });
 
-test('3.1.3.15', '', () => {
+test('3.1.3.15', ' Unknown provider returns null', () => {
   console.log('  Looking up a provider name that was never registered — must return null');
   check('Unknown provider returns null', getProvider('nonexistent') === null, 'null', String(getProvider('nonexistent')));
 });
@@ -113,6 +114,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Provider method validation ──────────────────────
 
+console.log('  File: test-p3-step1/provider-lifecycle.mjs');
 group('Group 4: Provider method validation', `
   If these tests fail, login, token exchange, user identity
   retrieval, or logout do not work. The dashboard is inaccessible.
@@ -120,7 +122,7 @@ group('Group 4: Provider method validation', `
 
 var before4 = getCounters();
 
-await testAsync('3.1.4.1', '', async () => {
+await testAsync('3.1.4.1', '  mock.exchangeCode("test_code_123")', async () => {
   console.log('  Calling mock.exchangeCode("test_code_123")');
   console.log('  Simulates the OAuth code→token exchange after login callback');
   var tokens = await mock.exchangeCode('test_code_123');
@@ -138,7 +140,7 @@ await testAsync('3.1.4.1', '', async () => {
     tokens.tokenType === 'Bearer', 'Bearer', String(tokens.tokenType));
 });
 
-await testAsync('3.1.4.5', '', async () => {
+await testAsync('3.1.4.5', '  mock.getUserInfo() with the access token', async () => {
   console.log('  Calling mock.getUserInfo() with the access token');
   console.log('  Retrieves the user profile the dashboard displays');
   var tokens = await mock.exchangeCode('test_code');
@@ -160,7 +162,7 @@ await testAsync('3.1.4.5', '', async () => {
     user.provider === 'mock', 'mock', String(user.provider));
 });
 
-test('3.1.4.10', '', () => {
+test('3.1.4.10', '  mock.getLoginUrl("state_abc")', () => {
   console.log('  Calling mock.getLoginUrl("state_abc")');
   console.log('  The state parameter is the CSRF token preventing auth hijacking');
   var loginUrl = mock.getLoginUrl('state_abc');
@@ -171,7 +173,7 @@ test('3.1.4.10', '', () => {
     loginUrl.includes('state_abc'), 'contains state_abc', loginUrl);
 });
 
-test('3.1.4.12', '', () => {
+test('3.1.4.12', '  mock.getLogoutUrl("https://example.com")', () => {
   console.log('  Calling mock.getLogoutUrl("https://example.com")');
   console.log('  After logout, user should land on the specified return page');
   var logoutUrl = mock.getLogoutUrl('https://example.com');

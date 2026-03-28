@@ -34,6 +34,7 @@ process.on('SIGINT', () => { cleanupHostile(); process.exit(1); });
 
 // ── Group 1: Crash in isConfigured() ─────────────────────────
 
+console.log('  File: test-p3-step1-adversarial/hostile-loading.mjs');
 group('Group 1: Crash in isConfigured()', `
   If the registry crashes when scanning a single bad provider
   file, ALL authentication fails. Every user is locked out
@@ -51,28 +52,28 @@ process.env.MOCK_AUTH_ENABLED = 'true';
 var logs = [];
 var result = await initRegistry((l, a, d) => logs.push({ l, a, d }));
 
-test('3.1.1.1-A', '', () => {
+test('3.1.1.1-A', ' A hostile provider throws during isConfigured()', () => {
   console.log('  A hostile provider throws during isConfigured()');
   console.log('  The registry is mid-scan — if the crash propagates, total auth failure');
   check('Registry survived the hostile crash', true, 'no uncaught exception', 'would have exited');
 });
 
-test('3.1.1.2-A', '', () => {
+test('3.1.1.2-A', ' If the legitimate mock provider survived', () => {
   console.log('  Checking if the legitimate mock provider survived');
   check('Mock provider still loaded', getProvider('mock') !== null, 'mock loaded', 'mock missing');
 });
 
-test('3.1.1.3-A', '', () => {
+test('3.1.1.3-A', ' Hostile provider must NOT be in the active map', () => {
   console.log('  Hostile provider must NOT be in the active map');
   check('Hostile provider not registered', getProvider('hostile_crash') === null, 'null', String(getProvider('hostile_crash')?.name));
 });
 
-test('3.1.1.4-A', '', () => {
+test('3.1.1.4-A', ' Auth must remain enabled via the surviving provider', () => {
   console.log('  Auth must remain enabled via the surviving provider');
   check('Auth still enabled', isAuthEnabled(), 'true', String(isAuthEnabled()));
 });
 
-test('3.1.1.5-A', '', () => {
+test('3.1.1.5-A', ' Logs for a record of the hostile file failure', () => {
   console.log('  Checking logs for a record of the hostile file failure');
   var hostileLog = logs.find(l => l.a === 'auth_provider_skipped' && l.d?.filename?.includes('hostile'));
   check('Hostile failure logged', !!hostileLog, 'log entry present', 'no log entry');
@@ -87,6 +88,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 5: Malformed provider files ────────────────────────
 
+console.log('  File: test-p3-step1-adversarial/hostile-loading.mjs');
 group('Group 5: Malformed provider files', `
   Syntax errors or invalid exports in one file during deployment
   crash the registry. Auth for every user goes down because of
@@ -105,23 +107,23 @@ _resetForTesting();
 process.env.MOCK_AUTH_ENABLED = 'true';
 var result5 = await initRegistry(() => {});
 
-test('3.1.5.1-A', '', () => {
+test('3.1.5.1-A', ' String export, null export, function export', () => {
   console.log('  5 hostile files placed in providers/: syntax error, no default export,');
   console.log('  string export, null export, function export');
   check('Registry survived all 5 malformed files', true, 'no crash', 'crash');
 });
 
-test('3.1.5.2-A', '', () => {
+test('3.1.5.2-A', ' Legitimate mock provider was in the same directory', () => {
   console.log('  Legitimate mock provider was in the same directory');
   check('Mock provider still operational', getProvider('mock') !== null, 'loaded', 'missing');
 });
 
-test('3.1.5.3-A', '', () => {
+test('3.1.5.3-A', ' Auth enforcement must remain active via surviving provider', () => {
   console.log('  Auth enforcement must remain active via surviving provider');
   check('Auth still enabled', isAuthEnabled(), 'true', String(isAuthEnabled()));
 });
 
-test('3.1.5.4-A', '', () => {
+test('3.1.5.4-A', ' All hostile files handled gracefully', () => {
   console.log('  Each hostile file should be status "error" or "skip" — not "ready"');
   var errorResults = result5.results.filter(r => r.status === 'error' || r.status === 'skip' || r.status === 'inactive');
   check('All hostile files handled gracefully', errorResults.length >= 4, '≥4', '' + errorResults.length);

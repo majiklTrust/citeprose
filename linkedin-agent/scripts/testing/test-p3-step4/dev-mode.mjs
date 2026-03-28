@@ -78,6 +78,7 @@ var allRoutes = [
 
 // ── Group 6: Dev mode — no auth provider configured ──────────
 
+console.log('  File: test-p3-step4/dev-mode.mjs');
 group('Group 6: Dev mode — all routes pass without auth', `
   If these tests fail, a developer who clones the repo and runs
   it without configuring Auth0 credentials will see 401 errors
@@ -103,7 +104,7 @@ for (var [idx, route] of allRoutes.entries()) {
   });
 }
 
-await testAsync('3.4.6.17', '', async () => {
+await testAsync('3.4.6.17', '  a garbage Authorization header in dev mode', async () => {
   console.log('  Sending a garbage Authorization header in dev mode');
   console.log('  Even with a bad header, dev mode must not reject the request');
   console.log('  The middleware should ignore auth entirely when no providers are loaded');
@@ -117,7 +118,7 @@ await testAsync('3.4.6.17', '', async () => {
     'not 401/403', String(res.status));
 });
 
-await testAsync('3.4.6.18', '', async () => {
+await testAsync('3.4.6.18', '  no Authorization header at all to a write endpoint', async () => {
   console.log('  Sending no Authorization header at all to a write endpoint');
   console.log('  In dev mode, POST endpoints must be reachable for testing');
   var r = await REQ('POST', '/api/mode', { mode: 'manual' });

@@ -20,6 +20,7 @@ var registry = await import('../../../src/auth/index.js');
 
 // ── Group 1: Module export contracts ─────────────────────────
 
+console.log('  File: test-p3-step3-design/architecture-boundaries.mjs');
 group('Group 1: Module export contracts', `
   If these tests fail, consumers of these modules cannot rely
   on a stable API. Every downstream file that imports auth
@@ -29,7 +30,7 @@ group('Group 1: Module export contracts', `
 
 var before1 = getCounters();
 
-test('3.3.1.1-D', '', () => {
+test('3.3.1.1-D', ' Jwt-verifier.js must export verifyToken as a named function', () => {
   console.log('  jwt-verifier.js must export verifyToken as a named function');
   console.log('  This is the single entry point for all token verification');
   console.log('  If it is a class, method, or default export, consumers couple differently');
@@ -37,14 +38,14 @@ test('3.3.1.1-D', '', () => {
     'named function', typeof jwtVerifier.verifyToken);
 });
 
-test('3.3.1.2-D', '', () => {
+test('3.3.1.2-D', ' Without this, key rotation requires a server restart', () => {
   console.log('  jwt-verifier.js must export clearJwksCache as a named function');
   console.log('  Without this, key rotation requires a server restart');
   check('clearJwksCache is named export', typeof jwtVerifier.clearJwksCache === 'function',
     'named function', typeof jwtVerifier.clearJwksCache);
 });
 
-test('3.3.1.3-D', '', () => {
+test('3.3.1.3-D', ' Jwt-verifier.js must NOT have a default export', () => {
   console.log('  jwt-verifier.js must NOT have a default export');
   console.log('  A default export encourages import-as-anything, hiding the module identity');
   console.log('  Named exports enforce consistent naming across the codebase');
@@ -52,7 +53,7 @@ test('3.3.1.3-D', '', () => {
     'undefined', typeof jwtVerifier.default);
 });
 
-test('3.3.1.4-D', '', () => {
+test('3.3.1.4-D', ' This prevents shared state between Express apps in tests', () => {
   console.log('  middleware.js must export createAuthMiddleware as a named function');
   console.log('  The factory pattern (create*) signals that each call returns fresh middleware');
   console.log('  This prevents shared state between Express apps in tests');
@@ -60,7 +61,7 @@ test('3.3.1.4-D', '', () => {
     'named function', typeof middleware.createAuthMiddleware);
 });
 
-test('3.3.1.5-D', '', () => {
+test('3.3.1.5-D', ' No direct requireAuth export', () => {
   console.log('  middleware.js must NOT export requireAuth or optionalAuth directly');
   console.log('  Direct exports would be singletons — shared state across the process');
   console.log('  The factory pattern returns fresh instances bound to a specific logger');
@@ -70,7 +71,7 @@ test('3.3.1.5-D', '', () => {
     'undefined', typeof middleware.optionalAuth);
 });
 
-test('3.3.1.6-D', '', () => {
+test('3.3.1.6-D', ' Testing: call with a mock logger, verify it does not throw', () => {
   console.log('  createAuthMiddleware must accept a logger function as its argument');
   console.log('  Dependency injection for logging — no hard-coded console.log inside middleware');
   console.log('  Testing: call with a mock logger, verify it does not throw');
@@ -79,7 +80,7 @@ test('3.3.1.6-D', '', () => {
     'object', typeof result);
 });
 
-test('3.3.1.7-D', '', () => {
+test('3.3.1.7-D', ' The factory must return both requireAuth and optionalAuth', () => {
   console.log('  The factory must return both requireAuth and optionalAuth');
   console.log('  Both are needed — requireAuth for protected routes, optionalAuth for public');
   var result = middleware.createAuthMiddleware(() => {});
@@ -89,7 +90,7 @@ test('3.3.1.7-D', '', () => {
     'function', typeof result.optionalAuth);
 });
 
-test('3.3.1.8-D', '', () => {
+test('3.3.1.8-D', ' requireAuth takes 3 args', () => {
   console.log('  requireAuth and optionalAuth must be Express middleware shaped');
   console.log('  Express middleware takes (req, res, next) — exactly 3 arguments');
   console.log('  If the function takes 4 args, Express treats it as an error handler');
@@ -100,7 +101,7 @@ test('3.3.1.8-D', '', () => {
     '3 (req, res, next)', String(result.optionalAuth.length));
 });
 
-test('3.3.1.9-D', '', () => {
+test('3.3.1.9-D', ' If they share state, one test app pollutes another', () => {
   console.log('  Two calls to createAuthMiddleware must return independent instances');
   console.log('  If they share state, one test app pollutes another');
   var m1 = middleware.createAuthMiddleware(() => {});
@@ -116,6 +117,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Single responsibility enforcement ───────────────
 
+console.log('  File: test-p3-step3-design/architecture-boundaries.mjs');
 group('Group 2: Single responsibility enforcement', `
   If these tests fail, responsibilities are tangled across
   modules. A change to token verification breaks middleware,
@@ -125,7 +127,7 @@ group('Group 2: Single responsibility enforcement', `
 
 var before2 = getCounters();
 
-test('3.3.2.1-D', '', () => {
+test('3.3.2.1-D', ' Jwt-verifier.js must not import from middleware.js', () => {
   console.log('  jwt-verifier.js must not import from middleware.js');
   console.log('  Token verification is a pure input→output operation');
   console.log('  If it imports middleware, the verifier knows about HTTP — wrong layer');
@@ -135,7 +137,7 @@ test('3.3.2.1-D', '', () => {
     'no middleware import', 'imports middleware');
 });
 
-test('3.3.2.2-D', '', () => {
+test('3.3.2.2-D', ' Jwt-verifier.js must not import from index.js (the registry)', () => {
   console.log('  jwt-verifier.js must not import from index.js (the registry)');
   console.log('  The verifier should not know which providers exist');
   console.log('  It receives issuer, jwksUri, audience as arguments — pure parameters');
@@ -145,7 +147,7 @@ test('3.3.2.2-D', '', () => {
     'no registry import', 'imports registry');
 });
 
-test('3.3.2.3-D', '', () => {
+test('3.3.2.3-D', ' Jwt-verifier.js must not import any provider (auth0, mock)', () => {
   console.log('  jwt-verifier.js must not import any provider (auth0, mock)');
   console.log('  The verifier is provider-agnostic — it works with any OIDC issuer');
   var src = fs.readFileSync('src/auth/jwt-verifier.js', 'utf8');
@@ -157,7 +159,7 @@ test('3.3.2.3-D', '', () => {
     'no provider imports', 'imports a provider: ' + importLines.filter(l => l.includes('provider') || l.includes('auth0') || l.includes('mock')).join('; '));
 });
 
-test('3.3.2.4-D', '', () => {
+test('3.3.2.4-D', ' Middleware.js must not import jose directly', () => {
   console.log('  middleware.js must not import jose directly');
   console.log('  All jose interaction must go through jwt-verifier.js');
   console.log('  If middleware imports jose, there are two places to update on jose upgrade');
@@ -167,7 +169,7 @@ test('3.3.2.4-D', '', () => {
     'no jose import', 'imports jose');
 });
 
-test('3.3.2.5-D', '', () => {
+test('3.3.2.5-D', ' Middleware.js must import verifyToken from jwt-verifier.js', () => {
   console.log('  middleware.js must import verifyToken from jwt-verifier.js');
   console.log('  This is the only path from HTTP request to token validation');
   console.log('  If middleware reimplements verification, the abstraction is broken');
@@ -177,7 +179,7 @@ test('3.3.2.5-D', '', () => {
     'imports verifyToken', 'missing import');
 });
 
-test('3.3.2.6-D', '', () => {
+test('3.3.2.6-D', ' Middleware.js must import from index.js for provider lookups', () => {
   console.log('  middleware.js must import from index.js for provider lookups');
   console.log('  The middleware needs isAuthEnabled, getJwksMap, getIssuers');
   console.log('  If it queries providers directly, the snapshot abstraction is bypassed');
@@ -187,7 +189,7 @@ test('3.3.2.6-D', '', () => {
     'imports registry', 'no registry import');
 });
 
-test('3.3.2.7-D', '', () => {
+test('3.3.2.7-D', ' GetProviders returns live objects — mutable after init', () => {
   console.log('  middleware.js must use getSnapshotByIssuer (not getProviders) for audience');
   console.log('  getProviders returns live objects — mutable after init');
   console.log('  getSnapshotByIssuer returns frozen copies — immune to post-init mutation');
@@ -197,7 +199,7 @@ test('3.3.2.7-D', '', () => {
     'uses snapshot lookup', 'uses live provider lookup');
 });
 
-test('3.3.2.8-D', '', () => {
+test('3.3.2.8-D', ' Index.js (registry) must not import jose', () => {
   console.log('  index.js (registry) must not import jose');
   console.log('  The registry manages providers — it should not know about JWT format');
   var src = fs.readFileSync('src/auth/index.js', 'utf8');
@@ -206,7 +208,7 @@ test('3.3.2.8-D', '', () => {
     'no jose import', 'imports jose');
 });
 
-test('3.3.2.9-D', '', () => {
+test('3.3.2.9-D', ' Function does not reference process.env or global', () => {
   console.log('  verifyToken must be a pure function — no side effects beyond cache');
   console.log('  It must not write to process.env, global, or modify arguments');
   console.log('  Checking: function does not reference process.env or global');
@@ -218,7 +220,7 @@ test('3.3.2.9-D', '', () => {
     'no global refs', 'references global');
 });
 
-test('3.3.2.10-D', '', () => {
+test('3.3.2.10-D', ' Auth layer has no upward dependencies', () => {
   console.log('  No file in src/auth/ should import from src/routes/ or src/services/');
   console.log('  Auth is a foundational layer — it must not depend on business logic');
   console.log('  If auth imports routes, a circular dependency forms on startup');

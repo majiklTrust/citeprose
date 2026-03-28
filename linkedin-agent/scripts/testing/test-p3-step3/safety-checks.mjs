@@ -6,6 +6,7 @@
 import { group, groupEnd, test, testAsync, check, getCounters } from '../lib/test-harness.mjs';
 import { verifyToken } from '../../../src/auth/jwt-verifier.js';
 
+console.log('  File: test-p3-step3/safety-checks.mjs');
 group('Group 6: Error message safety', `
   If these tests fail, auth error responses leak file paths,
   library names, or stack traces. Attackers use this to map

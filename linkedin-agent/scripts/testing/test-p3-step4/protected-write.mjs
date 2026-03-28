@@ -63,6 +63,7 @@ var protectedPosts = [
 
 // ── Group 3: Protected POST routes reject without token ──────
 
+console.log('  File: test-p3-step4/protected-write.mjs');
 group('Group 3: Protected POST routes reject unauthenticated', `
   If these tests fail, anyone can approve posts to LinkedIn,
   change the agent's operating mode, trigger content generation,
@@ -83,14 +84,14 @@ for (var [idx, entry] of protectedPosts.entries()) {
   });
 }
 
-await testAsync('3.4.3.10', '', async () => {
+await testAsync('3.4.3.10', ' Verifying POST 401 response includes error message', async () => {
   console.log('  Verifying POST 401 response includes error message');
   console.log('  Write endpoints should give the same error as read endpoints');
   var r = await POST('/api/mode');
   check('Error message present', r.body?.error !== undefined, 'error field', 'no error field');
 });
 
-await testAsync('3.4.3.11', '', async () => {
+await testAsync('3.4.3.11', ' Verifying the request body was NOT processed', async () => {
   console.log('  Verifying the request body was NOT processed');
   console.log('  If the route handler runs before auth middleware, side effects occur');
   console.log('  Sending mode=auto to /api/mode — must be rejected before handler');
@@ -103,6 +104,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Protected POST routes accept valid token ────────
 
+console.log('  File: test-p3-step4/protected-write.mjs');
 group('Group 4: Protected POST routes accept authenticated requests', `
   If these tests fail, authenticated users cannot operate the
   agent. Login works but the dashboard cannot approve posts,
@@ -125,7 +127,7 @@ for (var [idx2, entry2] of protectedPosts.entries()) {
   });
 }
 
-await testAsync('3.4.4.10', '', async () => {
+await testAsync('3.4.4.10', ' Verifying POST with token and valid body reaches the handler', async () => {
   console.log('  Verifying POST with token and valid body reaches the handler');
   console.log('  Sending mode change — the handler may reject the value but auth passes');
   var r = await POST('/api/mode', validToken, { mode: 'manual' });

@@ -15,6 +15,7 @@ var apiSource = fs.readFileSync('src/routes/api.js', 'utf8');
 
 // ── Group 3: Import discipline ───────────────────────────────
 
+console.log('  File: test-p3-step4-design/route-module-design.mjs');
 group('Group 3: api.js import discipline', `
   If these tests fail, api.js knows too much about auth internals.
   A change to the JWT library, provider config, or middleware
@@ -24,7 +25,7 @@ group('Group 3: api.js import discipline', `
 
 var before3 = getCounters();
 
-test('3.4.3.1-D', '', () => {
+test('3.4.3.1-D', ' This is the only auth import the route file needs', () => {
   console.log('  api.js must import from src/auth/middleware.js (for createAuthMiddleware)');
   console.log('  This is the only auth import the route file needs');
   check('Imports middleware',
@@ -32,7 +33,7 @@ test('3.4.3.1-D', '', () => {
     'imports middleware', 'no middleware import');
 });
 
-test('3.4.3.2-D', '', () => {
+test('3.4.3.2-D', ' Api.js must NOT import from src/auth/index.js directly', () => {
   console.log('  api.js must NOT import from src/auth/index.js directly');
   console.log('  The registry is used by middleware, not by route handlers');
   console.log('  If api.js imports the registry, handlers can bypass middleware');
@@ -46,7 +47,7 @@ test('3.4.3.2-D', '', () => {
     '0 non-middleware auth imports', (authImports?.length || 0) + ' found');
 });
 
-test('3.4.3.3-D', '', () => {
+test('3.4.3.3-D', ' Api.js must NOT import jose', () => {
   console.log('  api.js must NOT import jose');
   console.log('  JWT parsing is jwt-verifier responsibility — not route handler concern');
   check('No jose import',
@@ -54,14 +55,14 @@ test('3.4.3.3-D', '', () => {
     'clean', 'imports jose');
 });
 
-test('3.4.3.4-D', '', () => {
+test('3.4.3.4-D', ' Api.js must NOT import jwt-verifier', () => {
   console.log('  api.js must NOT import jwt-verifier');
   console.log('  Token verification goes through middleware, not direct handler calls');
   check('No jwt-verifier import', !apiSource.includes('jwt-verifier'),
     'clean', 'imports jwt-verifier');
 });
 
-test('3.4.3.5-D', '', () => {
+test('3.4.3.5-D', ' Api.js must NOT import any provider file directly', () => {
   console.log('  api.js must NOT import any provider file directly');
   console.log('  Routes do not need to know which IDP authenticated the user');
   check('No auth0 import', !apiSource.includes('/providers/auth0'),
@@ -70,7 +71,7 @@ test('3.4.3.5-D', '', () => {
     'clean', 'imports mock');
 });
 
-test('3.4.3.6-D', '', () => {
+test('3.4.3.6-D', ' Api.js must call createAuthMiddleware exactly once', () => {
   console.log('  api.js must call createAuthMiddleware exactly once');
   console.log('  Multiple calls create multiple middleware instances — inconsistent behavior');
   var matches = apiSource.match(/createAuthMiddleware\(/g);
@@ -79,7 +80,7 @@ test('3.4.3.6-D', '', () => {
     '1 call', (matches?.length || 0) + ' calls');
 });
 
-test('3.4.3.7-D', '', () => {
+test('3.4.3.7-D', ' The destructured result must include requireAuth', () => {
   console.log('  The destructured result must include requireAuth');
   console.log('  This is the middleware applied via router.use()');
   check('requireAuth destructured from factory',
@@ -92,6 +93,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Public/protected split visibility ───────────────
 
+console.log('  File: test-p3-step4-design/route-module-design.mjs');
 group('Group 4: Public/protected route split', `
   If these tests fail, the boundary between public and protected
   routes is implicit or scattered. A new developer adding a
@@ -101,7 +103,7 @@ group('Group 4: Public/protected route split', `
 
 var before4 = getCounters();
 
-test('3.4.4.1-D', '', () => {
+test('3.4.4.1-D', ' Every route after the middleware is protected by default', () => {
   console.log('  /api/status must be the ONLY route defined before requireAuth middleware');
   console.log('  Every route after the middleware is protected by default');
   console.log('  This makes "protected" the default — public is the exception');
@@ -124,7 +126,7 @@ test('3.4.4.1-D', '', () => {
     '["/api/status"]', JSON.stringify(routePaths));
 });
 
-test('3.4.4.2-D', '', () => {
+test('3.4.4.2-D', ' Auth middleware found', () => {
   console.log('  All 15 protected routes must appear AFTER requireAuth middleware');
   var useAuthIdx = apiSource.indexOf('router.use(requireAuth') !== -1
     ? apiSource.indexOf('router.use(requireAuth')
@@ -146,7 +148,7 @@ test('3.4.4.2-D', '', () => {
   }
 });
 
-test('3.4.4.3-D', '', () => {
+test('3.4.4.3-D', ' They rearrange routes alphabetically and break security', () => {
   console.log('  The file should have a comment marking the public/protected boundary');
   console.log('  Without a comment, the next developer does not know the ordering matters');
   console.log('  They rearrange routes alphabetically and break security');
@@ -158,7 +160,7 @@ test('3.4.4.3-D', '', () => {
     'comment marking boundary', 'no boundary comment');
 });
 
-test('3.4.4.4-D', '', () => {
+test('3.4.4.4-D', ' Route handlers must not check req.user for access control', () => {
   console.log('  Route handlers must not check req.user for access control');
   console.log('  Access control is the middleware\'s job');
   console.log('  Handlers may READ req.user for display or logging — but not for gating');
@@ -171,7 +173,7 @@ test('3.4.4.4-D', '', () => {
     '0 gating patterns', gatingPatterns.length + ' found');
 });
 
-test('3.4.4.5-D', '', () => {
+test('3.4.4.5-D', ' Route count sanity check — all 16 routes defined', () => {
   console.log('  Route count sanity check — the file must define all 16 routes');
   console.log('  If a route is missing, it was accidentally deleted during refactoring');
   var allPaths = [

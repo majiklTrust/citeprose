@@ -15,6 +15,7 @@ import { _resetForTesting, initRegistry, getProviders, getProvider,
 
 // ── Group 3: Lifecycle semantics ─────────────────────────────
 
+console.log('  File: test-p3-step1-design/registry-state-design.mjs');
 group('Group 3: Registry lifecycle semantics', `
   If these tests fail, the registry does not transition cleanly
   between states. A server restart leaves stale providers.
@@ -24,7 +25,7 @@ group('Group 3: Registry lifecycle semantics', `
 
 var before3 = getCounters();
 
-await testAsync('3.1.3.1-D', '', async () => {
+await testAsync('3.1.3.1-D', ' _resetForTesting must clear ALL state to pristine', async () => {
   console.log('  _resetForTesting must clear ALL state to pristine');
   console.log('  After reset: no providers, no snapshots, not initialized, auth not required');
   _resetForTesting();
@@ -34,7 +35,7 @@ await testAsync('3.1.3.1-D', '', async () => {
   check('getIssuers() empty after reset', getIssuers().length === 0, '0', String(getIssuers().length));
 });
 
-await testAsync('3.1.3.2-D', '', async () => {
+await testAsync('3.1.3.2-D', ' InitRegistry must be callable after reset', async () => {
   console.log('  initRegistry must be callable after reset');
   console.log('  Reset → init is the test isolation pattern');
   console.log('  If init refuses to run after reset, tests cannot isolate');
@@ -44,7 +45,7 @@ await testAsync('3.1.3.2-D', '', async () => {
   check('Init succeeds after reset', result.authEnabled === true, 'true', String(result.authEnabled));
 });
 
-await testAsync('3.1.3.3-D', '', async () => {
+await testAsync('3.1.3.3-D', ' The registry should not rescan providers on every call', async () => {
   console.log('  Calling initRegistry twice without reset must return cached result');
   console.log('  The registry should not rescan providers on every call');
   console.log('  This prevents duplicate providers and wasted I/O');
@@ -54,7 +55,7 @@ await testAsync('3.1.3.3-D', '', async () => {
     'same reference', 'different references');
 });
 
-await testAsync('3.1.3.4-D', '', async () => {
+await testAsync('3.1.3.4-D', ' ShutdownRegistry must clear providers', async () => {
   console.log('  shutdownRegistry must clear providers');
   console.log('  After shutdown, no provider should be accessible');
   await shutdownRegistry(() => {});
@@ -62,7 +63,7 @@ await testAsync('3.1.3.4-D', '', async () => {
   check('Auth disabled after shutdown', !isAuthEnabled(), 'false', String(isAuthEnabled()));
 });
 
-await testAsync('3.1.3.5-D', '', async () => {
+await testAsync('3.1.3.5-D', ' Shutdown → init is the graceful restart pattern', async () => {
   console.log('  initRegistry must be callable after shutdown (not just reset)');
   console.log('  Shutdown → init is the graceful restart pattern');
   _resetForTesting();
@@ -73,7 +74,7 @@ await testAsync('3.1.3.5-D', '', async () => {
   check('Init succeeds after shutdown', r.authEnabled === true, 'true', String(r.authEnabled));
 });
 
-await testAsync('3.1.3.6-D', '', async () => {
+await testAsync('3.1.3.6-D', ' InitRegistry must return a structured result object', async () => {
   console.log('  initRegistry must return a structured result object');
   console.log('  The result tells the caller what happened during scan');
   console.log('  Without this, initialization failures are silent');
@@ -85,7 +86,7 @@ await testAsync('3.1.3.6-D', '', async () => {
   check('Result has results array', Array.isArray(r.results), 'array', typeof r.results);
 });
 
-await testAsync('3.1.3.7-D', '', async () => {
+await testAsync('3.1.3.7-D', ' Each result entry must include filename and status', async () => {
   console.log('  Each result entry must include filename and status');
   console.log('  The operator needs to see which files loaded and which failed');
   _resetForTesting();
@@ -99,7 +100,7 @@ await testAsync('3.1.3.7-D', '', async () => {
   }
 });
 
-await testAsync('3.1.3.8-D', '', async () => {
+await testAsync('3.1.3.8-D', ' ShutdownRegistry must accept a logger parameter', async () => {
   console.log('  shutdownRegistry must accept a logger parameter');
   console.log('  Same dependency injection pattern as initRegistry');
   check('shutdownRegistry takes at least 1 parameter',
@@ -112,6 +113,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Snapshot isolation and immutability ─────────────
 
+console.log('  File: test-p3-step1-design/registry-state-design.mjs');
 group('Group 4: Snapshot isolation and immutability', `
   If these tests fail, a malicious or buggy provider can
   redirect token validation after initialization. The snapshot
@@ -126,7 +128,7 @@ _resetForTesting();
 process.env.MOCK_AUTH_ENABLED = 'true';
 await initRegistry(() => {});
 
-test('3.1.4.1-D', '', () => {
+test('3.1.4.1-D', ' GetSnapshotByIssuer must return a frozen object', () => {
   console.log('  getSnapshotByIssuer must return a frozen object');
   console.log('  Frozen = Object.isFrozen. Cannot add, remove, or change properties');
   var snap = getSnapshotByIssuer('https://mock-auth.test/');
@@ -134,7 +136,7 @@ test('3.1.4.1-D', '', () => {
   check('Snapshot is frozen', Object.isFrozen(snap), 'frozen', 'not frozen');
 });
 
-test('3.1.4.2-D', '', () => {
+test('3.1.4.2-D', ' Snapshot must contain all security-critical fields', () => {
   console.log('  Snapshot must contain all security-critical fields');
   console.log('  issuer, jwksUri, audience — these determine token validation');
   console.log('  If any is missing from the snapshot, middleware falls through to live object');
@@ -148,7 +150,7 @@ test('3.1.4.2-D', '', () => {
   check('Snapshot has priority', typeof snap.priority === 'number', 'number', typeof snap.priority);
 });
 
-test('3.1.4.3-D', '', () => {
+test('3.1.4.3-D', ' GetJwksMap must read from snapshots, not live providers', () => {
   console.log('  getJwksMap must read from snapshots, not live providers');
   console.log('  Checking: the returned Map keys match snapshot issuers');
   var map = getJwksMap();
@@ -159,7 +161,7 @@ test('3.1.4.3-D', '', () => {
     snap.jwksUri, map.get(snap.issuer));
 });
 
-test('3.1.4.4-D', '', () => {
+test('3.1.4.4-D', ' GetJwksMap must return a NEW Map on each call', () => {
   console.log('  getJwksMap must return a NEW Map on each call');
   console.log('  If it returns the internal Map, consumers can inject fake JWKS endpoints');
   var m1 = getJwksMap();
@@ -167,7 +169,7 @@ test('3.1.4.4-D', '', () => {
   check('Different Map references', m1 !== m2, 'different', 'same reference');
 });
 
-test('3.1.4.5-D', '', () => {
+test('3.1.4.5-D', ' Mutating the returned Map must not affect the registry', () => {
   console.log('  Mutating the returned Map must not affect the registry');
   var map = getJwksMap();
   map.set('https://evil.com/', 'https://evil.com/jwks');
@@ -176,14 +178,14 @@ test('3.1.4.5-D', '', () => {
     'absent', 'injected');
 });
 
-test('3.1.4.6-D', '', () => {
+test('3.1.4.6-D', ' GetIssuers must return a NEW array on each call', () => {
   console.log('  getIssuers must return a NEW array on each call');
   var a1 = getIssuers();
   var a2 = getIssuers();
   check('Different array references', a1 !== a2, 'different', 'same reference');
 });
 
-test('3.1.4.7-D', '', () => {
+test('3.1.4.7-D', ' Mutating the returned array must not affect the registry', () => {
   console.log('  Mutating the returned array must not affect the registry');
   var arr = getIssuers();
   arr.push('https://evil.com/');
@@ -192,14 +194,14 @@ test('3.1.4.7-D', '', () => {
     'absent', 'injected');
 });
 
-test('3.1.4.8-D', '', () => {
+test('3.1.4.8-D', ' GetSnapshotByIssuer for unknown issuer must return null', () => {
   console.log('  getSnapshotByIssuer for unknown issuer must return null');
   console.log('  Not undefined, not throw — null signals "not found" cleanly');
   var result = getSnapshotByIssuer('https://nonexistent.com/');
   check('Unknown issuer returns null', result === null, 'null', String(result));
 });
 
-test('3.1.4.9-D', '', () => {
+test('3.1.4.9-D', ' _patchSnapshotForTesting must refuse to run in production', () => {
   console.log('  _patchSnapshotForTesting must refuse to run in production');
   console.log('  This is a test-only escape hatch — it must not exist in prod');
   var orig = process.env.NODE_ENV;
@@ -213,7 +215,7 @@ test('3.1.4.9-D', '', () => {
   process.env.NODE_ENV = orig;
 });
 
-test('3.1.4.10-D', '', () => {
+test('3.1.4.10-D', ' _patchSnapshotForTesting for nonexistent provider must throw', () => {
   console.log('  _patchSnapshotForTesting for nonexistent provider must throw');
   console.log('  Silently accepting a bad name would create confusion in test failures');
   try {

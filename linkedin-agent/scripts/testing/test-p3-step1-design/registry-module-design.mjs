@@ -13,6 +13,7 @@ import * as registry from '../../../src/auth/index.js';
 
 // ── Group 1: Registry export contracts ───────────────────────
 
+console.log('  File: test-p3-step1-design/registry-module-design.mjs');
 group('Group 1: Registry export contracts', `
   If these tests fail, consumers of the registry cannot rely
   on a stable API. Adding a second IDP or refactoring the
@@ -21,7 +22,7 @@ group('Group 1: Registry export contracts', `
 
 var before1 = getCounters();
 
-test('3.1.1.1-D', '', () => {
+test('3.1.1.1-D', ' InitRegistry must be a named async function export', () => {
   console.log('  initRegistry must be a named async function export');
   console.log('  Named exports enforce consistent naming across the codebase');
   console.log('  Async because provider init() calls may involve network');
@@ -29,14 +30,14 @@ test('3.1.1.1-D', '', () => {
     'function', typeof registry.initRegistry);
 });
 
-test('3.1.1.2-D', '', () => {
+test('3.1.1.2-D', ' _resetForTesting must be exported for test isolation', () => {
   console.log('  _resetForTesting must be exported for test isolation');
   console.log('  Without reset, tests share registry state — order-dependent failures');
   check('_resetForTesting is named export', typeof registry._resetForTesting === 'function',
     'function', typeof registry._resetForTesting);
 });
 
-test('3.1.1.3-D', '', () => {
+test('3.1.1.3-D', ' Query functions must all be named exports', () => {
   console.log('  Query functions must all be named exports');
   console.log('  These are the public read API — consumers should never reach into internals');
   var queryExports = ['getProviders', 'getProvider', 'getDefaultProvider',
@@ -47,14 +48,14 @@ test('3.1.1.3-D', '', () => {
   }
 });
 
-test('3.1.1.4-D', '', () => {
+test('3.1.1.4-D', ' ShutdownRegistry must be exported for graceful shutdown', () => {
   console.log('  shutdownRegistry must be exported for graceful shutdown');
   console.log('  Without shutdown, provider connections leak on server restart');
   check('shutdownRegistry is named export', typeof registry.shutdownRegistry === 'function',
     'function', typeof registry.shutdownRegistry);
 });
 
-test('3.1.1.5-D', '', () => {
+test('3.1.1.5-D', ' New providers reference this to know what to implement', () => {
   console.log('  PROVIDER_INTERFACE must be exported as the contract definition');
   console.log('  New providers reference this to know what to implement');
   check('PROVIDER_INTERFACE is named export',
@@ -62,14 +63,14 @@ test('3.1.1.5-D', '', () => {
     'object', typeof registry.PROVIDER_INTERFACE);
 });
 
-test('3.1.1.6-D', '', () => {
+test('3.1.1.6-D', ' Registry must NOT have a default export', () => {
   console.log('  Registry must NOT have a default export');
   console.log('  Default exports allow import-as-anything, hiding module identity');
   check('No default export', registry.default === undefined,
     'undefined', typeof registry.default);
 });
 
-test('3.1.1.7-D', '', () => {
+test('3.1.1.7-D', ' Registry must not export the internal activeProviders Map', () => {
   console.log('  Registry must not export the internal activeProviders Map');
   console.log('  Direct access to the Map bypasses snapshot protection');
   console.log('  Consumers must use getProvider/getProviders/getJwksMap');
@@ -79,7 +80,7 @@ test('3.1.1.7-D', '', () => {
     'not in exports', 'exported directly');
 });
 
-test('3.1.1.8-D', '', () => {
+test('3.1.1.8-D', ' Registry must not export the internal providerSnapshots Map', () => {
   console.log('  Registry must not export the internal providerSnapshots Map');
   console.log('  Snapshots are accessed through getSnapshotByIssuer — not directly');
   var exportNames = Object.keys(registry);
@@ -93,6 +94,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Provider interface and discovery ────────────────
 
+console.log('  File: test-p3-step1-design/registry-module-design.mjs');
 group('Group 2: Provider interface and file discovery', `
   If these tests fail, the provider interface is ambiguous or
   the discovery mechanism is fragile. A new provider author
@@ -102,7 +104,7 @@ group('Group 2: Provider interface and file discovery', `
 
 var before2 = getCounters();
 
-test('3.1.2.1-D', '', () => {
+test('3.1.2.1-D', ' PROVIDER_INTERFACE must define both fields and methods', () => {
   console.log('  PROVIDER_INTERFACE must define both fields and methods');
   console.log('  Fields are static identity (name, issuer, jwksUri)');
   console.log('  Methods are lifecycle operations (init, getLoginUrl, exchangeCode)');
@@ -112,7 +114,7 @@ test('3.1.2.1-D', '', () => {
     'array', typeof registry.PROVIDER_INTERFACE.methods);
 });
 
-test('3.1.2.2-D', '', () => {
+test('3.1.2.2-D', ' Fields must include the 7 identity properties', () => {
   console.log('  Fields must include the 7 identity properties');
   console.log('  name: unique registry key');
   console.log('  type: protocol (oidc/saml)');
@@ -128,7 +130,7 @@ test('3.1.2.2-D', '', () => {
   }
 });
 
-test('3.1.2.3-D', '', () => {
+test('3.1.2.3-D', ' Methods must include the 7 lifecycle operations', () => {
   console.log('  Methods must include the 7 lifecycle operations');
   var required = ['isConfigured', 'init', 'getRoutes', 'getLoginUrl',
     'exchangeCode', 'getUserInfo', 'getLogoutUrl'];
@@ -138,7 +140,7 @@ test('3.1.2.3-D', '', () => {
   }
 });
 
-test('3.1.2.4-D', '', () => {
+test('3.1.2.4-D', ' The providers directory must exist at src/auth/providers/', () => {
   console.log('  The providers directory must exist at src/auth/providers/');
   console.log('  The registry scans this directory for provider files');
   console.log('  If it does not exist, the scan returns zero providers silently');
@@ -146,7 +148,7 @@ test('3.1.2.4-D', '', () => {
     'exists', 'missing');
 });
 
-test('3.1.2.5-D', '', () => {
+test('3.1.2.5-D', ' Provider files must be .js files in src/auth/providers/', () => {
   console.log('  Provider files must be .js files in src/auth/providers/');
   console.log('  Non-.js files (README.md, .gitkeep) must not crash the scanner');
   var files = fs.readdirSync('src/auth/providers');
@@ -155,7 +157,7 @@ test('3.1.2.5-D', '', () => {
     '≥1', String(jsFiles.length));
 });
 
-test('3.1.2.6-D', '', () => {
+test('3.1.2.6-D', ' Index.js must not import from src/routes/ or src/services/', () => {
   console.log('  index.js must not import from src/routes/ or src/services/');
   console.log('  The registry is a foundational layer — no upward dependencies');
   var src = fs.readFileSync('src/auth/index.js', 'utf8');
@@ -163,7 +165,7 @@ test('3.1.2.6-D', '', () => {
   check('No services import', !src.includes('/services/'), 'clean', 'imports services');
 });
 
-test('3.1.2.7-D', '', () => {
+test('3.1.2.7-D', ' Index.js must not import jose', () => {
   console.log('  index.js must not import jose');
   console.log('  JWT verification is jwt-verifier.js responsibility');
   console.log('  The registry manages providers — it does not parse tokens');
@@ -172,7 +174,7 @@ test('3.1.2.7-D', '', () => {
     'clean', 'imports jose');
 });
 
-test('3.1.2.8-D', '', () => {
+test('3.1.2.8-D', ' Index.js must not import any specific provider directly', () => {
   console.log('  index.js must not import any specific provider directly');
   console.log('  Providers are discovered via file scan, not hard-coded imports');
   console.log('  Hard-coding means adding a provider requires editing the registry');
@@ -183,7 +185,7 @@ test('3.1.2.8-D', '', () => {
     'clean', 'imports mock');
 });
 
-test('3.1.2.9-D', '', () => {
+test('3.1.2.9-D', ' InitRegistry must accept a logger function parameter', () => {
   console.log('  initRegistry must accept a logger function parameter');
   console.log('  Dependency injection for logging — not hard-coded console.log');
   console.log('  Checking function parameter count');
@@ -191,7 +193,7 @@ test('3.1.2.9-D', '', () => {
     '≥1', String(registry.initRegistry.length));
 });
 
-test('3.1.2.10-D', '', () => {
+test('3.1.2.10-D', ' INIT_TIMEOUT_MS or equivalent must exist in source', () => {
   console.log('  INIT_TIMEOUT_MS or equivalent must exist in source');
   console.log('  A named constant for the provider init timeout');
   console.log('  Without it, the timeout is a magic number that gets removed in cleanup');

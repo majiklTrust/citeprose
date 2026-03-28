@@ -62,6 +62,7 @@ var protectedGets = [
 
 // ── Group 1: Protected GET routes reject without token ───────
 
+console.log('  File: test-p3-step4/protected-read.mjs');
 group('Group 1: Protected GET routes reject unauthenticated', `
   If these tests fail, anyone who discovers the API URL can
   read draft posts, research data, activity logs, and LinkedIn
@@ -82,7 +83,7 @@ for (var [idx, entry] of protectedGets.entries()) {
   });
 }
 
-await testAsync('3.4.1.7', '', async () => {
+await testAsync('3.4.1.7', ' Verifying 401 response body has user-friendly error message', async () => {
   console.log('  Verifying 401 response body has user-friendly error message');
   console.log('  The message should tell the user to authenticate, not expose internals');
   var r = await GET('/api/posts');
@@ -95,6 +96,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Protected GET routes accept valid token ─────────
 
+console.log('  File: test-p3-step4/protected-read.mjs');
 group('Group 2: Protected GET routes accept authenticated requests', `
   If these tests fail, authenticated users are locked out of
   the dashboard. Login works but every page shows an error.
@@ -114,7 +116,7 @@ for (var [idx2, entry2] of protectedGets.entries()) {
   });
 }
 
-await testAsync('3.4.2.7', '', async () => {
+await testAsync('3.4.2.7', ' GET /api/status will be tested in Group 5 (public route)', async () => {
   console.log('  Checking that req.user is populated — route handlers need user identity');
   console.log('  GET /api/status will be tested in Group 5 (public route)');
   console.log('  Any non-401 response from a protected route confirms the middleware passed');

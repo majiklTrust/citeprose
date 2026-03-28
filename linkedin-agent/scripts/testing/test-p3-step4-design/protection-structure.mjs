@@ -14,6 +14,7 @@ var apiSource = fs.readFileSync('src/routes/api.js', 'utf8');
 
 // ── Group 1: Middleware-level protection ──────────────────────
 
+console.log('  File: test-p3-step4-design/protection-structure.mjs');
 group('Group 1: Middleware-level protection', `
   If these tests fail, auth is enforced per-handler instead of
   per-router. Adding a new route requires remembering to add
@@ -24,7 +25,7 @@ group('Group 1: Middleware-level protection', `
 
 var before1 = getCounters();
 
-test('3.4.1.1-D', '', () => {
+test('3.4.1.1-D', ' Router.use(requireAuth) applies to ALL subsequent routes', () => {
   console.log('  api.js must call router.use() with requireAuth or auth middleware');
   console.log('  router.use(requireAuth) applies to ALL subsequent routes');
   console.log('  This is the single enforcement point — one line protects 15 routes');
@@ -34,7 +35,7 @@ test('3.4.1.1-D', '', () => {
     'router.use(requireAuth...)', 'not found');
 });
 
-test('3.4.1.2-D', '', () => {
+test('3.4.1.2-D', ' RequireAuth must NOT appear inside individual route handlers', () => {
   console.log('  requireAuth must NOT appear inside individual route handlers');
   console.log('  If requireAuth is in handlers, it is per-route enforcement');
   console.log('  Counting occurrences: should be 1 (the router.use) or 0 in handler blocks');
@@ -45,7 +46,7 @@ test('3.4.1.2-D', '', () => {
     '0 handler-level occurrences', (handlerMatches?.length || 0) + ' found');
 });
 
-test('3.4.1.3-D', '', () => {
+test('3.4.1.3-D', ' Reimplementing auth instead of relying on middleware', () => {
   console.log('  No route handler should contain the word "authorization" or "bearer"');
   console.log('  If handlers inspect the Authorization header directly, they are');
   console.log('  reimplementing auth instead of relying on middleware');
@@ -64,7 +65,7 @@ test('3.4.1.3-D', '', () => {
     '0 references', suspicious.length + ': ' + suspicious[0]?.substring(0, 50));
 });
 
-test('3.4.1.4-D', '', () => {
+test('3.4.1.4-D', ' No JWT/verifyToken in route handlers', () => {
   console.log('  No route handler should contain the word "token" in an auth context');
   console.log('  "token" in a LinkedIn API context (access_token for LinkedIn) is fine');
   console.log('  "token" for JWT verification in a route handler is wrong — middleware does that');
@@ -83,6 +84,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Middleware ordering ─────────────────────────────
 
+console.log('  File: test-p3-step4-design/protection-structure.mjs');
 group('Group 2: Middleware ordering', `
   If these tests fail, middleware runs in the wrong order.
   Auth before CORS blocks preflight OPTIONS. Body parsing
@@ -92,7 +94,7 @@ group('Group 2: Middleware ordering', `
 
 var before2 = getCounters();
 
-test('3.4.2.1-D', '', () => {
+test('3.4.2.1-D', ' Routes after use() are protected. This is by design.', () => {
   console.log('  The public route (/api/status) must be defined BEFORE router.use(requireAuth)');
   console.log('  Express middleware is order-dependent: routes before use() are unprotected');
   console.log('  Routes after use() are protected. This is by design.');
@@ -110,7 +112,7 @@ test('3.4.2.1-D', '', () => {
   }
 });
 
-test('3.4.2.2-D', '', () => {
+test('3.4.2.2-D', ' Potentially executed before auth rejects the request', () => {
   console.log('  requireAuth must run BEFORE any route handler that processes body');
   console.log('  If the handler runs first, an attacker\'s POST body is parsed and');
   console.log('  potentially executed before auth rejects the request');
@@ -133,7 +135,7 @@ test('3.4.2.2-D', '', () => {
   }
 });
 
-test('3.4.2.3-D', '', () => {
+test('3.4.2.3-D', ' Uses createAuthMiddleware', () => {
   console.log('  api.js must use createAuthMiddleware (factory), not import requireAuth directly');
   console.log('  The factory pattern injects the logger — direct import would be a singleton');
   check('Uses createAuthMiddleware',
@@ -141,7 +143,7 @@ test('3.4.2.3-D', '', () => {
     'factory pattern', 'direct import');
 });
 
-test('3.4.2.4-D', '', () => {
+test('3.4.2.4-D', ' Api.js must not import jose, jwt-verifier, or provider files', () => {
   console.log('  api.js must not import jose, jwt-verifier, or provider files');
   console.log('  Route handlers should know nothing about JWT format or provider internals');
   console.log('  All auth knowledge is in the middleware layer');
@@ -153,7 +155,7 @@ test('3.4.2.4-D', '', () => {
     'clean', 'imports auth0');
 });
 
-test('3.4.2.5-D', '', () => {
+test('3.4.2.5-D', ' Error handling middleware must come AFTER auth middleware', () => {
   console.log('  Error handling middleware must come AFTER auth middleware');
   console.log('  If error handler is before auth, auth errors skip the handler');
   console.log('  Looking for app.use((err, req, res, next) pattern after auth');

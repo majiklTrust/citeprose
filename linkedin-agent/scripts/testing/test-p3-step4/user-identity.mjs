@@ -67,6 +67,7 @@ async function GET(path, token) {
 
 // ── Group 7: User identity available in route handlers ───────
 
+console.log('  File: test-p3-step4/user-identity.mjs');
 group('Group 7: User identity available in route handlers', `
   If these tests fail, the middleware authenticates the user but
   the route handler never sees who they are. Activity logs show
@@ -76,7 +77,7 @@ group('Group 7: User identity available in route handlers', `
 
 var before7 = getCounters();
 
-await testAsync('3.4.7.1', '', async () => {
+await testAsync('3.4.7.1', ' The route handler echoes req.user back as JSON', async () => {
   console.log('  Sending request with sub=user_001 email=admin@company.com name=Admin');
   console.log('  The route handler echoes req.user back as JSON');
   console.log('  If the middleware sets req.user but Express resets it, this catches that');
@@ -86,7 +87,7 @@ await testAsync('3.4.7.1', '', async () => {
     '200 + user object', r.status + ' + ' + String(r.body?.user));
 });
 
-await testAsync('3.4.7.2', '', async () => {
+await testAsync('3.4.7.2', ' Req.user.sub — the unique identifier for this user', async () => {
   console.log('  Checking req.user.sub — the unique identifier for this user');
   console.log('  Route handlers use sub to determine who performed an action');
   var token = await helper.signToken({ sub: 'user_001', email: 'admin@company.com', name: 'Admin' });
@@ -95,7 +96,7 @@ await testAsync('3.4.7.2', '', async () => {
     'user_001', String(r.body?.user?.sub));
 });
 
-await testAsync('3.4.7.3', '', async () => {
+await testAsync('3.4.7.3', ' Req.user.email — used for notifications and display', async () => {
   console.log('  Checking req.user.email — used for notifications and display');
   var token = await helper.signToken({ sub: 'user_001', email: 'admin@company.com', name: 'Admin' });
   var r = await GET('/test/echo-user', token);
@@ -103,7 +104,7 @@ await testAsync('3.4.7.3', '', async () => {
     'admin@company.com', String(r.body?.user?.email));
 });
 
-await testAsync('3.4.7.4', '', async () => {
+await testAsync('3.4.7.4', ' Req.user.name — displayed in the dashboard UI', async () => {
   console.log('  Checking req.user.name — displayed in the dashboard UI');
   var token = await helper.signToken({ sub: 'user_001', email: 'admin@company.com', name: 'Admin' });
   var r = await GET('/test/echo-user', token);
@@ -111,7 +112,7 @@ await testAsync('3.4.7.4', '', async () => {
     'Admin', String(r.body?.user?.name));
 });
 
-await testAsync('3.4.7.5', '', async () => {
+await testAsync('3.4.7.5', ' req.authProvider is mock', async () => {
   console.log('  Checking req.authProvider — identifies which IDP authenticated the user');
   console.log('  When multiple providers are active, this tells you which one was used');
   var token = await helper.signToken({ sub: 'user_001' });
@@ -120,7 +121,7 @@ await testAsync('3.4.7.5', '', async () => {
     'mock', String(r.body?.authProvider));
 });
 
-await testAsync('3.4.7.6', '', async () => {
+await testAsync('3.4.7.6', ' Req.user.issuer — the iss claim from the token', async () => {
   console.log('  Checking req.user.issuer — the iss claim from the token');
   console.log('  Used to validate which Auth0 tenant issued the token');
   var token = await helper.signToken({ sub: 'user_001' });
@@ -130,7 +131,7 @@ await testAsync('3.4.7.6', '', async () => {
     'https://mock-auth.test/', String(r.body?.user?.issuer));
 });
 
-await testAsync('3.4.7.7', '', async () => {
+await testAsync('3.4.7.7', ' Req.user.expiresAt — when the token expires', async () => {
   console.log('  Checking req.user.expiresAt — when the token expires');
   console.log('  Route handlers may use this to warn users about approaching session expiry');
   var token = await helper.signToken({ sub: 'user_001' });
@@ -140,7 +141,7 @@ await testAsync('3.4.7.7', '', async () => {
     'non-null', String(r.body?.user?.expiresAt));
 });
 
-await testAsync('3.4.7.8', '', async () => {
+await testAsync('3.4.7.8', ' Req.user.raw — the full decoded JWT payload', async () => {
   console.log('  Checking req.user.raw — the full decoded JWT payload');
   console.log('  Route handlers may need access to custom claims not in the standard fields');
   var token = await helper.signToken({ sub: 'user_001', customField: 'customValue' });
@@ -150,7 +151,7 @@ await testAsync('3.4.7.8', '', async () => {
     'customValue', String(r.body?.user?.raw?.customField));
 });
 
-await testAsync('3.4.7.9', '', async () => {
+await testAsync('3.4.7.9', ' Optional route has user with valid token', async () => {
   console.log('  optionalAuth route with valid token — user should be attached');
   var token = await helper.signToken({ sub: 'optional_user' });
   var r = await GET('/test/optional-user', token);
@@ -159,7 +160,7 @@ await testAsync('3.4.7.9', '', async () => {
     'optional_user', String(r.body?.user?.sub));
 });
 
-await testAsync('3.4.7.10', '', async () => {
+await testAsync('3.4.7.10', ' Optional route has null user without token', async () => {
   console.log('  optionalAuth route with no token — user should be null, not 401');
   var r = await GET('/test/optional-user');
   check('Optional route has null user without token',
@@ -167,7 +168,7 @@ await testAsync('3.4.7.10', '', async () => {
     '200 + null user', r.status + ' + ' + String(r.body?.user));
 });
 
-await testAsync('3.4.7.11', '', async () => {
+await testAsync('3.4.7.11', ' Optional route handles bad token gracefully', async () => {
   console.log('  optionalAuth route with bad token — user should be null, not 401');
   console.log('  Public-optional endpoints must never reject — they degrade gracefully');
   var r = await GET('/test/optional-user', 'garbage.token.here');
@@ -176,7 +177,7 @@ await testAsync('3.4.7.11', '', async () => {
     '200 + null user', r.status + ' + ' + String(r.body?.user));
 });
 
-await testAsync('3.4.7.12', '', async () => {
+await testAsync('3.4.7.12', ' First request is Alice', async () => {
   console.log('  Two different users — verify the middleware is not caching user identity');
   console.log('  If middleware caches, the second request gets the first user\'s identity');
   var token1 = await helper.signToken({ sub: 'user_alice', name: 'Alice' });

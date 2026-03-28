@@ -8,6 +8,7 @@ import auth0 from '../../../src/auth/providers/auth0.js';
 
 // ── Group 1: SSRF via AUTH0_DOMAIN ───────────────────────────
 
+console.log('  File: test-p3-step2-adversarial/hostile-network.mjs');
 group('Group 1: SSRF via AUTH0_DOMAIN', `
   If internal network addresses are accepted as AUTH0_DOMAIN,
   token exchange and userinfo calls hit internal services —
@@ -45,14 +46,14 @@ for (var [idx, entry] of domains.entries()) {
   });
 }
 
-test('3.2.1.11-A', '', () => {
+test('3.2.1.11-A', ' Setting AUTH0_DOMAIN=legit.auth0.com:8080@evil.com', () => {
   console.log('  Setting AUTH0_DOMAIN=legit.auth0.com:8080@evil.com');
   console.log('  The @ confuses URL parsers — userinfo before @ becomes hostname');
   process.env.AUTH0_DOMAIN = 'legit.auth0.com:8080@evil.com';
   check('Domain with @ blocked', !auth0.isConfigured(), 'false', String(auth0.isConfigured()));
 });
 
-test('3.2.1.12-A', '', () => {
+test('3.2.1.12-A', ' Backslash — another URL parser confusion attack', () => {
   console.log('  Backslash — another URL parser confusion attack');
   process.env.AUTH0_DOMAIN = 'legit.auth0.com\\@evil.com';
   check('Backslash domain blocked', !auth0.isConfigured(), 'false', String(auth0.isConfigured()));
@@ -64,6 +65,7 @@ groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Open redirect via redirect URI ──────────────────
 
+console.log('  File: test-p3-step2-adversarial/hostile-network.mjs');
 group('Group 2: Open redirect via redirect URI', `
   If AUTH0_REDIRECT_URI accepts attacker URLs, the authorization
   code is sent to the attacker after login. They exchange it for
@@ -119,6 +121,7 @@ groupEnd(after2.pass - before2.pass, after2.fail - before2.fail);
 
 // ── Group 6: Logout redirect manipulation ────────────────────
 
+console.log('  File: test-p3-step2-adversarial/hostile-network.mjs');
 group('Group 6: Logout redirect manipulation', `
   If returnTo in logout accepts any URL, an attacker crafts a
   logout link that redirects to a phishing page — harvesting

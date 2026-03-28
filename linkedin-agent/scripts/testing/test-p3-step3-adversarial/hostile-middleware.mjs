@@ -21,6 +21,7 @@ function mRes() {
 
 // ── Group 4: Middleware bypass attempts ───────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-middleware.mjs');
 group('Group 4: Middleware bypass attempts', `
   If the middleware can be bypassed through header tricks, case
   sensitivity, or token placement in cookies, authentication is
@@ -49,31 +50,31 @@ async function expectPass(label, req) {
   check(label, next && req.user?.sub, 'pass + user', 'next=' + next + ' sub=' + String(req.user?.sub));
 }
 
-await testAsync('3.3.4.1-A', '', async () => { await expectPass('Bearer correct case', mReq({ authorization: 'Bearer ' + vt })); });
-await testAsync('3.3.4.2-A', '', async () => { await expectPass('bearer lowercase', mReq({ authorization: 'bearer ' + vt })); });
-await testAsync('3.3.4.3-A', '', async () => { await expectPass('BEARER uppercase', mReq({ authorization: 'BEARER ' + vt })); });
+await testAsync('3.3.4.1-A', ' bearer lowercase', async () => { await expectPass('Bearer correct case', mReq({ authorization: 'Bearer ' + vt })); });
+await testAsync('3.3.4.2-A', ' BEARER uppercase', async () => { await expectPass('bearer lowercase', mReq({ authorization: 'bearer ' + vt })); });
+await testAsync('3.3.4.3-A', ' Double space after Bearer — split produces 3 parts', async () => { await expectPass('BEARER uppercase', mReq({ authorization: 'BEARER ' + vt })); });
 
-await testAsync('3.3.4.4-A', '', async () => {
+await testAsync('3.3.4.4-A', ' Double space after Bearer — split produces 3 parts', async () => {
   console.log('  Double space after Bearer — split produces 3 parts');
   await expectBlock('Double space', mReq({ authorization: 'Bearer  ' + vt }));
 });
-await testAsync('3.3.4.5-A', '', async () => { await expectBlock('Leading space', mReq({ authorization: ' Bearer ' + vt })); });
-await testAsync('3.3.4.6-A', '', async () => { await expectBlock('Basic scheme', mReq({ authorization: 'Basic ' + vt })); });
-await testAsync('3.3.4.7-A', '', async () => { await expectBlock('Token scheme', mReq({ authorization: 'Token ' + vt })); });
-await testAsync('3.3.4.8-A', '', async () => { await expectBlock('MAC scheme', mReq({ authorization: 'MAC ' + vt })); });
+await testAsync('3.3.4.5-A', ' Basic scheme', async () => { await expectBlock('Leading space', mReq({ authorization: ' Bearer ' + vt })); });
+await testAsync('3.3.4.6-A', ' Token scheme', async () => { await expectBlock('Basic scheme', mReq({ authorization: 'Basic ' + vt })); });
+await testAsync('3.3.4.7-A', ' MAC scheme', async () => { await expectBlock('Token scheme', mReq({ authorization: 'Token ' + vt })); });
+await testAsync('3.3.4.8-A', ' Token in query string — appears in logs, history, referrer', async () => { await expectBlock('MAC scheme', mReq({ authorization: 'MAC ' + vt })); });
 
-await testAsync('3.3.4.9-A', '', async () => {
+await testAsync('3.3.4.9-A', ' Token in query string — appears in logs, history, referrer', async () => {
   console.log('  Token in query string — appears in logs, history, referrer');
   await expectBlock('Query string token', mReq({}, { query: { access_token: vt } }));
 });
-await testAsync('3.3.4.10-A', '', async () => {
+await testAsync('3.3.4.10-A', ' Token in cookie — vulnerable to CSRF', async () => {
   console.log('  Token in cookie — vulnerable to CSRF');
   await expectBlock('Cookie token', mReq({}, { cookies: { access_token: vt } }));
 });
-await testAsync('3.3.4.11-A', '', async () => { await expectBlock('Empty bearer', mReq({ authorization: 'Bearer ' })); });
-await testAsync('3.3.4.12-A', '', async () => { await expectBlock('Bearer spaces only', mReq({ authorization: 'Bearer    ' })); });
+await testAsync('3.3.4.11-A', ' Bearer spaces only', async () => { await expectBlock('Empty bearer', mReq({ authorization: 'Bearer ' })); });
+await testAsync('3.3.4.12-A', ' Pre-set req.user — must be overwritten by verified token', async () => { await expectBlock('Bearer spaces only', mReq({ authorization: 'Bearer    ' })); });
 
-await testAsync('3.3.4.13-A', '', async () => {
+await testAsync('3.3.4.13-A', ' Pre-set req.user — must be overwritten by verified token', async () => {
   console.log('  Pre-set req.user — must be overwritten by verified token');
   var req = mReq({ authorization: 'Bearer ' + vt });
   req.user = { sub: 'pre-existing-attacker', isAdmin: true };
@@ -82,7 +83,7 @@ await testAsync('3.3.4.13-A', '', async () => {
   check('Pre-set user overwritten', req.user?.sub === 'user1', 'user1', String(req.user?.sub));
 });
 
-await testAsync('3.3.4.14-A', '', async () => {
+await testAsync('3.3.4.14-A', ' Pre-set isAdmin not preserved', async () => {
   var req = mReq({ authorization: 'Bearer ' + vt });
   req.user = { sub: 'attacker', isAdmin: true };
   var res = mRes();
@@ -96,6 +97,7 @@ groupEnd(after4.pass - before4.pass, after4.fail - before4.fail);
 
 // ── Group 5: Error response leakage ──────────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-middleware.mjs');
 group('Group 5: Error response information leakage', `
   If different failures produce different messages, attackers
   enumerate valid tokens, identify the JWT library, and map
@@ -127,7 +129,7 @@ for (var [label, headers] of scenarios) {
   responses.push({ label, status: res.getStatus(), json: res.getJson() });
 }
 
-test('3.3.5.1-A', '', () => {
+test('3.3.5.1-A', ' All 6 scenarios must return 401 — no 403/500 leakage', () => {
   console.log('  All 6 scenarios must return 401 — no 403/500 leakage');
   check('All return 401', responses.every(r => r.status === 401), 'all 401', responses.map(r => r.label + '=' + r.status).join(', '));
 });
@@ -151,6 +153,7 @@ groupEnd(after5.pass - before5.pass, after5.fail - before5.fail);
 
 // ── Group 6: JWKS endpoint abuse ─────────────────────────────
 
+console.log('  File: test-p3-step3-adversarial/hostile-middleware.mjs');
 group('Group 6: JWKS endpoint abuse', `
   If a compromised JWKS endpoint returns empty keys or errors
   and the verifier fails open, every token passes. If it crashes,
@@ -161,7 +164,7 @@ var before6 = getCounters();
 var helper6 = await createTestJWKS();
 var validToken = await helper6.signToken({ sub: 'user1' });
 
-await testAsync('3.3.6.1-A', '', async () => {
+await testAsync('3.3.6.1-A', ' JWKS returns {keys:[]} — valid JSON but zero keys', async () => {
   console.log('  JWKS returns {keys:[]} — valid JSON but zero keys');
   var srv = http.createServer((q, r) => { r.writeHead(200, { 'Content-Type': 'application/json' }); r.end(JSON.stringify({ keys: [] })); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
@@ -171,7 +174,7 @@ await testAsync('3.3.6.1-A', '', async () => {
   srv.close();
 });
 
-await testAsync('3.3.6.2-A', '', async () => {
+await testAsync('3.3.6.2-A', ' JWKS returns non-JSON garbage', async () => {
   console.log('  JWKS returns non-JSON garbage');
   var srv = http.createServer((q, r) => { r.writeHead(200); r.end('not json'); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
@@ -181,7 +184,7 @@ await testAsync('3.3.6.2-A', '', async () => {
   srv.close();
 });
 
-await testAsync('3.3.6.3-A', '', async () => {
+await testAsync('3.3.6.3-A', ' JWKS returns HTTP 500', async () => {
   console.log('  JWKS returns HTTP 500');
   var srv = http.createServer((q, r) => { r.writeHead(500); r.end('Internal Server Error'); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
@@ -191,7 +194,7 @@ await testAsync('3.3.6.3-A', '', async () => {
   srv.close();
 });
 
-await testAsync('3.3.6.4-A', '', async () => {
+await testAsync('3.3.6.4-A', ' JWKS endpoint unreachable (connection refused)', async () => {
   console.log('  JWKS endpoint unreachable (connection refused)');
   clearJwksCache();
   try { await verifyToken(validToken, helper6.issuer, 'http://127.0.0.1:1/.well-known/jwks.json', helper6.audience); check('Unreachable rejects', false, 'rejected', 'accepted'); }

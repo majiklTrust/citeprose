@@ -12,6 +12,7 @@ import auth0 from '../../../src/auth/providers/auth0.js';
 
 // ── Group 3: OAuth/OIDC protocol compliance ──────────────────
 
+console.log('  File: test-p3-step2-design/provider-protocol-design.mjs');
 group('Group 3: OAuth/OIDC protocol compliance', `
   If these tests fail, the Auth0 provider constructs URLs or
   handles state in ways that violate the OAuth 2.0 or OIDC
@@ -23,7 +24,7 @@ var before3 = getCounters();
 process.env.AUTH0_DOMAIN = 'test.auth0.com'; process.env.AUTH0_CLIENT_ID = 'cid';
 process.env.AUTH0_CLIENT_SECRET = 'secret';
 
-test('3.2.3.1-D', '', () => {
+test('3.2.3.1-D', ' Issuer must have a trailing slash per OIDC Discovery spec', () => {
   console.log('  issuer must have a trailing slash per OIDC Discovery spec');
   console.log('  RFC 8414 §2: "The issuer identifier is a URL using the https scheme');
   console.log('  that contains scheme, host, and optionally, port number and path"');
@@ -32,7 +33,7 @@ test('3.2.3.1-D', '', () => {
   check('Issuer ends with /', cfg.issuer.endsWith('/'), 'trailing /', cfg.issuer);
 });
 
-test('3.2.3.2-D', '', () => {
+test('3.2.3.2-D', ' All URLs must use HTTPS (except localhost defaults)', () => {
   console.log('  All URLs must use HTTPS (except localhost defaults)');
   console.log('  OAuth 2.0 spec requires TLS for authorization and token endpoints');
   var cfg = auth0._getConfig();
@@ -43,7 +44,7 @@ test('3.2.3.2-D', '', () => {
   }
 });
 
-test('3.2.3.3-D', '', () => {
+test('3.2.3.3-D', ' GetLoginUrl must produce a URL with response_type=code', () => {
   console.log('  getLoginUrl must produce a URL with response_type=code');
   console.log('  "code" is the authorization code flow — the most secure OAuth grant');
   console.log('  "token" (implicit flow) is deprecated by OAuth 2.1');
@@ -52,7 +53,7 @@ test('3.2.3.3-D', '', () => {
     'code', parsed.searchParams.get('response_type'));
 });
 
-test('3.2.3.4-D', '', () => {
+test('3.2.3.4-D', ' GetLoginUrl must include all 6 required OAuth parameters', () => {
   console.log('  getLoginUrl must include all 6 required OAuth parameters');
   console.log('  Missing any one causes Auth0 to reject or misroute the request');
   var parsed = new URL(auth0.getLoginUrl('test_state'));
@@ -63,7 +64,7 @@ test('3.2.3.4-D', '', () => {
   }
 });
 
-test('3.2.3.5-D', '', () => {
+test('3.2.3.5-D', ' OIDC tokens include sub, email, name — OAuth tokens do not', () => {
   console.log('  getLoginUrl must include scope=openid (minimum OIDC requirement)');
   console.log('  Without "openid" in scope, Auth0 returns an OAuth token, not an OIDC token');
   console.log('  OIDC tokens include sub, email, name — OAuth tokens do not');
@@ -73,7 +74,7 @@ test('3.2.3.5-D', '', () => {
     'includes openid', scopes);
 });
 
-test('3.2.3.6-D', '', () => {
+test('3.2.3.6-D', ' CSRF state must be 256-bit entropy (64 hex chars)', () => {
   console.log('  CSRF state must be 256-bit entropy (64 hex chars)');
   console.log('  Shorter states are brute-forceable. Longer wastes URL space.');
   console.log('  256 bits matches the security level of AES-256');
@@ -83,7 +84,7 @@ test('3.2.3.6-D', '', () => {
   auth0._validateState(state);
 });
 
-test('3.2.3.7-D', '', () => {
+test('3.2.3.7-D', ' CSRF state must be single-use (consumed on validation)', () => {
   console.log('  CSRF state must be single-use (consumed on validation)');
   console.log('  Replay prevention: a captured state cannot be reused in a second callback');
   var state = auth0._generateState();
@@ -92,7 +93,7 @@ test('3.2.3.7-D', '', () => {
     'rejected on reuse', 'accepted on reuse');
 });
 
-test('3.2.3.8-D', '', () => {
+test('3.2.3.8-D', ' GetLogoutUrl must include client_id parameter', () => {
   console.log('  getLogoutUrl must include client_id parameter');
   console.log('  Auth0 requires client_id in logout to match the application');
   var parsed = new URL(auth0.getLogoutUrl('https://example.com'));
@@ -100,7 +101,7 @@ test('3.2.3.8-D', '', () => {
     'present', 'missing');
 });
 
-test('3.2.3.9-D', '', () => {
+test('3.2.3.9-D', ' GetLogoutUrl must include returnTo parameter', () => {
   console.log('  getLogoutUrl must include returnTo parameter');
   console.log('  Without returnTo, Auth0 shows its own logout page — not your app');
   var parsed = new URL(auth0.getLogoutUrl('https://example.com'));
@@ -114,6 +115,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Configuration isolation ─────────────────────────
 
+console.log('  File: test-p3-step2-design/provider-protocol-design.mjs');
 group('Group 4: Configuration isolation', `
   If these tests fail, one env var change at runtime affects
   in-flight requests. Or a test that modifies AUTH0_DOMAIN
@@ -123,7 +125,7 @@ group('Group 4: Configuration isolation', `
 
 var before4 = getCounters();
 
-test('3.2.4.1-D', '', () => {
+test('3.2.4.1-D', ' _getConfig must read env vars on each call', () => {
   console.log('  _getConfig must read env vars on each call');
   console.log('  Setting AUTH0_DOMAIN=a, calling _getConfig, changing to b, calling again');
   console.log('  If the second call returns "a", the config is cached — stale');
@@ -138,7 +140,7 @@ test('3.2.4.1-D', '', () => {
     'first.auth0.com', c1.domain);
 });
 
-test('3.2.4.2-D', '', () => {
+test('3.2.4.2-D', ' Domain not mutated', () => {
   console.log('  Mutating a returned config object must not affect subsequent calls');
   console.log('  If _getConfig returns the same object, mutation poisons all reads');
   process.env.AUTH0_DOMAIN = 'clean.auth0.com';
@@ -152,7 +154,7 @@ test('3.2.4.2-D', '', () => {
     'clean.auth0.com URL', c2.tokenUrl);
 });
 
-test('3.2.4.3-D', '', () => {
+test('3.2.4.3-D', ' IsConfigured must read env vars live, not from cached state', () => {
   console.log('  isConfigured must read env vars live, not from cached state');
   console.log('  This prevents stale "configured" status after env vars are removed');
   process.env.AUTH0_DOMAIN = 'test.auth0.com';
@@ -162,7 +164,7 @@ test('3.2.4.3-D', '', () => {
   check('Not configured after removing secret', !auth0.isConfigured(), 'false', 'true');
 });
 
-test('3.2.4.4-D', '', () => {
+test('3.2.4.4-D', ' Default values must only apply when env var is unset', () => {
   console.log('  Default values must only apply when env var is unset');
   console.log('  AUTH0_AUDIENCE defaults to "https://linkedin-agent-api"');
   console.log('  If the default overrides an explicit env var, custom audiences break');
@@ -177,7 +179,7 @@ test('3.2.4.4-D', '', () => {
   delete process.env.AUTH0_AUDIENCE;
 });
 
-test('3.2.4.5-D', '', () => {
+test('3.2.4.5-D', ' Domain normalization handles prefix/suffix combos', () => {
   console.log('  Domain normalization must handle all 4 prefix/suffix combinations');
   console.log('  Operators paste from different sources — browser, docs, dashboard');
   var cases = [

@@ -28,6 +28,7 @@ process.on('SIGINT', () => { cleanupHostile(); process.exit(1); });
 
 // ── Group 3: Duplicate provider names ────────────────────────
 
+console.log('  File: test-p3-step1-adversarial/hostile-identity.mjs');
 group('Group 3: Duplicate provider names', `
   If a hostile file uses the same name as a legitimate provider,
   it could silently replace it. All tokens would validate
@@ -46,7 +47,7 @@ process.env.HOSTILE_DUPE = 'true';
 var logs3 = [];
 await initRegistry((l, a, d) => logs3.push({ l, a, d }));
 
-test('3.1.3.1-A', '', () => {
+test('3.1.3.1-A', ' Safe response: evict BOTH — neither can be trusted', () => {
   console.log('  Two files both export name:"mock" — hostile-dupe-name.js and mock.js');
   console.log('  Files load alphabetically, so hostile loads first and registers as "mock"');
   console.log('  When real mock.js arrives, the registry detects the duplicate');
@@ -56,13 +57,13 @@ test('3.1.3.1-A', '', () => {
     mock === null, 'null (both evicted)', mock === null ? 'null' : mock.issuer);
 });
 
-test('3.1.3.2-A', '', () => {
+test('3.1.3.2-A', ' With both evicted, auth should be disabled', () => {
   console.log('  With both evicted, auth should be disabled');
   console.log('  Forces operator to resolve the naming conflict manually');
   check('Auth disabled after eviction', !isAuthEnabled(), 'false', String(isAuthEnabled()));
 });
 
-test('3.1.3.3-A', '', () => {
+test('3.1.3.3-A', ' Logs for duplicate name detection', () => {
   console.log('  Checking logs for duplicate name detection');
   console.log('  The log entry is the operator\'s signal that something is wrong');
   var dw = logs3.find(l => l.d?.reason?.includes('duplicate') || l.a?.includes('duplicate'));
@@ -79,6 +80,7 @@ groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Interface mutation after loading ────────────────
 
+console.log('  File: test-p3-step1-adversarial/hostile-identity.mjs');
 group('Group 4: Interface mutation after loading', `
   A provider that changes its issuer or JWKS URL after init()
   redirects token validation to attacker-controlled keys.
@@ -96,19 +98,19 @@ process.env.HOSTILE_MUTATE = 'true';
 await initRegistry(() => {});
 var prov = getProvider('hostile_mutate');
 
-test('3.1.4.1-A', '', () => {
+test('3.1.4.1-A', ' The hostile provider scheduled a setTimeout in init()', () => {
   console.log('  The hostile provider scheduled a setTimeout in init()');
   console.log('  It will change issuer from legit.test to evil-attacker.com after 100ms');
   check('Hostile provider loaded for test', prov !== null, 'loaded', 'null');
 });
 
-test('3.1.4.2-A', '', () => {
+test('3.1.4.2-A', '  issuer immediately — setTimeout has not fired yet', () => {
   console.log('  Reading issuer immediately — setTimeout has not fired yet');
   var issuerBefore = prov.issuer;
   check('Initial issuer is legitimate', issuerBefore === 'https://legit.test/', 'https://legit.test/', issuerBefore);
 });
 
-await testAsync('3.1.4.3-A', '', async () => {
+await testAsync('3.1.4.3-A', ' Waiting 200ms for the mutation timer to fire', async () => {
   console.log('  Waiting 200ms for the mutation timer to fire');
   console.log('  The LIVE provider object will mutate — we cannot prevent that');
   console.log('  What matters: the FROZEN SNAPSHOT the middleware uses did not change');
@@ -122,7 +124,7 @@ await testAsync('3.1.4.3-A', '', async () => {
     jwksMap.has('https://legit.test/'), 'legit.test in map', JSON.stringify([...jwksMap.keys()]));
 });
 
-test('3.1.4.4-A', '', () => {
+test('3.1.4.4-A', ' Attacker URL must NOT appear in the JWKS map', () => {
   console.log('  Attacker URL must NOT appear in the JWKS map');
   console.log('  If it did, middleware would fetch attacker-controlled signing keys');
   var jwksMap = getJwksMap();
@@ -131,7 +133,7 @@ test('3.1.4.4-A', '', () => {
   check('JWKS map not poisoned', !hasEvil, 'no evil-attacker.com', 'evil-attacker.com found');
 });
 
-test('3.1.4.5-A', '', () => {
+test('3.1.4.5-A', ' GetIssuers() — the trusted issuer allowlist', () => {
   console.log('  Checking getIssuers() — the trusted issuer allowlist');
   console.log('  Must contain legit.test, must NOT contain evil-attacker.com');
   var issuers = getIssuers();

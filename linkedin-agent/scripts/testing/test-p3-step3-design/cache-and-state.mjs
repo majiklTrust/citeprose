@@ -19,6 +19,7 @@ import { createAuthMiddleware } from '../../../src/auth/middleware.js';
 
 // ── Group 4: JWKS cache lifecycle ────────────────────────────
 
+console.log('  File: test-p3-step3-design/cache-and-state.mjs');
 group('Group 4: JWKS cache lifecycle', `
   If these tests fail, signing key rotation is broken. When
   Auth0 rotates keys (every 90 days by default), the cached
@@ -30,7 +31,7 @@ group('Group 4: JWKS cache lifecycle', `
 var before4 = getCounters();
 var helper = await createTestJWKS({ issuer: 'https://mock-auth.test/' });
 
-await testAsync('3.3.4.1-D', '', async () => {
+await testAsync('3.3.4.1-D', ' Verifying a token populates the JWKS cache', async () => {
   console.log('  Verifying a token populates the JWKS cache');
   console.log('  The first verification fetches the JWKS endpoint and caches the keys');
   console.log('  Subsequent verifications use the cached keys — no network call');
@@ -40,7 +41,7 @@ await testAsync('3.3.4.1-D', '', async () => {
   check('Verification succeeds (cache populated)', true, 'success', 'failed');
 });
 
-await testAsync('3.3.4.2-D', '', async () => {
+await testAsync('3.3.4.2-D', ' ClearJwksCache() must invalidate the cache', async () => {
   console.log('  clearJwksCache() must invalidate the cache');
   console.log('  After clearing, the next verification must fetch keys again');
   console.log('  This is the mechanism for picking up rotated signing keys');
@@ -51,7 +52,7 @@ await testAsync('3.3.4.2-D', '', async () => {
   check('Verification works after cache clear', true, 'success', 'failed');
 });
 
-await testAsync('3.3.4.3-D', '', async () => {
+await testAsync('3.3.4.3-D', ' Triple clear does not break verifier', async () => {
   console.log('  Multiple clearJwksCache() calls must not throw or corrupt state');
   console.log('  An operator might call this in a health check endpoint or on a timer');
   clearJwksCache();
@@ -62,7 +63,7 @@ await testAsync('3.3.4.3-D', '', async () => {
   check('Triple clear does not break verifier', true, 'success', 'failed');
 });
 
-await testAsync('3.3.4.4-D', '', async () => {
+await testAsync('3.3.4.4-D', ' ClearJwksCache() before any verification must not throw', async () => {
   console.log('  clearJwksCache() before any verification must not throw');
   console.log('  The cache may be empty or uninitialized — clearing must be idempotent');
   clearJwksCache();
@@ -70,7 +71,7 @@ await testAsync('3.3.4.4-D', '', async () => {
   check('Clear on empty cache does not throw', true, 'no error', 'threw');
 });
 
-await testAsync('3.3.4.5-D', '', async () => {
+await testAsync('3.3.4.5-D', ' Rotated key accepted after cache clear', async () => {
   console.log('  Token signed by a DIFFERENT key after cache clear must verify');
   console.log('  This simulates key rotation: new key, clear cache, new tokens work');
   clearJwksCache();
@@ -89,7 +90,7 @@ await testAsync('3.3.4.5-D', '', async () => {
   helper = await createTestJWKS({ issuer: 'https://mock-auth.test/' });
 });
 
-await testAsync('3.3.4.6-D', '', async () => {
+await testAsync('3.3.4.6-D', ' VerifyToken must accept a token size limit', async () => {
   console.log('  verifyToken must accept a token size limit');
   console.log('  Without a size limit, an attacker submits a 10MB token and the');
   console.log('  verifier spends CPU parsing and verifying it — denial of service');
@@ -104,7 +105,7 @@ await testAsync('3.3.4.6-D', '', async () => {
   }
 });
 
-test('3.3.4.7-D', '', () => {
+test('3.3.4.7-D', ' The limit must be a named constant, not a magic number', () => {
   console.log('  Checking source code for MAX_TOKEN_BYTES or equivalent constant');
   console.log('  The limit must be a named constant, not a magic number');
   console.log('  A magic number gets removed in a "cleanup" commit — a named constant survives');
@@ -120,6 +121,7 @@ groupEnd(after4.pass - before4.pass, after4.fail - before4.fail);
 
 // ── Group 5: Request isolation and immutability ──────────────
 
+console.log('  File: test-p3-step3-design/cache-and-state.mjs');
 group('Group 5: Request isolation and immutability', `
   If these tests fail, one request's authentication state
   bleeds into another. User A's token data appears in User B's
@@ -145,7 +147,7 @@ function mRes() {
   return { status(s) { _s = s; return this; }, json(j) { _j = j; return this; }, getStatus() { return _s; }, getJson() { return _j; } };
 }
 
-await testAsync('3.3.5.1-D', '', async () => {
+await testAsync('3.3.5.1-D', ' If the middleware caches user identity in module scope, both', async () => {
   console.log('  Two requests with different tokens must produce different req.user');
   console.log('  If the middleware caches user identity in module scope, both');
   console.log('  requests return the same user — a privilege escalation vulnerability');
@@ -160,7 +162,7 @@ await testAsync('3.3.5.1-D', '', async () => {
   check('Alice ≠ Bob', req1.user?.sub !== req2.user?.sub, 'different', 'same');
 });
 
-await testAsync('3.3.5.2-D', '', async () => {
+await testAsync('3.3.5.2-D', ' First: send a bad token. Second: send a good token.', async () => {
   console.log('  A failed request must not leave stale state for the next request');
   console.log('  First: send a bad token. Second: send a good token.');
   console.log('  The good token must not inherit any state from the bad attempt');
@@ -175,7 +177,7 @@ await testAsync('3.3.5.2-D', '', async () => {
     'clean_user', String(req2.user?.sub));
 });
 
-await testAsync('3.3.5.3-D', '', async () => {
+await testAsync('3.3.5.3-D', ' Original properties preserved', async () => {
   console.log('  Middleware must not modify the req object beyond user, authProvider, authSkipped');
   console.log('  Any other property modification pollutes the request for downstream handlers');
   var token = await helper.signToken({ sub: 'test' });
@@ -194,7 +196,7 @@ await testAsync('3.3.5.3-D', '', async () => {
     'none', unexpectedProps.join(', '));
 });
 
-test('3.3.5.4-D', '', () => {
+test('3.3.5.4-D', ' GetJwksMap() must return a new Map on each call', () => {
   console.log('  getJwksMap() must return a new Map on each call');
   console.log('  If it returns the internal Map by reference, a consumer can mutate it');
   console.log('  Adding an entry to the returned Map would register a fake JWKS endpoint');
@@ -204,7 +206,7 @@ test('3.3.5.4-D', '', () => {
     'different references', 'same reference (mutable)');
 });
 
-test('3.3.5.5-D', '', () => {
+test('3.3.5.5-D', ' Mutating the returned JWKS map must not affect the registry', () => {
   console.log('  Mutating the returned JWKS map must not affect the registry');
   console.log('  If getJwksMap returns the internal Map, this mutation poisons all lookups');
   var map = getJwksMap();
@@ -214,7 +216,7 @@ test('3.3.5.5-D', '', () => {
     'no evil.com', 'evil.com injected');
 });
 
-test('3.3.5.6-D', '', () => {
+test('3.3.5.6-D', ' GetIssuers() must return a new array on each call', () => {
   console.log('  getIssuers() must return a new array on each call');
   var arr1 = getIssuers();
   var arr2 = getIssuers();
@@ -222,7 +224,7 @@ test('3.3.5.6-D', '', () => {
     'different references', 'same reference');
 });
 
-test('3.3.5.7-D', '', () => {
+test('3.3.5.7-D', ' Mutation did not poison issuers', () => {
   console.log('  Mutating the returned issuers array must not affect the registry');
   var arr = getIssuers();
   arr.push('https://evil.com/');
@@ -231,7 +233,7 @@ test('3.3.5.7-D', '', () => {
     'no evil.com', 'evil.com injected');
 });
 
-test('3.3.5.8-D', '', () => {
+test('3.3.5.8-D', ' Snapshots returned by getSnapshotByIssuer must be frozen', () => {
   console.log('  Snapshots returned by getSnapshotByIssuer must be frozen');
   console.log('  Object.isFrozen prevents post-registration mutation of issuer or jwksUri');
   var snap = getSnapshotByIssuer('https://mock-auth.test/');
@@ -239,7 +241,7 @@ test('3.3.5.8-D', '', () => {
     'frozen', snap === null ? 'null' : 'not frozen');
 });
 
-test('3.3.5.9-D', '', () => {
+test('3.3.5.9-D', ' In non-strict mode, assignment is silently ignored', () => {
   console.log('  Attempting to mutate a frozen snapshot must fail silently or throw');
   console.log('  In strict mode, assignment to a frozen object throws TypeError');
   console.log('  In non-strict mode, assignment is silently ignored');
@@ -254,7 +256,7 @@ test('3.3.5.9-D', '', () => {
   }
 });
 
-test('3.3.5.10-D', '', () => {
+test('3.3.5.10-D', ' _patchSnapshotForTesting must refuse to run in production', () => {
   console.log('  _patchSnapshotForTesting must refuse to run in production');
   console.log('  If this function works in production, an attacker who gains code execution');
   console.log('  can redirect token validation to their own JWKS endpoint');

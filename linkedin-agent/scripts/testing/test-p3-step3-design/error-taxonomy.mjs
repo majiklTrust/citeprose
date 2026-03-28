@@ -19,6 +19,7 @@ import { createAuthMiddleware } from '../../../src/auth/middleware.js';
 
 // ── Group 3: Error code architecture ─────────────────────────
 
+console.log('  File: test-p3-step3-design/error-taxonomy.mjs');
 group('Group 3: Error code architecture', `
   If these tests fail, the auth layer produces error codes that
   are ambiguous, unsafe, or unstable. The frontend cannot
@@ -52,7 +53,7 @@ for (var [scenarioName, fn] of errorScenarios) {
   catch (e) { collectedCodes.push({ scenario: scenarioName, code: e.message }); }
 }
 
-test('3.3.3.1-D', '', () => {
+test('3.3.3.1-D', ' Every error scenario must produce an error code (not null)', () => {
   console.log('  Every error scenario must produce an error code (not null)');
   console.log('  A missing code means the error path returns success — silent bypass');
   for (var entry of collectedCodes) {
@@ -61,7 +62,7 @@ test('3.3.3.1-D', '', () => {
   }
 });
 
-test('3.3.3.2-D', '', () => {
+test('3.3.3.2-D', ' All error codes must be UPPER_SNAKE_CASE', () => {
   console.log('  All error codes must be UPPER_SNAKE_CASE');
   console.log('  This convention signals that codes are constants, not prose');
   console.log('  Prose messages change with rewording — constants are stable');
@@ -74,7 +75,7 @@ test('3.3.3.2-D', '', () => {
   }
 });
 
-test('3.3.3.3-D', '', () => {
+test('3.3.3.3-D', ' Error codes must contain no spaces', () => {
   console.log('  Error codes must contain no spaces');
   console.log('  Spaces indicate a human-readable message, not a machine-parseable code');
   for (var entry of collectedCodes) {
@@ -85,7 +86,7 @@ test('3.3.3.3-D', '', () => {
   }
 });
 
-test('3.3.3.4-D', '', () => {
+test('3.3.3.4-D', ' These leak implementation details through the error boundary', () => {
   console.log('  Error codes must contain no file paths, class names, or stack fragments');
   console.log('  These leak implementation details through the error boundary');
   for (var entry of collectedCodes) {
@@ -98,7 +99,7 @@ test('3.3.3.4-D', '', () => {
   }
 });
 
-test('3.3.3.5-D', '', () => {
+test('3.3.3.5-D', ' All codes must start with TOKEN_ or VERIFIER_', () => {
   console.log('  All codes must start with TOKEN_ or VERIFIER_');
   console.log('  A consistent prefix lets consumers pattern-match error origin');
   console.log('  TOKEN_ = problem with the token itself');
@@ -112,7 +113,7 @@ test('3.3.3.5-D', '', () => {
   }
 });
 
-test('3.3.3.6-D', '', () => {
+test('3.3.3.6-D', ' Different failure modes must produce DIFFERENT codes', () => {
   console.log('  Different failure modes must produce DIFFERENT codes');
   console.log('  If expired and forged both return TOKEN_INVALID, the frontend cannot');
   console.log('  show "session expired, please log in again" vs "invalid credentials"');
@@ -126,7 +127,7 @@ test('3.3.3.6-D', '', () => {
     '≥4 distinct', unique.size + ' distinct');
 });
 
-test('3.3.3.7-D', '', () => {
+test('3.3.3.7-D', ' TOKEN_MISSING must be distinct from TOKEN_INVALID', () => {
   console.log('  TOKEN_MISSING must be distinct from TOKEN_INVALID');
   console.log('  Missing = no token was sent (user is not logged in)');
   console.log('  Invalid = token was sent but it is broken (possible attack)');
@@ -138,7 +139,7 @@ test('3.3.3.7-D', '', () => {
     'different codes', missingCode + ' === ' + invalidCode);
 });
 
-test('3.3.3.8-D', '', () => {
+test('3.3.3.8-D', ' TOKEN_EXPIRED must be a distinct code', () => {
   console.log('  TOKEN_EXPIRED must be a distinct code');
   console.log('  The frontend uses this to trigger silent token refresh');
   console.log('  If it is lumped with TOKEN_INVALID, the refresh never fires');
@@ -149,7 +150,7 @@ test('3.3.3.8-D', '', () => {
     'distinct from invalid', expiredCode + ' vs ' + invalidCode);
 });
 
-test('3.3.3.9-D', '', () => {
+test('3.3.3.9-D', ' VERIFIER_MISCONFIGURED must be a distinct code', () => {
   console.log('  VERIFIER_MISCONFIGURED must be a distinct code');
   console.log('  This code means the server is broken, not the token');
   console.log('  The operator needs to see this in logs to know the issue is on their side');
@@ -193,7 +194,7 @@ for (var [label, headers] of middlewareScenarios) {
   middlewareResponses.push({ label, json: res.getJson() });
 }
 
-test('3.3.3.10-D', '', () => {
+test('3.3.3.10-D', ' The verifier returns TOKEN_EXPIRED — the middleware returns', () => {
   console.log('  Middleware must translate verifier codes into user-facing messages');
   console.log('  The verifier returns TOKEN_EXPIRED — the middleware returns');
   console.log('  "Token expired. Please log in again." — not the raw code');
@@ -204,7 +205,7 @@ test('3.3.3.10-D', '', () => {
   }
 });
 
-test('3.3.3.11-D', '', () => {
+test('3.3.3.11-D', ' User-facing messages must be complete English sentences', () => {
   console.log('  User-facing messages must be complete English sentences');
   console.log('  Not "TOKEN_EXPIRED" — that is a developer artifact');
   console.log('  Not "invalid" — that is ambiguous');
@@ -217,7 +218,7 @@ test('3.3.3.11-D', '', () => {
   }
 });
 
-test('3.3.3.12-D', '', () => {
+test('3.3.3.12-D', ' User-facing messages must NOT contain raw error codes', () => {
   console.log('  User-facing messages must NOT contain raw error codes');
   console.log('  TOKEN_EXPIRED in the response body means the code leaked through');
   for (var r of middlewareResponses) {

@@ -55,6 +55,7 @@ var targets = [
 ];
 
 // ── Group 1: Expired tokens through Express ──────────────────
+console.log('  File: test-p3-step4-adversarial/hostile-access.mjs');
 group('Group 1: Expired tokens rejected through Express stack', `
   If these tests fail, stolen tokens that have expired still
   grant access. An attacker who captured a token last week
@@ -68,7 +69,7 @@ for (var [idx, target] of targets.entries()) {
   var method = target[0];
   var path = target[1];
   var desc = target[2];
-  await testAsync('3.4.1.' + (idx + 1) + '-A', '', async () => {
+  await testAsync('3.4.1.' + (idx + 1) + '-A', ' Expired token rejected on ' + path, async () => {
     console.log('  ' + method + ' ' + path + ' — ' + desc);
     console.log('  Token was valid when issued but exp claim is now in the past');
     console.log('  The middleware must check exp AFTER signature verification');
@@ -78,7 +79,7 @@ for (var [idx, target] of targets.entries()) {
   });
 }
 
-await testAsync('3.4.1.5-A', '', async () => {
+await testAsync('3.4.1.5-A', ' The error message for expired tokens', async () => {
   console.log('  Checking the error message for expired tokens');
   console.log('  The user needs to know their session expired — not just "invalid token"');
   console.log('  A specific message lets the frontend trigger re-login automatically');
@@ -92,6 +93,7 @@ var after1 = getCounters();
 groupEnd(after1.pass - before1.pass, after1.fail - before1.fail);
 
 // ── Group 2: Forged tokens through Express ───────────────────
+console.log('  File: test-p3-step4-adversarial/hostile-access.mjs');
 group('Group 2: Forged tokens rejected through Express stack', `
   If these tests fail, an attacker can fabricate tokens with
   arbitrary user identities. They access any account, approve
@@ -103,7 +105,7 @@ var forgedToken = helper.fabricateToken();
 var wrongIssuerToken = await helper.signToken({ sub: 'attacker' }, { issuer: 'https://evil.com/' });
 var garbageToken = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJoYWNrZXIifQ.not-a-real-signature';
 
-await testAsync('3.4.2.1-A', '', async () => {
+await testAsync('3.4.2.1-A', ' Fabricated token rejected across routes', async () => {
   console.log('  Sending a fabricated token — correct JWT structure, random signature');
   console.log('  This simulates an attacker who knows the token format but not the signing key');
   for (var [idx2, t] of targets.entries()) {
@@ -112,7 +114,7 @@ await testAsync('3.4.2.1-A', '', async () => {
   }
 });
 
-await testAsync('3.4.2.5-A', '', async () => {
+await testAsync('3.4.2.5-A', ' The base64url decodes but the payload is not a real JWT', async () => {
   console.log('  Sending a token signed by a legitimate key but with wrong issuer');
   console.log('  The attacker runs their own Auth0 tenant and signs tokens properly');
   console.log('  The middleware must verify the issuer matches a registered provider');
@@ -122,7 +124,7 @@ await testAsync('3.4.2.5-A', '', async () => {
   }
 });
 
-await testAsync('3.4.2.9-A', '', async () => {
+await testAsync('3.4.2.9-A', ' The base64url decodes but the payload is not a real JWT', async () => {
   console.log('  Sending a garbage string that looks like a JWT (3 dot-separated segments)');
   console.log('  The base64url decodes but the payload is not a real JWT');
   for (var [idx4, t] of targets.entries()) {
@@ -135,6 +137,7 @@ var after2 = getCounters();
 groupEnd(after2.pass - before2.pass, after2.fail - before2.fail);
 
 // ── Group 3: Response safety through Express ─────────────────
+console.log('  File: test-p3-step4-adversarial/hostile-access.mjs');
 group('Group 3: Error responses leak no internals through Express', `
   If these tests fail, auth error responses through Express
   include stack traces, file paths, or library names that
@@ -154,7 +157,7 @@ var badTokens = [
 for (var [idx5, entry] of badTokens.entries()) {
   var label = entry[0];
   var token = entry[1];
-  await testAsync('3.4.3.' + (idx5 + 1) + '-A', '', async () => {
+  await testAsync('3.4.3.' + (idx5 + 1) + '-A', ' Error response for ' + label + ' leaks no internals', async () => {
     console.log('  GET /api/posts — ' + label);
     console.log('  Checking that the error response through Express contains no internals');
     var headers = {};
@@ -170,7 +173,7 @@ for (var [idx5, entry] of badTokens.entries()) {
   });
 }
 
-await testAsync('3.4.3.7-A', '', async () => {
+await testAsync('3.4.3.7-A', '  an extremely long Authorization header (100KB)', async () => {
   console.log('  Sending an extremely long Authorization header (100KB)');
   console.log('  The server should reject it without crashing or returning a stack trace');
   console.log('  Node.js may return 431 (Request Header Fields Too Large) before Express runs');
@@ -182,7 +185,7 @@ await testAsync('3.4.3.7-A', '', async () => {
     '401 or 431', String(res.status));
 });
 
-await testAsync('3.4.3.8-A', '', async () => {
+await testAsync('3.4.3.8-A', '  null bytes in the Authorization header', async () => {
   console.log('  Sending null bytes in the Authorization header');
   console.log('  Binary injection must not crash the middleware or bypass parsing');
   console.log('  fetch() may throw before the request is sent — that counts as rejection');

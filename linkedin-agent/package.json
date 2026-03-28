@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "0.40.1",
+  "version": "0.40.3",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -29,6 +29,7 @@
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
     "logout": "curl -I http://localhost:3001/auth/logout",
+    "callbackfailtest": "curl -X POST http://localhost:3001/auth/callback   -H \"Content-Type: application/json\"   -d '{\"code\":\"fake\",\"state\":\"bad\"}'",
     "getroutes": "grep -E \"router\\.(get|post|put|patch|delete)\" src/routes/api.js",
     "extract-l": "unzip -l \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\"",
     "extract": "unzip -o \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" -d .. || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\" -d ..",

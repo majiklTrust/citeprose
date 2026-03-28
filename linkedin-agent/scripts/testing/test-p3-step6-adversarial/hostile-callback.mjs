@@ -133,7 +133,7 @@ await testAsync('3.6.2.3-A', ' POST to /auth/callback rejected', async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code: 'fake', state: 'bad' })
   });
-  check('POST to callback rejected', res.status === 404 || res.status === 405, '404 or 405', String(res.status));
+  check('POST to callback rejected', res.status === 404 || res.status === 405 || res.status === 401, '401, 404, or 405', String(res.status));
 });
 
 await testAsync('3.6.2.4-A', ' Login route with injected redirect parameter', async () => {

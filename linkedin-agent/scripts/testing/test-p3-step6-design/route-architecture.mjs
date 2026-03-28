@@ -108,12 +108,16 @@ await testAsync('3.6.2.1-D', ' Callback validates state before code exchange', a
   console.log('  Reading source to verify state validation happens BEFORE exchangeCode');
   console.log('  If code exchange runs first, the server makes an API call to Auth0');
   console.log('  even for forged callbacks — wasting resources and leaking timing info');
-  console.log('  Checking: validateOAuthState or state check appears before exchangeCode');
-  var stateCheckPos = indexSrc.indexOf('validateOAuthState') || indexSrc.indexOf('state');
-  var exchangePos = indexSrc.indexOf('exchangeCode');
-  if (stateCheckPos < 0) stateCheckPos = indexSrc.indexOf('state');
-  check('State checked before exchange', stateCheckPos < exchangePos && exchangePos > 0,
-    'state first', 'statePos=' + stateCheckPos + ' exchangePos=' + exchangePos);
+  console.log('  Checking: validateOAuthState(state) call appears before provider.exchangeCode call');
+  // Search for the function CALLS, not the imports
+  // validateOAuthState(state) is the call in the callback handler
+  // provider.exchangeCode is the call that exchanges the code for tokens
+  var stateCallPos = indexSrc.indexOf('validateOAuthState(state)');
+  var exchangeCallPos = indexSrc.indexOf('.exchangeCode(code)');
+  if (stateCallPos < 0) stateCallPos = indexSrc.indexOf('validateOAuthState(');
+  if (exchangeCallPos < 0) exchangeCallPos = indexSrc.indexOf('exchangeCode(');
+  check('State checked before exchange', stateCallPos > 0 && exchangeCallPos > 0 && stateCallPos < exchangeCallPos,
+    'state first', 'statePos=' + stateCallPos + ' exchangePos=' + exchangeCallPos);
 });
 
 await testAsync('3.6.2.2-D', ' Error rendering uses escapeHtml', async () => {

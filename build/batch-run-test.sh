@@ -30,6 +30,6 @@ CMD="$(which grep) -h -B1 'Results' $testing_out/*${batch_number}*.out"
 eval $CMD
 echo
 echo
-echo -e results for batch ${batch_number}\\n\\t $CMD\\n result fileset @ $testing_out
+echo -e " results for batch ${batch_number}\n\t $CMD\n\n result fileset @ $testing_out/"
 /bin/ls $testing_out/*${batch_number}*.out
 )

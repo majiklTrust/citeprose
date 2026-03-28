@@ -10,14 +10,14 @@ const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
 
 // ── OAuth 2.0 Flow ───────────────────────────────────────────
 
-export function getAuthorizationUrl() {
+export function getAuthorizationUrl(state) {
   const scopes = ["openid", "profile", "w_member_social"];
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.LINKEDIN_CLIENT_ID,
     redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
     scope: scopes.join(" "),
-    state: generateState()
+    state: state || generateState()
   });
   return `${LINKEDIN_AUTH}/authorization?${params}`;
 }
@@ -55,12 +55,29 @@ export async function exchangeCodeForToken(code) {
 
 // ── Profile ──────────────────────────────────────────────────
 
-export async function getProfile(accessToken) {
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function getProfile(accessToken, retries = 2) {
   const token = accessToken || process.env.LINKEDIN_ACCESS_TOKEN;
-  const response = await axios.get(`${LINKEDIN_API}/userinfo`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return response.data;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) await delay(2000 * attempt);
+      const response = await axios.get(`${LINKEDIN_API}/userinfo`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 429 && attempt < retries) {
+        logActivity("warn", "linkedin_profile_rate_limited", { attempt: attempt + 1, retries });
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // ── Posting ──────────────────────────────────────────────────
@@ -140,18 +157,48 @@ export async function publishPost(content, hashtags = []) {
   }
 }
 
-// ── Token Validation ─────────────────────────────────────────
+// ── Token Validation (cached) ────────────────────────────────
+
+let _tokenCache = null;
+let _tokenCacheTs = 0;
+
+function getTokenCacheTtl() {
+  return parseInt(process.env.LINKEDIN_TOKEN_CHECK_MINUTES || "10", 10) * 60 * 1000;
+}
 
 export async function validateToken() {
+  // Return cached result if fresh
+  if (_tokenCache && (Date.now() - _tokenCacheTs) < getTokenCacheTtl()) {
+    return _tokenCache;
+  }
+
   try {
     const profile = await getProfile();
-    return { valid: true, name: profile.name, sub: profile.sub };
+    _tokenCache = { valid: true, name: profile.name, sub: profile.sub };
+    _tokenCacheTs = Date.now();
+    return _tokenCache;
   } catch (err) {
     if (err.response?.status === 401) {
-      return { valid: false, reason: "Token expired or invalid" };
+      _tokenCache = { valid: false, reason: "Token expired or invalid" };
+    } else if (err.response?.status === 429) {
+      // Rate limited — keep previous cache if we have one, otherwise mark unknown
+      if (_tokenCache) {
+        _tokenCacheTs = Date.now(); // extend existing cache to avoid hammering
+        return _tokenCache;
+      }
+      _tokenCache = { valid: true, reason: "Token status unknown (rate limited)" };
+    } else {
+      _tokenCache = { valid: false, reason: err.message };
     }
-    return { valid: false, reason: err.message };
+    _tokenCacheTs = Date.now();
+    return _tokenCache;
   }
+}
+
+// Clear cache on new auth (called after successful OAuth)
+export function clearTokenCache() {
+  _tokenCache = null;
+  _tokenCacheTs = 0;
 }
 
 // ── Utilities ────────────────────────────────────────────────

@@ -43,9 +43,9 @@
     "qa_p3s4": "bash scripts/testing/test-p3-step4.sh --all",
     "qa_p3s4-d": "bash scripts/testing/test-p3-step4-design.sh --all",
     "qa_p3s4-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all",
-    "qa_p3s5": "bash scripts/testing/test-p3-step4.sh --all",
-    "qa_p3s5-d": "bash scripts/testing/test-p3-step4-design.sh --all",
-    "qa_p3s5-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all"
+    "qa_p3s5": "bash scripts/testing/test-p3-step5.sh --all",
+    "qa_p3s5-d": "bash scripts/testing/test-p3-step5-design.sh --all",
+    "qa_p3s5-a": "bash scripts/testing/test-p3-step5-adversarial.sh --all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

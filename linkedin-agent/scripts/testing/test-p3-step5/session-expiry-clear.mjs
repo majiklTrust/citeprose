@@ -49,6 +49,7 @@ function makeTokens(expiresIn) {
 }
 
 // ── Group 3: Session expiry detection ────────────────────────
+console.log('  File: test-p3-step5/session-expiry-clear.mjs');
 group('Group 3: Session expiry detection', `
   Impact: If these tests fail, the server cannot detect when a session
   is about to expire. The middleware either uses an expired token
@@ -64,7 +65,7 @@ group('Group 3: Session expiry detection', `
 
 var before3 = getCounters();
 
-await testAsync('3.5.3.1', 'Session with 1 hour remaining is not expiring', async () => {
+await testAsync('3.5.3.1', ' Session with 1 hour remaining is not expiring', async () => {
   console.log('  Creating a session with expiresIn=3600 (1 hour)');
   console.log('  Reading it back via createSession → readSession roundtrip');
   console.log('  isSessionExpiring default threshold is 300 seconds (5 minutes)');
@@ -77,7 +78,7 @@ await testAsync('3.5.3.1', 'Session with 1 hour remaining is not expiring', asyn
     'false', String(isSessionExpiring(session)));
 });
 
-await testAsync('3.5.3.2', 'Session with 200 seconds remaining is expiring', async () => {
+await testAsync('3.5.3.2', ' Session with 200 seconds remaining is expiring', async () => {
   console.log('  Creating a session with expiresIn=200 (3 min 20 sec)');
   console.log('  Default threshold is 300 seconds (5 minutes)');
   console.log('  200 seconds remaining < 300 second threshold → expiring');
@@ -89,7 +90,7 @@ await testAsync('3.5.3.2', 'Session with 200 seconds remaining is expiring', asy
     'true', String(isSessionExpiring(session)));
 });
 
-await testAsync('3.5.3.3', 'Session with 0 seconds remaining is expiring', async () => {
+await testAsync('3.5.3.3', ' Session with 0 seconds remaining is expiring', async () => {
   console.log('  Creating a session with expiresIn=0 (expires immediately)');
   console.log('  This should always return true regardless of threshold');
   console.log('  Checking: isSessionExpiring(session) === true');
@@ -100,7 +101,7 @@ await testAsync('3.5.3.3', 'Session with 0 seconds remaining is expiring', async
     'true', String(isSessionExpiring(session)));
 });
 
-await testAsync('3.5.3.4', 'Custom threshold: 600s threshold, 500s remaining', async () => {
+await testAsync('3.5.3.4', ' Custom threshold: 600s threshold, 500s remaining', async () => {
   console.log('  Creating a session with expiresIn=500');
   console.log('  Passing custom threshold of 600000ms (600 seconds)');
   console.log('  500 seconds remaining < 600 second threshold → expiring');
@@ -112,7 +113,7 @@ await testAsync('3.5.3.4', 'Custom threshold: 600s threshold, 500s remaining', a
     'true', String(isSessionExpiring(session, 600000)));
 });
 
-await testAsync('3.5.3.5', 'Custom threshold: 600s threshold, 700s remaining', async () => {
+await testAsync('3.5.3.5', ' Custom threshold: 600s threshold, 700s remaining', async () => {
   console.log('  Creating a session with expiresIn=700');
   console.log('  Passing custom threshold of 600000ms (600 seconds)');
   console.log('  700 seconds remaining > 600 second threshold → not expiring');
@@ -124,7 +125,7 @@ await testAsync('3.5.3.5', 'Custom threshold: 600s threshold, 700s remaining', a
     'false', String(isSessionExpiring(session, 600000)));
 });
 
-await testAsync('3.5.3.6', 'Null session is always expiring', async () => {
+await testAsync('3.5.3.6', ' Null session is always expiring', async () => {
   console.log('  Passing null to isSessionExpiring — simulates no session found');
   console.log('  A missing session is conceptually "already expired"');
   console.log('  The function must return true (not throw)');
@@ -133,7 +134,7 @@ await testAsync('3.5.3.6', 'Null session is always expiring', async () => {
     'true', String(isSessionExpiring(null)));
 });
 
-await testAsync('3.5.3.7', 'Session without expiresAt is always expiring', async () => {
+await testAsync('3.5.3.7', ' Session without expiresAt is always expiring', async () => {
   console.log('  Passing a session object with no expiresAt field');
   console.log('  This could happen if session data is corrupted or from an older format');
   console.log('  Without knowing when it expires, treat it as expired');
@@ -146,6 +147,7 @@ var after3 = getCounters();
 groupEnd(after3.pass - before3.pass, after3.fail - before3.fail);
 
 // ── Group 4: Session clearing ────────────────────────────────
+console.log('  File: test-p3-step5/session-expiry-clear.mjs');
 group('Group 4: Session clearing', `
   Impact: If these tests fail, users cannot log out. Clicking "Logout"
   leaves the session cookie active. On shared devices, the next
@@ -159,7 +161,7 @@ group('Group 4: Session clearing', `
 
 var before4 = getCounters();
 
-await testAsync('3.5.4.1', 'clearSession expires the cookie', async () => {
+await testAsync('3.5.4.1', ' clearSession expires the cookie', async () => {
   console.log('  Calling clearSession(res) on a mock response object');
   console.log('  The function must either:');
   console.log('    a) Call res.clearCookie(SESSION_COOKIE_NAME) — Express built-in, or');
@@ -177,7 +179,7 @@ await testAsync('3.5.4.1', 'clearSession expires the cookie', async () => {
     'cleared cookie', 'no cleared cookie found');
 });
 
-await testAsync('3.5.4.2', 'clearSession uses same cookie name as createSession', async () => {
+await testAsync('3.5.4.2', ' clearSession uses same cookie name as createSession', async () => {
   console.log('  If clearSession uses a different cookie name, the session cookie persists');
   console.log('  Checking: the cleared cookie name matches SESSION_COOKIE_NAME');
   var res = mockRes();
@@ -188,7 +190,7 @@ await testAsync('3.5.4.2', 'clearSession uses same cookie name as createSession'
     SESSION_COOKIE_NAME, 'cookie name: ' + (cookies[0]?.name || 'none'));
 });
 
-await testAsync('3.5.4.3', 'clearSession cookie has httpOnly', async () => {
+await testAsync('3.5.4.3', ' clearSession cookie has httpOnly', async () => {
   console.log('  The clearing cookie must also have httpOnly to match the original');
   console.log('  If httpOnly differs, the browser treats them as different cookies');
   console.log('  The original cookie persists while a non-httpOnly version is cleared');
@@ -201,7 +203,7 @@ await testAsync('3.5.4.3', 'clearSession cookie has httpOnly', async () => {
     'true', String(sessionClear?.options?.httpOnly));
 });
 
-await testAsync('3.5.4.4', 'clearSession cookie has path=/', async () => {
+await testAsync('3.5.4.4', ' clearSession cookie has path=/', async () => {
   console.log('  The clearing cookie must have the same path as the original');
   console.log('  A cookie set on path=/ is only cleared by a cookie with path=/');
   console.log('  Checking: cleared cookie options.path === "/"');
@@ -213,7 +215,7 @@ await testAsync('3.5.4.4', 'clearSession cookie has path=/', async () => {
     '/', String(sessionClear?.options?.path));
 });
 
-await testAsync('3.5.4.5', 'clearSession does not throw when no session exists', async () => {
+await testAsync('3.5.4.5', ' clearSession does not throw when no session exists', async () => {
   console.log('  Calling clearSession on a fresh response (no prior createSession)');
   console.log('  This happens when a user visits /auth/logout without being logged in');
   console.log('  The function must not throw — it should be a no-op or set maxAge=0 anyway');
@@ -228,7 +230,7 @@ await testAsync('3.5.4.5', 'clearSession does not throw when no session exists',
   check('No throw on empty clear', !threw, 'no throw', 'threw');
 });
 
-await testAsync('3.5.4.6', 'After clear, readSession returns null', async () => {
+await testAsync('3.5.4.6', ' After clear, readSession returns null', async () => {
   console.log('  Step 1: Create a session (sets cookie on res1)');
   console.log('  Step 2: Build a request from that cookie');
   console.log('  Step 3: Verify readSession returns data (session exists)');

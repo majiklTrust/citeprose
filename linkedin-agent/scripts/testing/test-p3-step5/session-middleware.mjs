@@ -96,6 +96,7 @@ function mockReqWithBoth(cookieValue, bearerToken) {
 }
 
 // ── Group 5: Cookie authentication path ──────────────────────
+console.log('  File: test-p3-step5/session-middleware.mjs');
 group('Group 5: Middleware cookie authentication', `
   Impact: If these tests fail, the session cookie set during login
   is not recognized by the middleware on subsequent requests.
@@ -110,7 +111,7 @@ group('Group 5: Middleware cookie authentication', `
 
 var before5 = getCounters();
 
-await testAsync('3.5.5.1', 'Valid session cookie authenticates the request', async () => {
+await testAsync('3.5.5.1', ' Valid session cookie authenticates the request', async () => {
   console.log('  Creating a session cookie via createSession() with sub=auth0|session_user');
   console.log('  Building a request with that cookie in the Cookie header');
   console.log('  Passing the request through requireAuth middleware');
@@ -125,7 +126,7 @@ await testAsync('3.5.5.1', 'Valid session cookie authenticates the request', asy
   check('Request passes with session cookie', nextCalled, 'next() called', 'blocked');
 });
 
-await testAsync('3.5.5.2', 'req.user.sub populated from session', async () => {
+await testAsync('3.5.5.2', ' req.user.sub populated from session', async () => {
   console.log('  After successful cookie authentication, req.user should contain');
   console.log('  the user claims stored in the session at login time');
   console.log('  Checking: req.user.sub === "auth0|session_user"');
@@ -137,7 +138,7 @@ await testAsync('3.5.5.2', 'req.user.sub populated from session', async () => {
     'auth0|cookie_user_001', String(req.user?.sub));
 });
 
-await testAsync('3.5.5.3', 'req.user.email populated from session', async () => {
+await testAsync('3.5.5.3', ' req.user.email populated from session', async () => {
   console.log('  Checking: req.user.email matches the email stored in the session');
   var cookieValue = createSessionCookieValue({ email: 'cookie@test.com' });
   var req = mockReqWithSession(cookieValue);
@@ -147,7 +148,7 @@ await testAsync('3.5.5.3', 'req.user.email populated from session', async () => 
     'cookie@test.com', String(req.user?.email));
 });
 
-await testAsync('3.5.5.4', 'No cookie and no Bearer returns 401', async () => {
+await testAsync('3.5.5.4', ' No cookie and no Bearer returns 401', async () => {
   console.log('  Building a request with no Cookie header and no Authorization header');
   console.log('  The middleware checks session cookie first (none found),');
   console.log('  then checks Bearer token (none found), then returns 401');
@@ -160,7 +161,7 @@ await testAsync('3.5.5.4', 'No cookie and no Bearer returns 401', async () => {
     '401', 'next=' + nextCalled + ' status=' + res.getStatus());
 });
 
-await testAsync('3.5.5.5', 'Invalid cookie and no Bearer returns 401', async () => {
+await testAsync('3.5.5.5', ' Invalid cookie and no Bearer returns 401', async () => {
   console.log('  Building a request with a garbage cookie value (not valid ciphertext)');
   console.log('  readSession() returns null for invalid ciphertext');
   console.log('  No Bearer header fallback → 401');
@@ -173,7 +174,7 @@ await testAsync('3.5.5.5', 'Invalid cookie and no Bearer returns 401', async () 
     '401', 'next=' + nextCalled + ' status=' + res.getStatus());
 });
 
-await testAsync('3.5.5.6', 'Two different session users produce different req.user', async () => {
+await testAsync('3.5.5.6', ' Two different session users produce different req.user', async () => {
   console.log('  Creating two session cookies with different user claims');
   console.log('  Each request through requireAuth should get its own req.user');
   console.log('  If the middleware caches the session, the second request gets the first user');
@@ -194,6 +195,7 @@ var after5 = getCounters();
 groupEnd(after5.pass - before5.pass, after5.fail - before5.fail);
 
 // ── Group 6: Cookie + Bearer coexistence ─────────────────────
+console.log('  File: test-p3-step5/session-middleware.mjs');
 group('Group 6: Cookie and Bearer token coexistence', `
   Impact: If these tests fail, the middleware cannot serve both browser
   users (cookies) and programmatic clients (Bearer tokens).
@@ -206,7 +208,7 @@ group('Group 6: Cookie and Bearer token coexistence', `
 
 var before6 = getCounters();
 
-await testAsync('3.5.6.1', 'Cookie present, no Bearer → cookie used', async () => {
+await testAsync('3.5.6.1', ' Cookie present, no Bearer → cookie used', async () => {
   console.log('  Building a request with only a session cookie (no Authorization header)');
   console.log('  This is the normal browser path — fetch() sends cookies automatically');
   console.log('  The middleware should use the cookie and not look for a Bearer token');
@@ -219,7 +221,7 @@ await testAsync('3.5.6.1', 'Cookie present, no Bearer → cookie used', async ()
     'cookie_only', String(req.user?.sub));
 });
 
-await testAsync('3.5.6.2', 'No cookie, Bearer present → Bearer used', async () => {
+await testAsync('3.5.6.2', ' No cookie, Bearer present → Bearer used', async () => {
   console.log('  Building a request with only a Bearer token (no Cookie header)');
   console.log('  This is the programmatic path — curl or scripts set Authorization header');
   console.log('  The middleware should skip the cookie check and validate the Bearer JWT');
@@ -232,7 +234,7 @@ await testAsync('3.5.6.2', 'No cookie, Bearer present → Bearer used', async ()
     'bearer_only', String(req.user?.sub));
 });
 
-await testAsync('3.5.6.3', 'Both present → cookie takes priority', async () => {
+await testAsync('3.5.6.3', ' Both present → cookie takes priority', async () => {
   console.log('  Building a request with BOTH a session cookie AND a Bearer token');
   console.log('  The cookie belongs to "cookie_user", the Bearer token to "bearer_user"');
   console.log('  Cookie takes priority because it is the browser path — the primary use case');
@@ -246,7 +248,7 @@ await testAsync('3.5.6.3', 'Both present → cookie takes priority', async () =>
     'cookie_user', String(req.user?.sub));
 });
 
-await testAsync('3.5.6.4', 'Invalid cookie, valid Bearer → Bearer used as fallback', async () => {
+await testAsync('3.5.6.4', ' Invalid cookie, valid Bearer → Bearer used as fallback', async () => {
   console.log('  Building a request with a corrupted cookie AND a valid Bearer token');
   console.log('  readSession() returns null for the bad cookie');
   console.log('  The middleware falls through to the Bearer check, which succeeds');
@@ -261,7 +263,7 @@ await testAsync('3.5.6.4', 'Invalid cookie, valid Bearer → Bearer used as fall
     'bearer_fallback', String(req.user?.sub));
 });
 
-await testAsync('3.5.6.5', 'Invalid cookie, invalid Bearer → 401', async () => {
+await testAsync('3.5.6.5', ' Invalid cookie, invalid Bearer → 401', async () => {
   console.log('  Building a request with a corrupted cookie AND an invalid Bearer token');
   console.log('  Both authentication paths fail');
   console.log('  The middleware must return 401, not 500');
@@ -274,7 +276,7 @@ await testAsync('3.5.6.5', 'Invalid cookie, invalid Bearer → 401', async () =>
     '401', 'next=' + nextCalled + ' status=' + res.getStatus());
 });
 
-await testAsync('3.5.6.6', 'Dev mode bypasses both cookie and Bearer', async () => {
+await testAsync('3.5.6.6', ' Dev mode bypasses both cookie and Bearer', async () => {
   console.log('  Shutting down all providers to simulate dev mode');
   console.log('  In dev mode, requireAuth passes through without checking anything');
   console.log('  req.user is null, req.authSkipped is true');

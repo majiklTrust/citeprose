@@ -65,6 +65,7 @@ var validTokens = {
 };
 
 // ── Group 2: Session reading ─────────────────────────────────
+console.log('  File: test-p3-step5/session-read.mjs');
 group('Group 2: Session reading', `
   Impact: If these tests fail, the server cannot read the session
   cookie it set during login. Every request after login appears
@@ -79,7 +80,7 @@ group('Group 2: Session reading', `
 
 var before2 = getCounters();
 
-await testAsync('3.5.2.1', 'readSession decrypts a cookie set by createSession', async () => {
+await testAsync('3.5.2.1', ' readSession decrypts a cookie set by createSession', async () => {
   console.log('  Step 1: Calling createSession(res, tokens) to encrypt tokens into a cookie');
   console.log('  Step 2: Extracting the encrypted cookie value from the mock response');
   console.log('  Step 3: Building a mock request with that cookie in the Cookie header');
@@ -94,7 +95,7 @@ await testAsync('3.5.2.1', 'readSession decrypts a cookie set by createSession',
     'non-null object', String(session));
 });
 
-await testAsync('3.5.2.2', 'Decrypted payload contains accessToken', async () => {
+await testAsync('3.5.2.2', ' Decrypted payload contains accessToken', async () => {
   console.log('  After roundtrip: createSession → set cookie → readSession');
   console.log('  The decrypted session must contain the original accessToken string');
   console.log('  This is the token the middleware can use for Auth0 API calls');
@@ -106,7 +107,7 @@ await testAsync('3.5.2.2', 'Decrypted payload contains accessToken', async () =>
     validTokens.accessToken.substring(0, 30) + '...', String(session?.accessToken).substring(0, 30) + '...');
 });
 
-await testAsync('3.5.2.3', 'Decrypted payload contains refreshToken', async () => {
+await testAsync('3.5.2.3', ' Decrypted payload contains refreshToken', async () => {
   console.log('  Checking that the refresh token survives the encryption roundtrip');
   console.log('  The refresh token is used to obtain new access tokens without re-login');
   console.log('  Comparing: session.refreshToken === original tokens.refreshToken');
@@ -117,7 +118,7 @@ await testAsync('3.5.2.3', 'Decrypted payload contains refreshToken', async () =
     validTokens.refreshToken, String(session?.refreshToken));
 });
 
-await testAsync('3.5.2.4', 'Decrypted payload contains expiresAt as number', async () => {
+await testAsync('3.5.2.4', ' Decrypted payload contains expiresAt as number', async () => {
   console.log('  createSession receives expiresIn (seconds from now)');
   console.log('  It converts to expiresAt (absolute timestamp) for storage');
   console.log('  readSession returns expiresAt so the middleware can check expiry');
@@ -129,7 +130,7 @@ await testAsync('3.5.2.4', 'Decrypted payload contains expiresAt as number', asy
     'number', typeof session?.expiresAt);
 });
 
-await testAsync('3.5.2.5', 'expiresAt is in the future', async () => {
+await testAsync('3.5.2.5', ' expiresAt is in the future', async () => {
   console.log('  Token was created with expiresIn=3600 (1 hour from now)');
   console.log('  expiresAt should be approximately Date.now() + 3600000');
   console.log('  Allowing 5 seconds of tolerance for test execution time');
@@ -142,7 +143,7 @@ await testAsync('3.5.2.5', 'expiresAt is in the future', async () => {
     '> ' + now, String(session?.expiresAt));
 });
 
-await testAsync('3.5.2.6', 'Decrypted payload contains user claims', async () => {
+await testAsync('3.5.2.6', ' Decrypted payload contains user claims', async () => {
   console.log('  The session stores user claims from getUserInfo: sub, email, name');
   console.log('  These populate req.user in the middleware — no JWT decoding needed per request');
   console.log('  Checking: session.user.sub, session.user.email, session.user.name');
@@ -157,7 +158,7 @@ await testAsync('3.5.2.6', 'Decrypted payload contains user claims', async () =>
     validTokens.user.name, String(session?.user?.name));
 });
 
-await testAsync('3.5.2.7', 'readSession returns null when no cookie present', async () => {
+await testAsync('3.5.2.7', ' readSession returns null when no cookie present', async () => {
   console.log('  Building a request with no Cookie header at all');
   console.log('  This is the first request from a new browser — no prior session');
   console.log('  readSession must return null (not throw, not return empty object)');
@@ -167,7 +168,7 @@ await testAsync('3.5.2.7', 'readSession returns null when no cookie present', as
   check('Returns null for no cookie', session === null, 'null', String(session));
 });
 
-await testAsync('3.5.2.8', 'readSession returns null for wrong cookie name', async () => {
+await testAsync('3.5.2.8', ' readSession returns null for wrong cookie name', async () => {
   console.log('  Building a request with a cookie named "other_session" instead of SESSION_COOKIE_NAME');
   console.log('  readSession only reads the specific cookie name — ignores all others');
   console.log('  Checking: readSession returns null');
@@ -176,7 +177,7 @@ await testAsync('3.5.2.8', 'readSession returns null for wrong cookie name', asy
   check('Returns null for wrong name', session === null, 'null', String(session));
 });
 
-await testAsync('3.5.2.9', 'readSession returns null for empty cookie value', async () => {
+await testAsync('3.5.2.9', ' readSession returns null for empty cookie value', async () => {
   console.log('  Building a request where the session cookie exists but has an empty value');
   console.log('  This can happen if clearSession set the value to empty');
   console.log('  Checking: readSession returns null');
@@ -185,7 +186,7 @@ await testAsync('3.5.2.9', 'readSession returns null for empty cookie value', as
   check('Returns null for empty value', session === null, 'null', String(session));
 });
 
-await testAsync('3.5.2.10', 'readSession with missing SESSION_SECRET throws or returns null', async () => {
+await testAsync('3.5.2.10', ' readSession with missing SESSION_SECRET throws or returns null', async () => {
   console.log('  Temporarily removing SESSION_SECRET from process.env');
   console.log('  Without the decryption key, the session cannot be read');
   console.log('  The function must either throw (fail-closed) or return null (deny access)');
@@ -207,7 +208,7 @@ await testAsync('3.5.2.10', 'readSession with missing SESSION_SECRET throws or r
     'null or throw', result);
 });
 
-await testAsync('3.5.2.11', 'Full roundtrip preserves all fields', async () => {
+await testAsync('3.5.2.11', ' Full roundtrip preserves all fields', async () => {
   console.log('  Final integrity check: encrypt → decrypt → compare every field');
   console.log('  tokens.accessToken, tokens.refreshToken, computed expiresAt, user.sub/email/name');
   console.log('  Any field that does not survive the roundtrip means data loss in the session');

@@ -44,11 +44,15 @@ function deriveKey(secret) {
 
 /**
  * Read and validate SESSION_SECRET from environment.
- * Throws if missing or too short.
+ * Throws if missing, too short, or not valid hex.
+ * Must be at least 64 hex characters (32 bytes = 256 bits).
  */
 function getSecret() {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < MIN_SECRET_LENGTH) {
+    throw new Error('Session configuration invalid.');
+  }
+  if (!/^[0-9a-f]+$/i.test(secret)) {
     throw new Error('Session configuration invalid.');
   }
   return secret;
@@ -129,7 +133,7 @@ export function createSession(res, tokens) {
   const payload = {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken || null,
-    expiresAt: Date.now() + (tokens.expiresIn || 3600) * 1000,
+    expiresAt: Date.now() + (tokens.expiresIn ?? 3600) * 1000,
     user: {
       sub: tokens.user.sub,
       email: tokens.user.email || null,

@@ -61,6 +61,7 @@ var validTokens = {
 };
 
 // ── Group 1: Session creation ────────────────────────────────
+console.log('  File: test-p3-step5/session-create.mjs');
 group('Group 1: Session creation', `
   Impact: If these tests fail, users who successfully authenticate
   with Auth0 never receive a session cookie. Every page load
@@ -74,7 +75,7 @@ group('Group 1: Session creation', `
 
 var before1 = getCounters();
 
-await testAsync('3.5.1.1', 'Session cookie set on response', async () => {
+await testAsync('3.5.1.1', ' Session cookie set on response', async () => {
   console.log('  Calling createSession() from src/auth/session.js');
   console.log('  Input: mock Express response object + token payload with accessToken, refreshToken, expiresIn, user');
   console.log('  createSession encrypts the payload using AES-256-GCM with SESSION_SECRET from env');
@@ -86,7 +87,7 @@ await testAsync('3.5.1.1', 'Session cookie set on response', async () => {
   check('Session cookie set on response', cookies.length >= 1, '≥1 cookie', String(cookies.length) + ' cookies');
 });
 
-await testAsync('3.5.1.2', 'Cookie name matches constant', async () => {
+await testAsync('3.5.1.2', ' Cookie name matches constant', async () => {
   console.log('  Calling createSession() and reading the cookie name from the response');
   console.log('  The cookie name must match SESSION_COOKIE_NAME exported from session.js');
   console.log('  This ensures readSession() and clearSession() look for the same cookie');
@@ -97,7 +98,7 @@ await testAsync('3.5.1.2', 'Cookie name matches constant', async () => {
   check('Cookie name matches constant', cookie !== null, 'cookie named ' + SESSION_COOKIE_NAME, cookie ? cookie.name : 'no session cookie');
 });
 
-await testAsync('3.5.1.3', 'Cookie value is encrypted', async () => {
+await testAsync('3.5.1.3', ' Cookie value is encrypted', async () => {
   console.log('  Calling createSession() and reading the raw cookie value');
   console.log('  The value must NOT contain plaintext JSON, token strings, or user data');
   console.log('  AES-256-GCM produces opaque ciphertext — no readable fragments');
@@ -110,7 +111,7 @@ await testAsync('3.5.1.3', 'Cookie value is encrypted', async () => {
   check('Cookie value is not plaintext', !containsPlaintext, 'opaque ciphertext', 'contains plaintext fragments');
 });
 
-await testAsync('3.5.1.4', 'Cookie has httpOnly flag', async () => {
+await testAsync('3.5.1.4', ' Cookie has httpOnly flag', async () => {
   console.log('  Reading cookie options from the mock response');
   console.log('  httpOnly:true prevents JavaScript from accessing the cookie via document.cookie');
   console.log('  This is the primary defense against XSS-based session theft');
@@ -121,7 +122,7 @@ await testAsync('3.5.1.4', 'Cookie has httpOnly flag', async () => {
   check('httpOnly flag is true', cookie?.options?.httpOnly === true, 'true', String(cookie?.options?.httpOnly));
 });
 
-await testAsync('3.5.1.5', 'Cookie has sameSite=lax', async () => {
+await testAsync('3.5.1.5', ' Cookie has sameSite=lax', async () => {
   console.log('  Reading cookie options.sameSite from the mock response');
   console.log('  sameSite:lax prevents the cookie from being sent on cross-origin POST requests');
   console.log('  This blocks CSRF attacks where a malicious site submits forms to our API');
@@ -134,7 +135,7 @@ await testAsync('3.5.1.5', 'Cookie has sameSite=lax', async () => {
   check('sameSite is lax', sameSite === 'lax', 'lax', sameSite);
 });
 
-await testAsync('3.5.1.6', 'Cookie has path=/', async () => {
+await testAsync('3.5.1.6', ' Cookie has path=/', async () => {
   console.log('  Reading cookie options.path from the mock response');
   console.log('  path:/ makes the cookie available on all routes');
   console.log('  Without this, the cookie might only be sent on the route that set it');
@@ -145,7 +146,7 @@ await testAsync('3.5.1.6', 'Cookie has path=/', async () => {
   check('Path is /', cookie?.options?.path === '/', '/', String(cookie?.options?.path));
 });
 
-await testAsync('3.5.1.7', 'Cookie secure=false in non-production', async () => {
+await testAsync('3.5.1.7', ' Cookie secure=false in non-production', async () => {
   console.log('  Current NODE_ENV: ' + (process.env.NODE_ENV || '(unset)'));
   console.log('  When NODE_ENV is not "production", secure must be false');
   console.log('  secure:true requires HTTPS — local development uses HTTP');
@@ -157,7 +158,7 @@ await testAsync('3.5.1.7', 'Cookie secure=false in non-production', async () => 
   check('Secure is false in dev', cookie?.options?.secure === false, 'false', String(cookie?.options?.secure));
 });
 
-await testAsync('3.5.1.8', 'Cookie secure=true in production', async () => {
+await testAsync('3.5.1.8', ' Cookie secure=true in production', async () => {
   console.log('  Setting NODE_ENV=production temporarily');
   console.log('  In production, secure:true ensures the cookie is only sent over HTTPS');
   console.log('  Without this, the cookie could be intercepted on an unencrypted connection');
@@ -170,7 +171,7 @@ await testAsync('3.5.1.8', 'Cookie secure=true in production', async () => {
   delete process.env.NODE_ENV;
 });
 
-await testAsync('3.5.1.9', 'Cookie maxAge matches SESSION_MAX_AGE_MS', async () => {
+await testAsync('3.5.1.9', ' Cookie maxAge matches SESSION_MAX_AGE_MS', async () => {
   console.log('  Reading cookie options.maxAge from the mock response');
   console.log('  SESSION_MAX_AGE_MS is exported from session.js (default 86400000 = 24 hours)');
   console.log('  The cookie maxAge must match — mismatch means the browser discards');
@@ -183,7 +184,7 @@ await testAsync('3.5.1.9', 'Cookie maxAge matches SESSION_MAX_AGE_MS', async () 
     String(SESSION_MAX_AGE_MS), String(cookie?.options?.maxAge));
 });
 
-await testAsync('3.5.1.10', 'Two sessions produce different ciphertext', async () => {
+await testAsync('3.5.1.10', ' Two sessions produce different ciphertext', async () => {
   console.log('  Calling createSession() twice with the same token payload');
   console.log('  AES-256-GCM requires a unique 12-byte IV per encryption');
   console.log('  If the IV is reused, an attacker can XOR two ciphertexts to recover plaintext');
@@ -199,7 +200,7 @@ await testAsync('3.5.1.10', 'Two sessions produce different ciphertext', async (
     'different values', val1 === val2 ? 'identical values (IV reuse)' : 'different values');
 });
 
-await testAsync('3.5.1.11', 'Missing accessToken throws', async () => {
+await testAsync('3.5.1.11', ' Missing accessToken throws', async () => {
   console.log('  Calling createSession() with tokens that have no accessToken field');
   console.log('  A session without an access token is useless — the middleware cannot authorize');
   console.log('  createSession must throw rather than create a broken session');
@@ -214,7 +215,7 @@ await testAsync('3.5.1.11', 'Missing accessToken throws', async () => {
   check('Throws without accessToken', threw, 'throws', 'did not throw');
 });
 
-await testAsync('3.5.1.12', 'Missing SESSION_SECRET throws', async () => {
+await testAsync('3.5.1.12', ' Missing SESSION_SECRET throws', async () => {
   console.log('  Temporarily removing SESSION_SECRET from process.env');
   console.log('  Without a secret, there is no encryption key — the session is unprotectable');
   console.log('  createSession must refuse to produce an unencrypted cookie');
@@ -232,7 +233,7 @@ await testAsync('3.5.1.12', 'Missing SESSION_SECRET throws', async () => {
   check('Throws without SESSION_SECRET', threw, 'throws', 'did not throw');
 });
 
-await testAsync('3.5.1.13', 'Missing user claims throws', async () => {
+await testAsync('3.5.1.13', ' Missing user claims throws', async () => {
   console.log('  Calling createSession() with tokens that have no user field');
   console.log('  The session stores user claims (sub, email, name) for req.user');
   console.log('  Without user claims, the middleware cannot identify who is logged in');

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "0.37.1",
+  "version": "0.37.2",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -23,10 +23,14 @@
     "setup": "node scripts/setup.js",
     "test-post": "node scripts/test-post.js",
     "auth": "node scripts/linkedin-auth.js",
+    "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     "refresh": "rm -rf ./node_modules && npm install",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "extract-l": "unzip -l \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\"",
     "extract": "unzip -o \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" -d .. || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\" -d ..",
+    "qa_p1": "bash scripts/testing/test-p1.sh --all",
+    "qa_p1-d": "bash scripts/testing/test-p1-design.sh --all",
+    "qa_p1-a": "bash scripts/testing/test-p1-adversarial.sh --all",
     "qa_p3s1": "bash scripts/testing/test-p3-step1.sh --all",
     "qa_p3s1-d": "bash scripts/testing/test-p3-step1-design.sh --all",
     "qa_p3s1-a": "bash scripts/testing/test-p3-step1-adversarial.sh --all",
@@ -38,7 +42,10 @@
     "qa_p3s3-a": "bash scripts/testing/test-p3-step3-adversarial.sh --all",
     "qa_p3s4": "bash scripts/testing/test-p3-step4.sh --all",
     "qa_p3s4-d": "bash scripts/testing/test-p3-step4-design.sh --all",
-    "qa_p3s4-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all"
+    "qa_p3s4-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all",
+    "qa_p3s5": "bash scripts/testing/test-p3-step4.sh --all",
+    "qa_p3s5-d": "bash scripts/testing/test-p3-step4-design.sh --all",
+    "qa_p3s5-a": "bash scripts/testing/test-p3-step4-adversarial.sh --all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

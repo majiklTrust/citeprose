@@ -102,6 +102,7 @@ async function start() {
   const app = express();
   app.disable("x-powered-by");
   app.disable("etag");
+  app.set("trust proxy", true); // ALB terminates TLS — req.protocol must read X-Forwarded-Proto
 
   // Security headers
   app.use((req, res, next) => {

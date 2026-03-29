@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v0.41.7
+// v0.42.1
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -102,6 +102,7 @@ async function start() {
   const app = express();
   app.disable("x-powered-by");
   app.disable("etag");
+  app.set("trust proxy", true); // ALB terminates TLS — req.protocol must read X-Forwarded-Proto
 
   // Security headers
   app.use((req, res, next) => {
@@ -355,7 +356,7 @@ async function start() {
     // and AFTER initRegistry() so isAuthEnabled() is accurate.
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.41.7
+║           LinkedIn AI Content Agent  v0.42.1
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

@@ -16,6 +16,7 @@ import {
 } from "./database.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-api.js";
+import { runOutputFilter } from "./output-filter.js";
 
 let schedulerJob = null;
 
@@ -175,6 +176,23 @@ async function schedulerTick(topicId = null) {
 export async function executePost(postId) {
   const post = getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
+
+  // ── Output security filter ─────────────────────────────────
+  // Scan content for leaked secrets, prompt fragments, and
+  // exfiltration attempts BEFORE publishing. This is the last
+  // line of defense — if a prompt injection bypassed sanitization
+  // and framing, the output filter catches the result.
+  const filterResult = runOutputFilter(post.content);
+  if (filterResult.blocked) {
+    updatePostStatus(postId, "blocked", { errorMessage: filterResult.reason });
+    logActivity("warn", "post_blocked_by_filter", {
+      postId,
+      title: post.title,
+      reason: filterResult.reason,
+      checks: filterResult.checks
+    });
+    throw new Error(`Post blocked by output filter: ${filterResult.reason}`);
+  }
 
   try {
     const result = await publishPost(post.content, post.hashtags);

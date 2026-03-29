@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
 import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
+import { frameUntrustedContent } from "./prompt-framing.js";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -150,7 +151,7 @@ export async function generatePost(topic = null) {
     // Corroboration ON — strict verified-facts-only prompt
     researchBlock = `
 RESEARCH BRIEF (use ONLY these verified facts as the basis for your post):
-${researchBrief.context}
+${frameUntrustedContent(researchBrief.context)}
 
 CRITICAL SOURCE RULES:
 - You may ONLY state facts that appear in the "VERIFIED FACTS" section above.
@@ -166,7 +167,7 @@ CRITICAL SOURCE RULES:
     // Corroboration OFF — attribution-based prompt (less strict)
     researchBlock = `
 SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources — corroboration step was skipped):
-${researchBrief.context}
+${frameUntrustedContent(researchBrief.context)}
 
 ATTRIBUTION RULES:
 - Base ALL factual claims on the source material above. Do not invent or embellish.

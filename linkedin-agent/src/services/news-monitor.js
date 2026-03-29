@@ -6,6 +6,7 @@ import Parser from "rss-parser";
 import cron from "node-cron";
 import { logActivity } from "./database.js";
 import { FEEDS } from "../config/feeds.js";
+import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } from "./sanitize-content.js";
 
 const parser = new Parser({
   timeout: 15000,
@@ -54,24 +55,35 @@ async function fetchFeed(feedConfig) {
     `);
 
     for (const item of feed.items || []) {
-      const link = item.link || item.guid;
+      const link = sanitizeLink(item.link || item.guid);
       if (!link) continue;
 
       const rawSummary = item.contentSnippet || item.content || item.summary || "";
-      const cleanSummary = rawSummary
-        .replace(/<[^>]*>/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 1000);
+      const cleanSummary = sanitizeSummary(rawSummary);
+      const cleanTitle = sanitizeTitle(item.title || "Untitled");
+
+      // Check for prompt injection in title and summary
+      const titleInjection = detectPromptInjection(cleanTitle);
+      const summaryInjection = detectPromptInjection(cleanSummary);
+
+      if (titleInjection.detected || summaryInjection.detected) {
+        logActivity("warn", "prompt_injection_detected", {
+          feed: feedConfig.name,
+          link,
+          titlePatterns: titleInjection.patterns,
+          summaryPatterns: summaryInjection.patterns
+        });
+        continue; // Skip this article — do not store poisoned content
+      }
 
       const published = item.isoDate || item.pubDate || null;
-      const hash = simpleHash(link + (item.title || ""));
+      const hash = simpleHash(link + cleanTitle);
 
       const result = insertStmt.run(
         feedConfig.name,
         feedConfig.tier,
         JSON.stringify(feedConfig.topicIds),
-        (item.title || "Untitled").slice(0, 500),
+        cleanTitle,
         link,
         cleanSummary,
         published,

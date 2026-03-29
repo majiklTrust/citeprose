@@ -154,16 +154,20 @@ await testAsync('2.0.2.7-D', ' scheduler.js calls runOutputFilter', async () => 
 });
 
 await testAsync('2.0.2.8-D', ' Filter runs BEFORE publishPost', async () => {
-  console.log('  In scheduler.js, runOutputFilter must appear before publishPost call');
+  console.log('  In scheduler.js, runOutputFilter() call must appear before publishPost() call');
   console.log('  If filter runs after publish, the post is already public');
-  var filterPos = schedulerSrc.indexOf('runOutputFilter');
-  var publishPos = schedulerSrc.indexOf('publishPost');
+  console.log('  Searching for function CALLS (with parentheses), not import statements');
+  // Search for the function calls, not the import statements
+  // indexOf('runOutputFilter(') finds the call, not "import { runOutputFilter }"
+  var filterPos = schedulerSrc.indexOf('runOutputFilter(');
+  var publishPos = schedulerSrc.indexOf('await publishPost(');
+  if (publishPos < 0) publishPos = schedulerSrc.indexOf('publishPost(post');
   if (filterPos < 0 || publishPos < 0) {
-    check('Both present in scheduler', false, 'both found',
+    check('Both calls present in scheduler', false, 'both found',
       'filter=' + (filterPos >= 0) + ' publish=' + (publishPos >= 0));
     return;
   }
-  check('Filter before publish', filterPos < publishPos,
+  check('Filter call before publish call', filterPos < publishPos,
     'filter first', 'filterPos=' + filterPos + ' publishPos=' + publishPos);
 });
 

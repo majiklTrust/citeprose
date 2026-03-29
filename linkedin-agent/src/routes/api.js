@@ -25,21 +25,23 @@ import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
+import { isAuthEnabled } from "../auth/index.js";
 
 const router = Router();
 
 // ── Auth Middleware ──────────────────────────────────────────
 // createAuthMiddleware returns { requireAuth, optionalAuth }.
-// In dev mode (zero providers configured), requireAuth passes
-// all requests through with req.user = null.
+// In dev mode (zero providers configured or DEV_BYPASS_ORIGINS),
+// requireAuth passes all requests through with req.user = null.
 
-const { requireAuth } = createAuthMiddleware(logActivity);
+const { requireAuth, optionalAuth } = createAuthMiddleware(logActivity);
 
 // ── Public Routes (no auth required) ────────────────────────
 // Routes defined BEFORE the auth middleware are accessible
 // without authentication. Only health check belongs here.
+// optionalAuth attempts to read the session but does not block.
 
-router.get("/api/status", async (req, res) => {
+router.get("/api/status", optionalAuth, async (req, res) => {
   try {
     const stats = getPostStats();
     const mode = getAgentState("mode");
@@ -54,6 +56,12 @@ router.get("/api/status", async (req, res) => {
     } catch { /* monitor may not be initialized yet */ }
 
     res.json({
+      authRequired: isAuthEnabled() && !req.devBypass,
+      user: req.user ? {
+        name: req.user.name || null,
+        email: req.user.email || null,
+        sub: req.user.sub || null,
+      } : null,
       mode,
       paused: paused === "true",
       corroboration,

@@ -685,6 +685,90 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
     }
+    /* ── Auth: Login Wall ────────────────────────── */
+    .login-wall {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      text-align: center;
+      padding: 2rem;
+    }
+    .login-wall-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .login-wall-subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+      font-family: var(--font-mono);
+    }
+    .login-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 2rem;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .login-btn:hover {
+      background: #2563eb;
+    }
+    /* ── Auth: Dev Banner ─────────────────────────── */
+    .dev-banner {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 1rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--accent-amber);
+      font-family: var(--font-mono);
+    }
+    .dev-banner-icon { font-size: 1rem; }
+    /* ── Auth: User Info + Logout ─────────────────── */
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+    }
+    .user-name {
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+    .logout-btn {
+      padding: 0.3rem 0.75rem;
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      font-family: var(--font-mono);
+    }
+    .logout-btn:hover {
+      color: var(--accent-red);
+      border-color: var(--accent-red);
+    }
   </style>
 </head>
 <body>
@@ -738,21 +822,42 @@
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
 
+      const authFetch = useCallback(async (url, opts) => {
+        const res = await fetch(url, opts);
+        if (res.status === 401) {
+          window.location.href = '/auth/login';
+          throw new Error('Authentication required');
+        }
+        return res;
+      }, []);
+
       const fetchAll = useCallback(async () => {
         try {
-          const [statusRes, postsRes, logsRes] = await Promise.all([
-            fetch(`${API}/api/status`).then(r => r.json()),
-            fetch(`${API}/api/posts?limit=30`).then(r => r.json()),
-            fetch(`${API}/api/logs?limit=40`).then(r => r.json()),
-          ]);
+          // Status is public (uses optionalAuth) — always fetch with regular fetch
+          const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
           setStatus(statusRes);
+
+          // If auth is required and no user, don't fetch protected routes
+          if (statusRes.authRequired && !statusRes.user) {
+            setPosts([]);
+            setLogs([]);
+            setError(null);
+            return;
+          }
+
+          const [postsRes, logsRes] = await Promise.all([
+            authFetch(`${API}/api/posts?limit=30`).then(r => r.json()),
+            authFetch(`${API}/api/logs?limit=40`).then(r => r.json()),
+          ]);
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
           setError(null);
         } catch (err) {
-          setError('Cannot connect to agent backend. Is it running?');
+          if (err.message !== 'Authentication required') {
+            setError('Cannot connect to agent backend. Is it running?');
+          }
         }
-      }, []);
+      }, [authFetch]);
 
       useEffect(() => {
         fetchAll();
@@ -902,6 +1007,19 @@
       const pendingPosts = posts.filter(p => p.status === 'pending_approval');
       const recentPosts = posts.filter(p => p.status !== 'pending_approval');
 
+      // ── Login Wall: shown when auth is required but no user ──
+      if (status && status.authRequired && !status.user) {
+        return (
+          <div className="app-container">
+            <div className="login-wall">
+              <div className="login-wall-title">LinkedIn AI Agent</div>
+              <div className="login-wall-subtitle">Authentication required to access the dashboard</div>
+              <a href="/auth/login" className="login-btn">Log In</a>
+            </div>
+          </div>
+        );
+      }
+
       if (error) {
         return (
           <div className="app-container">
@@ -935,12 +1053,26 @@
 
       return (
         <div className="app-container">
+          {/* Dev Mode Banner */}
+          {status && !status.authRequired && (
+            <div className="dev-banner">
+              <span className="dev-banner-icon">⚠</span>
+              Development Mode — Authentication Disabled
+            </div>
+          )}
           {/* Header */}
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v0.40.5 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v0.40.12 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+              {status?.user && (
+                <div className="user-info">
+                  <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
+                  <a href="/auth/logout" className="logout-btn">Logout</a>
+                </div>
+              )}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
               <div className={`toggle-track ${status.mode === 'auto' ? 'active' : ''}`} onClick={toggleMode}>
@@ -949,6 +1081,7 @@
               <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
                 {status.mode.toUpperCase()}
               </span>
+            </div>
             </div>
           </div>
 

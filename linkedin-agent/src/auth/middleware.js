@@ -7,9 +7,10 @@
 // token verification is delegated to jwt-verifier.js.
 //
 // Authentication priority:
-//   1. Session cookie (browser path) — readSession()
-//   2. Authorization: Bearer header (programmatic path) — verifyToken()
-//   3. Neither present → 401
+//   1. Dev bypass (NODE_ENV !== 'production' + DEV_BYPASS_ORIGINS)
+//   2. Session cookie (browser path) — readSession()
+//   3. Authorization: Bearer header (programmatic path) — verifyToken()
+//   4. Neither present → 401
 //
 // Usage in index.js:
 //   import { createAuthMiddleware } from "./auth/middleware.js";
@@ -30,6 +31,46 @@ const ERR_TOKEN_EXPIRED  = { status: 401, error: "Token expired. Please log in a
 const ERR_TOKEN_INVALID  = { status: 401, error: "Invalid token." };
 const ERR_ISSUER_UNKNOWN = { status: 401, error: "Token issuer not recognized." };
 const ERR_INTERNAL       = { status: 500, error: "Authentication check failed." };
+
+// ── Dev Bypass ───────────────────────────────────────────────
+
+/**
+ * Check if the current request qualifies for dev mode bypass.
+ *
+ * Two conditions must BOTH be true:
+ *   1. NODE_ENV is NOT 'production'
+ *   2. DEV_BYPASS_ORIGINS is set and the request origin matches
+ *
+ * If DEV_BYPASS_ORIGINS is not set, dev bypass is disabled even
+ * in non-production environments. This is intentional — explicit
+ * opt-in prevents accidental bypass on staging servers.
+ */
+function isDevBypass(req) {
+  if (process.env.NODE_ENV === 'production') return false;
+
+  const bypassOrigins = process.env.DEV_BYPASS_ORIGINS;
+  if (!bypassOrigins) return false;
+
+  const allowed = bypassOrigins.split(',').map(o => o.trim()).filter(Boolean);
+  if (allowed.length === 0) return false;
+
+  // Check the Origin header (present on cross-origin and same-origin fetch)
+  const origin = req.headers.origin;
+  if (origin && allowed.includes(origin)) return true;
+
+  // For same-origin requests without Origin header (direct browser navigation),
+  // construct the effective origin from protocol + host
+  if (!origin) {
+    const proto = req.protocol || 'http';
+    const host = req.headers.host;
+    if (host) {
+      const effective = `${proto}://${host}`;
+      if (allowed.includes(effective)) return true;
+    }
+  }
+
+  return false;
+}
 
 // ── Token Extraction ─────────────────────────────────────────
 
@@ -91,14 +132,23 @@ export function createAuthMiddleware(logFn) {
    * requireAuth — blocks requests without a valid token or session.
    * Attaches req.user (decoded JWT payload or session user) on success.
    *
-   * Priority: session cookie → Bearer header → 401
+   * Priority: no providers → dev bypass → session cookie → Bearer → 401
    */
   async function requireAuth(req, res, next) {
     // If no auth providers are configured, pass through
-    // (dev mode without auth — controlled by NODE_ENV in registry)
     if (!isAuthEnabled()) {
       req.user = null;
       req.authSkipped = true;
+      return next();
+    }
+
+    // Dev bypass: non-production + request from DEV_BYPASS_ORIGINS
+    // Auth providers may be configured (for testing the login flow)
+    // but enforcement is disabled for matching origins.
+    if (isDevBypass(req)) {
+      req.user = null;
+      req.authSkipped = true;
+      req.devBypass = true;
       return next();
     }
 
@@ -119,11 +169,9 @@ export function createAuthMiddleware(logFn) {
       }
     } catch {
       // Session read failed — fall through to Bearer check.
-      // This is not an error — the cookie may be absent or invalid.
     }
 
     // ── Path 2: Bearer token ───────────────────────────────
-    // Programmatic clients (curl, scripts, CI) send Authorization: Bearer <token>.
     const token = extractBearerToken(req);
 
     // No Authorization header
@@ -212,6 +260,14 @@ export function createAuthMiddleware(logFn) {
     if (!isAuthEnabled()) {
       req.user = null;
       req.authSkipped = true;
+      return next();
+    }
+
+    // Dev bypass
+    if (isDevBypass(req)) {
+      req.user = null;
+      req.authSkipped = true;
+      req.devBypass = true;
       return next();
     }
 

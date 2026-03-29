@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "0.40.5",
+  "version": "0.40.12",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -29,6 +29,7 @@
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
     "logout": "curl -I http://localhost:3001/auth/logout",
+    "authrequired": "curl -s http://localhost:3001/api/status | node -e \"process.stdin.on('data',d=>console.log(JSON.parse(d).authRequired))\"",
     "callbackfailtest": "curl -X POST http://localhost:3001/auth/callback   -H \"Content-Type: application/json\"   -d '{\"code\":\"fake\",\"state\":\"bad\"}'",
     "getroutes": "grep -E \"router\\.(get|post|put|patch|delete)\" src/routes/api.js",
     "extract-l": "unzip -l \"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/*.zip|tail -1)\" || unzip -l /vol_share/LinkedIn_Agent_drop/drop/\"$(/bin/ls -tr /vol_share/LinkedIn_Agent_drop/drop/|tail -1)\"",
@@ -53,7 +54,10 @@
     "qa_p3s5-a": "bash scripts/testing/test-p3-step5-adversarial.sh --all",
     "qa_p3s6": "bash scripts/testing/test-p3-step6.sh --all",
     "qa_p3s6-d": "bash scripts/testing/test-p3-step6-design.sh --all",
-    "qa_p3s6-a": "bash scripts/testing/test-p3-step6-adversarial.sh --all"
+    "qa_p3s6-a": "bash scripts/testing/test-p3-step6-adversarial.sh --all",
+    "qa_p3s7": "bash scripts/testing/test-p3-step7.sh --all",
+    "qa_p3s7-d": "bash scripts/testing/test-p3-step7-design.sh --all",
+    "qa_p3s7-a": "bash scripts/testing/test-p3-step7-adversarial.sh --all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

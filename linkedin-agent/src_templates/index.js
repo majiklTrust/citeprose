@@ -8,7 +8,7 @@
 //   2. Read encryption vars, decrypt API key (explicit params)
 //   3. Scrub secrets from process.env
 //   4. Dynamic-import all services (key is in process.env)
-//   5. Initialize auth registry (discovers providers from env)
+//   5. Initialize database, then auth registry
 //   6. Start Express + scheduler + news monitor
 // // ════════════════════════════════════════════════
 import dotenv from "dotenv";
@@ -82,7 +82,19 @@ async function start() {
   // Ensure data directory exists
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
-  // ── Initialize ───────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════
+  // STEP 5: Initialize database, then auth registry
+  // Database must be ready before initRegistry because
+  // logActivity writes to the activity_log table.
+  // ═════════════════════════════════════════════════════════════
+  const db = initDatabase();
+  setDatabase(db);
+  logActivity("info", "agent_started", { mode: process.env.AGENT_MODE || "manual" });
+
+  await initRegistry(logActivity);
+
+  // ── Startup Banner ─────────────────────────────────────────
+  // Printed AFTER initRegistry so isAuthEnabled() is accurate.
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║           LinkedIn AI Content Agent  v{{VERSION}}
@@ -95,15 +107,6 @@ async function start() {
 ║   Auth: ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
 ╚═══════════════════════════════════════════════════════════╝
 `);
-
-  const db = initDatabase();
-  setDatabase(db);
-  logActivity("info", "agent_started", { mode: process.env.AGENT_MODE || "manual" });
-
-  // ═════════════════════════════════════════════════════════════
-  // STEP 5: Initialize auth registry
-  // ═════════════════════════════════════════════════════════════
-  await initRegistry(logActivity);
 
   // ── Express Server ───────────────────────────────────────────
   const app = express();
@@ -260,7 +263,7 @@ async function start() {
     res.redirect("/");
   });
 
-  // API routes (requireAuth is applied inside apiRoutes)
+  // API routes (auth enforcement is applied inside apiRoutes)
   app.use(apiRoutes);
 
   // ── LinkedIn OAuth Callback ──────────────────────────────────

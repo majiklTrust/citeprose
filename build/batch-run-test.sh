@@ -30,10 +30,13 @@ echo
 echo
 CMD="$(which grep) -h -B1 'Results' $testing_out/*${batch_number}*.out"
 # $(which grep) -h -B1 'Results' $testing_out/*${batch_number}*.out
+# SUMMARY_RESULTS=$(eval $CMD|awk '/PASSED/ {passed += $2; failed += $4} END {print "TOTAL PASSED:", passed; print "TOTAL FAILED:", failed}')
 eval $CMD
 echo
 echo
 echo -e " results for batch ${batch_number}\n\t $CMD\n\n result fileset @ $testing_out/"
 /bin/ls $testing_out/*${batch_number}*.out
+echo
+eval $CMD|awk '/PASSED/ {passed += $2; failed += $4} END {print "TOTAL PASSED:", passed; print "TOTAL FAILED:", failed}'
 )
 )

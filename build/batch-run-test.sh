@@ -4,7 +4,7 @@ d=$(date +%Y%m%dT%H%M)
 batch_number=$(base64 </dev/urandom | tr -dc "A-Za-z0-9" | head -c 8)
 suite=test-p3
 
-if [ -z "$test_numbers" ];then test_numbers=(1 2 3 4 5 6);fi
+if [ -z "$test_numbers" ];then test_numbers=(1 2 3 4 5 6 7);fi
 
 for i in ${test_numbers[@]};do
 step=step$i

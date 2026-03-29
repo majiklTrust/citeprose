@@ -1,4 +1,5 @@
-test_numbers=
+(
+  test_numbers=()
 (
 d=$(date +%Y%m%dT%H%M)
 batch_number=$(base64 </dev/urandom | tr -dc "A-Za-z0-9" | head -c 8)
@@ -35,4 +36,5 @@ echo
 echo
 echo -e " results for batch ${batch_number}\n\t $CMD\n\n result fileset @ $testing_out/"
 /bin/ls $testing_out/*${batch_number}*.out
+)
 )

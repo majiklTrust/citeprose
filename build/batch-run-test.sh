@@ -1,15 +1,19 @@
 (
   # test_numbers=()
-  if [ -n "$1" ];then test_numbers=$@;fi
+  if [ -n "$1" ];then suite=$1;else echo \$1 is suite e.g., test-p3 && exit;fi
+  if [ -n "$2" ];then _step=$2;else echo \$2 is step e.g., step or ai && exit;fi
+  if [ -n "$3" ];then test_numbers=${@:3};else echo \$3 is the test number list e.g., 1 2 3...,etc && exit;fi
+  # echo suite=$suite
+  # echo _step=$_step
+  # echo test_numbers=${test_numbers[@]}
 (
 d=$(date +%Y%m%dT%H%M)
 batch_number=$(base64 </dev/urandom | tr -dc "A-Za-z0-9" | head -c 8)
-suite=test-p3
 
 if [ -z "$test_numbers" ];then test_numbers=(1 2 3 4 5 6 7 8);fi
 
 for i in ${test_numbers[@]};do
-step=step$i
+step+=$_step$i
 testing_out=/vol_share/LinkedIn_Agent_drop/drop/testing
 outfile=$testing_out/$suite-$step.$batch_number.results.$d.out
 >$outfile

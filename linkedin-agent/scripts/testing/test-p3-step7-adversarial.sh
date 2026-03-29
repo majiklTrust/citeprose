@@ -35,7 +35,7 @@ function run_group {
   FAIL=$((FAIL + code))
 }
 
-run_group "hostile-bypass.mjs" "Groups 1-2 (bypass attacks + content leak)" 10
+run_group "hostile-bypass.mjs" "Groups 1-2 (bypass attacks + content leak)" 11
 
 echo ""
 echo "  ═══════════════════════════════════════"

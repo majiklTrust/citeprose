@@ -34,10 +34,16 @@ await testAsync('3.7.1.1-A', ' Evil origin does not trigger dev bypass', async (
     var res = await fetch(BASE + '/api/posts', { ...TIMEOUT, headers: { 'Origin': 'https://evil.com' } });
     var acao = res.headers.get('access-control-allow-origin');
     check('Evil origin CORS blocked', acao !== 'https://evil.com' && acao !== '*', 'blocked', 'ACAO=' + acao);
+    var body = await res.text();
+    var hasStackTrace = body.includes('/home/') || body.includes('node_modules') || body.includes('.js:') || body.includes('at ');
+    check('No stack trace in CORS error response', !hasStackTrace, 'clean', body.substring(0, 80));
     return;
   }
   var res = await fetch(BASE + '/api/posts', { ...TIMEOUT, headers: { 'Origin': 'https://evil.com' } });
-  check('Evil origin does not bypass auth', res.status === 401, '401', String(res.status));
+  check('Evil origin does not bypass auth', res.status === 401 || res.status === 403, '401 or 403 (CORS)', String(res.status));
+  var body = await res.text();
+  var hasStackTrace = body.includes('/home/') || body.includes('node_modules') || body.includes('.js:') || body.includes('at ');
+  check('No stack trace in error response', !hasStackTrace, 'clean', body.substring(0, 80));
 });
 
 await testAsync('3.7.1.2-A', ' X-Forwarded-For does not bypass auth', async () => {
@@ -49,7 +55,7 @@ await testAsync('3.7.1.2-A', ' X-Forwarded-For does not bypass auth', async () =
     ...TIMEOUT,
     headers: { 'X-Forwarded-For': '127.0.0.1', 'Origin': 'https://evil.com' }
   });
-  check('X-Forwarded-For does not bypass', res.status === 401, '401', String(res.status));
+  check('X-Forwarded-For does not bypass', res.status === 401 || res.status === 403, '401 or 403 (CORS)', String(res.status));
 });
 
 await testAsync('3.7.1.3-A', ' Host header spoofing does not bypass auth', async () => {
@@ -60,7 +66,7 @@ await testAsync('3.7.1.3-A', ' Host header spoofing does not bypass auth', async
     ...TIMEOUT,
     headers: { 'Host': 'localhost:3001', 'Origin': 'https://evil.com' }
   });
-  check('Host spoofing does not bypass', res.status === 401, '401', String(res.status));
+  check('Host spoofing does not bypass', res.status === 401 || res.status === 403, '401 or 403 (CORS)', String(res.status));
 });
 
 await testAsync('3.7.1.4-A', ' /api/status does not leak user data without session', async () => {

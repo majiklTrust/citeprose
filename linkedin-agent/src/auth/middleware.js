@@ -7,7 +7,7 @@
 // token verification is delegated to jwt-verifier.js.
 //
 // Authentication priority:
-//   1. Dev bypass (NODE_ENV !== 'production' + DEV_BYPASS_ORIGINS)
+//   1. Dev bypass (NODE_ENV === 'dev' + DEV_BYPASS_ORIGINS)
 //   2. Session cookie (browser path) — readSession()
 //   3. Authorization: Bearer header (programmatic path) — verifyToken()
 //   4. Neither present → 401
@@ -38,15 +38,15 @@ const ERR_INTERNAL       = { status: 500, error: "Authentication check failed." 
  * Check if the current request qualifies for dev mode bypass.
  *
  * Two conditions must BOTH be true:
- *   1. NODE_ENV is NOT 'production'
+ *   1. NODE_ENV is exactly 'dev'
  *   2. DEV_BYPASS_ORIGINS is set and the request origin matches
  *
- * If DEV_BYPASS_ORIGINS is not set, dev bypass is disabled even
- * in non-production environments. This is intentional — explicit
- * opt-in prevents accidental bypass on staging servers.
+ * Any other NODE_ENV value — production, staging, nonprod, test,
+ * or unset — enforces authentication. This is intentional.
+ * Only an explicit NODE_ENV=dev disables auth.
  */
 function isDevBypass(req) {
-  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.NODE_ENV !== 'dev') return false;
 
   const bypassOrigins = process.env.DEV_BYPASS_ORIGINS;
   if (!bypassOrigins) return false;

@@ -26,6 +26,7 @@ import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
+import { getServerAddress } from "../services/server-address.js";
 
 const router = Router();
 
@@ -62,6 +63,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
         email: req.user.email || null,
         sub: req.user.sub || null,
       } : null,
+      serverAddress: getServerAddress().display,
       mode,
       paused: paused === "true",
       corroboration,

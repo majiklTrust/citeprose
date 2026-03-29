@@ -1057,14 +1057,17 @@
           {status && !status.authRequired && (
             <div className="dev-banner">
               <span className="dev-banner-icon">⚠</span>
-              Development Mode — Authentication Disabled
+              <div>
+                <div>Authentication Disabled</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>NODE_ENV=dev{status.serverAddress ? '  APP_SERVER=' + status.serverAddress : ''}</div>
+              </div>
             </div>
           )}
           {/* Header */}
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v0.40.12 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v0.41.5 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
               {status?.user && (

@@ -1057,7 +1057,10 @@
           {status && !status.authRequired && (
             <div className="dev-banner">
               <span className="dev-banner-icon">⚠</span>
-              Development Mode — Authentication Disabled
+              <div>
+                <div>Authentication Disabled</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>NODE_ENV=dev{status.serverAddress ? '  APP_SERVER=' + status.serverAddress : ''}</div>
+              </div>
             </div>
           )}
           {/* Header */}

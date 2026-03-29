@@ -79,6 +79,11 @@ async function start() {
   const { createSession,
           clearSession }                 = await import("./auth/session.js");
 
+  // ── Server address utility ─────────────────────────────────
+  const { setBoundAddress,
+          getServerAddress,
+          getServerUrl }                 = await import("./services/server-address.js");
+
   // Ensure data directory exists
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -92,21 +97,6 @@ async function start() {
   logActivity("info", "agent_started", { mode: process.env.AGENT_MODE || "manual" });
 
   await initRegistry(logActivity);
-
-  // ── Startup Banner ─────────────────────────────────────────
-  // Printed AFTER initRegistry so isAuthEnabled() is accurate.
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v{{VERSION}}
-║                                                           ║
-║   Topics: AI Benefits · AI Guardrails                     ║
-║           Cyber Incidents · Cyber Advances                ║
-║                                                           ║
-║    Env: ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
-║   Mode: ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
-║   Auth: ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
-╚═══════════════════════════════════════════════════════════╝
-`);
 
   // ── Express Server ───────────────────────────────────────────
   const app = express();
@@ -136,8 +126,9 @@ async function start() {
     next();
   });
 
-  // CORS — restrict to configured origins (default: localhost only)
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || `http://localhost:${process.env.DASHBOARD_PORT || 3001}`)
+  // CORS — restrict to configured origins, default from APP_BASE_URL
+  // getServerAddress() returns runtime-detected origin when APP_BASE_URL is unset
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || getServerAddress().origin)
     .split(",").map(o => o.trim());
 
   app.use(cors({
@@ -251,8 +242,7 @@ async function start() {
     clearSession(res);
 
     const provider = getDefaultProvider();
-    const returnTo = process.env.AUTH0_LOGOUT_URI ||
-      `http://localhost:${process.env.DASHBOARD_PORT || 3001}`;
+    const returnTo = process.env.AUTH0_LOGOUT_URI || getServerAddress().origin;
 
     if (provider && typeof provider.getLogoutUrl === "function") {
       const logoutUrl = provider.getLogoutUrl(returnTo);
@@ -338,13 +328,44 @@ async function start() {
     res.sendFile(path.join(__dirname, "../public/index.html"));
   });
 
+  // ── Error handler ──────────────────────────────────────────
+  // Catches errors thrown by middleware (e.g., CORS rejection).
+  // Without this, Express's default handler sends the full stack
+  // trace to the client when NODE_ENV is not 'production'.
+  // Four parameters mark this as an error handler for Express.
+  app.use((err, req, res, next) => {
+    if (!res.headersSent) {
+      res.status(403).json({ error: "Forbidden" });
+    }
+  });
+
   // ── Start Server & Scheduler ─────────────────────────────────
   const PORT = process.env.DASHBOARD_PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`🖥  Dashboard running at http://localhost:${PORT}`);
-    console.log(`🔗 LinkedIn auth at  http://localhost:${PORT}/auth/linkedin`);
+  const server = app.listen(PORT, () => {
+    // Register the bound address for runtime detection
+    setBoundAddress(server.address());
+    const addr = getServerAddress();
+
+    // ── Startup Banner ─────────────────────────────────────────
+    // Printed AFTER app.listen() so server address is known,
+    // and AFTER initRegistry() so isAuthEnabled() is accurate.
+    console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║           LinkedIn AI Content Agent  v{{VERSION}}
+║                                                           ║
+║   Topics: AI Benefits · AI Guardrails                     ║
+║           Cyber Incidents · Cyber Advances                ║
+║                                                           ║
+║    Env: ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
+║   Mode: ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
+║   Auth: ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
+║    App: ${addr.origin}
+╚═══════════════════════════════════════════════════════════╝
+`);
+    console.log(`🖥  Dashboard running at ${addr.origin}`);
+    console.log(`🔗 LinkedIn auth at  ${addr.origin}/auth/linkedin`);
     if (isAuthEnabled()) {
-      console.log(`🔐 Auth0 login at   http://localhost:${PORT}/auth/login`);
+      console.log(`🔐 Auth0 login at   ${addr.origin}/auth/login`);
     }
     console.log("");
 

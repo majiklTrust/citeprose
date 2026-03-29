@@ -1,5 +1,6 @@
 (
-  test_numbers=()
+  # test_numbers=()
+  if [ -n "$1" ];then test_numbers=$@;fi
 (
 d=$(date +%Y%m%dT%H%M)
 batch_number=$(base64 </dev/urandom | tr -dc "A-Za-z0-9" | head -c 8)
@@ -13,10 +14,8 @@ testing_out=/vol_share/LinkedIn_Agent_drop/drop/testing
 outfile=$testing_out/$suite-$step.$batch_number.results.$d.out
 >$outfile
 (
-unset NODE_ENV
 exec > >(tee -a $outfile) 2>&1
 echo testing start: $(date)
-echo NODE_ENV is $NODE_ENV
 
 bash scripts/testing/$suite-$step.sh --all
 bash scripts/testing/$suite-$step-adversarial.sh --all

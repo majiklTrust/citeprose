@@ -253,10 +253,11 @@ async function start() {
     res.redirect("/");
   });
 
-  // API routes (auth enforcement is applied inside apiRoutes)
-  app.use(apiRoutes);
+  // ── LinkedIn OAuth ──────────────────────────────────────────
+  // LinkedIn OAuth is for posting tokens — completely independent
+  // from Auth0 dashboard auth. Both must be defined BEFORE
+  // app.use(apiRoutes) because the API router enforces auth.
 
-  // ── LinkedIn OAuth Callback ──────────────────────────────────
   app.get("/auth/linkedin/callback", async (req, res) => {
     const { code, error, state } = req.query;
 
@@ -322,6 +323,9 @@ async function start() {
     const state = generateOAuthState();
     res.redirect(getAuthorizationUrl(state));
   });
+
+  // API routes (auth enforcement is applied inside apiRoutes)
+  app.use(apiRoutes);
 
   // SPA fallback
   app.get("*", (req, res) => {

@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v0.41.6
+// v0.41.7
 //
 // Startup sequence (all inside async start()):
 //   1. Load .env via dotenv.config() with override:true
@@ -253,10 +253,11 @@ async function start() {
     res.redirect("/");
   });
 
-  // API routes (auth enforcement is applied inside apiRoutes)
-  app.use(apiRoutes);
+  // ── LinkedIn OAuth ──────────────────────────────────────────
+  // LinkedIn OAuth is for posting tokens — completely independent
+  // from Auth0 dashboard auth. Both must be defined BEFORE
+  // app.use(apiRoutes) because the API router enforces auth.
 
-  // ── LinkedIn OAuth Callback ──────────────────────────────────
   app.get("/auth/linkedin/callback", async (req, res) => {
     const { code, error, state } = req.query;
 
@@ -323,6 +324,9 @@ async function start() {
     res.redirect(getAuthorizationUrl(state));
   });
 
+  // API routes (auth enforcement is applied inside apiRoutes)
+  app.use(apiRoutes);
+
   // SPA fallback
   app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "../public/index.html"));
@@ -351,7 +355,7 @@ async function start() {
     // and AFTER initRegistry() so isAuthEnabled() is accurate.
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v0.41.6
+║           LinkedIn AI Content Agent  v0.41.7
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

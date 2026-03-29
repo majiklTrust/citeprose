@@ -131,17 +131,21 @@ await testAsync('3.6.2.2-D', ' Error rendering uses escapeHtml', async () => {
 await testAsync('3.6.2.3-D', ' Auth routes defined before auth middleware', async () => {
   console.log('  /auth/login, /auth/callback, /auth/logout must be accessible');
   console.log('  WITHOUT authentication — they are the login mechanism itself');
-  console.log('  They must be mounted BEFORE the requireAuth middleware');
-  console.log('  Checking: /auth/login appears before requireAuth in source');
+  console.log('  They must be mounted BEFORE app.use(apiRoutes) which enforces auth');
+  console.log('  Checking: /auth/login appears before apiRoutes in source');
   var loginPos = indexSrc.indexOf('/auth/login');
+  // requireAuth lives inside api.js now — index.js wires it via app.use(apiRoutes)
+  var apiRoutesPos = indexSrc.indexOf('app.use(apiRoutes)');
   var requirePos = indexSrc.indexOf('requireAuth');
-  if (loginPos < 0 || requirePos < 0) {
-    check('Both found in source', loginPos >= 0 && requirePos >= 0,
-      'both present', 'login=' + (loginPos >= 0) + ' require=' + (requirePos >= 0));
+  // Accept either: requireAuth directly in index.js, or apiRoutes (which contains requireAuth)
+  var authEnforcementPos = requirePos >= 0 ? requirePos : apiRoutesPos;
+  if (loginPos < 0 || authEnforcementPos < 0) {
+    check('Both found in source', loginPos >= 0 && authEnforcementPos >= 0,
+      'both present', 'login=' + (loginPos >= 0) + ' authEnforcement=' + (authEnforcementPos >= 0));
     return;
   }
-  check('Auth routes before requireAuth', loginPos < requirePos,
-    'login first', 'loginPos=' + loginPos + ' requirePos=' + requirePos);
+  check('Auth routes before auth enforcement', loginPos < authEnforcementPos,
+    'login first', 'loginPos=' + loginPos + ' authPos=' + authEnforcementPos);
 });
 
 await testAsync('3.6.2.4-D', ' CSP allows Auth0 domain in form-action', async () => {

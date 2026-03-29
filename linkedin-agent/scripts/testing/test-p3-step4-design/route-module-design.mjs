@@ -33,18 +33,19 @@ test('3.4.3.1-D', ' This is the only auth import the route file needs', () => {
     'imports middleware', 'no middleware import');
 });
 
-test('3.4.3.2-D', ' Api.js must NOT import from src/auth/index.js directly', () => {
-  console.log('  api.js must NOT import from src/auth/index.js directly');
-  console.log('  The registry is used by middleware, not by route handlers');
-  console.log('  If api.js imports the registry, handlers can bypass middleware');
-  check('No registry import',
-    !apiSource.includes('/auth/index') || apiSource.includes('/auth/middleware'),
-    'clean (or middleware-only)', 'imports registry directly');
-  // More precise check: does it import something OTHER than middleware from auth?
-  var authImports = apiSource.match(/from ['"].*\/auth\/(?!middleware)[^'"]+['"]/g);
-  check('No non-middleware auth imports',
+test('3.4.3.2-D', ' Api.js auth imports limited to middleware and registry', () => {
+  console.log('  api.js may import from auth/middleware.js (for requireAuth/optionalAuth)');
+  console.log('  and from auth/index.js (for isAuthEnabled in /api/status response)');
+  console.log('  It must NOT import from providers, jwt-verifier, or session directly');
+  console.log('  Those are internal auth concerns — route handlers should not touch them');
+  check('No registry import or allowed',
+    !apiSource.includes('/auth/index') || apiSource.includes('isAuthEnabled'),
+    'clean (or isAuthEnabled only)', 'imports registry for wrong reason');
+  // Precise check: does it import something OTHER than middleware or index from auth?
+  var authImports = apiSource.match(/from ['"].*\/auth\/(?!middleware|index)[^'"]+['"]/g);
+  check('No internal auth imports',
     authImports === null || authImports.length === 0,
-    '0 non-middleware auth imports', (authImports?.length || 0) + ' found');
+    '0 internal auth imports', (authImports?.length || 0) + ' found');
 });
 
 test('3.4.3.3-D', ' Api.js must NOT import jose', () => {

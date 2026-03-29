@@ -62,8 +62,8 @@
     "s_qa_p3s7": "bash scripts/testing/test-p3-step7.sh",
     "s_qa_p3s7_d": "bash scripts/testing/test-p3-step7-design.sh",
     "s_qa_p3s7_a": "bash scripts/testing/test-p3-step7-adversarial.sh",
-    "batch_test": "bash ../build/batch-run-test.sh",
-    "batch_test_s7": "bash ../build/batch-run-test.sh 7"
+    "batch_test": "bash scripts/testing/batch-run-test.sh",
+    "batch_test_s7": "bash scripts/testing/batch-run-test.sh 7"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

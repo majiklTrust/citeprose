@@ -77,6 +77,7 @@ async function start() {
           isAuthEnabled,
           getDefaultProvider }           = await import("./auth/index.js");
   const { createSession,
+          readSession,
           clearSession }                 = await import("./auth/session.js");
 
   // ── Server address utility ─────────────────────────────────
@@ -139,13 +140,26 @@ async function start() {
       } else {
         callback(new Error("CORS: origin not allowed"));
       }
-    }
+    },
+    credentials: true,
   }));
 
   app.use(express.json({ limit: "16kb" }));
 
-  // Serve the dashboard frontend
-  app.use(express.static(path.join(__dirname, "../public")));
+  // ── Static File Serving ──────────────────────────────────────
+  // Two static surfaces, one Express process:
+  //
+  //   /app/*  → dashboard UI (React SPA from public/)
+  //   /*      → marketing homepage (static HTML from ***REMOVED***/)
+  //
+  // index:false on both mounts because explicit route handlers
+  // below serve the HTML shells — not express.static's auto-index.
+  const dashboardHtml = path.join(__dirname, "../public/index.html");
+  const alphaDir = path.join(__dirname, "../***REMOVED***");
+  const alphaHtml = path.join(alphaDir, "index.html");
+
+  app.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
+  app.use(express.static(alphaDir, { index: false }));
 
   // ── Auth0 Login / Callback / Logout ────────────────────────
   // These routes are defined BEFORE the API router because the
@@ -158,7 +172,7 @@ async function start() {
       return res.status(503).send(`
         <h2>Authentication Not Available</h2>
         <p>No authentication provider is configured.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/">Back to home</a>
       `);
     }
     const state = generateOAuthState();
@@ -176,7 +190,7 @@ async function start() {
       return res.status(400).send(`
         <h2>Authentication Failed</h2>
         <p>${safeError}: ${safeDesc}</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/">Back to home</a>
       `);
     }
 
@@ -185,7 +199,7 @@ async function start() {
       return res.status(403).send(`
         <h2>Authentication Failed</h2>
         <p>Invalid or expired authentication state. Please try again.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/">Back to home</a>
       `);
     }
 
@@ -194,7 +208,7 @@ async function start() {
       return res.status(503).send(`
         <h2>Authentication Not Available</h2>
         <p>No authentication provider is configured.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/">Back to home</a>
       `);
     }
 
@@ -222,8 +236,8 @@ async function start() {
         }
       });
 
-      // Redirect to dashboard
-      res.redirect("/");
+      // Redirect to dashboard (mounted at /app)
+      res.redirect("/app");
 
     } catch (err) {
       logActivity("error", "auth_code_exchange_failed", {
@@ -233,7 +247,7 @@ async function start() {
       return res.status(500).send(`
         <h2>Authentication Failed</h2>
         <p>An error occurred during authentication. Please try again.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/">Back to home</a>
       `);
     }
   });
@@ -266,7 +280,7 @@ async function start() {
       return res.status(403).send(`
         <h2>Authorization Failed</h2>
         <p>Invalid or expired OAuth state. Please try again.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/app">Back to Dashboard</a>
       `);
     }
 
@@ -274,7 +288,7 @@ async function start() {
       return res.send(`
         <h2>LinkedIn Authorization Failed</h2>
         <p>${escapeHtml(String(error))}: ${escapeHtml(String(req.query.error_description || ""))}</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/app">Back to Dashboard</a>
       `);
     }
 
@@ -300,7 +314,7 @@ async function start() {
         <p>Token saved to session. Add credentials to your <code>.env</code> file via the server console.</p>
         <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
         <br>
-        <a href="/">Go to Dashboard</a>
+        <a href="/app">Go to Dashboard</a>
       `);
 
       console.log("[AUTH] LinkedIn token obtained. Add to .env:");
@@ -315,7 +329,7 @@ async function start() {
       res.status(500).send(`
         <h2>Token Exchange Failed</h2>
         <p>An error occurred during authentication. Check the activity log.</p>
-        <a href="/">Back to Dashboard</a>
+        <a href="/app">Back to Dashboard</a>
       `);
     }
   });
@@ -325,13 +339,49 @@ async function start() {
     res.redirect(getAuthorizationUrl(state));
   });
 
+  // ── Auth Status Probe ─────────────────────────────────────
+  // Public endpoint consumed by the alpha marketing homepage.
+  // Returns whether the caller holds a valid session and, if so,
+  // the minimum display fields for a "Welcome back" greeting.
+  // Lives here alongside the other /auth/* routes — NOT in
+  // api.js — so it never enters the API router and never
+  // triggers requireAuth.
+  //
+  // Security notes:
+  //   • Reads the session cookie directly via readSession() —
+  //     no middleware, no req.user gating.
+  //   • Returns only name and email. The stable user identifier
+  //     (sub) is deliberately NOT exposed.
+  //   • Cache-Control: no-store prevents intermediaries from
+  //     returning a stale auth state to a different user.
+  app.get("/auth/status", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, private, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    const session = readSession(req);
+    const user = session?.user || null;
+    res.json({
+      authenticated: !!user,
+      user: user ? { name: user.name || null, email: user.email || null } : null,
+    });
+  });
+
+  // ── HTML Shell Routes ─────────────────────────────────────
+  // IMPORTANT: These MUST be defined BEFORE app.use(apiRoutes).
+  // The API router is mounted at root (no path prefix) and its
+  // requireAuth middleware runs on every request that enters it.
+  // If these routes were defined after the API router, requests
+  // to / and /app from unauthenticated visitors would hit
+  // requireAuth and get a 401 instead of the HTML page.
+
+  // Dashboard SPA — /app and any client-side route under /app/*
+  app.get("/app", (req, res) => res.sendFile(dashboardHtml));
+  app.get("/app/*", (req, res) => res.sendFile(dashboardHtml));
+
+  // Marketing homepage — ***REMOVED***/index.html at the root
+  app.get("/", (req, res) => res.sendFile(alphaHtml));
+
   // API routes (auth enforcement is applied inside apiRoutes)
   app.use(apiRoutes);
-
-  // SPA fallback
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../public/index.html"));
-  });
 
   // ── Error handler ──────────────────────────────────────────
   // Catches errors thrown by middleware (e.g., CORS rejection).
@@ -367,8 +417,9 @@ async function start() {
 ║    App: ${addr.origin}
 ╚═══════════════════════════════════════════════════════════╝
 `);
-    console.log(`🖥  Dashboard running at ${addr.origin}`);
-    console.log(`🔗 LinkedIn auth at  ${addr.origin}/auth/linkedin`);
+    console.log(`🖥  Homepage at      ${addr.origin}/`);
+    console.log(`🖥  Dashboard at     ${addr.origin}/app`);
+    console.log(`🔗 LinkedIn auth at ${addr.origin}/auth/linkedin`);
     if (isAuthEnabled()) {
       console.log(`🔐 Auth0 login at   ${addr.origin}/auth/login`);
     }

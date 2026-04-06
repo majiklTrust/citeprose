@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>majiklTrust &amp; Marketing Intelligence</title>
+  <meta name="description" content="AI-powered content intelligence — researched, drafted, and queued for your approval.">
+
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    style-src 'self' https://fonts.googleapis.com;
+    font-src https://fonts.gstatic.com;
+    script-src 'self';
+    connect-src 'self';
+    img-src 'self' data:;
+    base-uri 'self';
+    object-src 'none';
+  ">
+
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="dark">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Shared tokens and base styles from the dashboard -->
+  <link rel="stylesheet" href="/app/styles/app.css">
+  <!-- Marketing-specific components and scoped overrides -->
+  <link rel="stylesheet" href="/styles/alpha.css">
+</head>
+<body>
+  <div class="ambient-glow" aria-hidden="true"></div>
+
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="site-container header-inner">
+      <a class="brand" href="/" aria-label="majiklTrust &amp; Marketing Intelligence — Home">
+        <span class="brand-mark" aria-hidden="true">&#9670;</span>
+        <span class="brand-name">majiklTrust &amp; Marketing Intelligence</span>
+      </a>
+      <div id="user-greeting" class="header-user-info" hidden>
+        <span class="user-name"></span>
+        <a href="/auth/logout" class="logout-btn">Logout</a>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#how-it-works">How it works</a>
+        <a
+          class="js-auth-cta btn btn-secondary"
+          href="/auth/login"
+          data-href-auth="/app"
+        >LinkedIn Agent</a>
+      </nav>
+    </div>
+  </header>
+
+  <div id="degraded-banner" class="alpha-banner" role="status" aria-live="polite" hidden>
+    <div class="site-container alpha-banner-inner">
+      <span class="alpha-banner-icon" aria-hidden="true">&#9672;</span>
+      <div class="alpha-banner-text">
+        <strong>The dashboard is temporarily unavailable.</strong>
+        <span>Sign-in will return shortly — please try again in a few minutes.</span>
+      </div>
+    </div>
+  </div>
+
+  <main id="main">
+    <section class="hero">
+      <div class="site-container hero-inner">
+        <p class="hero-eyebrow">LinkedIn AI Content Agent</p>
+        <h1 class="hero-title">AI-researched posts.<br>Published on your terms.</h1>
+        <p class="hero-lede">
+          The agent monitors trusted sources, drafts grounded content, and queues it
+          for your approval — so your feed stays sharp without the grind.
+        </p>
+        <div class="hero-cta">
+          <a
+            class="js-auth-cta btn btn-primary btn-lg"
+            href="/auth/login"
+            data-href-auth="/app"
+          >LinkedIn Agent</a>
+          <a class="btn btn-ghost btn-lg" href="#how-it-works">See how it works</a>
+        </div>
+        <p class="hero-footnote">Private alpha &middot; Invitation only</p>
+      </div>
+    </section>
+
+    <section id="features" class="alpha-section">
+      <div class="site-container">
+        <p class="alpha-section-eyebrow">What it does</p>
+        <h2 class="section-title">Built for people who have something to say.</h2>
+        <p class="alpha-section-lede">
+          Three responsibilities, handled continuously, so you can focus on the work
+          that makes you worth reading in the first place.
+        </p>
+        <div class="features-grid">
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9673;</div>
+            <h3 class="feature-title">Autonomous research</h3>
+            <p class="feature-body">
+              Ingests trusted RSS sources around the clock, tracks breaking
+              developments across the topics you care about, and ranks what
+              matters by corroboration across independent reporting.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9672;</div>
+            <h3 class="feature-title">Grounded drafts</h3>
+            <p class="feature-body">
+              Writes posts in your voice, cited to real sources, checked for
+              factual alignment and tone. Never pulled out of thin air, never
+              published without a paper trail back to the original reporting.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9670;</div>
+            <h3 class="feature-title">Human in the loop</h3>
+            <p class="feature-body">
+              Nothing ships without your approval. Review, edit, or reject every
+              draft before it hits your feed. Set the cadence, keep the final word.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="alpha-section alpha-section-alt">
+      <div class="site-container">
+        <p class="alpha-section-eyebrow">How it works</p>
+        <h2 class="section-title">Three steps from signal to post.</h2>
+        <ol class="steps-list">
+          <li class="step">
+            <div class="step-num" aria-hidden="true">01</div>
+            <div class="step-body">
+              <h3 class="step-title">Pick your topics</h3>
+              <p>
+                Tell the agent what you want to follow. Cybersecurity, AI policy,
+                industry shifts — your call. Point it at the feeds you already trust.
+              </p>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-num" aria-hidden="true">02</div>
+            <div class="step-body">
+              <h3 class="step-title">The agent researches and drafts</h3>
+              <p>
+                It reads the feeds, identifies what matters, corroborates across
+                sources, and writes posts in your voice with citations attached.
+              </p>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-num" aria-hidden="true">03</div>
+            <div class="step-body">
+              <h3 class="step-title">Approve and publish</h3>
+              <p>
+                Review the queue on your schedule. Publish with one click, or
+                let the cadence controller handle the timing for you.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="alpha-section-cta">
+      <div class="site-container cta-inner">
+        <h2 class="cta-title">Ready to see it in action?</h2>
+        <p class="cta-lede">Sign in with your existing credentials to launch the dashboard.</p>
+        <a
+          class="js-auth-cta btn btn-primary btn-lg"
+          href="/auth/login"
+          data-href-auth="/app"
+        >LinkedIn Agent</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-container footer-inner">
+      <p class="footer-copy">&copy; 2026 majiklTrust &amp; Marketing Intelligence</p>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Contact</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="/scripts/site.js" defer></script>
+</body>
+</html>

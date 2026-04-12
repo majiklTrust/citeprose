@@ -8,6 +8,11 @@
 // and the RLS-scoped pg client are read from AsyncLocalStorage.
 // Calling outside a withTenant block throws immediately.
 //
+// PUBLIC API — typed accessors per credential, not a generic
+// getCredential(key) with magic strings. Every known credential
+// has its own function. Adding a new credential type is an
+// explicit API change, not a silent string convention.
+//
 // ENCRYPTION SCHEME (must match sqlite-to-postgres.mjs exactly):
 //   Key derivation: HKDF-SHA256
 //     IKM:  process.env.ENCRYPTION_SECRET (UTF-8 bytes)
@@ -27,6 +32,15 @@ const HKDF_INFO = "credential-encryption-v1";
 const AES_KEY_LENGTH_BYTES = 32;
 const AES_IV_LENGTH_BYTES = 12;
 const AES_AUTH_TAG_LENGTH_BYTES = 16;
+
+// Internal storage-key convention. Used only within this module
+// to query the `credentials` table. Callers never see these
+// strings — they use the typed accessor functions below.
+const STORAGE_KEY = Object.freeze({
+  ANTHROPIC_API_KEY:     "anthropic_api_key",
+  LINKEDIN_ACCESS_TOKEN: "linkedin_access_token",
+  LINKEDIN_PERSON_URN:   "linkedin_person_urn"
+});
 
 // ── Derived-key cache (per tenant UUID) ──────────────────────
 // Keys are deterministic (same inputs = same output) so caching
@@ -66,17 +80,12 @@ function decrypt(blob, tenantKey) {
   ]).toString("utf8");
 }
 
-// ── Public API ───────────────────────────────────────────────
-
-// Reads and decrypts a credential for the current tenant.
-// Must be called inside a withTenant() block.
-//
-// Returns the plaintext string.
-// Throws if: no tenant context, key not found, decrypt fails.
-export async function getCredential(key) {
+// ── Internal core ────────────────────────────────────────────
+// Not exported. Callers go through the typed accessors below.
+async function fetchDecrypted(storageKey) {
   const tenantId = currentTenantId();
   if (!tenantId) {
-    throw new Error("getCredential called outside tenant context");
+    throw new Error("credential access called outside tenant context");
   }
   const client = currentClient();
   if (!client) {
@@ -84,11 +93,43 @@ export async function getCredential(key) {
   }
   const result = await client.query(
     "SELECT value_enc FROM credentials WHERE key = $1",
-    [key]
+    [storageKey]
   );
   if (result.rows.length === 0) {
-    throw new Error(`Credential not found: ${key}`);
+    throw new Error(`Credential not found: ${storageKey}`);
   }
   const tenantKey = deriveTenantKey(tenantId);
   return decrypt(result.rows[0].value_enc, tenantKey);
+}
+
+// ── Public API — typed accessors ─────────────────────────────
+
+// Returns the current tenant's Anthropic API key in plaintext.
+// Used by content-generator and research modules to construct
+// the Anthropic SDK client with per-tenant BYOK credentials.
+//
+// Must be called inside a withTenant() block.
+// Throws if no tenant context, if the credential is missing,
+// or if decryption fails.
+export async function getAnthropicApiKey() {
+  return fetchDecrypted(STORAGE_KEY.ANTHROPIC_API_KEY);
+}
+
+// Returns the current tenant's LinkedIn OAuth access token in
+// plaintext. Used by linkedin-api module to authenticate the
+// post-publishing call.
+//
+// Must be called inside a withTenant() block.
+export async function getLinkedInAccessToken() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_ACCESS_TOKEN);
+}
+
+// Returns the current tenant's LinkedIn person URN.
+// Format: "urn:li:person:<id>". Used as the author field when
+// publishing a post. Not encrypted-sensitive but stored here
+// for cohesion — all per-tenant identity material in one place.
+//
+// Must be called inside a withTenant() block.
+export async function getLinkedInPersonUrn() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_PERSON_URN);
 }

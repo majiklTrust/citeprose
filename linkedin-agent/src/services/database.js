@@ -1,17 +1,94 @@
 // ═══════════════════════════════════════════════════════════════
-// Database Service — SQLite persistence for post history & state
+// src/services/database.js — async Postgres wrapper
+// ═══════════════════════════════════════════════════════════════
+// Per-tenant database operations. Every function must be called
+// inside a withTenant() block so that:
+//   1. app.current_tenant_id is SET LOCAL for RLS policies
+//   2. a dedicated pg.Client is checked out for the transaction
+// Outside withTenant, calls throw a tenant-context error.
+//
+// This module preserves the public API shape of the pre-conversion
+// SQLite wrapper: the 13 exported function names are unchanged,
+// arguments are unchanged, return shapes are unchanged. Internals
+// are rewritten to use pg + RLS. Callers convert to async/await
+// but are otherwise untouched.
+//
+// Schema management is NOT done here. The DDL lives in
+// linkedin-agent/data/pgsql/ and is applied externally via psql.
+// initDatabase() is kept as a throwing legacy stub so any caller
+// that still invokes it (e.g., old startup code) fails loudly.
 // ═══════════════════════════════════════════════════════════════
 
-import Database from "better-sqlite3";
-import path from "path";
-import { fileURLToPath } from "url";
+import { currentClient, currentTenantId } from "../db/with-tenant.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, "../../data/agent.db");
+// ── Internal helpers ─────────────────────────────────────────
 
-let db;
+// Every data-access function calls this first. Returns the
+// RLS-scoped pg.Client from the current withTenant block.
+// Throws a tenant-context error if called outside one.
+function client() {
+  const c = currentClient();
+  if (!c) {
+    throw new Error("database operation requires tenant context (call inside withTenant)");
+  }
+  return c;
+}
 
+// Validates scheduledFor and returns a value the pg driver can
+// serialize into a TIMESTAMPTZ column. Accepts:
+//   - null / undefined       → returned as null
+//   - Date object            → returned as-is (pg driver handles it)
+//   - string ending in Z     → returned as-is (UTC marker)
+//   - string ending in +hh:mm or +hhmm → returned as-is (explicit offset)
+// Rejects anything else, including naive datetime strings that
+// Postgres would silently parse in server-local timezone.
+function validateScheduledFor(value) {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  if (typeof value !== "string") {
+    throw new TypeError("scheduledFor must be a Date, timezone-aware string, or null");
+  }
+  const tzAware = /Z$|[+-]\d{2}:?\d{2}$/.test(value);
+  if (!tzAware) {
+    throw new TypeError(
+      "scheduledFor string must be timezone-aware (ISO 8601 with Z or offset)"
+    );
+  }
+  return value;
+}
+
+// Resolves a topic slug to its BIGINT id within the current tenant.
+// Throws a slug-identifying error if not found so callers (and tests)
+// can distinguish "unknown topic" from generic DB errors.
+async function resolveTopicIdBySlug(c, slug) {
+  const r = await c.query(
+    "SELECT id FROM topics WHERE slug = $1",
+    [slug]
+  );
+  if (r.rows.length === 0) {
+    throw new Error(`topic not found for slug: ${slug}`);
+  }
+  return r.rows[0].id;
+}
+
+// ── Legacy schema init — intentionally throws ────────────────
+// In the SQLite era this function created tables and seeded
+// default agent_state on every app startup. Under Postgres,
+// schema is applied once via the DDL files in data/pgsql/ by
+// an operator running psql. Default agent_state is seeded by
+// the migration script (scripts/migration/sqlite-to-postgres.mjs)
+// or by an explicit admin workflow.
+//
+// Any caller that still invokes initDatabase() is running legacy
+// startup logic that needs to be removed. Throwing loudly is the
+// safe default — silent no-op would let the bug live in prod.
 export function initDatabase() {
+  throw new Error(
+    "initDatabase() is legacy — Postgres schema is managed externally " +
+    "via data/pgsql/ DDL files. Remove this call from the app startup path."
+  );
+
+  // UNREACHABLE CODE
   db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
@@ -64,107 +141,227 @@ export function initDatabase() {
 
 // ── Post CRUD ────────────────────────────────────────────────
 
-export function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor }) {
-  const stmt = db.prepare(`
-    INSERT INTO posts (topic_id, title, content, hashtags, news_context, scheduled_for, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'draft')
-  `);
-  const result = stmt.run(topicId, title, content, JSON.stringify(hashtags), newsContext, scheduledFor);
-  return result.lastInsertRowid;
+export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor }) {
+  const c = client();
+  const scheduled = validateScheduledFor(scheduledFor);
+  const topicIntId = await resolveTopicIdBySlug(c, topicId);
+
+  // news_context is JSONB nullable; pass JS object or null directly.
+  // If caller passed a string, keep current behavior and wrap it
+  // under a "raw" key so JSONB storage is consistent.
+  let nc = null;
+  if (newsContext != null) {
+    nc = typeof newsContext === "string" ? { raw: newsContext } : newsContext;
+  }
+
+  const r = await c.query(
+    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, status)
+     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, 'draft')
+     RETURNING id`,
+    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled]
+  );
+  return r.rows[0].id;
 }
 
-export function getPost(id) {
-  const row = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
-  if (row && row.hashtags) row.hashtags = JSON.parse(row.hashtags);
+// Returns a post row with hashtags parsed as a JS array.
+// pg driver returns JSONB columns as already-parsed JS values,
+// so hashtags comes back as an array natively — we normalize
+// null to [] to match pre-conversion behavior.
+export async function getPost(id) {
+  const c = client();
+  const r = await c.query(
+    `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
+            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+     FROM posts p
+     LEFT JOIN topics t ON t.id = p.topic_id
+     WHERE p.id = $1`,
+    [id]
+  );
+  if (r.rows.length === 0) return null;
+  const row = r.rows[0];
+  if (!Array.isArray(row.hashtags)) row.hashtags = row.hashtags || [];
   return row;
 }
 
-export function updatePostStatus(id, status, extra = {}) {
-  const sets = ["status = ?"];
+export async function updatePostStatus(id, status, extra = {}) {
+  const c = client();
+  const sets = ["status = $1::post_status"];
   const params = [status];
+  let i = 2;
 
   if (extra.linkedinId) {
-    sets.push("linkedin_id = ?");
+    sets.push(`linkedin_id = $${i++}`);
     params.push(extra.linkedinId);
   }
   if (extra.postedAt) {
-    sets.push("posted_at = ?");
+    sets.push(`posted_at = $${i++}`);
     params.push(extra.postedAt);
   }
   if (extra.errorMessage) {
-    sets.push("error_message = ?");
+    sets.push(`error_message = $${i++}`);
     params.push(extra.errorMessage);
   }
 
   params.push(id);
-  db.prepare(`UPDATE posts SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+  await c.query(
+    `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i}`,
+    params
+  );
 }
 
-export function getPostsByStatus(status) {
-  const rows = db.prepare("SELECT * FROM posts WHERE status = ? ORDER BY created_at DESC").all(status);
-  return rows.map(r => ({ ...r, hashtags: r.hashtags ? JSON.parse(r.hashtags) : [] }));
+// Returns all posts with the given status, most recent first.
+// Each row's hashtags is guaranteed to be an array.
+export async function getPostsByStatus(status) {
+  const c = client();
+  const r = await c.query(
+    `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
+            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+     FROM posts p
+     LEFT JOIN topics t ON t.id = p.topic_id
+     WHERE p.status = $1::post_status
+     ORDER BY p.created_at DESC`,
+    [status]
+  );
+  return r.rows.map(normalizeHashtags);
 }
 
-export function getRecentPosts(days = 10) {
-  const rows = db.prepare(`
-    SELECT * FROM posts
-    WHERE posted_at >= datetime('now', ?)
-      AND status = 'posted'
-    ORDER BY posted_at DESC
-  `).all(`-${days} days`);
-  return rows.map(r => ({ ...r, hashtags: r.hashtags ? JSON.parse(r.hashtags) : [] }));
+export async function getRecentPosts(days = 10) {
+  const c = client();
+  const r = await c.query(
+    `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
+            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+     FROM posts p
+     LEFT JOIN topics t ON t.id = p.topic_id
+     WHERE p.posted_at >= now() - ($1 || ' days')::interval
+       AND p.status = 'posted'::post_status
+     ORDER BY p.posted_at DESC`,
+    [String(days)]
+  );
+  return r.rows.map(normalizeHashtags);
 }
 
-export function getAllPosts(limit = 50) {
-  const rows = db.prepare("SELECT * FROM posts ORDER BY created_at DESC LIMIT ?").all(limit);
-  return rows.map(r => ({ ...r, hashtags: r.hashtags ? JSON.parse(r.hashtags) : [] }));
+export async function getAllPosts(limit = 50) {
+  const c = client();
+  const r = await c.query(
+    `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
+            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+     FROM posts p
+     LEFT JOIN topics t ON t.id = p.topic_id
+     ORDER BY p.created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return r.rows.map(normalizeHashtags);
 }
 
-export function getLastPostedTopic() {
-  const row = db.prepare(`
-    SELECT topic_id FROM posts WHERE status = 'posted' ORDER BY posted_at DESC LIMIT 1
-  `).get();
-  return row?.topic_id || null;
+// Returns the slug of the most recently posted topic, or null
+// if no posts with status='posted' exist for this tenant. JOIN
+// to topics preserves the pre-conversion caller contract (slug
+// string, not integer id).
+export async function getLastPostedTopic() {
+  const c = client();
+  const r = await c.query(
+    `SELECT t.slug
+     FROM posts p
+     JOIN topics t ON t.id = p.topic_id
+     WHERE p.status = 'posted'::post_status
+     ORDER BY p.posted_at DESC
+     LIMIT 1`
+  );
+  return r.rows.length === 0 ? null : r.rows[0].slug;
+}
+
+function normalizeHashtags(row) {
+  if (!Array.isArray(row.hashtags)) row.hashtags = row.hashtags || [];
+  return row;
 }
 
 // ── Agent State ──────────────────────────────────────────────
 
-export function getAgentState(key) {
-  const row = db.prepare("SELECT value FROM agent_state WHERE key = ?").get(key);
-  return row?.value;
+export async function getAgentState(key) {
+  const c = client();
+  const r = await c.query(
+    "SELECT value FROM agent_state WHERE key = $1",
+    [key]
+  );
+  return r.rows.length === 0 ? undefined : r.rows[0].value;
 }
 
-export function setAgentState(key, value) {
-  db.prepare("INSERT OR REPLACE INTO agent_state (key, value) VALUES (?, ?)").run(key, String(value));
+// Upsert semantics — overwrites existing value for the same key.
+// Coerces any input to string before storage (matches pre-conversion
+// behavior: the SQLite version did String(value) in the same position).
+export async function setAgentState(key, value) {
+  const c = client();
+  await c.query(
+    `INSERT INTO agent_state (tenant_id, key, value)
+     VALUES (current_tenant_id(), $1, $2)
+     ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [key, String(value)]
+  );
 }
 
 // ── Activity Log ─────────────────────────────────────────────
 
-export function logActivity(level, action, details = null) {
-  db.prepare("INSERT INTO activity_log (level, action, details) VALUES (?, ?, ?)").run(
-    level, action, typeof details === "string" ? details : JSON.stringify(details)
+// details can be a string, object, or null. Strings get wrapped
+// as { raw: string } for JSONB storage consistency; objects pass
+// through; null stays null. Matches the pre-conversion behavior
+// of accepting either shape.
+export async function logActivity(level, action, details = null) {
+  const c = client();
+  let jsonb = null;
+  if (details != null) {
+    jsonb = typeof details === "string"
+      ? JSON.stringify({ raw: details })
+      : JSON.stringify(details);
+  }
+  await c.query(
+    `INSERT INTO activity_log (tenant_id, level, action, details)
+     VALUES (current_tenant_id(), $1::log_level, $2, $3::jsonb)`,
+    [level, action, jsonb]
   );
 }
 
-export function getActivityLog(limit = 100) {
-  return db.prepare("SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT ?").all(limit);
+export async function getActivityLog(limit = 100) {
+  const c = client();
+  const r = await c.query(
+    `SELECT id, tenant_id, timestamp, level, action, details
+     FROM activity_log
+     ORDER BY timestamp DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return r.rows;
 }
 
 // ── Stats ────────────────────────────────────────────────────
 
-export function getPostStats() {
-  const total = db.prepare("SELECT COUNT(*) as count FROM posts WHERE status = 'posted'").get();
-  const byTopic = db.prepare(`
-    SELECT topic_id, COUNT(*) as count FROM posts WHERE status = 'posted' GROUP BY topic_id
-  `).all();
-  const last10Days = getRecentPosts(10);
-  const pending = db.prepare("SELECT COUNT(*) as count FROM posts WHERE status = 'pending_approval'").get();
+export async function getPostStats() {
+  const c = client();
+
+  const total = await c.query(
+    "SELECT COUNT(*)::int AS count FROM posts WHERE status = 'posted'::post_status"
+  );
+  const byTopic = await c.query(
+    `SELECT t.slug AS topic_id, COUNT(*)::int AS count
+     FROM posts p
+     JOIN topics t ON t.id = p.topic_id
+     WHERE p.status = 'posted'::post_status
+     GROUP BY t.slug`
+  );
+  const pending = await c.query(
+    "SELECT COUNT(*)::int AS count FROM posts WHERE status = 'pending_approval'::post_status"
+  );
+  const last10Days = await getRecentPosts(10);
 
   return {
-    totalPosted: total.count,
-    byTopic,
+    totalPosted: total.rows[0].count,
+    byTopic: byTopic.rows,
     postsLast10Days: last10Days.length,
-    pendingApproval: pending.count,
+    pendingApproval: pending.rows[0].count,
     recentPosts: last10Days
   };
 }

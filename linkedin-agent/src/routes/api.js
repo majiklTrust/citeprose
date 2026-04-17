@@ -40,6 +40,7 @@ import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { withTenant } from "../db/with-tenant.js";
+import { platformLog } from "../services/platform-log.js";
 
 const router = Router();
 
@@ -78,10 +79,13 @@ router.use((req, res, next) => {
   next();
 });
 
-// Auth middleware receives logActivity, which is now async. The
-// middleware's safeLog wrapper awaits the call internally (see
-// auth/middleware.js conversion).
-const { requireAuth, optionalAuth } = createAuthMiddleware(logActivity);
+// Auth middleware receives platformLog instead of the tenant-scoped
+// logActivity. Auth-path events (token_expired, issuer_unknown,
+// jwks_fetch_failed) fire BEFORE tenant resolution — there is no
+// tenant context at that point. platformLog writes to the console
+// so these events are preserved in the diagnostic trail rather
+// than silently swallowed by safeLog's rejection handler.
+const { requireAuth, optionalAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
 // ── Public Routes (no auth required) ────────────────────────

@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.34
+// v1.0.35
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -429,7 +429,7 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.34
+║           LinkedIn AI Content Agent  v1.0.35
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

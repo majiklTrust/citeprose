@@ -7,14 +7,21 @@ import crypto from "crypto";
 import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
 import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
+import { getAnthropicApiKey } from "../tenant/credential-store.js";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Anthropic client is constructed per-call using the tenant's
+// BYOK key fetched from the credential store. Module-level
+// caching would leak keys across tenants.
+async function newAnthropicClient() {
+  const apiKey = await getAnthropicApiKey();
+  return new Anthropic({ apiKey });
+}
 
 // ── Topic Selection ──────────────────────────────────────────
 
-export function selectNextTopic() {
-  const lastTopicId = getLastPostedTopic();
-  const recentPosts = getRecentPosts(14);
+export async function selectNextTopic() {
+  const lastTopicId = await getLastPostedTopic();
+  const recentPosts = await getRecentPosts(14);
 
   const recentCounts = {};
   for (const post of recentPosts) {
@@ -89,14 +96,14 @@ export async function generatePost(topic = null) {
   if (typeof topic === "string") {
     topic = getTopicById(topic);
   }
-  if (!topic) topic = selectNextTopic();
+  if (!topic) topic = await selectNextTopic();
 
   const cycleId = crypto.randomBytes(4).toString("hex");
 
   // Read corroboration toggle from agent state
-  const skipCorroboration = getAgentState("corroboration") === "disabled";
+  const skipCorroboration = (await getAgentState("corroboration")) === "disabled";
 
-  const recentPosts = getRecentPosts(14);
+  const recentPosts = await getRecentPosts(14);
   const angle = selectContentAngle(topic, recentPosts);
 
   // ── Research phase ─────────────────────────────────────────
@@ -105,7 +112,7 @@ export async function generatePost(topic = null) {
     const { conductResearch } = await import("./research.js");
     researchBrief = await conductResearch(topic.id, angle, cycleId, skipCorroboration);
 
-    logActivity("info", "research_integrated", {
+    await logActivity("info", "research_integrated", {
       cycleId,
       topicId: topic.id,
       corroborationSkipped: skipCorroboration,
@@ -115,7 +122,7 @@ export async function generatePost(topic = null) {
       hasEnoughMaterial: researchBrief.hasEnoughMaterial
     });
   } catch (err) {
-    logActivity("warn", "research_unavailable", {
+    await logActivity("warn", "research_unavailable", {
       cycleId, topicId: topic.id, error: err.message
     });
   }
@@ -128,7 +135,7 @@ export async function generatePost(topic = null) {
         ? `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`
         : `Only ${researchBrief.verifiedClaimCount || 0} verified claim(s) found; minimum is 1 from 2+ independent sources`;
 
-    logActivity("info", "post_blocked_insufficient_sources", {
+    await logActivity("info", "post_blocked_insufficient_sources", {
       cycleId, topicId: topic.id, angle, reason
     });
 
@@ -136,7 +143,7 @@ export async function generatePost(topic = null) {
   }
 
   // ── Rate limit cooldown before generation ──────────────────
-  logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before content generation" });
+  await logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before content generation" });
   await new Promise(resolve => setTimeout(resolve, 65000));
 
   // Build context about what was recently posted to avoid repetition
@@ -195,10 +202,11 @@ REQUIREMENTS:
 4. End with a question or call-to-reflection (not a hard CTA).
 5. Do NOT use emoji. Do NOT use bullet points in excess — 
    at most 3–4 short bullets if listing is genuinely the clearest format.
-6. Avoid clichés: "game-changer", "in today's rapidly evolving landscape", 
+6. Do NOT use en dashes (–) or em dashes (—) anywhere in the post.  The only exception is inside a direct quotation from a cited source — if you quote a passage verbatim that contains an en dash or an em dash, you may preserve it.  In all other non-exception cases, when you would otherwise add en dashes or em dashes yourself (for emphasis, asides, or pacing) the phrase or combination of phrases must be replaced with commas, parentheses, sentence breaks, or otherwise intelligently.  This is a hard rule.
+7. Avoid clichés: "game-changer", "in today's rapidly evolving landscape", 
    "it's not a matter of if but when", "the future is here".
-7. Do NOT include hashtags in the body — they will be appended separately.
-8. Include natural source attribution within the post and a "Sources:" line at the end.${!skipCorroboration ? '\n9. Include the attestation line after the Sources line.' : ''}
+8. Do NOT include hashtags in the body — they will be appended separately.
+9. Include natural source attribution within the post and a "Sources:" line at the end.${!skipCorroboration ? '\n10. Include the attestation line after the Sources line.' : ''}
 
 Respond in this exact JSON format:
 {
@@ -211,9 +219,10 @@ Respond in this exact JSON format:
 
 Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
-  logActivity("info", "content_generation_started", { cycleId, topicId: topic.id, angle });
+  await logActivity("info", "content_generation_started", { cycleId, topicId: topic.id, angle });
 
   try {
+    const client = await newAnthropicClient();
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1500,
@@ -230,7 +239,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       ...topic.hashtags
     ])].slice(0, 6);
 
-    logActivity("info", "content_generation_success", {
+    await logActivity("info", "content_generation_success", {
       cycleId, topicId: topic.id,
       title: parsed.title,
       wordCount: parsed.body.split(/\s+/).length
@@ -253,7 +262,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       }
     };
   } catch (err) {
-    logActivity("error", "content_generation_failed", {
+    await logActivity("error", "content_generation_failed", {
       cycleId, topicId: topic.id, error: err.message
     });
     throw err;
@@ -267,6 +276,7 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nVerified claims (corroborated by 2+ sources): ${researchSummary.verifiedClaims || 0}\nIndependent sources consulted: ${researchSummary.independentSources || 0}\nCorroboration step: ${researchSummary.corroborationSkipped ? 'SKIPPED' : 'COMPLETED'}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";
 
+  const client = await newAnthropicClient();
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 800,

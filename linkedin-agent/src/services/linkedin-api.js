@@ -4,6 +4,11 @@
 
 import axios from "axios";
 import { logActivity } from "./database.js";
+import {
+  getLinkedInAccessToken,
+  getLinkedInPersonUrn
+} from "../tenant/credential-store.js";
+import { currentTenantId } from "../db/with-tenant.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
@@ -36,7 +41,7 @@ export async function exchangeCodeForToken(code) {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
-    logActivity("info", "linkedin_token_obtained", {
+    await logActivity("info", "linkedin_token_obtained", {
       expiresIn: response.data.expires_in
     });
 
@@ -46,7 +51,7 @@ export async function exchangeCodeForToken(code) {
       refreshToken: response.data.refresh_token
     };
   } catch (err) {
-    logActivity("error", "linkedin_token_exchange_failed", {
+    await logActivity("error", "linkedin_token_exchange_failed", {
       error: err.response?.data || err.message
     });
     throw err;
@@ -60,7 +65,9 @@ async function delay(ms) {
 }
 
 export async function getProfile(accessToken, retries = 2) {
-  const token = accessToken || process.env.LINKEDIN_ACCESS_TOKEN;
+  // If caller passed a token explicitly, use it (OAuth callback path).
+  // Otherwise fetch the current tenant's stored token.
+  const token = accessToken || await getLinkedInAccessToken();
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -72,7 +79,7 @@ export async function getProfile(accessToken, retries = 2) {
     } catch (err) {
       const status = err.response?.status;
       if (status === 429 && attempt < retries) {
-        logActivity("warn", "linkedin_profile_rate_limited", { attempt: attempt + 1, retries });
+        await logActivity("warn", "linkedin_profile_rate_limited", { attempt: attempt + 1, retries });
         continue;
       }
       throw err;
@@ -83,11 +90,12 @@ export async function getProfile(accessToken, retries = 2) {
 // ── Posting ──────────────────────────────────────────────────
 
 export async function publishPost(content, hashtags = []) {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const personUrn = process.env.LINKEDIN_PERSON_URN;
-
-  if (!token || !personUrn) {
-    throw new Error("LinkedIn credentials not configured. Run: npm run auth");
+  let token, personUrn;
+  try {
+    token = await getLinkedInAccessToken();
+    personUrn = await getLinkedInPersonUrn();
+  } catch (err) {
+    throw new Error("LinkedIn credentials not configured for this tenant. Connect via /auth/linkedin");
   }
 
   // Append hashtags to the post body
@@ -124,13 +132,13 @@ export async function publishPost(content, hashtags = []) {
     const postId = response.headers["x-restli-id"] || response.data?.id || null;
 
     if (!postId) {
-      logActivity("warn", "linkedin_post_no_id", {
+      await logActivity("warn", "linkedin_post_no_id", {
         status: response.status,
         headers: JSON.stringify(response.headers)
       });
     }
 
-    logActivity("info", "linkedin_post_published", {
+    await logActivity("info", "linkedin_post_published", {
       postId,
       status: response.status,
       contentLength: fullContent.length
@@ -141,13 +149,13 @@ export async function publishPost(content, hashtags = []) {
     const errorDetail = err.response?.data || err.message;
     const statusCode = err.response?.status;
 
-    logActivity("error", "linkedin_post_failed", {
+    await logActivity("error", "linkedin_post_failed", {
       status: statusCode,
       error: errorDetail
     });
 
     if (statusCode === 401) {
-      throw new Error("LinkedIn access token expired. Run: npm run auth");
+      throw new Error("LinkedIn access token expired. Reconnect via /auth/linkedin");
     }
     if (statusCode === 422) {
       throw new Error(`LinkedIn rejected the post content: ${JSON.stringify(errorDetail)}`);
@@ -157,48 +165,69 @@ export async function publishPost(content, hashtags = []) {
   }
 }
 
-// ── Token Validation (cached) ────────────────────────────────
+// ── Token Validation (per-tenant cache) ──────────────────────
+// Cache is keyed by tenant UUID so tenant A's validity answer
+// is never served to tenant B. Must be called inside withTenant
+// so currentTenantId() returns a valid key.
 
-let _tokenCache = null;
-let _tokenCacheTs = 0;
+const _tokenCacheByTenant = new Map();
 
 function getTokenCacheTtl() {
   return parseInt(process.env.LINKEDIN_TOKEN_CHECK_MINUTES || "10", 10) * 60 * 1000;
 }
 
+function getCacheEntry(tenantId) {
+  return _tokenCacheByTenant.get(tenantId) || null;
+}
+
+function setCacheEntry(tenantId, value) {
+  _tokenCacheByTenant.set(tenantId, { value, ts: Date.now() });
+}
+
 export async function validateToken() {
+  const tenantId = currentTenantId();
+  if (!tenantId) {
+    // Called outside tenant context — cannot resolve credentials
+    return { valid: false, reason: "No tenant context" };
+  }
+
   // Return cached result if fresh
-  if (_tokenCache && (Date.now() - _tokenCacheTs) < getTokenCacheTtl()) {
-    return _tokenCache;
+  const cached = getCacheEntry(tenantId);
+  if (cached && (Date.now() - cached.ts) < getTokenCacheTtl()) {
+    return cached.value;
   }
 
   try {
     const profile = await getProfile();
-    _tokenCache = { valid: true, name: profile.name, sub: profile.sub };
-    _tokenCacheTs = Date.now();
-    return _tokenCache;
+    const result = { valid: true, name: profile.name, sub: profile.sub };
+    setCacheEntry(tenantId, result);
+    return result;
   } catch (err) {
+    let result;
     if (err.response?.status === 401) {
-      _tokenCache = { valid: false, reason: "Token expired or invalid" };
+      result = { valid: false, reason: "Token expired or invalid" };
     } else if (err.response?.status === 429) {
-      // Rate limited — keep previous cache if we have one, otherwise mark unknown
-      if (_tokenCache) {
-        _tokenCacheTs = Date.now(); // extend existing cache to avoid hammering
-        return _tokenCache;
+      // Rate limited — keep previous cache entry if we have one
+      if (cached) {
+        setCacheEntry(tenantId, cached.value);
+        return cached.value;
       }
-      _tokenCache = { valid: true, reason: "Token status unknown (rate limited)" };
+      result = { valid: true, reason: "Token status unknown (rate limited)" };
     } else {
-      _tokenCache = { valid: false, reason: err.message };
+      result = { valid: false, reason: err.message };
     }
-    _tokenCacheTs = Date.now();
-    return _tokenCache;
+    setCacheEntry(tenantId, result);
+    return result;
   }
 }
 
-// Clear cache on new auth (called after successful OAuth)
+// Clear cache on new auth (called after successful OAuth).
+// Clears only the current tenant's entry, not the whole cache.
 export function clearTokenCache() {
-  _tokenCache = null;
-  _tokenCacheTs = 0;
+  const tenantId = currentTenantId();
+  if (tenantId) {
+    _tokenCacheByTenant.delete(tenantId);
+  }
 }
 
 // ── Utilities ────────────────────────────────────────────────

@@ -60,6 +60,11 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
+      // Edit mode state. editing holds the in-progress draft; null means
+      // the modal is in read-only display mode. Initialized when the user
+      // clicks Edit, cleared when Save succeeds or Cancel is pressed.
+      const [editing, setEditing] = useState(null);
+      const [editError, setEditError] = useState(null);
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -104,6 +109,15 @@
         return () => clearInterval(interval);
       }, [fetchAll]);
 
+      // Clear edit state whenever the modal closes. Prevents stale
+      // edit drafts from persisting into the next post the user opens.
+      useEffect(() => {
+        if (!selectedPost) {
+          setEditing(null);
+          setEditError(null);
+        }
+      }, [selectedPost]);
+
       async function toggleMode() {
         const newMode = status.mode === 'auto' ? 'manual' : 'auto';
         await fetch(`${API}/api/mode`, {
@@ -134,6 +148,64 @@
           body: JSON.stringify({ reason: 'Manually rejected from dashboard' })
         });
         fetchAll();
+      }
+
+      // Edit mode: opens the modal in edit-form mode with the post's
+      // current title/content/hashtags pre-populated. hashtags is held
+      // as a single space-separated string in the form for ergonomics;
+      // it's split on whitespace at save time.
+      function handleEditStart(post, e) {
+        if (e) e.stopPropagation();
+        setSelectedPost(post);
+        setEditing({
+          title: post.title || '',
+          content: post.content || '',
+          hashtagsText: (post.hashtags || []).join(' ')
+        });
+        setEditError(null);
+      }
+
+      function handleEditCancel() {
+        setEditing(null);
+        setEditError(null);
+      }
+
+      async function handleEditSave() {
+        if (!selectedPost || !editing) return;
+        setLoading(l => ({ ...l, editSave: true }));
+        setEditError(null);
+        try {
+          // Split hashtags on whitespace, drop empties, and ensure each
+          // starts with '#'. This is permissive — operator can paste a
+          // line of "#a #b c" and get ["#a", "#b", "#c"].
+          const hashtags = editing.hashtagsText
+            .split(/\s+/)
+            .map(s => s.trim())
+            .filter(Boolean)
+            .map(s => s.startsWith('#') ? s : '#' + s);
+
+          const res = await fetch(`${API}/api/posts/${selectedPost.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: editing.title,
+              content: editing.content,
+              hashtags
+            })
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${res.status}`);
+          }
+          // Refresh the post list, close edit mode, close the modal.
+          // Operator can re-open the (now updated) card to review.
+          await fetchAll();
+          setEditing(null);
+          setSelectedPost(null);
+        } catch (err) {
+          setEditError(err.message);
+        }
+        setLoading(l => ({ ...l, editSave: false }));
       }
 
       async function handleForceCycle() {
@@ -287,6 +359,47 @@
         );
       }
 
+      // ── No-Tenant Panel ──────────────────────────────────────
+      // Authenticated user with no workspace assignment. The
+      // /api/status endpoint returns tenant-scoped fields as null
+      // when findTenantByAuthIdentity finds no membership for the
+      // user's sub. Without this guard, the main render below
+      // crashes on status.mode.toUpperCase() (line ~322) and
+      // status.stats.totalPosted (line ~332).
+      //
+      // This is a legitimate state — new sign-ups exist before
+      // tenant provisioning. Backlog: dedicated /no-tenant route
+      // would give a stable URL for tenant-provisioning emails.
+      if (status.user && status.stats === null) {
+        return (
+          <div className="app-container">
+            <div className="header">
+              <div>
+                <div className="header-title">LinkedIn AI Agent</div>
+                <div className="header-subtitle">v1.0.32</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
+                <div className="user-info">
+                  <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
+                  <a href="/auth/logout" className="logout-btn">Logout</a>
+                </div>
+              </div>
+            </div>
+            <div className="sidebar-panel" style={{ textAlign: 'center', padding: '3rem', marginTop: '2rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🔐</div>
+              <div style={{ color: 'var(--accent-amber)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                No Membership - Workspace Unassigned
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '32rem', margin: '0 auto' }}>
+                Your account is authenticated but isn't yet assigned to a workspace.
+                Contact your administrator to be added to one, then log out and back in.
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="app-container">
           {/* Dev Mode Banner */}
@@ -303,7 +416,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v0.45.1 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.0.32 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
               <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -398,6 +511,9 @@
                         <div className="post-footer">
                           <span className="post-date">{formatDate(post.created_at)}</span>
                           <div className="post-actions">
+                            <button className="btn btn-ghost" onClick={(e) => handleEditStart(post, e)}>
+                              Edit
+                            </button>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
                             </button>
@@ -596,7 +712,9 @@
                   </span>
                 </div>
 
-                <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
+                {!editing && (
+                  <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
+                )}
 
                 {ctx?.researchSummary && (
                   <div className="research-summary">
@@ -607,12 +725,68 @@
                   </div>
                 )}
 
-                <div className="modal-body">{selectedPost.content}</div>
-                <div className="modal-hashtags">
-                  {(selectedPost.hashtags || []).map((tag, i) => (
-                    <span key={i} className="hashtag">{tag}</span>
-                  ))}
-                </div>
+                {editing ? (
+                  <div style={{ marginTop: '1rem' }}>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Title</label>
+                      <input
+                        type="text"
+                        value={editing.title}
+                        onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                        style={{
+                          width: '100%', padding: '0.5rem', fontSize: '1rem',
+                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Content</label>
+                      <textarea
+                        value={editing.content}
+                        onChange={(e) => setEditing({ ...editing, content: e.target.value })}
+                        rows={12}
+                        style={{
+                          width: '100%', padding: '0.5rem', fontSize: '0.9rem',
+                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
+                          fontFamily: 'inherit', resize: 'vertical'
+                        }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                        Hashtags (space-separated; # added if missing)
+                      </label>
+                      <input
+                        type="text"
+                        value={editing.hashtagsText}
+                        onChange={(e) => setEditing({ ...editing, hashtagsText: e.target.value })}
+                        style={{
+                          width: '100%', padding: '0.5rem', fontSize: '0.9rem',
+                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
+                          fontFamily: 'var(--font-mono, monospace)'
+                        }}
+                      />
+                    </div>
+                    {editError && (
+                      <div style={{ color: 'var(--accent-red)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                        {editError}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <React.Fragment>
+                    <div className="modal-body">{selectedPost.content}</div>
+                    <div className="modal-hashtags">
+                      {(selectedPost.hashtags || []).map((tag, i) => (
+                        <span key={i} className="hashtag">{tag}</span>
+                      ))}
+                    </div>
+                  </React.Fragment>
+                )}
 
                 {ctx?.researchSummary?.sourceList && ctx.researchSummary.sourceList.length > 0 && (
                   <div className="source-list">
@@ -675,25 +849,41 @@
                     </div>
                   </div>
                 )}
-                {selectedPost.status === 'pending_approval' && (
+                {editing ? (
                   <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
-                      Approve & Publish
+                    <button className="btn btn-approve" onClick={handleEditSave}>
+                      {loading.editSave ? <span className="loading-spinner"></span> : 'Save Changes'}
                     </button>
-                    <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
-                      Reject
+                    <button className="btn btn-ghost" onClick={handleEditCancel}>
+                      Cancel
                     </button>
                   </div>
-                )}
-                {selectedPost.isPreview && (
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={handleSavePreview}>
-                      {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
-                    </button>
-                    <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
-                      Discard
-                    </button>
-                  </div>
+                ) : (
+                  <React.Fragment>
+                    {selectedPost.status === 'pending_approval' && (
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button className="btn btn-ghost" onClick={(e) => handleEditStart(selectedPost, e)}>
+                          Edit
+                        </button>
+                        <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
+                          Approve & Publish
+                        </button>
+                        <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                    {selectedPost.isPreview && (
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button className="btn btn-approve" onClick={handleSavePreview}>
+                          {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
+                        </button>
+                        <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
+                          Discard
+                        </button>
+                      </div>
+                    )}
+                  </React.Fragment>
                 )}
               </div>
             </div>

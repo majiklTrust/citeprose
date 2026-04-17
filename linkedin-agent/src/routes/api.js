@@ -1,6 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
-// API Routes — Dashboard backend endpoints
+// API Routes — Dashboard backend endpoints (async + per-tenant)
 // ═══════════════════════════════════════════════════════════════
+// Every data-touching handler wraps its DB work in withTenant
+// using req.tenant.id (attached by the TenantResolver middleware
+// which runs after requireAuth). RLS enforces per-tenant row
+// visibility; the wrapper guarantees the pg client has the
+// correct tenant context set for the transaction.
+//
+// Middleware chain (top-to-bottom for protected routes):
+//   requireAuth  →  createTenantResolver()  →  handler
+// The resolver is inserted immediately after requireAuth so
+// req.tenant is present before any handler executes.
 
 import { Router } from "express";
 import {
@@ -12,6 +22,7 @@ import {
   getActivityLog,
   getPost,
   createPost,
+  updatePost,
   updatePostStatus,
   logActivity
 } from "../services/database.js";
@@ -27,49 +38,117 @@ import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
+import { createTenantResolver } from "../tenant/resolver.js";
+import { withTenant } from "../db/with-tenant.js";
 
 const router = Router();
 
-// ── Auth Middleware ──────────────────────────────────────────
-// createAuthMiddleware returns { requireAuth, optionalAuth }.
-// In dev mode (zero providers configured or DEV_BYPASS_ORIGINS),
-// requireAuth passes all requests through with req.user = null.
+// ── Pre-Auth Route Existence Check ────────────────────────────
+// Return 404 for any /api/* path that isn't a registered route.
+// Registered BEFORE requireAuth so unknown paths can't probe for
+// the auth wall — they get a 404 regardless of whether they
+// would have been protected. This prevents the "authenticated-
+// only 401 leak" pattern where a 401 reveals that a path exists.
+// If the path matches a registered route, fall through to auth.
+router.use((req, res, next) => {
+  const reqPath = req.path;
+  const reqMethod = req.method.toLowerCase();
 
+  const matched = router.stack.some(layer => {
+    if (!layer.route || !layer.route.path) return false;
+    // Path match: either exact or with route params (:id)
+    const routePath = layer.route.path;
+    const isParam = routePath.includes(':');
+    if (!isParam) {
+      if (routePath !== reqPath) return false;
+    } else {
+      // Convert /api/posts/:id → regex-style match
+      const pattern = new RegExp('^' + routePath.replace(/:[^/]+/g, '[^/]+') + '$');
+      if (!pattern.test(reqPath)) return false;
+    }
+    // Method match — OPTIONS and HEAD are permitted for CORS preflight
+    if (layer.route.methods[reqMethod]) return true;
+    if (reqMethod === 'options' || reqMethod === 'head') return true;
+    return false;
+  });
+
+  if (!matched) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  next();
+});
+
+// Auth middleware receives logActivity, which is now async. The
+// middleware's safeLog wrapper awaits the call internally (see
+// auth/middleware.js conversion).
 const { requireAuth, optionalAuth } = createAuthMiddleware(logActivity);
+const resolveTenant = createTenantResolver();
 
 // ── Public Routes (no auth required) ────────────────────────
-// Routes defined BEFORE the auth middleware are accessible
-// without authentication. Only health check belongs here.
-// optionalAuth attempts to read the session but does not block.
+// /api/status is reachable without a token. optionalAuth reads
+// the session if present but never blocks. It has no tenant
+// scope — data returned is platform-level (server address, auth
+// config) or left null when no tenant is available.
 
 router.get("/api/status", optionalAuth, async (req, res) => {
   try {
-    const stats = getPostStats();
-    const mode = getAgentState("mode");
-    const paused = getAgentState("paused");
-    const corroboration = getAgentState("corroboration") || "enabled";
-    const cadence = canPostNow();
-    const tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
+    // Platform-level data — no tenant context required
+    const serverAddress = getServerAddress().display;
+    const authRequired = isAuthEnabled() && !req.devBypass;
+    const maxPostsPer10Days = parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10);
 
+    // Tenant-scoped data — only available if caller is authenticated
+    // AND has a tenant. Otherwise omit (dashboard handles nulls).
+    let stats = null, mode = null, paused = false, corroboration = "enabled";
     let researchStats = null;
-    try {
-      researchStats = getArticleStats();
-    } catch { /* monitor may not be initialized yet */ }
+    let cadence = null;
+    let tokenStatus = { valid: false };
+
+    if (req.user && req.user.sub) {
+      // Try to resolve the tenant from the session user. If the
+      // caller is authenticated but has no tenant, simply leave
+      // the tenant-scoped fields null — do not error.
+      try {
+        const { findTenantByAuthIdentity } = await import("../tenant/platform-db.js");
+        const provider = req.user.authMethod === "bearer"
+          ? (req.authProvider || "auth0")
+          : "auth0";
+        const tenant = await findTenantByAuthIdentity(provider, req.user.sub);
+        if (tenant) {
+          await withTenant(tenant.id, async () => {
+            stats = await getPostStats();
+            mode = await getAgentState("mode");
+            const p = await getAgentState("paused");
+            paused = p === "true";
+            corroboration = (await getAgentState("corroboration")) || "enabled";
+            try { researchStats = await getArticleStats(); } catch { /* monitor not ready */ }
+            // Cadence and LinkedIn token status are tenant-scoped
+            // (each tenant has their own post history and their own
+            // LinkedIn credentials). Populate them inside the tenant
+            // block so currentTenantId() returns a valid UUID.
+            cadence = await canPostNow();
+            tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
+          });
+        }
+      } catch {
+        // Tenant lookup failed — return platform-level data only
+      }
+    }
 
     res.json({
-      authRequired: isAuthEnabled() && !req.devBypass,
+      authRequired,
       user: req.user ? {
         name: req.user.name || null,
         email: req.user.email || null,
         sub: req.user.sub || null,
       } : null,
-      serverAddress: getServerAddress().display,
+      serverAddress,
       mode,
-      paused: paused === "true",
+      paused,
       corroboration,
       cadence,
       stats,
-      maxPostsPer10Days: parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10),
+      maxPostsPer10Days,
       researchStats,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
@@ -79,43 +158,101 @@ router.get("/api/status", optionalAuth, async (req, res) => {
   }
 });
 
-// ── Protected Routes (auth required) ────────────────────────
-// Everything below this line requires a valid Bearer token.
-// Adding a new route? Place it BELOW this middleware.
-// Making a route public? Move it ABOVE this middleware.
+// ── Protected Routes (auth + tenant required) ─────────────────
+// Everything below this line:
+//   1. requires a valid Bearer token or session (requireAuth)
+//   2. requires a tenant membership (resolveTenant sets req.tenant)
+//   3. runs all DB work inside withTenant(req.tenant.id, ...)
 
 router.use(requireAuth);
+router.use(resolveTenant);
 
 // ── Posts ─────────────────────────────────────────────────────
 
-router.get("/api/posts", (req, res) => {
-  const limit = parseInt(req.query.limit || "50");
-  const status = req.query.status;
-
-  const posts = status ? getPostsByStatus(status) : getAllPosts(limit);
-  res.json({ posts });
+router.get("/api/posts", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || "50");
+    const status = req.query.status;
+    const posts = await withTenant(req.tenant.id, async () => {
+      return status ? await getPostsByStatus(status) : await getAllPosts(limit);
+    });
+    res.json({ posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.get("/api/posts/:id", (req, res) => {
-  const post = getPost(parseInt(req.params.id));
-  if (!post) return res.status(404).json({ error: "Post not found" });
-  res.json({ post });
+router.get("/api/posts/:id", async (req, res) => {
+  try {
+    const post = await withTenant(req.tenant.id, async () => {
+      return getPost(parseInt(req.params.id));
+    });
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    res.json({ post });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Edit Pending Post ────────────────────────────────────────
+// Patches editable fields (title, content, hashtags) on a post.
+// Restricted to pending_approval posts — see updatePost guard in
+// database.js. Body shape: { title?, content?, hashtags? }. Any
+// supplied field is updated; omitted fields are left unchanged.
+//
+// Status mapping for known database errors:
+//   NOT_FOUND     → 404
+//   NOT_EDITABLE  → 409 (conflict — wrong state for this operation)
+//   NO_FIELDS     → 400
+//   anything else → 500
+router.patch("/api/posts/:id", async (req, res) => {
+  try {
+    const { title, content, hashtags } = req.body || {};
+    const fields = {};
+    if (title !== undefined)   fields.title = title;
+    if (content !== undefined) fields.content = content;
+    if (hashtags !== undefined) fields.hashtags = hashtags;
+
+    const updated = await withTenant(req.tenant.id, async () => {
+      const row = await updatePost(parseInt(req.params.id), fields);
+      await logActivity("info", "post_edited", {
+        postId: row.id,
+        fieldsChanged: Object.keys(fields)
+      });
+      return row;
+    });
+
+    res.json({ success: true, post: updated });
+  } catch (err) {
+    if (err.code === "NOT_FOUND")    return res.status(404).json({ error: err.message });
+    if (err.code === "NOT_EDITABLE") return res.status(409).json({ error: err.message });
+    if (err.code === "NO_FIELDS")    return res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Approval Flow ────────────────────────────────────────────
+// approvePost and rejectPost must run inside withTenant because
+// they both modify posts. The scheduler services are converted
+// in delivery 0.45.1.16 to accept the tenant context via
+// AsyncLocalStorage (they will read currentTenantId internally).
 
 router.post("/api/posts/:id/approve", async (req, res) => {
   try {
-    const result = await approvePost(parseInt(req.params.id));
+    const result = await withTenant(req.tenant.id, async () => {
+      return approvePost(parseInt(req.params.id));
+    });
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/api/posts/:id/reject", (req, res) => {
+router.post("/api/posts/:id/reject", async (req, res) => {
   try {
-    rejectPost(parseInt(req.params.id), req.body.reason || "");
+    await withTenant(req.tenant.id, async () => {
+      return rejectPost(parseInt(req.params.id), req.body.reason || "");
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -124,27 +261,45 @@ router.post("/api/posts/:id/reject", (req, res) => {
 
 // ── Mode Control ─────────────────────────────────────────────
 
-router.post("/api/mode", (req, res) => {
-  const { mode } = req.body;
-  if (!["auto", "manual"].includes(mode)) {
-    return res.status(400).json({ error: "Mode must be 'auto' or 'manual'" });
+router.post("/api/mode", async (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (!["auto", "manual"].includes(mode)) {
+      return res.status(400).json({ error: "Mode must be 'auto' or 'manual'" });
+    }
+    await withTenant(req.tenant.id, async () => {
+      await setAgentState("mode", mode);
+    });
+    res.json({ mode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  setAgentState("mode", mode);
-  res.json({ mode });
 });
 
-router.post("/api/pause", (req, res) => {
-  const { paused } = req.body;
-  setAgentState("paused", String(!!paused));
-  res.json({ paused: !!paused });
+router.post("/api/pause", async (req, res) => {
+  try {
+    const { paused } = req.body;
+    await withTenant(req.tenant.id, async () => {
+      await setAgentState("paused", String(!!paused));
+    });
+    res.json({ paused: !!paused });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.post("/api/corroboration", (req, res) => {
-  const { enabled } = req.body;
-  const value = enabled === false ? "disabled" : "enabled";
-  setAgentState("corroboration", value);
-  logActivity("info", "corroboration_toggled", { corroboration: value });
-  res.json({ corroboration: value });
+router.post("/api/corroboration", async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const value = enabled === false ? "disabled" : "enabled";
+    await withTenant(req.tenant.id, async () => {
+      await setAgentState("corroboration", value);
+      await logActivity("info", "corroboration_toggled", { corroboration: value });
+    });
+    res.json({ corroboration: value });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Manual Triggers ──────────────────────────────────────────
@@ -152,20 +307,26 @@ router.post("/api/corroboration", (req, res) => {
 router.post("/api/generate-preview", async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
-    const generated = await generatePost(topicId);
+    const { generated, quality } = await withTenant(req.tenant.id, async () => {
+      const g = await generatePost(topicId);
+      if (g.blocked) return { generated: g, quality: null };
+      const q = await qualityCheck(g.content, g.researchSummary);
+      return { generated: g, quality: q };
+    });
 
     if (generated.blocked) {
-      return res.json({ blocked: true, reason: generated.reason, topicId: generated.topicId, angle: generated.angle });
+      return res.json({
+        blocked: true, reason: generated.reason,
+        topicId: generated.topicId, angle: generated.angle
+      });
     }
-
-    const quality = await qualityCheck(generated.content, generated.researchSummary);
     res.json({ post: generated, quality });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/api/save-preview", (req, res) => {
+router.post("/api/save-preview", async (req, res) => {
   try {
     const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
 
@@ -173,24 +334,27 @@ router.post("/api/save-preview", (req, res) => {
       return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
     }
 
-    const storedContext = JSON.stringify({
+    const storedContext = {
       angle: angle || "",
       sourcesUsed: sourcesUsed || [],
       researchSummary: researchSummary || null,
       qualityScores: quality?.scores,
       factualFlags: quality?.factual_flags
-    });
+    };
 
-    const postId = createPost({
-      topicId,
-      title,
-      content,
-      hashtags: hashtags || [],
-      newsContext: storedContext
+    const postId = await withTenant(req.tenant.id, async () => {
+      const id = await createPost({
+        topicId,
+        title,
+        content,
+        hashtags: hashtags || [],
+        newsContext: storedContext,
+        scheduledFor: null
+      });
+      await updatePostStatus(id, "pending_approval");
+      await logActivity("info", "preview_saved_to_queue", { postId: id, title });
+      return id;
     });
-
-    updatePostStatus(postId, "pending_approval");
-    logActivity("info", "preview_saved_to_queue", { postId, title });
 
     res.json({ success: true, postId });
   } catch (err) {
@@ -201,7 +365,9 @@ router.post("/api/save-preview", (req, res) => {
 router.post("/api/force-cycle", async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
-    await forceCycle(topicId);
+    await withTenant(req.tenant.id, async () => {
+      return forceCycle(topicId);
+    });
     res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -210,16 +376,16 @@ router.post("/api/force-cycle", async (req, res) => {
 
 // ── Research & News Monitor ──────────────────────────────────
 
-router.get("/api/research/stats", (req, res) => {
+router.get("/api/research/stats", async (req, res) => {
   try {
-    const stats = getArticleStats();
+    const stats = await withTenant(req.tenant.id, async () => getArticleStats());
     res.json(stats);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get("/api/research/articles", (req, res) => {
+router.get("/api/research/articles", async (req, res) => {
   try {
     const topicId = req.query.topic;
     const maxAge = parseInt(req.query.maxAge || "14");
@@ -229,7 +395,9 @@ router.get("/api/research/articles", (req, res) => {
       return res.status(400).json({ error: "topic query parameter required" });
     }
 
-    const articles = getArticlesForTopic(topicId, maxAge, limit);
+    const articles = await withTenant(req.tenant.id, async () => {
+      return getArticlesForTopic(topicId, maxAge, limit);
+    });
     res.json({ articles });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -238,7 +406,7 @@ router.get("/api/research/articles", (req, res) => {
 
 router.post("/api/research/poll", async (req, res) => {
   try {
-    const newArticles = await pollAllFeeds();
+    const newArticles = await withTenant(req.tenant.id, async () => pollAllFeeds());
     res.json({ success: true, newArticles });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -247,17 +415,29 @@ router.post("/api/research/poll", async (req, res) => {
 
 // ── Activity Log ─────────────────────────────────────────────
 
-router.get("/api/logs", (req, res) => {
-  const limit = parseInt(req.query.limit || "100");
-  const logs = getActivityLog(limit);
-  res.json({ logs });
+router.get("/api/logs", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || "100");
+    const logs = await withTenant(req.tenant.id, async () => getActivityLog(limit));
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── LinkedIn Auth ────────────────────────────────────────────
 
 router.get("/api/linkedin/status", async (req, res) => {
-  const status = await validateToken().catch(() => ({ valid: false }));
-  res.json(status);
+  try {
+    // validateToken reads tenant-scoped LinkedIn credentials;
+    // runs inside withTenant so the credential store can resolve.
+    const status = await withTenant(req.tenant.id, async () => {
+      return validateToken().catch(() => ({ valid: false }));
+    });
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

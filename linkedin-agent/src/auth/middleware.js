@@ -116,12 +116,24 @@ function decodeTokenIssuer(token) {
 export function createAuthMiddleware(logFn) {
 
   // Safe logging wrapper — a logging failure must never crash
-  // auth enforcement. If logFn throws (e.g. database not
-  // initialized), the auth decision is unaffected.
-  function safeLog(level, action, details) {
+  // auth enforcement. If logFn throws or rejects (e.g. database
+  // not ready, no tenant context for activity_log RLS), the auth
+  // decision is unaffected.
+  //
+  // Note: logFn is now async (writes to Postgres via withTenant).
+  // Most auth-path log events (token_expired, issuer_unknown, etc.)
+  // fire BEFORE a tenant is resolved — they are platform-level
+  // events, not tenant events, and the underlying logActivity()
+  // will reject with "requires tenant context". safeLog swallows
+  // that rejection silently; platform-level audit logging is out
+  // of scope for this delivery.
+  async function safeLog(level, action, details) {
     if (!logFn) return;
     try {
-      logFn(level, action, details);
+      const result = logFn(level, action, details);
+      if (result && typeof result.then === "function") {
+        await result.catch(() => {});
+      }
     } catch {
       // Logging failed — swallow silently.
       // Auth enforcement continues regardless.

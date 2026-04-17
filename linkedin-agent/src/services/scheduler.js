@@ -1,6 +1,20 @@
 // ═══════════════════════════════════════════════════════════════
 // Scheduler Service — Posting cadence enforcement & automation
 // ═══════════════════════════════════════════════════════════════
+//
+// Tenant model: all per-tenant operations (database reads/writes,
+// Anthropic calls, LinkedIn publishing) must run inside a
+// withTenant(tenantId, ...) block. Two entry paths exist:
+//
+//   1. Route handlers (api.js) — the handler has already resolved
+//      req.tenant and wraps the scheduler call in withTenant.
+//      Functions like approvePost/rejectPost/forceCycle assume
+//      they're already inside a tenant context.
+//
+//   2. Cron loop (startScheduler) — no request, no req.tenant.
+//      The cron callback iterates every active tenant and wraps
+//      each tenant's schedulerTick() in its own withTenant.
+//      Tenant A's failure does not stop tenant B's tick.
 
 import cron from "node-cron";
 import {
@@ -17,6 +31,8 @@ import {
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-api.js";
 import { runOutputFilter } from "./output-filter.js";
+import { withTenant } from "../db/with-tenant.js";
+import { listActiveTenants } from "../tenant/platform-db.js";
 
 let schedulerJob = null;
 
@@ -25,9 +41,12 @@ let schedulerJob = null;
 const MIN_HOURS = () => parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "72", 10);
 const MAX_PER_10_DAYS = () => parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10);
 
-export function canPostNow() {
-  const recentPosts = getRecentPosts(10);
-  const stats = getPostStats();
+// Must be called inside withTenant. Returns a cadence decision
+// for the current tenant — respects their post history and the
+// global min-hours / max-per-10-days configuration.
+export async function canPostNow() {
+  const recentPosts = await getRecentPosts(10);
+  const stats = await getPostStats();
 
   // Rule 1: Max posts per 10-day window
   if (stats.postsLast10Days >= MAX_PER_10_DAYS()) {
@@ -41,7 +60,12 @@ export function canPostNow() {
   // Rule 2: Minimum hours between posts
   if (recentPosts.length > 0) {
     const lastPost = recentPosts[0];
-    const hoursSince = (Date.now() - new Date(lastPost.posted_at + "Z").getTime()) / (1000 * 60 * 60);
+    // posted_at comes back from pg as a Date object (TIMESTAMPTZ).
+    // Keep the string-with-Z fallback for any legacy serialized rows.
+    const postedAtMs = lastPost.posted_at instanceof Date
+      ? lastPost.posted_at.getTime()
+      : new Date(String(lastPost.posted_at).endsWith("Z") ? lastPost.posted_at : lastPost.posted_at + "Z").getTime();
+    const hoursSince = (Date.now() - postedAtMs) / (1000 * 60 * 60);
 
     if (hoursSince < MIN_HOURS()) {
       const hoursRemaining = Math.ceil(MIN_HOURS() - hoursSince);
@@ -58,60 +82,63 @@ export function canPostNow() {
 
 function estimateNextWindow(recentPosts) {
   if (recentPosts.length < MAX_PER_10_DAYS()) return "now";
-  // Find when the oldest post in the window will "age out"
   const oldest = recentPosts[recentPosts.length - 1];
-  const agesOut = new Date(new Date(oldest.posted_at.endsWith("Z") ? oldest.posted_at : oldest.posted_at + "Z").getTime() + 10 * 24 * 60 * 60 * 1000);
+  const postedAtMs = oldest.posted_at instanceof Date
+    ? oldest.posted_at.getTime()
+    : new Date(String(oldest.posted_at).endsWith("Z") ? oldest.posted_at : oldest.posted_at + "Z").getTime();
+  const agesOut = new Date(postedAtMs + 10 * 24 * 60 * 60 * 1000);
   return agesOut.toISOString();
 }
 
 // ── Core Scheduling Loop ─────────────────────────────────────
+// Must be called inside withTenant.
 
 async function schedulerTick(topicId = null) {
-  const mode = getAgentState("mode");
-  const paused = getAgentState("paused");
+  const mode = await getAgentState("mode");
+  const paused = await getAgentState("paused");
 
   if (paused === "true") {
-    logActivity("info", "scheduler_skipped", "Agent is paused");
+    await logActivity("info", "scheduler_skipped", "Agent is paused");
     return;
   }
 
-  // Step 1: Check if there are posts pending approval (manual mode)
+  // Step 1: Manual-mode hold if there are posts awaiting approval
   if (mode === "manual") {
-    const pending = getPostsByStatus("pending_approval");
+    const pending = await getPostsByStatus("pending_approval");
     if (pending.length > 0) {
-      logActivity("info", "scheduler_waiting", `${pending.length} post(s) awaiting manual approval`);
+      await logActivity("info", "scheduler_waiting", `${pending.length} post(s) awaiting manual approval`);
       return;
     }
   }
 
-  // Step 2: Check cadence rules
-  const cadence = canPostNow();
+  // Step 2: Cadence check
+  const cadence = await canPostNow();
   if (!cadence.allowed) {
-    logActivity("info", "scheduler_cadence_hold", cadence.reason);
+    await logActivity("info", "scheduler_cadence_hold", cadence.reason);
     return;
   }
 
   // Step 3: Generate content (includes research phase)
-  logActivity("info", "scheduler_generating", "Generating new post content with research");
+  await logActivity("info", "scheduler_generating", "Generating new post content with research");
 
   try {
     const generated = await generatePost(topicId || null);
     const cycleId = generated.cycleId || null;
 
-    // Step 3a: Check if post was blocked due to insufficient sources
+    // Step 3a: Post was blocked due to insufficient sources
     if (generated.blocked) {
-      logActivity("info", "post_blocked", {
+      await logActivity("info", "post_blocked", {
         cycleId,
         topicId: generated.topicId,
         angle: generated.angle,
         reason: generated.reason
       });
-      return;  // Skip this cycle — scheduler will try again next tick
+      return;
     }
 
-    // Step 4: Quality check (includes source grounding verification)
+    // Step 4: Quality check
     const quality = await qualityCheck(generated.content, generated.researchSummary, cycleId);
-    logActivity("info", "quality_check", {
+    await logActivity("info", "quality_check", {
       cycleId,
       overall: quality.overall,
       pass: quality.pass,
@@ -120,72 +147,70 @@ async function schedulerTick(topicId = null) {
       factualFlags: quality.factual_flags
     });
 
-    // If quality is below threshold, regenerate once
     if (!quality.pass || quality.overall < 6) {
-      logActivity("warn", "quality_below_threshold", {
+      await logActivity("warn", "quality_below_threshold", {
         cycleId,
         score: quality.overall,
         feedback: quality.feedback,
         factualFlags: quality.factual_flags
       });
       const retry = await generatePost(null);
-      // Retry may also be blocked — check before quality checking
       if (!retry.blocked) {
         const retryQuality = await qualityCheck(retry.content, retry.researchSummary, retry.cycleId);
         if (retryQuality.overall > quality.overall) {
           Object.assign(generated, retry);
-          logActivity("info", "quality_retry_improved", { cycleId: retry.cycleId, newScore: retryQuality.overall });
+          await logActivity("info", "quality_retry_improved", { cycleId: retry.cycleId, newScore: retryQuality.overall });
         }
       }
     }
 
-    // Build research context for storage
-    const storedContext = JSON.stringify({
+    // createPost stores news_context as JSONB — pass the object
+    // directly, no JSON.stringify wrapping.
+    const storedContext = {
       cycleId,
       angle: generated.angle,
       sourcesUsed: generated.sourcesUsed || [],
       researchSummary: generated.researchSummary || null,
       qualityScores: quality.scores,
       factualFlags: quality.factual_flags
-    });
+    };
 
     // Step 5: Save to database
-    const postId = createPost({
+    const postId = await createPost({
       topicId: generated.topicId,
       title: generated.title,
       content: generated.content,
       hashtags: generated.hashtags,
-      newsContext: storedContext
+      newsContext: storedContext,
+      scheduledFor: null
     });
 
     // Step 6: Route based on mode
     if (mode === "auto") {
       await executePost(postId);
     } else {
-      updatePostStatus(postId, "pending_approval");
-      logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
+      await updatePostStatus(postId, "pending_approval");
+      await logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
     }
 
   } catch (err) {
-    logActivity("error", "scheduler_error", err.message);
+    await logActivity("error", "scheduler_error", err.message);
   }
 }
 
 // ── Post Execution ───────────────────────────────────────────
+// Must be called inside withTenant.
 
 export async function executePost(postId) {
-  const post = getPost(postId);
+  const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
 
-  // ── Output security filter ─────────────────────────────────
-  // Scan content for leaked secrets, prompt fragments, and
-  // exfiltration attempts BEFORE publishing. This is the last
-  // line of defense — if a prompt injection bypassed sanitization
-  // and framing, the output filter catches the result.
+  // Output security filter — last line of defense against
+  // prompt injection or exfiltration via the generated content.
   const filterResult = runOutputFilter(post.content);
   if (filterResult.blocked) {
-    updatePostStatus(postId, "blocked", { errorMessage: filterResult.reason });
-    logActivity("warn", "post_blocked_by_filter", {
+    await updatePostStatus(postId, "blocked", { errorMessage: filterResult.reason });
+    await logActivity("warn", "post_blocked_by_filter", {
       postId,
       title: post.title,
       reason: filterResult.reason,
@@ -197,12 +222,12 @@ export async function executePost(postId) {
   try {
     const result = await publishPost(post.content, post.hashtags);
 
-    updatePostStatus(postId, "posted", {
+    await updatePostStatus(postId, "posted", {
       linkedinId: result.postId,
       postedAt: new Date().toISOString()
     });
 
-    logActivity("info", "post_published", {
+    await logActivity("info", "post_published", {
       postId,
       linkedinId: result.postId,
       title: post.title
@@ -210,65 +235,90 @@ export async function executePost(postId) {
 
     return result;
   } catch (err) {
-    updatePostStatus(postId, "failed", { errorMessage: err.message });
-    logActivity("error", "post_publish_failed", { postId, error: err.message });
+    await updatePostStatus(postId, "failed", { errorMessage: err.message });
+    await logActivity("error", "post_publish_failed", { postId, error: err.message });
     throw err;
   }
 }
 
 // ── Manual Mode Actions ──────────────────────────────────────
+// Called from api.js routes which wrap them in withTenant.
 
 export async function approvePost(postId) {
-  const post = getPost(postId);
+  const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
-  if (post.status !== "pending_approval") throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
-  updatePostStatus(postId, "approved");
-  logActivity("info", "post_approved", { postId });
+  if (post.status !== "pending_approval") {
+    throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
+  }
+  await updatePostStatus(postId, "approved");
+  await logActivity("info", "post_approved", { postId });
   return executePost(postId);
 }
 
-export function rejectPost(postId, reason = "") {
-  const post = getPost(postId);
+export async function rejectPost(postId, reason = "") {
+  const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
-  if (post.status !== "pending_approval") throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
-  updatePostStatus(postId, "rejected", { errorMessage: reason });
-  logActivity("info", "post_rejected", { postId, reason });
+  if (post.status !== "pending_approval") {
+    throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
+  }
+  await updatePostStatus(postId, "rejected", { errorMessage: reason });
+  await logActivity("info", "post_rejected", { postId, reason });
 }
 
 // ── Scheduler Lifecycle ──────────────────────────────────────
 
+// The cron callback iterates every active tenant and runs each
+// tenant's schedulerTick inside its own withTenant block. Each
+// iteration is independent: a failure in one tenant's tick is
+// logged (best-effort) and the loop continues to the next tenant.
+async function runTickForAllTenants() {
+  let tenants;
+  try {
+    tenants = await listActiveTenants();
+  } catch (err) {
+    // Platform-level log — no tenant context available. Falls
+    // back to console so the failure isn't invisible.
+    console.error("[scheduler] failed to list tenants:", err.message);
+    return;
+  }
+
+  for (const tenant of tenants) {
+    try {
+      await withTenant(tenant.id, async () => {
+        await logActivity("info", "scheduler_tick", `Cron fired for tenant ${tenant.slug}`);
+        await schedulerTick();
+      });
+    } catch (err) {
+      console.error(`[scheduler] tenant ${tenant.slug} tick failed:`, err.message);
+    }
+  }
+}
+
 export function startScheduler() {
   const hour = process.env.PREFERRED_POST_HOUR || "9";
-
-  // Run at the preferred hour every day, and also at hour+12 for a second check
   const secondHour = (parseInt(hour) + 12) % 24;
 
   schedulerJob = cron.schedule(`0 ${hour},${secondHour} * * *`, () => {
-    logActivity("info", "scheduler_tick", `Cron fired at preferred hours ${hour}, ${secondHour}`);
-    schedulerTick().catch(err => {
-      logActivity("error", "scheduler_tick_unhandled", err.message);
+    runTickForAllTenants().catch(err => {
+      console.error("[scheduler] runTickForAllTenants unhandled error:", err.message);
     });
   });
 
-  logActivity("info", "scheduler_started", {
-    checkTimes: [`${hour}:00`, `${secondHour}:00`],
-    mode: getAgentState("mode")
-  });
-
-  console.log(`⏰ Scheduler started — checks at ${hour}:00 and ${secondHour}:00 daily`);
+  console.log(`⏰ Scheduler started — checks at ${hour}:00 and ${secondHour}:00 daily, iterating all active tenants`);
   return schedulerJob;
 }
 
 export function stopScheduler() {
   if (schedulerJob) {
     schedulerJob.stop();
-    logActivity("info", "scheduler_stopped", "Manual stop");
+    console.log("⏰ Scheduler stopped");
   }
 }
 
 // ── Force a cycle (for testing/manual trigger) ───────────────
+// Called from /api/force-cycle which wraps this in withTenant.
 
 export async function forceCycle(topicId = null) {
-  logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" });
+  await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" });
   return schedulerTick(topicId);
 }

@@ -184,6 +184,75 @@ export async function getPost(id) {
   return row;
 }
 
+// Updates editable fields on a post. Only title/content/hashtags are
+// supported — these are the user-facing fields a manual editor would
+// change. Strict guard: rejects any update against a post whose status
+// is not pending_approval. Editing a posted/approved/rejected/blocked
+// post would diverge the database from external state (LinkedIn).
+//
+// Returns the updated row, or throws if the post doesn't exist or is
+// in a non-editable state. The caller (route handler) maps thrown
+// errors to appropriate HTTP responses.
+export async function updatePost(id, fields) {
+  const c = client();
+
+  // Status check + lock the row for the duration of the transaction.
+  // SELECT FOR UPDATE prevents a concurrent approve/reject from
+  // changing status between our check and our UPDATE.
+  const guard = await c.query(
+    `SELECT id, status FROM posts WHERE id = $1 FOR UPDATE`,
+    [id]
+  );
+  if (guard.rows.length === 0) {
+    const err = new Error(`Post ${id} not found`);
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+  if (guard.rows[0].status !== "pending_approval") {
+    const err = new Error(
+      `Post ${id} is not editable (status: ${guard.rows[0].status}). Only pending_approval posts can be edited.`
+    );
+    err.code = "NOT_EDITABLE";
+    throw err;
+  }
+
+  // Only the three caller-supplied fields are written. Unsupplied
+  // fields are left as-is (no NULL-out by accident).
+  const sets = [];
+  const params = [];
+  let i = 1;
+
+  if (typeof fields.title === "string") {
+    sets.push(`title = $${i++}`);
+    params.push(fields.title);
+  }
+  if (typeof fields.content === "string") {
+    sets.push(`content = $${i++}`);
+    params.push(fields.content);
+  }
+  if (Array.isArray(fields.hashtags)) {
+    sets.push(`hashtags = $${i++}::jsonb`);
+    params.push(JSON.stringify(fields.hashtags));
+  }
+
+  if (sets.length === 0) {
+    const err = new Error("No editable fields supplied");
+    err.code = "NO_FIELDS";
+    throw err;
+  }
+
+  params.push(id);
+  const r = await c.query(
+    `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i}
+     RETURNING id, title, content, hashtags, status`,
+    params
+  );
+
+  const row = r.rows[0];
+  if (!Array.isArray(row.hashtags)) row.hashtags = row.hashtags || [];
+  return row;
+}
+
 export async function updatePostStatus(id, status, extra = {}) {
   const c = client();
   const sets = ["status = $1::post_status"];

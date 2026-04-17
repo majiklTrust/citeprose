@@ -16,8 +16,14 @@ import { getArticlesForTopic } from "./news-monitor.js";
 import { logActivity } from "./database.js";
 import { TOPICS } from "../config/topics.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
+import { getAnthropicApiKey } from "../tenant/credential-store.js";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Anthropic client is constructed per-call using the tenant's
+// BYOK key fetched from the credential store.
+async function newAnthropicClient() {
+  const apiKey = await getAnthropicApiKey();
+  return new Anthropic({ apiKey });
+}
 
 const COOLDOWN_MS = 65000;
 
@@ -25,9 +31,9 @@ const COOLDOWN_MS = 65000;
 // Step 1: Gather material from RSS (no API call)
 // ═══════════════════════════════════════════════════════════════
 
-function gatherRSSMaterial(topicId, angle) {
+async function gatherRSSMaterial(topicId, angle) {
   const maxAge = SOURCE_RULES.maxAgeDays[topicId] || 14;
-  const articles = getArticlesForTopic(topicId, maxAge, 30);
+  const articles = await getArticlesForTopic(topicId, maxAge, 30);
 
   const angleWords = angle.toLowerCase().split(/\s+/).filter(w => w.length > 3);
 
@@ -52,9 +58,10 @@ async function gatherWebSearchMaterial(topicId, angle, cycleId) {
   const topicName = topic?.name || topicId;
   const searchQueries = buildSearchQueries(topicId, angle);
 
-  logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
+  await logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
 
   try {
+    const client = await newAnthropicClient();
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
@@ -97,13 +104,13 @@ Rules:
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
 
     if (!jsonMatch) {
-      logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
+      await logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
 
     const claims = JSON.parse(jsonMatch[0]);
 
-    logActivity("info", "web_search_complete", {
+    await logActivity("info", "web_search_complete", {
       cycleId,
       claimsFound: claims.length,
       sources: [...new Set(claims.map(c => c.source_name))].length
@@ -111,7 +118,7 @@ Rules:
 
     return claims;
   } catch (err) {
-    logActivity("error", "web_search_failed", { cycleId, error: err.message });
+    await logActivity("error", "web_search_failed", { cycleId, error: err.message });
     return [];
   }
 }
@@ -191,13 +198,14 @@ function assembleAllSources(webClaims, rssArticles) {
 
 async function corroborateClaims(allSources, cycleId) {
   if (allSources.length === 0) {
-    logActivity("warn", "corroboration_no_sources", { cycleId });
+    await logActivity("warn", "corroboration_no_sources", { cycleId });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }
 
-  logActivity("info", "corroboration_started", { cycleId, sourceCount: allSources.length });
+  await logActivity("info", "corroboration_started", { cycleId, sourceCount: allSources.length });
 
   try {
+    const client = await newAnthropicClient();
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
@@ -241,7 +249,7 @@ Return ONLY valid JSON:
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      logActivity("warn", "corroboration_parse_failed", { cycleId });
+      await logActivity("warn", "corroboration_parse_failed", { cycleId });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
 
@@ -260,7 +268,7 @@ Return ONLY valid JSON:
     const verified = scoredCorroborated.filter(c => c.meetsThreshold);
     const belowThreshold = scoredCorroborated.filter(c => !c.meetsThreshold);
 
-    logActivity("info", "corroboration_complete", {
+    await logActivity("info", "corroboration_complete", {
       cycleId,
       totalSources: allSources.length,
       verifiedClaims: verified.length,
@@ -270,7 +278,7 @@ Return ONLY valid JSON:
 
     return { verified, belowThreshold, uncorroborated: result.uncorroborated_claims || [] };
   } catch (err) {
-    logActivity("error", "corroboration_failed", { cycleId, error: err.message });
+    await logActivity("error", "corroboration_failed", { cycleId, error: err.message });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }
 }
@@ -394,15 +402,15 @@ function buildDirectBrief(allSources) {
 // ═══════════════════════════════════════════════════════════════
 
 export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false) {
-  logActivity("info", "research_started", { cycleId, topicId, angle, corroboration: !skipCorroboration });
+  await logActivity("info", "research_started", { cycleId, topicId, angle, corroboration: !skipCorroboration });
 
   // Step 1: RSS (instant)
-  const rssArticles = gatherRSSMaterial(topicId, angle);
+  const rssArticles = await gatherRSSMaterial(topicId, angle);
 
   // Step 2: Web search (API call #1)
   const webClaims = await gatherWebSearchMaterial(topicId, angle, cycleId);
 
-  logActivity("info", "research_material_gathered", {
+  await logActivity("info", "research_material_gathered", {
     cycleId, rssArticles: rssArticles.length, webClaims: webClaims.length
   });
 
@@ -412,18 +420,18 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
 
   if (skipCorroboration) {
     // Path B: Skip corroboration — build brief directly from raw sources
-    logActivity("info", "corroboration_skipped", { cycleId, message: "Corroboration disabled via dashboard toggle" });
+    await logActivity("info", "corroboration_skipped", { cycleId, message: "Corroboration disabled via dashboard toggle" });
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
-    logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before corroboration call" });
+    await logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before corroboration call" });
     await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
 
     const corroboration = await corroborateClaims(allSources, cycleId);
     brief = buildVerifiedBrief(corroboration, allSources);
   }
 
-  logActivity("info", "research_complete", {
+  await logActivity("info", "research_complete", {
     cycleId, topicId,
     corroborationSkipped: skipCorroboration,
     verifiedClaims: brief.verifiedClaimCount,

@@ -3,13 +3,18 @@
 // // ════════════════════════════════════════════════
 // v{{VERSION}}
 //
-// Startup sequence (all inside async start()):
-//   1. Load .env via dotenv.config() with override:true
-//   2. Read encryption vars, decrypt API key (explicit params)
-//   3. Scrub secrets from process.env
-//   4. Dynamic-import all services (key is in process.env)
-//   5. Initialize database, then auth registry
-//   6. Start Express + scheduler + news monitor
+// Split into three phases:
+//   - createApp()  : builds and returns the Express app with
+//                    all middleware wired. No listener bound.
+//                    Exported so tests can drive the app in-process.
+//   - start()      : full production startup — env, decrypt,
+//                    services, createApp(), listen, scheduler.
+//   - module-guard : start() runs only when this file is the
+//                    process entrypoint, not when imported.
+//
+// The `app` export is populated after createApp() completes
+// during start(). Tests that need the app call createApp()
+// directly with a prepared context.
 // // ════════════════════════════════════════════════
 import dotenv from "dotenv";
 import path from "path";
@@ -20,93 +25,50 @@ import cors from "cors";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-async function start() {
-  // ═════════════════════════════════════════════════════════════
-  // STEP 1: Load .env (override:true ensures .env always wins
-  //         over empty shell variables)
-  // ═════════════════════════════════════════════════════════════
-  const envPath = path.resolve(__dirname, "../.env");
-  const envResult = dotenv.config({ path: envPath, override: true });
-  if (envResult.error) {
-    console.error("[WARN] Could not load .env — falling back to OS environment variables.");
-  }
+// The app instance created during start(). Exposed for tests
+// that drive the running app via supertest. Null until start()
+// or an explicit createApp() call completes.
+export let app = null;
 
-  // ═════════════════════════════════════════════════════════════
-  // STEP 2: Decrypt API key
-  // ═════════════════════════════════════════════════════════════
-  const { decryptApiKey } = await import("./services/decrypt-key.js");
+// Platform-level logger. Used by code paths that run BEFORE any
+// tenant context exists — auth registry initialization, OAuth
+// callback handlers, etc. The tenant-scoped logActivity would
+// reject these because they have no tenant context to attach the
+// log entry to. platformLog writes to the console with a clear
+// prefix so the diagnostic trail is preserved without database
+// involvement. Kept at module scope so createApp(), start(), and
+// buildAppForTests() all share the same implementation.
+export function platformLog(level, action, details) {
+  const upper = String(level || "info").toUpperCase();
+  const payload = details === null || details === undefined ? "" : (
+    typeof details === "string" ? details : JSON.stringify(details)
+  );
+  console.log(`[PLATFORM:${upper}] ${action}${payload ? " " + payload : ""}`);
+}
 
-  // Read values HERE, pass explicitly — no hidden process.env coupling
-  const encryptedKey = process.env.ANTHROPIC_API_KEY_ENCRYPTED;
-  const encSecret    = process.env.ENCRYPTION_SECRET;
-  const encSalt      = process.env.ENCRYPTION_SALT;
+// ═════════════════════════════════════════════════════════════
+// createApp — builds the Express app from a context object
+// containing the already-imported services. No I/O, no listener.
+// Returns the Express app. Callable from tests or start().
+// ═════════════════════════════════════════════════════════════
+export function createApp(ctx) {
+  const {
+    apiRoutes,
+    getAuthorizationUrl, exchangeCodeForToken, getProfile,
+    escapeHtml, generateOAuthState, validateOAuthState,
+    isAuthEnabled, getDefaultProvider,
+    createSession, readSession, clearSession,
+    getServerAddress,
+    logActivity
+  } = ctx;
 
-  try {
-    const apiKey = decryptApiKey(encryptedKey, encSecret, encSalt);
-    process.env.ANTHROPIC_API_KEY = apiKey;
-    console.log("[OK] API key decrypted.");
-  } catch (err) {
-    console.error("[FATAL] API key decryption failed. Run: node scripts/verify-key.js");
-    process.exit(1);
-  }
-
-  // ═════════════════════════════════════════════════════════════
-  // STEP 3: Scrub secrets — passphrase and salt have no further
-  //         use. Only the decrypted ANTHROPIC_API_KEY remains.
-  // ═════════════════════════════════════════════════════════════
-  delete process.env.ENCRYPTION_SECRET;
-  delete process.env.ENCRYPTION_SALT;
-  delete process.env.ANTHROPIC_API_KEY_ENCRYPTED;
-
-  // ═════════════════════════════════════════════════════════════
-  // STEP 4: Dynamic-import all services (key is now in process.env)
-  // ═════════════════════════════════════════════════════════════
-  const { initDatabase, logActivity }    = await import("./services/database.js");
-  const { startScheduler }               = await import("./services/scheduler.js");
-  const { setDatabase, startMonitor }    = await import("./services/news-monitor.js");
-  const { default: apiRoutes }           = await import("./routes/api.js");
-  const { getAuthorizationUrl,
-          exchangeCodeForToken,
-          getProfile }                   = await import("./services/linkedin-api.js");
-  const { escapeHtml,
-          generateOAuthState,
-          validateOAuthState }           = await import("./services/security.js");
-
-  // ── Auth layer imports ─────────────────────────────────────
-  const { initRegistry,
-          isAuthEnabled,
-          getDefaultProvider }           = await import("./auth/index.js");
-  const { createSession,
-          readSession,
-          clearSession }                 = await import("./auth/session.js");
-
-  // ── Server address utility ─────────────────────────────────
-  const { setBoundAddress,
-          getServerAddress,
-          getServerUrl }                 = await import("./services/server-address.js");
-
-  // Ensure data directory exists
-  mkdirSync(path.join(__dirname, "../data"), { recursive: true });
-
-  // ═════════════════════════════════════════════════════════════
-  // STEP 5: Initialize database, then auth registry
-  // Database must be ready before initRegistry because
-  // logActivity writes to the activity_log table.
-  // ═════════════════════════════════════════════════════════════
-  const db = initDatabase();
-  setDatabase(db);
-  logActivity("info", "agent_started", { mode: process.env.AGENT_MODE || "manual" });
-
-  await initRegistry(logActivity);
-
-  // ── Express Server ───────────────────────────────────────────
-  const app = express();
-  app.disable("x-powered-by");
-  app.disable("etag");
-  app.set("trust proxy", true); // ALB terminates TLS — req.protocol must read X-Forwarded-Proto
+  const instance = express();
+  instance.disable("x-powered-by");
+  instance.disable("etag");
+  instance.set("trust proxy", true);
 
   // Security headers
-  app.use((req, res, next) => {
+  instance.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("X-XSS-Protection", "0");
@@ -128,12 +90,11 @@ async function start() {
     next();
   });
 
-  // CORS — restrict to configured origins, default from APP_BASE_URL
-  // getServerAddress() returns runtime-detected origin when APP_BASE_URL is unset
+  // CORS
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || getServerAddress().origin)
     .split(",").map(o => o.trim());
 
-  app.use(cors({
+  instance.use(cors({
     origin: function (origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -144,29 +105,18 @@ async function start() {
     credentials: true,
   }));
 
-  app.use(express.json({ limit: "16kb" }));
+  instance.use(express.json({ limit: "16kb" }));
 
-  // ── Static File Serving ──────────────────────────────────────
-  // Two static surfaces, one Express process:
-  //
-  //   /app/*  → dashboard UI (React SPA from public/)
-  //   /*      → marketing homepage (static HTML from ***REMOVED***/)
-  //
-  // index:false on both mounts because explicit route handlers
-  // below serve the HTML shells — not express.static's auto-index.
+  // Static file surfaces
   const dashboardHtml = path.join(__dirname, "../public/index.html");
   const alphaDir = path.join(__dirname, "../***REMOVED***");
   const alphaHtml = path.join(alphaDir, "index.html");
 
-  app.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
-  app.use(express.static(alphaDir, { index: false }));
+  instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
+  instance.use(express.static(alphaDir, { index: false }));
 
   // ── Auth0 Login / Callback / Logout ────────────────────────
-  // These routes are defined BEFORE the API router because the
-  // API router enforces authentication. The login flow itself
-  // cannot require authentication — it IS the authentication.
-
-  app.get("/auth/login", (req, res) => {
+  instance.get("/auth/login", (req, res) => {
     const provider = getDefaultProvider();
     if (!provider) {
       return res.status(503).send(`
@@ -180,10 +130,9 @@ async function start() {
     res.redirect(loginUrl);
   });
 
-  app.get("/auth/callback", async (req, res) => {
+  instance.get("/auth/callback", async (req, res) => {
     const { code, error, error_description, state } = req.query;
 
-    // Auth0 error (user denied consent, misconfigured app, etc.)
     if (error) {
       const safeError = escapeHtml(String(error));
       const safeDesc = escapeHtml(String(error_description || ""));
@@ -194,11 +143,10 @@ async function start() {
       `);
     }
 
-    // Validate CSRF state — must happen BEFORE code exchange
     if (!validateOAuthState(state)) {
       return res.status(403).send(`
-        <h2>Authentication Failed</h2>
-        <p>Invalid or expired authentication state. Please try again.</p>
+        <h2>Authorization Failed</h2>
+        <p>Invalid or expired OAuth state. Please try again.</p>
         <a href="/">Back to home</a>
       `);
     }
@@ -208,39 +156,26 @@ async function start() {
       return res.status(503).send(`
         <h2>Authentication Not Available</h2>
         <p>No authentication provider is configured.</p>
-        <a href="/">Back to home</a>
       `);
     }
 
-    // Exchange authorization code for tokens
     try {
+      // exchangeCode returns OAuth tokens only — no user identity.
+      // getUserInfo fetches the user identity using the access token.
+      // Both calls are required to populate the session payload that
+      // createSession expects: { accessToken, refreshToken, expiresIn, user }.
       const tokens = await provider.exchangeCode(code);
-
-      // Fetch user profile from the provider
-      let userInfo = { sub: tokens.sub || "unknown" };
-      try {
-        userInfo = await provider.getUserInfo(tokens.accessToken || tokens.access_token);
-      } catch (profileErr) {
-        logActivity("warn", "auth_profile_fetch_failed", { error: profileErr.message });
-      }
-
-      // Create encrypted session cookie
+      const user = await provider.getUserInfo(tokens.accessToken);
       createSession(res, {
-        accessToken: tokens.accessToken || tokens.access_token,
-        refreshToken: tokens.refreshToken || tokens.refresh_token || null,
-        expiresIn: tokens.expiresIn || tokens.expires_in || 3600,
-        user: {
-          sub: userInfo.sub || userInfo.user_id || "unknown",
-          email: userInfo.email || null,
-          name: userInfo.name || null,
-        }
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+        user
       });
-
-      // Redirect to dashboard (mounted at /app)
-      res.redirect("/app");
-
+      platformLog("info", "user_logged_in", { sub: user.sub, provider: provider.name });
+      return res.redirect("/app");
     } catch (err) {
-      logActivity("error", "auth_code_exchange_failed", {
+      platformLog("error", "auth_callback_failed", {
         error: err.message,
         provider: provider.name
       });
@@ -252,8 +187,7 @@ async function start() {
     }
   });
 
-  app.get("/auth/logout", (req, res) => {
-    // Clear the session cookie regardless of provider state
+  instance.get("/auth/logout", (req, res) => {
     clearSession(res);
 
     const provider = getDefaultProvider();
@@ -264,16 +198,11 @@ async function start() {
       return res.redirect(logoutUrl);
     }
 
-    // No provider — just redirect home
     res.redirect("/");
   });
 
   // ── LinkedIn OAuth ──────────────────────────────────────────
-  // LinkedIn OAuth is for posting tokens — completely independent
-  // from Auth0 dashboard auth. Both must be defined BEFORE
-  // app.use(apiRoutes) because the API router enforces auth.
-
-  app.get("/auth/linkedin/callback", async (req, res) => {
+  instance.get("/auth/linkedin/callback", async (req, res) => {
     const { code, error, state } = req.query;
 
     if (!validateOAuthState(state)) {
@@ -304,7 +233,7 @@ async function start() {
         profileName = profile.name || "(unknown)";
         process.env.LINKEDIN_PERSON_URN = `urn:li:person:${profile.sub}`;
       } catch (profileErr) {
-        logActivity("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
+        platformLog("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
       }
 
       res.send(`
@@ -325,7 +254,7 @@ async function start() {
         console.log("  LINKEDIN_PERSON_URN=(profile fetch failed — set manually or retry auth)");
       }
     } catch (err) {
-      logActivity("error", "oauth_token_exchange_failed", { error: err.message });
+      platformLog("error", "oauth_token_exchange_failed", { error: err.message });
       res.status(500).send(`
         <h2>Token Exchange Failed</h2>
         <p>An error occurred during authentication. Check the activity log.</p>
@@ -334,27 +263,13 @@ async function start() {
     }
   });
 
-  app.get("/auth/linkedin", (req, res) => {
+  instance.get("/auth/linkedin", (req, res) => {
     const state = generateOAuthState();
     res.redirect(getAuthorizationUrl(state));
   });
 
   // ── Auth Status Probe ─────────────────────────────────────
-  // Public endpoint consumed by the alpha marketing homepage.
-  // Returns whether the caller holds a valid session and, if so,
-  // the minimum display fields for a "Welcome back" greeting.
-  // Lives here alongside the other /auth/* routes — NOT in
-  // api.js — so it never enters the API router and never
-  // triggers requireAuth.
-  //
-  // Security notes:
-  //   • Reads the session cookie directly via readSession() —
-  //     no middleware, no req.user gating.
-  //   • Returns only name and email. The stable user identifier
-  //     (sub) is deliberately NOT exposed.
-  //   • Cache-Control: no-store prevents intermediaries from
-  //     returning a stale auth state to a different user.
-  app.get("/auth/status", (req, res) => {
+  instance.get("/auth/status", (req, res) => {
     res.setHeader("Cache-Control", "no-store, private, max-age=0");
     res.setHeader("Pragma", "no-cache");
     const session = readSession(req);
@@ -366,44 +281,152 @@ async function start() {
   });
 
   // ── HTML Shell Routes ─────────────────────────────────────
-  // IMPORTANT: These MUST be defined BEFORE app.use(apiRoutes).
-  // The API router is mounted at root (no path prefix) and its
-  // requireAuth middleware runs on every request that enters it.
-  // If these routes were defined after the API router, requests
-  // to / and /app from unauthenticated visitors would hit
-  // requireAuth and get a 401 instead of the HTML page.
+  instance.get("/app", (req, res) => res.sendFile(dashboardHtml));
+  instance.get("/app/*", (req, res) => res.sendFile(dashboardHtml));
+  instance.get("/", (req, res) => res.sendFile(alphaHtml));
 
-  // Dashboard SPA — /app and any client-side route under /app/*
-  app.get("/app", (req, res) => res.sendFile(dashboardHtml));
-  app.get("/app/*", (req, res) => res.sendFile(dashboardHtml));
+  // API routes (auth + tenant resolver applied inside apiRoutes)
+  instance.use(apiRoutes);
 
-  // Marketing homepage — ***REMOVED***/index.html at the root
-  app.get("/", (req, res) => res.sendFile(alphaHtml));
+  // API 404 handler — returns JSON so the dashboard can parse it.
+  // Must be after apiRoutes but before the generic error handler.
+  instance.use("/api", (req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
 
-  // API routes (auth enforcement is applied inside apiRoutes)
-  app.use(apiRoutes);
-
-  // ── Error handler ──────────────────────────────────────────
-  // Catches errors thrown by middleware (e.g., CORS rejection).
-  // Without this, Express's default handler sends the full stack
-  // trace to the client when NODE_ENV is not 'production'.
-  // Four parameters mark this as an error handler for Express.
-  app.use((err, req, res, next) => {
+  // Error handler (four params → Express treats as error handler)
+  instance.use((err, req, res, next) => {
     if (!res.headersSent) {
       res.status(403).json({ error: "Forbidden" });
     }
   });
 
-  // ── Start Server & Scheduler ─────────────────────────────────
+  return instance;
+}
+
+// ═════════════════════════════════════════════════════════════
+// buildAppForTests — dynamic-imports services and returns a
+// fully-wired Express app without binding a listener, starting
+// the scheduler, or running the news monitor.
+//
+// Used by the test suite (scripts/testing/test-routes-async*)
+// to drive the app in-process via supertest. Not used at
+// runtime — start() does the full boot including listener.
+//
+// Assumes .env is already loaded (dotenv) and required env
+// vars (PG*, ENCRYPTION_SECRET, etc.) are set. The test runner
+// is responsible for that setup.
+// ═════════════════════════════════════════════════════════════
+export async function buildAppForTests() {
+  const { logActivity }                  = await import("./services/database.js");
+  const { default: apiRoutes }           = await import("./routes/api.js");
+  const { getAuthorizationUrl,
+          exchangeCodeForToken,
+          getProfile }                   = await import("./services/linkedin-api.js");
+  const { escapeHtml,
+          generateOAuthState,
+          validateOAuthState }           = await import("./services/security.js");
+  const { initRegistry,
+          isAuthEnabled,
+          getDefaultProvider }           = await import("./auth/index.js");
+  const { createSession,
+          readSession,
+          clearSession }                 = await import("./auth/session.js");
+  const { getServerAddress }             = await import("./services/server-address.js");
+
+  // Use the module-level platformLog so initRegistry's startup
+  // events bypass the tenant-scoped logActivity.
+  await initRegistry(platformLog);
+
+  return createApp({
+    apiRoutes,
+    getAuthorizationUrl, exchangeCodeForToken, getProfile,
+    escapeHtml, generateOAuthState, validateOAuthState,
+    isAuthEnabled, getDefaultProvider,
+    createSession, readSession, clearSession,
+    getServerAddress,
+    logActivity
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+// start — full production startup. Loads env, decrypts key,
+// imports services, builds the app, starts the listener, kicks
+// off the scheduler.
+// ═════════════════════════════════════════════════════════════
+export async function start() {
+  // STEP 1: Load .env
+  const envPath = path.resolve(__dirname, "../.env");
+  const envResult = dotenv.config({ path: envPath, override: true });
+  if (envResult.error) {
+    console.error("[WARN] Could not load .env — falling back to OS environment variables.");
+  }
+
+  // STEP 2: (removed) Per-tenant Anthropic API keys are now fetched
+  // from the credentials table via getAnthropicApiKey() at each use
+  // site. There is no global ANTHROPIC_API_KEY to decrypt at startup.
+  // ANTHROPIC_API_KEY_ENCRYPTED and ENCRYPTION_SALT can be removed
+  // from .env. ENCRYPTION_SECRET must remain — it is the HKDF input
+  // keying material used on every per-tenant credential decrypt.
+
+  // STEP 3: Scrub no-longer-needed legacy secrets.
+  // ENCRYPTION_SECRET is NOT scrubbed — the credential store reads
+  // it on every credential access.
+  delete process.env.ENCRYPTION_SALT;
+  delete process.env.ANTHROPIC_API_KEY_ENCRYPTED;
+
+  // STEP 4: Dynamic-import services
+  const { logActivity }                  = await import("./services/database.js");
+  const { startScheduler }               = await import("./services/scheduler.js");
+  const { startMonitor }                 = await import("./services/news-monitor.js");
+  const { default: apiRoutes }           = await import("./routes/api.js");
+  const { getAuthorizationUrl,
+          exchangeCodeForToken,
+          getProfile }                   = await import("./services/linkedin-api.js");
+  const { escapeHtml,
+          generateOAuthState,
+          validateOAuthState }           = await import("./services/security.js");
+  const { initRegistry,
+          isAuthEnabled,
+          getDefaultProvider }           = await import("./auth/index.js");
+  const { createSession,
+          readSession,
+          clearSession }                 = await import("./auth/session.js");
+  const { setBoundAddress,
+          getServerAddress,
+          getServerUrl }                 = await import("./services/server-address.js");
+
+  mkdirSync(path.join(__dirname, "../data"), { recursive: true });
+
+  // STEP 5: Initialize auth registry.
+  //
+  // initRegistry fires several logFn() calls at startup for
+  // platform-level events (providers loaded, duplicates, init
+  // failures, etc.). These happen BEFORE any tenant exists, so
+  // the async logActivity — which requires tenant context for
+  // the activity_log RLS — would reject. We pass the module-level
+  // platformLog (console only) to preserve the diagnostic trail
+  // without touching the database. Request-path logging continues
+  // to use the real logActivity inside withTenant.
+  await initRegistry(platformLog);
+
+  // STEP 6: Build app
+  app = createApp({
+    apiRoutes,
+    getAuthorizationUrl, exchangeCodeForToken, getProfile,
+    escapeHtml, generateOAuthState, validateOAuthState,
+    isAuthEnabled, getDefaultProvider,
+    createSession, readSession, clearSession,
+    getServerAddress,
+    logActivity
+  });
+
+  // STEP 7: Listen
   const PORT = process.env.DASHBOARD_PORT || 3001;
   const server = app.listen(PORT, () => {
-    // Register the bound address for runtime detection
     setBoundAddress(server.address());
     const addr = getServerAddress();
 
-    // ── Startup Banner ─────────────────────────────────────────
-    // Printed AFTER app.listen() so server address is known,
-    // and AFTER initRegistry() so isAuthEnabled() is accurate.
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║           LinkedIn AI Content Agent  v{{VERSION}}
@@ -425,18 +448,24 @@ async function start() {
     }
     console.log("");
 
-    // Start the scheduling engine
     startScheduler();
-
-    // Start the RSS news monitor
+    // News monitor — iterates all active tenants each hour
     startMonitor();
   });
+
+  return { app, server };
 }
 
-// // ════════════════════════════════════════════════
-// Run
-// // ════════════════════════════════════════════════
-start().catch(err => {
-  console.error("[FATAL] Startup failed.");
-  process.exit(1);
-});
+// ═════════════════════════════════════════════════════════════
+// Module guard — start() runs only when this file is invoked
+// as the process entrypoint (node src/index.js), never when
+// another module imports it. Tests import { createApp } without
+// triggering startup.
+// ═════════════════════════════════════════════════════════════
+const isEntrypoint = fileURLToPath(import.meta.url) === path.resolve(process.argv[1] || "");
+if (isEntrypoint) {
+  start().catch(err => {
+    console.error("[FATAL] Startup failed.", err);
+    process.exit(1);
+  });
+}

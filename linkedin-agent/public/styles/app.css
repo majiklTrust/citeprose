@@ -337,6 +337,13 @@ body::after {
 }
 .btn-reject:hover { background: var(--glow-red); }
 
+.btn-edit {
+  background: transparent;
+  border: 1px solid var(--accent-amber);
+  color: var(--accent-amber);
+}
+.btn-edit:hover { background: var(--glow-amber); }
+
 .btn-primary {
   background: var(--accent-blue);
   color: white;

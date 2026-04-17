@@ -511,7 +511,7 @@
                         <div className="post-footer">
                           <span className="post-date">{formatDate(post.created_at)}</span>
                           <div className="post-actions">
-                            <button className="btn btn-ghost" onClick={(e) => handleEditStart(post, e)}>
+                            <button className="btn btn-edit" onClick={(e) => handleEditStart(post, e)}>
                               Edit
                             </button>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
@@ -862,7 +862,7 @@
                   <React.Fragment>
                     {selectedPost.status === 'pending_approval' && (
                       <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                        <button className="btn btn-ghost" onClick={(e) => handleEditStart(selectedPost, e)}>
+                        <button className="btn btn-edit" onClick={(e) => handleEditStart(selectedPost, e)}>
                           Edit
                         </button>
                         <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>

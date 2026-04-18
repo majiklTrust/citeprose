@@ -60,11 +60,6 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
-      // Edit mode state. editing holds the in-progress draft; null means
-      // the modal is in read-only display mode. Initialized when the user
-      // clicks Edit, cleared when Save succeeds or Cancel is pressed.
-      const [editing, setEditing] = useState(null);
-      const [editError, setEditError] = useState(null);
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -109,15 +104,6 @@
         return () => clearInterval(interval);
       }, [fetchAll]);
 
-      // Clear edit state whenever the modal closes. Prevents stale
-      // edit drafts from persisting into the next post the user opens.
-      useEffect(() => {
-        if (!selectedPost) {
-          setEditing(null);
-          setEditError(null);
-        }
-      }, [selectedPost]);
-
       async function toggleMode() {
         const newMode = status.mode === 'auto' ? 'manual' : 'auto';
         await fetch(`${API}/api/mode`, {
@@ -150,64 +136,6 @@
         fetchAll();
       }
 
-      // Edit mode: opens the modal in edit-form mode with the post's
-      // current title/content/hashtags pre-populated. hashtags is held
-      // as a single space-separated string in the form for ergonomics;
-      // it's split on whitespace at save time.
-      function handleEditStart(post, e) {
-        if (e) e.stopPropagation();
-        setSelectedPost(post);
-        setEditing({
-          title: post.title || '',
-          content: post.content || '',
-          hashtagsText: (post.hashtags || []).join(' ')
-        });
-        setEditError(null);
-      }
-
-      function handleEditCancel() {
-        setEditing(null);
-        setEditError(null);
-      }
-
-      async function handleEditSave() {
-        if (!selectedPost || !editing) return;
-        setLoading(l => ({ ...l, editSave: true }));
-        setEditError(null);
-        try {
-          // Split hashtags on whitespace, drop empties, and ensure each
-          // starts with '#'. This is permissive — operator can paste a
-          // line of "#a #b c" and get ["#a", "#b", "#c"].
-          const hashtags = editing.hashtagsText
-            .split(/\s+/)
-            .map(s => s.trim())
-            .filter(Boolean)
-            .map(s => s.startsWith('#') ? s : '#' + s);
-
-          const res = await fetch(`${API}/api/posts/${selectedPost.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: editing.title,
-              content: editing.content,
-              hashtags
-            })
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `HTTP ${res.status}`);
-          }
-          // Refresh the post list, close edit mode, close the modal.
-          // Operator can re-open the (now updated) card to review.
-          await fetchAll();
-          setEditing(null);
-          setSelectedPost(null);
-        } catch (err) {
-          setEditError(err.message);
-        }
-        setLoading(l => ({ ...l, editSave: false }));
-      }
-
       async function handleForceCycle() {
         setLoading(l => ({ ...l, forceCycle: true }));
         await fetch(`${API}/api/force-cycle`, {
@@ -228,6 +156,10 @@
             body: JSON.stringify({ topicId: selectedTopic || undefined })
           });
           const data = await res.json();
+
+          if (!res.ok || data.error) {
+            throw new Error(data.error || `Server returned ${res.status}`);
+          }
 
           if (data.blocked) {
             alert(`Post blocked — insufficient sources.\n\nTopic: ${TOPIC_STYLES[data.topicId]?.label || data.topicId}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
@@ -511,9 +443,6 @@
                         <div className="post-footer">
                           <span className="post-date">{formatDate(post.created_at)}</span>
                           <div className="post-actions">
-                            <button className="btn btn-edit" onClick={(e) => handleEditStart(post, e)}>
-                              Edit
-                            </button>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
                             </button>
@@ -559,6 +488,17 @@
 
             {/* Controls (middle column) */}
             <div>
+              {/* AI Model */}
+              {status.anthropicModel && (
+                <div className="sidebar-panel" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>AI Model</span>
+                    <span style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono, monospace)', color: 'var(--accent-cyan)' }}>
+                      {status.anthropicModel}
+                    </span>
+                  </div>
+                </div>
+              )}
               {/* Quick Actions */}
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
@@ -712,9 +652,7 @@
                   </span>
                 </div>
 
-                {!editing && (
-                  <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
-                )}
+                <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
 
                 {ctx?.researchSummary && (
                   <div className="research-summary">
@@ -725,68 +663,12 @@
                   </div>
                 )}
 
-                {editing ? (
-                  <div style={{ marginTop: '1rem' }}>
-                    <div style={{ marginBottom: '0.75rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Title</label>
-                      <input
-                        type="text"
-                        value={editing.title}
-                        onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                        style={{
-                          width: '100%', padding: '0.5rem', fontSize: '1rem',
-                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
-                          fontFamily: 'inherit'
-                        }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: '0.75rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Content</label>
-                      <textarea
-                        value={editing.content}
-                        onChange={(e) => setEditing({ ...editing, content: e.target.value })}
-                        rows={12}
-                        style={{
-                          width: '100%', padding: '0.5rem', fontSize: '0.9rem',
-                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
-                          fontFamily: 'inherit', resize: 'vertical'
-                        }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: '0.75rem' }}>
-                      <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                        Hashtags (space-separated; # added if missing)
-                      </label>
-                      <input
-                        type="text"
-                        value={editing.hashtagsText}
-                        onChange={(e) => setEditing({ ...editing, hashtagsText: e.target.value })}
-                        style={{
-                          width: '100%', padding: '0.5rem', fontSize: '0.9rem',
-                          background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                          border: '1px solid var(--border-color, #444)', borderRadius: 'var(--radius-sm)',
-                          fontFamily: 'var(--font-mono, monospace)'
-                        }}
-                      />
-                    </div>
-                    {editError && (
-                      <div style={{ color: 'var(--accent-red)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                        {editError}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <React.Fragment>
-                    <div className="modal-body">{selectedPost.content}</div>
-                    <div className="modal-hashtags">
-                      {(selectedPost.hashtags || []).map((tag, i) => (
-                        <span key={i} className="hashtag">{tag}</span>
-                      ))}
-                    </div>
-                  </React.Fragment>
-                )}
+                <div className="modal-body">{selectedPost.content}</div>
+                <div className="modal-hashtags">
+                  {(selectedPost.hashtags || []).map((tag, i) => (
+                    <span key={i} className="hashtag">{tag}</span>
+                  ))}
+                </div>
 
                 {ctx?.researchSummary?.sourceList && ctx.researchSummary.sourceList.length > 0 && (
                   <div className="source-list">
@@ -849,41 +731,25 @@
                     </div>
                   </div>
                 )}
-                {editing ? (
+                {selectedPost.status === 'pending_approval' && (
                   <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={handleEditSave}>
-                      {loading.editSave ? <span className="loading-spinner"></span> : 'Save Changes'}
+                    <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
+                      Approve & Publish
                     </button>
-                    <button className="btn btn-ghost" onClick={handleEditCancel}>
-                      Cancel
+                    <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
+                      Reject
                     </button>
                   </div>
-                ) : (
-                  <React.Fragment>
-                    {selectedPost.status === 'pending_approval' && (
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                        <button className="btn btn-edit" onClick={(e) => handleEditStart(selectedPost, e)}>
-                          Edit
-                        </button>
-                        <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
-                          Approve & Publish
-                        </button>
-                        <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                    {selectedPost.isPreview && (
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                        <button className="btn btn-approve" onClick={handleSavePreview}>
-                          {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
-                        </button>
-                        <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
-                          Discard
-                        </button>
-                      </div>
-                    )}
-                  </React.Fragment>
+                )}
+                {selectedPost.isPreview && (
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    <button className="btn btn-approve" onClick={handleSavePreview}>
+                      {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
+                      Discard
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

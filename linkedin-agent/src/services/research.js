@@ -17,6 +17,7 @@ import { logActivity } from "./database.js";
 import { TOPICS } from "../config/topics.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
+import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -62,8 +63,9 @@ async function gatherWebSearchMaterial(topicId, angle, cycleId) {
 
   try {
     const client = await newAnthropicClient();
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    const model = await getAnthropicModel();
+    const response = await callAnthropic(client, {
+      model,
       max_tokens: 2000,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{
@@ -206,8 +208,9 @@ async function corroborateClaims(allSources, cycleId) {
 
   try {
     const client = await newAnthropicClient();
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    const model = await getAnthropicModel();
+    const response = await callAnthropic(client, {
+      model,
       max_tokens: 2000,
       messages: [{
         role: "user",

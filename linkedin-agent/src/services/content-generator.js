@@ -8,6 +8,7 @@ import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
 import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
+import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store. Module-level
@@ -223,8 +224,9 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
   try {
     const client = await newAnthropicClient();
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    const model = await getAnthropicModel();
+    const response = await callAnthropic(client, {
+      model,
       max_tokens: 1500,
       system: topic.systemContext,
       messages: [{ role: "user", content: userPrompt }]
@@ -277,8 +279,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     : "\n(No research brief was provided — post should avoid specific factual claims)";
 
   const client = await newAnthropicClient();
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const model = await getAnthropicModel();
+  const response = await callAnthropic(client, {
+    model,
     max_tokens: 800,
     messages: [{
       role: "user",

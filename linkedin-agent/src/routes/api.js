@@ -41,6 +41,7 @@ import { getServerAddress } from "../services/server-address.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { getAnthropicModel } from "../config/ai.js";
 
 const router = Router();
 
@@ -107,6 +108,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let researchStats = null;
     let cadence = null;
     let tokenStatus = { valid: false };
+    let anthropicModel = null;
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
@@ -132,6 +134,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             // block so currentTenantId() returns a valid UUID.
             cadence = await canPostNow();
             tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
+            anthropicModel = await getAnthropicModel();
           });
         }
       } catch {
@@ -155,7 +158,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       maxPostsPer10Days,
       researchStats,
       linkedinConnected: tokenStatus.valid,
-      linkedinProfile: tokenStatus.valid ? tokenStatus.name : null
+      linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
+      anthropicModel
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

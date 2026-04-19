@@ -72,6 +72,34 @@ function isDevBypass(req) {
   return false;
 }
 
+// ── Synthetic Dev User ───────────────────────────────────────
+
+/**
+ * Build a synthetic user identity from DEV_BYPASS_SUB.
+ *
+ * When dev bypass is active (or no providers are configured),
+ * this identity is injected as req.user so the tenant resolver
+ * can find the workspace and load data. Without it, req.user
+ * is null and every tenant-scoped route returns 403.
+ *
+ * Returns null if DEV_BYPASS_SUB is not set — caller falls back
+ * to req.user = null (no synthetic identity available).
+ *
+ * DEV_BYPASS_SUB should be the auth_sub of a real membership
+ * row (e.g. "***REMOVED***"). The tenant
+ * resolver uses it to look up the workspace.
+ */
+function syntheticDevUser() {
+  const sub = process.env.DEV_BYPASS_SUB;
+  if (!sub || typeof sub !== 'string' || sub.trim().length === 0) return null;
+  return {
+    sub: sub.trim(),
+    email: null,
+    name: 'Dev Bypass User',
+    authMethod: 'dev-bypass'
+  };
+}
+
 // ── Token Extraction ─────────────────────────────────────────
 
 function extractBearerToken(req) {
@@ -147,18 +175,23 @@ export function createAuthMiddleware(logFn) {
    * Priority: no providers → dev bypass → session cookie → Bearer → 401
    */
   async function requireAuth(req, res, next) {
-    // If no auth providers are configured, pass through
+    // If no auth providers are configured, pass through.
+    // Inject synthetic user from DEV_BYPASS_SUB so the tenant
+    // resolver can find the workspace. Without it, tenant-scoped
+    // routes return 403 because req.user is null.
     if (!isAuthEnabled()) {
-      req.user = null;
+      req.user = syntheticDevUser();
       req.authSkipped = true;
+      req.devBypass = !!req.user;
       return next();
     }
 
-    // Dev bypass: non-production + request from DEV_BYPASS_ORIGINS
+    // Dev bypass: NODE_ENV=dev + request from DEV_BYPASS_ORIGINS.
     // Auth providers may be configured (for testing the login flow)
-    // but enforcement is disabled for matching origins.
+    // but enforcement is disabled for matching origins. Synthetic
+    // user injected from DEV_BYPASS_SUB when available.
     if (isDevBypass(req)) {
-      req.user = null;
+      req.user = syntheticDevUser();
       req.authSkipped = true;
       req.devBypass = true;
       return next();
@@ -269,15 +302,17 @@ export function createAuthMiddleware(logFn) {
    * Attaches req.user if valid, null otherwise.
    */
   async function optionalAuth(req, res, next) {
+    // No providers — inject synthetic user if available
     if (!isAuthEnabled()) {
-      req.user = null;
+      req.user = syntheticDevUser();
       req.authSkipped = true;
+      req.devBypass = !!req.user;
       return next();
     }
 
-    // Dev bypass
+    // Dev bypass — inject synthetic user if available
     if (isDevBypass(req)) {
-      req.user = null;
+      req.user = syntheticDevUser();
       req.authSkipped = true;
       req.devBypass = true;
       return next();

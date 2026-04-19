@@ -1,0 +1,15 @@
+"Post Multi Tenant User Security Hardening".
+Real gaps
+Gap 1 — dotenv.config({ override: true }). Your start() function loads .env with override: true. If someone puts NODE_ENV=dev in the production .env file, it silently overwrites the NODE_ENV=production you passed at runtime. The runtime value is gone. Dev bypass activates on a production server.
+Gap 2 — DEV_BYPASS_SUB has no environment guard. If DEV_BYPASS_SUB is accidentally in the production .env, and Gap 1 occurs, every request gets that identity without authentication. There's no code that says "refuse to read DEV_BYPASS_SUB when NODE_ENV is production."
+Gap 3 — Origin header is spoofable. DEV_BYPASS_ORIGINS checks the HTTP Origin header. Browsers enforce Origin honestly, but a raw HTTP client (curl, scripts, attackers) can send any Origin they want. The existing test suite (test-p3-step7-adversarial) already flagged this — the defense is that NODE_ENV must also be 'dev', so spoofing Origin alone isn't enough.
+Gap 4 — No log trail when synthetic user activates. If dev bypass fires, nothing is logged. An attacker who managed to flip NODE_ENV to 'dev' would leave no evidence in the activity log.
+Recommended hardening
+Three changes, in priority order:
+Fix 1 — syntheticDevUser() should refuse to run in production. Add a production guard at the top of the function:
+jsif (process.env.NODE_ENV === 'production') return null;
+Even if all other defenses fail, the synthetic user is never injected in production. Defense in depth.
+Fix 2 — Change dotenv.config({ override: true }) to override: false. Runtime values should win over .env values. A deployment script that passes NODE_ENV=production on the command line should not be overridden by a stale .env file. This is a one-word change in src_templates/index.js.
+Fix 3 — Log when synthetic user activates. Add a platformLog("warn", "dev_bypass_synthetic_user", { sub }) call so there's an audit trail.
+Want me to ship these three hardening fixes now? They're small and self-contained.
+

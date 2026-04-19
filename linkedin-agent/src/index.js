@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.40
+// v1.0.46
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -269,13 +269,42 @@ export function createApp(ctx) {
   });
 
   // ── Auth Status Probe ─────────────────────────────────────
+  // Used by the alpha homepage (site.js) to decide CTA targets.
+  // Does NOT go through requireAuth/optionalAuth middleware —
+  // it reads the session directly and computes authRequired by
+  // checking both provider state and dev bypass mode.
   instance.get("/auth/status", (req, res) => {
     res.setHeader("Cache-Control", "no-store, private, max-age=0");
     res.setHeader("Pragma", "no-cache");
+
+    // Dev bypass is active when NODE_ENV=dev AND DEV_BYPASS_ORIGINS
+    // is set. This matches the two-condition check in middleware.js's
+    // isDevBypass(), but without checking the specific request origin
+    // — the homepage just needs to know if bypass MODE is active.
+    const devBypassActive = process.env.NODE_ENV === "dev"
+      && !!process.env.DEV_BYPASS_ORIGINS;
+
+    // Auth is required only when providers are configured AND dev
+    // bypass is not active. This aligns with how /api/status
+    // computes authRequired (isAuthEnabled() && !req.devBypass).
+    const authRequired = isAuthEnabled() && !devBypassActive;
+
+    // Try session first. If no session but dev bypass is active
+    // with a synthetic user configured, return that identity so
+    // the homepage can show the user greeting and point CTAs to
+    // the dashboard.
     const session = readSession(req);
-    const user = session?.user || null;
+    let user = session?.user || null;
+    if (!user && devBypassActive) {
+      const sub = process.env.DEV_BYPASS_SUB;
+      if (sub && sub.trim().length > 0) {
+        user = { name: "Dev Bypass User", email: null, sub: sub.trim() };
+      }
+    }
+
     res.json({
       authenticated: !!user,
+      authRequired,
       user: user ? { name: user.name || null, email: user.email || null } : null,
     });
   });
@@ -429,7 +458,7 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.40
+║           LinkedIn AI Content Agent  v1.0.46
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

@@ -2,7 +2,7 @@
 -- Phase 2 + Phase 4 DDL — Role permissions + activity log attribution
 -- ═══════════════════════════════════════════════════════════════
 -- Target: ***REMOVED*** (schema: public)
--- Run as: superuser or liagt_owner (needs ALTER TYPE privilege)
+-- Run as: agent (superuser — needs ALTER TYPE privilege)
 --
 -- IMPORTANT: ALTER TYPE ... ADD VALUE cannot run inside a
 -- transaction block. Run these two lines FIRST, outside BEGIN:
@@ -59,4 +59,7 @@ ON CONFLICT DO NOTHING;
 ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS user_sub TEXT;
 
 -- Grants: ***REMOVED*** needs to read the permissions table
+-- and INSERT/DELETE on memberships for user management (Phase 5)
+-- and test infrastructure (role enforcement tests).
 GRANT SELECT ON role_permissions TO ***REMOVED***;
+GRANT INSERT, UPDATE, DELETE ON memberships TO ***REMOVED***;

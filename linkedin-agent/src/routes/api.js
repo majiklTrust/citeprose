@@ -39,6 +39,7 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
 import { createTenantResolver } from "../tenant/resolver.js";
+import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { getAnthropicModel } from "../config/ai.js";
@@ -180,7 +181,7 @@ router.use(resolveTenant);
 
 // ── Posts ─────────────────────────────────────────────────────
 
-router.get("/api/posts", async (req, res) => {
+router.get("/api/posts", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || "50");
     const status = req.query.status;
@@ -193,7 +194,7 @@ router.get("/api/posts", async (req, res) => {
   }
 });
 
-router.get("/api/posts/:id", async (req, res) => {
+router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const post = await withTenant(req.tenant.id, async () => {
       return getPost(parseInt(req.params.id));
@@ -216,7 +217,7 @@ router.get("/api/posts/:id", async (req, res) => {
 //   NOT_EDITABLE  → 409 (conflict — wrong state for this operation)
 //   NO_FIELDS     → 400
 //   anything else → 500
-router.patch("/api/posts/:id", async (req, res) => {
+router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) => {
   try {
     const { title, content, hashtags } = req.body || {};
     const fields = {};
@@ -248,7 +249,7 @@ router.patch("/api/posts/:id", async (req, res) => {
 // in delivery 0.45.1.16 to accept the tenant context via
 // AsyncLocalStorage (they will read currentTenantId internally).
 
-router.post("/api/posts/:id/approve", async (req, res) => {
+router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), async (req, res) => {
   try {
     const result = await withTenant(req.tenant.id, async () => {
       return approvePost(parseInt(req.params.id));
@@ -259,7 +260,7 @@ router.post("/api/posts/:id/approve", async (req, res) => {
   }
 });
 
-router.post("/api/posts/:id/reject", async (req, res) => {
+router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), async (req, res) => {
   try {
     await withTenant(req.tenant.id, async () => {
       return rejectPost(parseInt(req.params.id), req.body.reason || "");
@@ -272,7 +273,7 @@ router.post("/api/posts/:id/reject", async (req, res) => {
 
 // ── Mode Control ─────────────────────────────────────────────
 
-router.post("/api/mode", async (req, res) => {
+router.post("/api/mode", requirePermission("change_mode"), async (req, res) => {
   try {
     const { mode } = req.body;
     if (!["auto", "manual"].includes(mode)) {
@@ -287,7 +288,7 @@ router.post("/api/mode", async (req, res) => {
   }
 });
 
-router.post("/api/pause", async (req, res) => {
+router.post("/api/pause", requirePermission("change_mode"), async (req, res) => {
   try {
     const { paused } = req.body;
     await withTenant(req.tenant.id, async () => {
@@ -299,7 +300,7 @@ router.post("/api/pause", async (req, res) => {
   }
 });
 
-router.post("/api/corroboration", async (req, res) => {
+router.post("/api/corroboration", requirePermission("toggle_corroboration"), async (req, res) => {
   try {
     const { enabled } = req.body;
     const value = enabled === false ? "disabled" : "enabled";
@@ -315,7 +316,7 @@ router.post("/api/corroboration", async (req, res) => {
 
 // ── Manual Triggers ──────────────────────────────────────────
 
-router.post("/api/generate-preview", async (req, res) => {
+router.post("/api/generate-preview", requirePermission("preview_post"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
     const { generated, quality } = await withTenant(req.tenant.id, async () => {
@@ -337,7 +338,7 @@ router.post("/api/generate-preview", async (req, res) => {
   }
 });
 
-router.post("/api/save-preview", async (req, res) => {
+router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
     const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
 
@@ -373,7 +374,7 @@ router.post("/api/save-preview", async (req, res) => {
   }
 });
 
-router.post("/api/force-cycle", async (req, res) => {
+router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
     await withTenant(req.tenant.id, async () => {
@@ -387,7 +388,7 @@ router.post("/api/force-cycle", async (req, res) => {
 
 // ── Research & News Monitor ──────────────────────────────────
 
-router.get("/api/research/stats", async (req, res) => {
+router.get("/api/research/stats", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const stats = await withTenant(req.tenant.id, async () => getArticleStats());
     res.json(stats);
@@ -396,7 +397,7 @@ router.get("/api/research/stats", async (req, res) => {
   }
 });
 
-router.get("/api/research/articles", async (req, res) => {
+router.get("/api/research/articles", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const topicId = req.query.topic;
     const maxAge = parseInt(req.query.maxAge || "14");
@@ -415,7 +416,7 @@ router.get("/api/research/articles", async (req, res) => {
   }
 });
 
-router.post("/api/research/poll", async (req, res) => {
+router.post("/api/research/poll", requirePermission("refresh_feeds"), async (req, res) => {
   try {
     const newArticles = await withTenant(req.tenant.id, async () => pollAllFeeds());
     res.json({ success: true, newArticles });
@@ -426,7 +427,7 @@ router.post("/api/research/poll", async (req, res) => {
 
 // ── Activity Log ─────────────────────────────────────────────
 
-router.get("/api/logs", async (req, res) => {
+router.get("/api/logs", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || "100");
     const logs = await withTenant(req.tenant.id, async () => getActivityLog(limit));
@@ -438,7 +439,7 @@ router.get("/api/logs", async (req, res) => {
 
 // ── LinkedIn Auth ────────────────────────────────────────────
 
-router.get("/api/linkedin/status", async (req, res) => {
+router.get("/api/linkedin/status", requirePermission("view_dashboard"), async (req, res) => {
   try {
     // validateToken reads tenant-scoped LinkedIn credentials;
     // runs inside withTenant so the credential store can resolve.

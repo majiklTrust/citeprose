@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.54
+// v1.0.56
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -229,9 +229,26 @@ export function createApp(ctx) {
     // membership lookup identifies which workspace to store the
     // credentials in. Without this, we don't know whose
     // LinkedIn account this is or where to put the tokens.
+    //
+    // Dev bypass fallback: when NODE_ENV=dev with DEV_BYPASS_SUB,
+    // the user reaches the dashboard via synthetic user injection
+    // (no real session cookie). The LinkedIn OAuth redirect lands
+    // here without a cookie. Fall back to DEV_BYPASS_SUB so the
+    // callback can resolve the tenant and store credentials.
     const session = readSession(req);
-    const sessionUser = session?.user || null;
-    if (!sessionUser || !sessionUser.sub) {
+    let userSub = session?.user?.sub || null;
+
+    if (!userSub) {
+      const devBypassActive = process.env.NODE_ENV === "dev"
+        && !!process.env.DEV_BYPASS_ORIGINS;
+      const bypassSub = process.env.DEV_BYPASS_SUB;
+      if (devBypassActive && bypassSub && bypassSub.trim().length > 0) {
+        userSub = bypassSub.trim();
+        platformLog("info", "linkedin_callback_dev_bypass", { sub: userSub });
+      }
+    }
+
+    if (!userSub) {
       return res.status(403).send(`
         <h2>Session Required</h2>
         <p>You must be logged in to connect LinkedIn. Your session may have expired.</p>
@@ -239,11 +256,14 @@ export function createApp(ctx) {
       `);
     }
 
-    // Resolve the tenant from the session user's auth identity
-    const provider = sessionUser.sub.startsWith("auth0|") ? "auth0" : "auth0";
+    // Resolve the tenant from the user's auth identity.
+    // Infer auth provider from the sub prefix — same logic as
+    // the tenant resolver middleware (inferProvider).
+    let provider = "auth0";
+    if (userSub.startsWith("user_")) provider = "workos";
     let tenant = null;
     try {
-      tenant = await findTenantByAuthIdentity(provider, sessionUser.sub);
+      tenant = await findTenantByAuthIdentity(provider, userSub);
     } catch {
       // Lookup failed
     }
@@ -285,7 +305,7 @@ export function createApp(ctx) {
 
         platformLog("info", "linkedin_credentials_stored", {
           tenant: tenant.slug,
-          user: sessionUser.sub,
+          user: userSub,
           profileName,
           hasPersonUrn: !!personSub
         });
@@ -524,7 +544,7 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.54
+║           LinkedIn AI Content Agent  v1.0.56
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

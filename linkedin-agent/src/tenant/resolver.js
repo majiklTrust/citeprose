@@ -10,7 +10,7 @@
 //   app.use('/api', requireAuth, createTenantResolver());
 //
 // req.tenant shape after resolution:
-//   { id, slug, name, status, created_at, updated_at }
+//   { id, slug, name, status, role, created_at, updated_at }
 // ═══════════════════════════════════════════════════════════════
 
 import { findTenantByAuthIdentity } from "./platform-db.js";

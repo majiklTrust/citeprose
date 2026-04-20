@@ -109,6 +109,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let cadence = null;
     let tokenStatus = { valid: false };
     let anthropicModel = null;
+    let tenantRole = null;
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
@@ -121,6 +122,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
           : "auth0";
         const tenant = await findTenantByAuthIdentity(provider, req.user.sub);
         if (tenant) {
+          tenantRole = tenant.role || null;
           await withTenant(tenant.id, async () => {
             stats = await getPostStats();
             mode = await getAgentState("mode");
@@ -148,6 +150,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
         name: req.user.name || null,
         email: req.user.email || null,
         sub: req.user.sub || null,
+        role: tenantRole,
       } : null,
       serverAddress,
       mode,

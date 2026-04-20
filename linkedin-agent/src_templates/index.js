@@ -255,46 +255,50 @@ export function createApp(ctx) {
     }
 
     try {
-      const tokens = await exchangeCodeForToken(code);
-
-      let profileName = "(unknown)";
-      let personSub = null;
-      try {
-        const profile = await getProfile(tokens.accessToken);
-        personSub = profile.sub;
-        profileName = profile.name || "(unknown)";
-      } catch (profileErr) {
-        platformLog("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
-      }
-
-      // ── Persist to database ──────────────────────────────────
-      // Store credentials inside the resolved tenant's context so
-      // RLS scopes the INSERT/UPDATE to the correct workspace.
-      // Both the access token and person URN are encrypted at rest
-      // via AES-256-GCM with a per-tenant derived key.
+      // ── All LinkedIn API calls run inside withTenant ─────────
+      // exchangeCodeForToken and getProfile both call logActivity
+      // internally, which writes to activity_log via RLS. Without
+      // tenant context, logActivity throws "database operation
+      // requires tenant context." The withTenant block provides
+      // that context for the entire exchange + profile + store
+      // sequence.
       await withTenant(tenant.id, async () => {
+        const tokens = await exchangeCodeForToken(code);
+
+        let profileName = "(unknown)";
+        let personSub = null;
+        try {
+          const profile = await getProfile(tokens.accessToken);
+          personSub = profile.sub;
+          profileName = profile.name || "(unknown)";
+        } catch (profileErr) {
+          platformLog("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
+        }
+
+        // Persist credentials — encrypted at rest via AES-256-GCM
+        // with a per-tenant derived key.
         await storeCredential("linkedin_access_token", tokens.accessToken);
         if (personSub) {
           await storeCredential("linkedin_person_urn", `urn:li:person:${personSub}`);
         }
-      });
 
-      platformLog("info", "linkedin_credentials_stored", {
-        tenant: tenant.slug,
-        user: sessionUser.sub,
-        profileName,
-        hasPersonUrn: !!personSub
-      });
+        platformLog("info", "linkedin_credentials_stored", {
+          tenant: tenant.slug,
+          user: sessionUser.sub,
+          profileName,
+          hasPersonUrn: !!personSub
+        });
 
-      res.send(`
-        <h2>LinkedIn Connected Successfully!</h2>
-        <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
-        ${!personSub ? '<p><em>Profile lookup failed. Token is valid but person URN was not saved. Retry auth to fix.</em></p>' : ''}
-        <p>Credentials saved to your workspace.</p>
-        <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
-        <br>
-        <a href="/app">Go to Dashboard</a>
-      `);
+        res.send(`
+          <h2>LinkedIn Connected Successfully!</h2>
+          <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
+          ${!personSub ? '<p><em>Profile lookup failed. Token is valid but person URN was not saved. Retry auth to fix.</em></p>' : ''}
+          <p>Credentials saved to your workspace.</p>
+          <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
+          <br>
+          <a href="/app">Go to Dashboard</a>
+        `);
+      });
     } catch (err) {
       platformLog("error", "oauth_token_exchange_failed", { error: err.message });
       res.status(500).send(`

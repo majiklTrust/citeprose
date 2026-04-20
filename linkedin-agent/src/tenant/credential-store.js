@@ -80,6 +80,19 @@ function decrypt(blob, tenantKey) {
   ]).toString("utf8");
 }
 
+function encrypt(plaintext, tenantKey) {
+  const iv = crypto.randomBytes(AES_IV_LENGTH_BYTES);
+  const cipher = crypto.createCipheriv("aes-256-gcm", tenantKey, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.from(plaintext, "utf8")),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+  // Binary format: iv (12) || authTag (16) || ciphertext
+  // Must match the format decrypt() expects.
+  return Buffer.concat([iv, authTag, encrypted]);
+}
+
 // ── Internal core ────────────────────────────────────────────
 // Not exported. Callers go through the typed accessors below.
 async function fetchDecrypted(storageKey) {
@@ -100,6 +113,31 @@ async function fetchDecrypted(storageKey) {
   }
   const tenantKey = deriveTenantKey(tenantId);
   return decrypt(result.rows[0].value_enc, tenantKey);
+}
+
+// Encrypts plaintext and upserts into the credentials table.
+// Uses ON CONFLICT to update if the key already exists.
+// encryption_version is always 1 (current scheme).
+async function storeEncrypted(storageKey, plaintext) {
+  const tenantId = currentTenantId();
+  if (!tenantId) {
+    throw new Error("credential store called outside tenant context");
+  }
+  const client = currentClient();
+  if (!client) {
+    throw new Error("No database client in tenant context");
+  }
+  const tenantKey = deriveTenantKey(tenantId);
+  const blob = encrypt(plaintext, tenantKey);
+  await client.query(
+    `INSERT INTO credentials (tenant_id, key, value_enc, encryption_version)
+     VALUES (current_tenant_id(), $1, $2, 1)
+     ON CONFLICT (tenant_id, key)
+     DO UPDATE SET value_enc = EXCLUDED.value_enc,
+                   encryption_version = EXCLUDED.encryption_version,
+                   updated_at = now()`,
+    [storageKey, blob]
+  );
 }
 
 // ── Public API — typed accessors ─────────────────────────────
@@ -132,4 +170,20 @@ export async function getLinkedInAccessToken() {
 // Must be called inside a withTenant() block.
 export async function getLinkedInPersonUrn() {
   return fetchDecrypted(STORAGE_KEY.LINKEDIN_PERSON_URN);
+}
+
+// ── Public API — generic store ───────────────────────────────
+
+// Encrypts a plaintext value and upserts it into the credentials
+// table for the current tenant. Accepts any key — not restricted
+// to STORAGE_KEY entries, so callers can store arbitrary secrets.
+//
+// Used by the LinkedIn OAuth callback to persist tokens to the
+// database instead of process.env. Also usable for future
+// credential types without adding a new typed accessor.
+//
+// Must be called inside a withTenant() block.
+// Throws if no tenant context or no database client.
+export async function storeCredential(key, plaintext) {
+  return storeEncrypted(key, plaintext);
 }

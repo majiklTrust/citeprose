@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.0.46",
+  "version": "1.0.50",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -46,6 +46,11 @@
     "zipsrc": "zip -r /datavol/$npm_package_name/drop/source/source-$npm_package_name-$npm_package_version.zip ../linkedin-agent/ -x \"linkedin-agent/public/index.html\"-x \"linkedin-agent/src/index.js\" -x \"**/LinkedIn_Agent_Testing/*\" -x \"**/deploy/*\" -x \"**/testing/*\" -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/drop/source/src-$npm_package_name-$npm_package_version.zip",
     "zipall": "zip -r /datavol/$npm_package_name/drop/source/source-all-$npm_package_name-$npm_package_version.zip ../linkedin-agent/ -x \"**/LinkedIn_Agent_Testing/*\" -x \"**/deploy/*\" -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/drop/source/src-$npm_package_name-$npm_package_version.zip",
     "ziptests": "zip -r /datavol/$npm_package_name/drop/source/testing-$npm_package_name-$npm_package_version.zip ../linkedin-agent/scripts/testing/  -x \"**/.DS_Store\" -x \"**/.git/*\" -x \"**/node_modules/*\"",
+    "batch_test": "npm run batch-test",
+    "batch-test": "bash scripts/testing/batch-run-test.sh",
+    "showtests": "npm run batch-test -- show",
+    "testall": "npm run batch-test -- all",
+    "batch_test_s7": "bash scripts/testing/batch-run-test.sh 7",
     "qa_p1": "bash scripts/testing/test-p1.sh --all",
     "qa_p1_d": "bash scripts/testing/test-p1-design.sh --all",
     "qa_p1_a": "bash scripts/testing/test-p1-adversarial.sh --all",
@@ -72,10 +77,7 @@
     "qa_p3s7_a": "bash scripts/testing/test-p3-step7-adversarial.sh --all",
     "s_qa_p3s7": "bash scripts/testing/test-p3-step7.sh",
     "s_qa_p3s7_d": "bash scripts/testing/test-p3-step7-design.sh",
-    "s_qa_p3s7_a": "bash scripts/testing/test-p3-step7-adversarial.sh",
-    "batch_test": "bash scripts/testing/batch-run-test.sh",
-    "batch-test": "bash scripts/testing/batch-run-test.sh",
-    "batch_test_s7": "bash scripts/testing/batch-run-test.sh 7"
+    "s_qa_p3s7_a": "bash scripts/testing/test-p3-step7-adversarial.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

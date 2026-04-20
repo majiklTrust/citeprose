@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.46
+// v1.0.50
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -59,7 +59,8 @@ export function createApp(ctx) {
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
-    logActivity
+    logActivity,
+    withTenant, findTenantByAuthIdentity, storeCredential
   } = ctx;
 
   const instance = express();
@@ -221,9 +222,40 @@ export function createApp(ctx) {
       `);
     }
 
+    // ── Session-based tenant resolution ──────────────────────
+    // The user must be logged in (have a session) to connect
+    // LinkedIn. The session identifies who they are; the
+    // membership lookup identifies which workspace to store the
+    // credentials in. Without this, we don't know whose
+    // LinkedIn account this is or where to put the tokens.
+    const session = readSession(req);
+    const sessionUser = session?.user || null;
+    if (!sessionUser || !sessionUser.sub) {
+      return res.status(403).send(`
+        <h2>Session Required</h2>
+        <p>You must be logged in to connect LinkedIn. Your session may have expired.</p>
+        <a href="/auth/login">Log In</a>
+      `);
+    }
+
+    // Resolve the tenant from the session user's auth identity
+    const provider = sessionUser.sub.startsWith("auth0|") ? "auth0" : "auth0";
+    let tenant = null;
+    try {
+      tenant = await findTenantByAuthIdentity(provider, sessionUser.sub);
+    } catch {
+      // Lookup failed
+    }
+    if (!tenant) {
+      return res.status(403).send(`
+        <h2>No Workspace Found</h2>
+        <p>Your account is not associated with a workspace. Contact your administrator.</p>
+        <a href="/app">Back to Dashboard</a>
+      `);
+    }
+
     try {
       const tokens = await exchangeCodeForToken(code);
-      process.env.LINKEDIN_ACCESS_TOKEN = tokens.accessToken;
 
       let profileName = "(unknown)";
       let personSub = null;
@@ -231,28 +263,38 @@ export function createApp(ctx) {
         const profile = await getProfile(tokens.accessToken);
         personSub = profile.sub;
         profileName = profile.name || "(unknown)";
-        process.env.LINKEDIN_PERSON_URN = `urn:li:person:${profile.sub}`;
       } catch (profileErr) {
         platformLog("warn", "oauth_profile_fetch_failed", { error: profileErr.message });
       }
 
+      // ── Persist to database ──────────────────────────────────
+      // Store credentials inside the resolved tenant's context so
+      // RLS scopes the INSERT/UPDATE to the correct workspace.
+      // Both the access token and person URN are encrypted at rest
+      // via AES-256-GCM with a per-tenant derived key.
+      await withTenant(tenant.id, async () => {
+        await storeCredential("linkedin_access_token", tokens.accessToken);
+        if (personSub) {
+          await storeCredential("linkedin_person_urn", `urn:li:person:${personSub}`);
+        }
+      });
+
+      platformLog("info", "linkedin_credentials_stored", {
+        tenant: tenant.slug,
+        user: sessionUser.sub,
+        profileName,
+        hasPersonUrn: !!personSub
+      });
+
       res.send(`
         <h2>LinkedIn Connected Successfully!</h2>
         <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
-        ${!personSub ? '<p><em>Profile lookup failed. Token is valid. Set LINKEDIN_PERSON_URN in .env manually or retry auth.</em></p>' : ''}
-        <p>Token saved to session. Add credentials to your <code>.env</code> file via the server console.</p>
+        ${!personSub ? '<p><em>Profile lookup failed. Token is valid but person URN was not saved. Retry auth to fix.</em></p>' : ''}
+        <p>Credentials saved to your workspace.</p>
         <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
         <br>
         <a href="/app">Go to Dashboard</a>
       `);
-
-      console.log("[AUTH] LinkedIn token obtained. Add to .env:");
-      console.log(`  LINKEDIN_ACCESS_TOKEN=${tokens.accessToken}`);
-      if (personSub) {
-        console.log(`  LINKEDIN_PERSON_URN=urn:li:person:${personSub}`);
-      } else {
-        console.log("  LINKEDIN_PERSON_URN=(profile fetch failed — set manually or retry auth)");
-      }
     } catch (err) {
       platformLog("error", "oauth_token_exchange_failed", { error: err.message });
       res.status(500).send(`
@@ -362,6 +404,9 @@ export async function buildAppForTests() {
           readSession,
           clearSession }                 = await import("./auth/session.js");
   const { getServerAddress }             = await import("./services/server-address.js");
+  const { withTenant }                   = await import("./db/with-tenant.js");
+  const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
+  const { storeCredential }              = await import("./tenant/credential-store.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -374,7 +419,8 @@ export async function buildAppForTests() {
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
-    logActivity
+    logActivity,
+    withTenant, findTenantByAuthIdentity, storeCredential
   });
 }
 
@@ -424,6 +470,9 @@ export async function start() {
   const { setBoundAddress,
           getServerAddress,
           getServerUrl }                 = await import("./services/server-address.js");
+  const { withTenant }                   = await import("./db/with-tenant.js");
+  const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
+  const { storeCredential }              = await import("./tenant/credential-store.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -447,7 +496,8 @@ export async function start() {
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
-    logActivity
+    logActivity,
+    withTenant, findTenantByAuthIdentity, storeCredential
   });
 
   // STEP 7: Listen
@@ -458,7 +508,7 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.46
+║           LinkedIn AI Content Agent  v1.0.50
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

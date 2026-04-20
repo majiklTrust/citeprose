@@ -184,6 +184,14 @@ function setCacheEntry(tenantId, value) {
   _tokenCacheByTenant.set(tenantId, { value, ts: Date.now() });
 }
 
+// Clear a tenant's cached token validation result. Called after
+// the LinkedIn OAuth callback stores new credentials — without
+// this, the dashboard reads a stale { valid: false } from the
+// cache until the TTL expires (default 10 minutes).
+export function invalidateTokenCache(tenantId) {
+  _tokenCacheByTenant.delete(tenantId);
+}
+
 export async function validateToken() {
   const tenantId = currentTenantId();
   if (!tenantId) {

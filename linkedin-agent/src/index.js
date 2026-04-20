@@ -60,7 +60,8 @@ export function createApp(ctx) {
     createSession, readSession, clearSession,
     getServerAddress,
     logActivity,
-    withTenant, findTenantByAuthIdentity, storeCredential
+    withTenant, findTenantByAuthIdentity, storeCredential,
+    invalidateTokenCache
   } = ctx;
 
   const instance = express();
@@ -289,14 +290,21 @@ export function createApp(ctx) {
           hasPersonUrn: !!personSub
         });
 
+        // Clear the stale { valid: false } cache entry so the
+        // dashboard sees the new credentials immediately instead
+        // of waiting for the 10-minute TTL to expire.
+        invalidateTokenCache(tenant.id);
+
         res.send(`
           <h2>LinkedIn Connected Successfully!</h2>
           <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
           ${!personSub ? '<p><em>Profile lookup failed. Token is valid but person URN was not saved. Retry auth to fix.</em></p>' : ''}
           <p>Credentials saved to your workspace.</p>
           <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
+          <p>Redirecting to dashboard...</p>
           <br>
           <a href="/app">Go to Dashboard</a>
+          <script>setTimeout(function() { window.location.href = "/app"; }, 1500);</script>
         `);
       });
     } catch (err) {
@@ -397,7 +405,8 @@ export async function buildAppForTests() {
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
-          getProfile }                   = await import("./services/linkedin-api.js");
+          getProfile,
+          invalidateTokenCache }         = await import("./services/linkedin-api.js");
   const { escapeHtml,
           generateOAuthState,
           validateOAuthState }           = await import("./services/security.js");
@@ -424,7 +433,8 @@ export async function buildAppForTests() {
     createSession, readSession, clearSession,
     getServerAddress,
     logActivity,
-    withTenant, findTenantByAuthIdentity, storeCredential
+    withTenant, findTenantByAuthIdentity, storeCredential,
+    invalidateTokenCache
   });
 }
 
@@ -461,7 +471,8 @@ export async function start() {
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
-          getProfile }                   = await import("./services/linkedin-api.js");
+          getProfile,
+          invalidateTokenCache }         = await import("./services/linkedin-api.js");
   const { escapeHtml,
           generateOAuthState,
           validateOAuthState }           = await import("./services/security.js");
@@ -501,7 +512,8 @@ export async function start() {
     createSession, readSession, clearSession,
     getServerAddress,
     logActivity,
-    withTenant, findTenantByAuthIdentity, storeCredential
+    withTenant, findTenantByAuthIdentity, storeCredential,
+    invalidateTokenCache
   });
 
   // STEP 7: Listen

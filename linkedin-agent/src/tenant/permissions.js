@@ -53,3 +53,23 @@ export function requirePermission(permission) {
     }
   };
 }
+
+/**
+ * Express middleware that blocks dev bypass users. Used on admin
+ * endpoints where synthetic user access is not acceptable —
+ * even in development, admin actions should require a real login.
+ *
+ * Chain order: requireAuth → resolveTenant → requireNoDevBypass
+ *              → requirePermission → handler
+ *
+ * Returns 403 with a generic message. Does not reveal that the
+ * block is dev-bypass-specific (Zero Trust).
+ */
+export function requireNoDevBypass() {
+  return function devBypassBlock(req, res, next) {
+    if (req.devBypass) {
+      return res.status(403).json({ error: "Permission denied" });
+    }
+    next();
+  };
+}

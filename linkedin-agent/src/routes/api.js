@@ -147,6 +147,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
 
     res.json({
       authRequired,
+      devBypass: !!req.devBypass,
       user: req.user ? {
         name: req.user.name || null,
         email: req.user.email || null,
@@ -230,7 +231,7 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
       await logActivity("info", "post_edited", {
         postId: row.id,
         fieldsChanged: Object.keys(fields)
-      });
+      }, req.user?.sub || null);
       return row;
     });
 
@@ -252,7 +253,7 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
 router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), async (req, res) => {
   try {
     const result = await withTenant(req.tenant.id, async () => {
-      return approvePost(parseInt(req.params.id));
+      return approvePost(parseInt(req.params.id), req.user?.sub || null);
     });
     res.json({ success: true, result });
   } catch (err) {
@@ -263,7 +264,7 @@ router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), 
 router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), async (req, res) => {
   try {
     await withTenant(req.tenant.id, async () => {
-      return rejectPost(parseInt(req.params.id), req.body.reason || "");
+      return rejectPost(parseInt(req.params.id), req.body.reason || "", req.user?.sub || null);
     });
     res.json({ success: true });
   } catch (err) {
@@ -306,7 +307,7 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
     const value = enabled === false ? "disabled" : "enabled";
     await withTenant(req.tenant.id, async () => {
       await setAgentState("corroboration", value);
-      await logActivity("info", "corroboration_toggled", { corroboration: value });
+      await logActivity("info", "corroboration_toggled", { corroboration: value }, req.user?.sub || null);
     });
     res.json({ corroboration: value });
   } catch (err) {
@@ -364,7 +365,7 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         scheduledFor: null
       });
       await updatePostStatus(id, "pending_approval");
-      await logActivity("info", "preview_saved_to_queue", { postId: id, title });
+      await logActivity("info", "preview_saved_to_queue", { postId: id, title }, req.user?.sub || null);
       return id;
     });
 
@@ -378,7 +379,7 @@ router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, re
   try {
     const topicId = req.body.topicId || null;
     await withTenant(req.tenant.id, async () => {
-      return forceCycle(topicId);
+      return forceCycle(topicId, req.user?.sub || null);
     });
     res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {

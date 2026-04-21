@@ -13,7 +13,7 @@
 //   { id, slug, name, status, role, created_at, updated_at }
 // ═══════════════════════════════════════════════════════════════
 
-import { findTenantByAuthIdentity } from "./platform-db.js";
+import { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite } from "./platform-db.js";
 
 export function createTenantResolver() {
   return async function tenantResolver(req, res, next) {
@@ -32,15 +32,39 @@ export function createTenantResolver() {
       return;
     }
 
-    // Look up the membership → tenant mapping
+    // ── Path 1: Existing membership ──────────────────────────
     const tenant = await findTenantByAuthIdentity(provider, req.user.sub);
-    if (!tenant) {
-      res.status(403).json({ error: "No tenant membership for this identity" });
-      return;
+    if (tenant) {
+      req.tenant = tenant;
+      return next();
     }
 
-    req.tenant = tenant;
-    next();
+    // ── Path 2: Invite claim ─────────────────────────────────
+    // No membership found. Before returning 403, check if the
+    // user's email matches a pending invite. If so, create a
+    // membership from the invite and proceed.
+    //
+    // req.user.email comes from Auth0's userinfo endpoint via
+    // the session cookie. It may be null for some social logins.
+    const email = req.user.email;
+    if (email) {
+      try {
+        const invite = await findPendingInviteByEmail(email);
+        if (invite) {
+          const claimed = await claimInvite(invite.id, provider, req.user.sub);
+          if (claimed) {
+            req.tenant = claimed;
+            req.inviteClaimed = true;
+            return next();
+          }
+        }
+      } catch {
+        // Claim failed — fall through to 403.
+        // Do not expose the error to the client.
+      }
+    }
+
+    res.status(403).json({ error: "No tenant membership for this identity" });
   };
 }
 

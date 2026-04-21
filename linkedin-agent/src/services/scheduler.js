@@ -244,25 +244,25 @@ export async function executePost(postId) {
 // ── Manual Mode Actions ──────────────────────────────────────
 // Called from api.js routes which wrap them in withTenant.
 
-export async function approvePost(postId) {
+export async function approvePost(postId, userSub = null) {
   const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
   if (post.status !== "pending_approval") {
     throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
   }
   await updatePostStatus(postId, "approved");
-  await logActivity("info", "post_approved", { postId });
+  await logActivity("info", "post_approved", { postId }, userSub);
   return executePost(postId);
 }
 
-export async function rejectPost(postId, reason = "") {
+export async function rejectPost(postId, reason = "", userSub = null) {
   const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
   if (post.status !== "pending_approval") {
     throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
   }
   await updatePostStatus(postId, "rejected", { errorMessage: reason });
-  await logActivity("info", "post_rejected", { postId, reason });
+  await logActivity("info", "post_rejected", { postId, reason }, userSub);
 }
 
 // ── Scheduler Lifecycle ──────────────────────────────────────
@@ -318,7 +318,7 @@ export function stopScheduler() {
 // ── Force a cycle (for testing/manual trigger) ───────────────
 // Called from /api/force-cycle which wraps this in withTenant.
 
-export async function forceCycle(topicId = null) {
-  await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" });
+export async function forceCycle(topicId = null, userSub = null) {
+  await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" }, userSub);
   return schedulerTick(topicId);
 }

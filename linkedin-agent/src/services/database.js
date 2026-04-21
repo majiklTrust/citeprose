@@ -379,7 +379,7 @@ export async function setAgentState(key, value) {
 // as { raw: string } for JSONB storage consistency; objects pass
 // through; null stays null. Matches the pre-conversion behavior
 // of accepting either shape.
-export async function logActivity(level, action, details = null) {
+export async function logActivity(level, action, details = null, userSub = null) {
   const c = client();
   let jsonb = null;
   if (details != null) {
@@ -388,9 +388,9 @@ export async function logActivity(level, action, details = null) {
       : JSON.stringify(details);
   }
   await c.query(
-    `INSERT INTO activity_log (tenant_id, level, action, details)
-     VALUES (current_tenant_id(), $1::log_level, $2, $3::jsonb)`,
-    [level, action, jsonb]
+    `INSERT INTO activity_log (tenant_id, level, action, details, user_sub)
+     VALUES (current_tenant_id(), $1::log_level, $2, $3::jsonb, $4)`,
+    [level, action, jsonb, userSub]
   );
 }
 

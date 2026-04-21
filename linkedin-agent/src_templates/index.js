@@ -53,7 +53,7 @@ export function platformLog(level, action, details) {
 // ═════════════════════════════════════════════════════════════
 export function createApp(ctx) {
   const {
-    apiRoutes,
+    apiRoutes, adminRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -113,6 +113,10 @@ export function createApp(ctx) {
   const dashboardHtml = path.join(__dirname, "../public/index.html");
   const alphaDir = path.join(__dirname, "../***REMOVED***");
   const alphaHtml = path.join(alphaDir, "index.html");
+
+  // Admin page — must be before /app static so /app/admin/ resolves
+  // to the admin page, not the SPA fallback.
+  instance.use("/app/admin", express.static(path.join(__dirname, "../public/admin"), { index: "index.html" }));
 
   instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
   instance.use(express.static(alphaDir, { index: false }));
@@ -388,6 +392,14 @@ export function createApp(ctx) {
   instance.get("/app/*", (req, res) => res.sendFile(dashboardHtml));
   instance.get("/", (req, res) => res.sendFile(alphaHtml));
 
+  // Admin API routes — mounted at /api/admin so the router's
+  // blanket middleware (requireAuth, resolveTenant, requireNoDevBypass,
+  // requirePermission) only runs for admin paths. Without the prefix,
+  // the admin middleware intercepts ALL /api/* requests.
+  // Must be BEFORE apiRoutes because api.js's route guard 404s
+  // unknown /api/* paths.
+  instance.use("/api/admin", adminRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -423,6 +435,7 @@ export function createApp(ctx) {
 export async function buildAppForTests() {
   const { logActivity }                  = await import("./services/database.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
+  const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -446,7 +459,7 @@ export async function buildAppForTests() {
   await initRegistry(platformLog);
 
   return createApp({
-    apiRoutes,
+    apiRoutes, adminRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -489,6 +502,7 @@ export async function start() {
   const { startScheduler }               = await import("./services/scheduler.js");
   const { startMonitor }                 = await import("./services/news-monitor.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
+  const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -525,7 +539,7 @@ export async function start() {
 
   // STEP 6: Build app
   app = createApp({
-    apiRoutes,
+    apiRoutes, adminRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,

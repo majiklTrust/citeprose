@@ -155,6 +155,11 @@ router.patch("/members/:id", async (req, res) => {
       return res.status(400).json({ error: "Cannot change your own role" });
     }
 
+    // Owner role is immutable through the API
+    if (target.rows[0].role === "owner") {
+      return res.status(400).json({ error: "This member cannot be modified" });
+    }
+
     const r = await query(
       `UPDATE memberships SET role = $1::member_role WHERE id = $2 AND tenant_id = $3
        RETURNING id, auth_sub, role::text`,
@@ -177,7 +182,7 @@ router.delete("/members/:id", async (req, res) => {
 
     // Fetch the target membership
     const target = await query(
-      `SELECT id, auth_sub FROM memberships WHERE id = $1 AND tenant_id = $2`,
+      `SELECT id, auth_sub, role::text FROM memberships WHERE id = $1 AND tenant_id = $2`,
       [req.params.id, req.tenant.id]
     );
     if (target.rows.length === 0) {
@@ -187,6 +192,11 @@ router.delete("/members/:id", async (req, res) => {
     // Prevent self-removal
     if (target.rows[0].auth_sub === req.user.sub) {
       return res.status(400).json({ error: "Cannot remove yourself" });
+    }
+
+    // Owner role is immutable through the API
+    if (target.rows[0].role === "owner") {
+      return res.status(400).json({ error: "This member cannot be removed" });
     }
 
     await query(

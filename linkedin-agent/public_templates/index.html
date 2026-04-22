@@ -17,12 +17,34 @@
 
     const API = '';  // same-origin
 
-    const TOPIC_STYLES = {
-      'ai-practical-benefit': { class: 'topic-ai-benefit', label: 'AI Benefits' },
-      'ai-guardrails': { class: 'topic-ai-guardrails', label: 'AI Guardrails' },
-      'cybersecurity-incidents': { class: 'topic-cyber-incidents', label: 'Cyber Incidents' },
-      'cybersecurity-advances': { class: 'topic-cyber-advances', label: 'Cyber Advances' },
-    };
+    // ── Dynamic topic colors — deterministic hash from slug ──
+    const TOPIC_PALETTE = [
+      { color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
+      { color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
+      { color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+      { color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
+      { color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
+      { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+    ];
+
+    function hashSlug(slug) {
+      let h = 0;
+      for (let i = 0; i < (slug || '').length; i++) {
+        h = ((h << 5) - h + slug.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h);
+    }
+
+    function humanizeSlug(slug) {
+      return (slug || '').split('-').map(function(w) {
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      }).join(' ');
+    }
+
+    function getTopicStyle(slug) {
+      const p = TOPIC_PALETTE[hashSlug(slug) % TOPIC_PALETTE.length];
+      return { color: p.color, bg: p.bg, label: humanizeSlug(slug) };
+    }
 
     function formatDate(dateStr) {
       if (!dateStr) return '—';
@@ -60,6 +82,9 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
+      const [topics, setTopics] = useState([]);
+      const [editingPost, setEditingPost] = useState(null);
+      const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -90,6 +115,12 @@
           ]);
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
+
+          // Fetch topics for the selector — 403 is expected for viewers
+          try {
+            const topicsRes = await fetch(`${API}/api/topics`).then(r => r.ok ? r.json() : null);
+            setTopics((topicsRes && topicsRes.topics) || []);
+          } catch { setTopics([]); }
           setError(null);
         } catch (err) {
           if (err.message !== 'Authentication required') {
@@ -136,6 +167,42 @@
         fetchAll();
       }
 
+      function openEditModal(post, e) {
+        if (e) e.stopPropagation();
+        setEditingPost(post);
+        setEditFields({
+          title: post.title || '',
+          content: post.content || '',
+          hashtags: (post.hashtags || []).join(', ')
+        });
+      }
+
+      async function handleSaveEdit() {
+        if (!editingPost) return;
+        setLoading(l => ({ ...l, editSave: true }));
+        try {
+          const hashtags = editFields.hashtags.split(',').map(h => h.trim()).filter(Boolean);
+          const res = await fetch(`${API}/api/posts/${editingPost.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: editFields.title,
+              content: editFields.content,
+              hashtags
+            })
+          });
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Failed to save');
+          }
+          setEditingPost(null);
+          fetchAll();
+        } catch (err) {
+          alert('Save failed: ' + err.message);
+        }
+        setLoading(l => ({ ...l, editSave: false }));
+      }
+
       async function handleForceCycle() {
         setLoading(l => ({ ...l, forceCycle: true }));
         await fetch(`${API}/api/force-cycle`, {
@@ -162,7 +229,7 @@
           }
 
           if (data.blocked) {
-            alert(`Post blocked — insufficient sources.\n\nTopic: ${TOPIC_STYLES[data.topicId]?.label || data.topicId}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
+            alert(`Post blocked — insufficient sources.\n\nTopic: ${getTopicStyle(data.topicId).label}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
             setLoading(l => ({ ...l, preview: false }));
             return;
           }
@@ -350,16 +417,19 @@
               <div className="header-title">LinkedIn AI Agent</div>
               <div className="header-subtitle">v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-              <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (
                 <div className="user-info">
                   <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
                   <a href="/auth/logout" className="logout-btn">Logout</a>
                 </div>
               )}
+              <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
               {status?.user?.role === 'owner' && !status.devBypass && (
                 <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
+              )}
+              {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && !status.devBypass && (
+                <a href="/app/topics/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Topics</a>
               )}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
@@ -392,7 +462,7 @@
             </div>
             <div className="stat-card">
               <div className="stat-label">Pending Approval</div>
-              <div className="stat-value" style={{ color: pendingPosts.length > 0 ? 'var(--accent-amber)' : 'inherit' }}>
+              <div className="stat-value">
                 {status.stats.pendingApproval}
               </div>
             </div>
@@ -432,8 +502,8 @@
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
                         <div className="post-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                            <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
-                              {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
+                            <span className="post-topic-badge" style={{ background: getTopicStyle(post.topic_id).bg, color: getTopicStyle(post.topic_id).color }}>
+                              {getTopicStyle(post.topic_id).label}
                             </span>
                             <span className={`corroboration-badge ${pLabel.cls}`}>
                               {pLevel === 'strong' ? '◉' : pLevel === 'weak' ? '◎' : '○'} {pLabel.text}
@@ -451,6 +521,10 @@
                             </button>
                             <button className="btn btn-reject" onClick={(e) => handleReject(post.id, e)}>
                               Reject
+                            </button>
+                            <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
+                              style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
+                              Edit
                             </button>
                           </div>
                         </div>
@@ -471,8 +545,8 @@
                 ) : recentPosts.slice(0, 15).map(post => (
                   <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}>
                     <div className="post-card-header">
-                      <span className={`post-topic-badge ${TOPIC_STYLES[post.topic_id]?.class || ''}`}>
-                        {TOPIC_STYLES[post.topic_id]?.label || post.topic_id}
+                      <span className="post-topic-badge" style={{ background: getTopicStyle(post.topic_id).bg, color: getTopicStyle(post.topic_id).color }}>
+                        {getTopicStyle(post.topic_id).label}
                       </span>
                       <span className={`post-status status-${post.status}`}>
                         {post.status.replace('_', ' ').toUpperCase()}
@@ -482,6 +556,12 @@
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
                       <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
+                      {(post.status === 'draft' || post.status === 'pending_approval') && (
+                        <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
+                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
+                          Edit
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -509,10 +589,9 @@
                   <select className="topic-selector" value={selectedTopic}
                     onChange={e => setSelectedTopic(e.target.value)}>
                     <option value="">Auto-select topic</option>
-                    <option value="ai-practical-benefit">AI Benefits</option>
-                    <option value="ai-guardrails">AI Guardrails</option>
-                    <option value="cybersecurity-incidents">Cyber Incidents</option>
-                    <option value="cybersecurity-advances">Cyber Advances</option>
+                    {topics.filter(t => t.enabled !== false).map(t => (
+                      <option key={t.id} value={t.slug}>{t.name}</option>
+                    ))}
                   </select>
                   <div className="toggle-row">
                     <span className={`toggle-label ${loading.corroboration ? 'toggle-label-inactive' : (status.corroboration || 'enabled') === 'enabled' ? 'toggle-label-active' : 'toggle-label-inactive'}`}>
@@ -585,8 +664,8 @@
                 {(status.stats.byTopic || []).map(t => (
                   <div key={t.topic_id} style={{ marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                      <span className={`post-topic-badge ${TOPIC_STYLES[t.topic_id]?.class || ''}`} style={{ fontSize: '0.65rem' }}>
-                        {TOPIC_STYLES[t.topic_id]?.label || t.topic_id}
+                      <span className="post-topic-badge" style={{ fontSize: '0.65rem', background: getTopicStyle(t.topic_id).bg, color: getTopicStyle(t.topic_id).color }}>
+                        {getTopicStyle(t.topic_id).label}
                       </span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {t.count} posts
@@ -644,8 +723,8 @@
               <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <button className="modal-close" onClick={() => setSelectedPost(null)}>✕</button>
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-                  <span className={`post-topic-badge ${TOPIC_STYLES[selectedPost.topic_id]?.class || ''}`}>
-                    {TOPIC_STYLES[selectedPost.topic_id]?.label || selectedPost.topic_id}
+                  <span className="post-topic-badge" style={{ background: getTopicStyle(selectedPost.topic_id).bg, color: getTopicStyle(selectedPost.topic_id).color }}>
+                    {getTopicStyle(selectedPost.topic_id).label}
                   </span>
                   {selectedPost.isPreview && (
                     <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)' }}>PREVIEW</span>
@@ -742,6 +821,9 @@
                     <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
                       Reject
                     </button>
+                    <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); setSelectedPost(null); }}>
+                      Edit
+                    </button>
                   </div>
                 )}
                 {selectedPost.isPreview && (
@@ -758,6 +840,41 @@
             </div>
             );
           })()}
+
+          {/* Edit Post Modal */}
+          {editingPost && (
+            <div className="modal-overlay" onClick={() => setEditingPost(null)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                <button className="modal-close" onClick={() => setEditingPost(null)}>✕</button>
+                <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>Edit Post</h3>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Title</label>
+                  <input type="text" value={editFields.title}
+                    onChange={e => setEditFields(f => ({ ...f, title: e.target.value }))}
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.9rem' }} />
+                </div>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Content</label>
+                  <textarea value={editFields.content}
+                    onChange={e => setEditFields(f => ({ ...f, content: e.target.value }))}
+                    rows={10}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Hashtags (comma-separated)</label>
+                  <input type="text" value={editFields.hashtags}
+                    onChange={e => setEditFields(f => ({ ...f, hashtags: e.target.value }))}
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.9rem' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost" onClick={() => setEditingPost(null)}>Cancel</button>
+                  <button className="btn btn-approve" onClick={handleSaveEdit} disabled={loading.editSave}>
+                    {loading.editSave ? <span className="loading-spinner"></span> : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }

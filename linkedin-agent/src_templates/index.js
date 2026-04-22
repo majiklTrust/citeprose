@@ -53,7 +53,7 @@ export function platformLog(level, action, details) {
 // ═════════════════════════════════════════════════════════════
 export function createApp(ctx) {
   const {
-    apiRoutes, adminRoutes,
+    apiRoutes, adminRoutes, topicsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -113,6 +113,9 @@ export function createApp(ctx) {
   const dashboardHtml = path.join(__dirname, "../public/index.html");
   const alphaDir = path.join(__dirname, "../***REMOVED***");
   const alphaHtml = path.join(alphaDir, "index.html");
+
+  // Topics page — accessible to owners and editors (manage_own_topics)
+  instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html" }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback.
@@ -400,6 +403,11 @@ export function createApp(ctx) {
   // unknown /api/* paths.
   instance.use("/api/admin", adminRoutes);
 
+  // Topics API routes — mounted at /api/topics. Blanket middleware
+  // requires manage_own_topics (blocks viewers). Per-handler checks
+  // enforce manage_topics for global operations.
+  instance.use("/api/topics", topicsRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -436,6 +444,7 @@ export async function buildAppForTests() {
   const { logActivity }                  = await import("./services/database.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
+  const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -459,7 +468,7 @@ export async function buildAppForTests() {
   await initRegistry(platformLog);
 
   return createApp({
-    apiRoutes, adminRoutes,
+    apiRoutes, adminRoutes, topicsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -503,6 +512,7 @@ export async function start() {
   const { startMonitor }                 = await import("./services/news-monitor.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
+  const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -539,7 +549,7 @@ export async function start() {
 
   // STEP 6: Build app
   app = createApp({
-    apiRoutes, adminRoutes,
+    apiRoutes, adminRoutes, topicsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,

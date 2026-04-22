@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Topic Management — LinkedIn Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 2rem; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { margin-bottom: 0.5rem; }
+    .subtitle { color: #666; margin-bottom: 2rem; }
+    .back-link { display: inline-block; margin-bottom: 1.5rem; color: #0073b1; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .section h2 { margin-bottom: 1rem; font-size: 1.1rem; }
+    .btn { padding: 0.4rem 0.85rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .btn-primary { background: #0073b1; color: #fff; }
+    .btn-primary:hover { background: #005a8d; }
+    .btn-secondary { background: #e0e0e0; color: #333; }
+    .btn-secondary:hover { background: #ccc; }
+    .btn-danger { background: #ef5350; color: #fff; }
+    .btn-danger:hover { background: #c62828; }
+    .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.78rem; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    input, textarea, select { padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; width: 100%; }
+    textarea { resize: vertical; min-height: 60px; }
+    .form-row { margin-bottom: 0.75rem; }
+    .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.85rem; color: #555; }
+    .form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+    .msg { padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
+    .msg-error { background: #ffebee; color: #c62828; }
+    .msg-success { background: #e8f5e9; color: #2e7d32; }
+    .topic-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; }
+    .topic-card.disabled { opacity: 0.6; }
+    .topic-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .topic-name { font-weight: 600; font-size: 1rem; }
+    .topic-meta { font-size: 0.78rem; color: #888; }
+    .topic-details { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee; }
+    .topic-details.open { display: block; }
+    .tag { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; margin: 0.1rem; }
+    .angle-list { list-style: decimal; padding-left: 1.5rem; font-size: 0.88rem; }
+    .angle-list li { margin-bottom: 0.25rem; }
+    .weight-badge { display: inline-block; background: #fff3e0; color: #e65100; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; }
+    .scope-badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; font-weight: 600; }
+    .scope-global { background: #e8f5e9; color: #2e7d32; }
+    .scope-personal { background: #f3e5f5; color: #7b1fa2; }
+    .toggle-btn { cursor: pointer; font-size: 0.78rem; color: #0073b1; text-decoration: underline; border: none; background: none; }
+    .empty { color: #999; font-style: italic; padding: 1rem 0; }
+    .loading { text-align: center; padding: 2rem; color: #999; }
+    .access-denied { text-align: center; padding: 3rem; }
+    .create-form { display: none; }
+    .create-form.open { display: block; }
+    .generating { text-align: center; padding: 1rem; color: #0073b1; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="loading" class="loading">Checking access...</div>
+    <div id="denied" class="access-denied" style="display:none;">
+      <h2>Access Denied</h2>
+      <p>You do not have permission to view this page.</p>
+      <a href="/app">Back to Dashboard</a>
+    </div>
+    <div id="topics-app" style="display:none;">
+      <a href="/app" class="back-link">&larr; Back to Dashboard</a>
+      <h1>Topic Management</h1>
+      <p class="subtitle">Manage content topics for AI-powered LinkedIn posts</p>
+
+      <div id="message"></div>
+
+      <div class="section">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2 id="create-header">New Topic</h2>
+          <button class="btn btn-primary" id="toggle-create-btn">+ Add Topic</button>
+        </div>
+        <div id="create-form" class="create-form">
+          <div class="form-row">
+            <label>Topic Name</label>
+            <input type="text" id="topic-name" placeholder="e.g., Cloud Migration Strategy">
+          </div>
+          <div class="form-row">
+            <label>Description (one sentence)</label>
+            <input type="text" id="topic-desc" placeholder="Practical guidance for moving workloads to the cloud">
+          </div>
+          <div class="form-row" id="scope-row" style="display:none;">
+            <label>Scope</label>
+            <select id="topic-scope">
+              <option value="personal">Personal (only you)</option>
+              <option value="global">Global (all members)</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" id="generate-btn">Generate Suggestions</button>
+          </div>
+          <div id="generate-result" style="display:none; margin-top:1rem;">
+            <div class="form-row">
+              <label>Content Angles</label>
+              <textarea id="topic-angles" rows="6" placeholder="One angle per line"></textarea>
+            </div>
+            <div class="form-row">
+              <label>Hashtags</label>
+              <input type="text" id="topic-hashtags" placeholder="#Tag1, #Tag2, #Tag3">
+            </div>
+            <div class="form-row">
+              <label>Weight (higher = more frequent)</label>
+              <input type="number" id="topic-weight" value="1" min="1" max="10" style="width:80px;">
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="cancel-create-btn">Cancel</button>
+              <button class="btn btn-primary" id="save-topic-btn">Save Topic</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" id="global-section">
+        <h2>Global Topics</h2>
+        <div id="global-topics"><span class="empty">Loading...</span></div>
+      </div>
+
+      <div class="section" id="personal-section">
+        <h2>My Topics</h2>
+        <div id="personal-topics"><span class="empty">Loading...</span></div>
+      </div>
+    </div>
+  </div>
+  <script src="topics.js"></script>
+</body>
+</html>

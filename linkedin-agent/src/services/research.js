@@ -14,7 +14,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getArticlesForTopic } from "./news-monitor.js";
 import { logActivity } from "./database.js";
-import { TOPICS } from "../config/topics.js";
+import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
@@ -55,7 +55,7 @@ async function gatherRSSMaterial(topicId, angle) {
 // ═══════════════════════════════════════════════════════════════
 
 async function gatherWebSearchMaterial(topicId, angle, cycleId) {
-  const topic = TOPICS.find(t => t.id === topicId);
+  const topic = await getTopicBySlug(topicId);
   const topicName = topic?.name || topicId;
   const searchQueries = buildSearchQueries(topicId, angle);
 

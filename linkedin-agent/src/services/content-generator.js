@@ -4,11 +4,11 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { TOPICS, ROTATION_CONFIG } from "../config/topics.js";
 import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store. Module-level
@@ -20,31 +20,48 @@ async function newAnthropicClient() {
 
 // ── Topic Selection ──────────────────────────────────────────
 
-export async function selectNextTopic() {
+// userSub: null = global topics only (scheduler/automated),
+//          string = global + that user's personal topics (manual preview).
+export async function selectNextTopic(userSub = null) {
   const lastTopicId = await getLastPostedTopic();
   const recentPosts = await getRecentPosts(14);
+  const allTopics = await getTopicsForGeneration(userSub);
+
+  if (allTopics.length === 0) {
+    throw new Error("No enabled topics available for content generation");
+  }
 
   const recentCounts = {};
   for (const post of recentPosts) {
     recentCounts[post.topic_id] = (recentCounts[post.topic_id] || 0) + 1;
   }
 
-  const candidates = TOPICS.filter(t => t.id !== lastTopicId).map(topic => {
-    const baseWeight = ROTATION_CONFIG.weights[topic.id] || 0.25;
-    const recentCount = recentCounts[topic.id] || 0;
-    const totalRecent = recentPosts.length || 1;
-    const expectedShare = baseWeight;
-    const actualShare = recentCount / totalRecent;
-    const balanceFactor = expectedShare / Math.max(actualShare, 0.05);
-    return { topic, weight: baseWeight * Math.min(balanceFactor, 3.0) };
-  });
+  // Total weight for normalization
+  const totalWeight = allTopics.reduce((sum, t) => sum + (t.weight || 1), 0);
+
+  const candidates = allTopics
+    .filter(t => t.slug !== lastTopicId)
+    .map(topic => {
+      const baseWeight = (topic.weight || 1) / totalWeight;
+      const recentCount = recentCounts[topic.slug] || 0;
+      const totalRecent = recentPosts.length || 1;
+      const expectedShare = baseWeight;
+      const actualShare = recentCount / totalRecent;
+      const balanceFactor = expectedShare / Math.max(actualShare, 0.05);
+      return { topic, weight: baseWeight * Math.min(balanceFactor, 3.0) };
+    });
 
   if (candidates.length === 0) {
-    candidates.push(...TOPICS.map(t => ({ topic: t, weight: 0.25 })));
+    // All topics were filtered (only one topic and it was last posted)
+    const fallback = allTopics.map(t => ({
+      topic: t,
+      weight: (t.weight || 1) / totalWeight
+    }));
+    return fallback[Math.floor(Math.random() * fallback.length)].topic;
   }
 
-  const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
-  let roll = Math.random() * totalWeight;
+  const candidateTotal = candidates.reduce((sum, c) => sum + c.weight, 0);
+  let roll = Math.random() * candidateTotal;
 
   for (const candidate of candidates) {
     roll -= candidate.weight;
@@ -57,47 +74,51 @@ export async function selectNextTopic() {
 // ── Content Angle Selection ──────────────────────────────────
 
 function selectContentAngle(topic, recentPosts) {
+  const angles = topic.content_angles || [];
+  if (angles.length === 0) return "General discussion";
+
   const recentSameTopic = recentPosts
-    .filter(p => p.topic_id === topic.id)
+    .filter(p => p.topic_id === topic.slug)
     .slice(0, 5);
 
   const usedAngles = new Set();
   for (const post of recentSameTopic) {
-    for (let i = 0; i < topic.contentAngles.length; i++) {
-      const angleWords = topic.contentAngles[i].toLowerCase().split(/\s+/);
+    for (let i = 0; i < angles.length; i++) {
+      const angleWords = angles[i].toLowerCase().split(/\s+/);
       const postWords = post.content.toLowerCase();
       const matchCount = angleWords.filter(w => w.length > 4 && postWords.includes(w)).length;
       if (matchCount >= 3) usedAngles.add(i);
     }
   }
 
-  const availableIndices = topic.contentAngles
+  const availableIndices = angles
     .map((_, i) => i)
     .filter(i => !usedAngles.has(i));
 
   const pool = availableIndices.length > 0
     ? availableIndices
-    : topic.contentAngles.map((_, i) => i);
+    : angles.map((_, i) => i);
 
   const idx = pool[Math.floor(Math.random() * pool.length)];
-  return topic.contentAngles[idx];
+  return angles[idx];
 }
 
 // ── Post Generation ──────────────────────────────────────────
 
-export function getTopicById(topicId) {
-  return TOPICS.find(t => t.id === topicId) || null;
+export async function getTopicByIdFromDb(topicId) {
+  return getTopicBySlug(topicId);
 }
 
-export function getAllTopicIds() {
-  return TOPICS.map(t => ({ id: t.id, name: t.name }));
+export async function getAvailableTopics(userSub = null) {
+  const topics = await getTopicsForGeneration(userSub);
+  return topics.map(t => ({ id: t.slug, name: t.name }));
 }
 
-export async function generatePost(topic = null) {
+export async function generatePost(topic = null, userSub = null) {
   if (typeof topic === "string") {
-    topic = getTopicById(topic);
+    topic = await getTopicBySlug(topic);
   }
-  if (!topic) topic = await selectNextTopic();
+  if (!topic) topic = await selectNextTopic(userSub);
 
   const cycleId = crypto.randomBytes(4).toString("hex");
 
@@ -111,11 +132,11 @@ export async function generatePost(topic = null) {
   let researchBrief = null;
   try {
     const { conductResearch } = await import("./research.js");
-    researchBrief = await conductResearch(topic.id, angle, cycleId, skipCorroboration);
+    researchBrief = await conductResearch(topic.slug, angle, cycleId, skipCorroboration);
 
     await logActivity("info", "research_integrated", {
       cycleId,
-      topicId: topic.id,
+      topicId: topic.slug,
       corroborationSkipped: skipCorroboration,
       verifiedClaims: researchBrief.verifiedClaimCount,
       independentSources: researchBrief.independentSourceCount,
@@ -124,7 +145,7 @@ export async function generatePost(topic = null) {
     });
   } catch (err) {
     await logActivity("warn", "research_unavailable", {
-      cycleId, topicId: topic.id, error: err.message
+      cycleId, topicId: topic.slug, error: err.message
     });
   }
 
@@ -137,10 +158,10 @@ export async function generatePost(topic = null) {
         : `Only ${researchBrief.verifiedClaimCount || 0} verified claim(s) found; minimum is 1 from 2+ independent sources`;
 
     await logActivity("info", "post_blocked_insufficient_sources", {
-      cycleId, topicId: topic.id, angle, reason
+      cycleId, topicId: topic.slug, angle, reason
     });
 
-    return { blocked: true, reason, topicId: topic.id, angle, cycleId };
+    return { blocked: true, reason, topicId: topic.slug, angle, cycleId };
   }
 
   // ── Rate limit cooldown before generation ──────────────────
@@ -156,7 +177,6 @@ export async function generatePost(topic = null) {
   let researchBlock;
 
   if (!skipCorroboration) {
-    // Corroboration ON — strict verified-facts-only prompt
     researchBlock = `
 RESEARCH BRIEF (use ONLY these verified facts as the basis for your post):
 ${frameUntrustedContent(researchBrief.context)}
@@ -172,7 +192,6 @@ CRITICAL SOURCE RULES:
   "Sources verified through multi-source corroboration. Full source list available upon request."
 `;
   } else {
-    // Corroboration OFF — attribution-based prompt (less strict)
     researchBlock = `
 SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources — corroboration step was skipped):
 ${frameUntrustedContent(researchBrief.context)}
@@ -186,6 +205,8 @@ ATTRIBUTION RULES:
 - At the end of the post body, include a "Sources:" line listing the key references by name.
 `;
   }
+
+  const topicHashtags = topic.hashtags || [];
 
   const userPrompt = `Write a LinkedIn post about the following topic area and angle.
 
@@ -220,7 +241,7 @@ Respond in this exact JSON format:
 
 Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
-  await logActivity("info", "content_generation_started", { cycleId, topicId: topic.id, angle });
+  await logActivity("info", "content_generation_started", { cycleId, topicId: topic.slug, angle });
 
   try {
     const client = await newAnthropicClient();
@@ -228,7 +249,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     const response = await callAnthropic(client, {
       model,
       max_tokens: 1500,
-      system: topic.systemContext,
+      system: topic.system_context,
       messages: [{ role: "user", content: userPrompt }]
     });
 
@@ -238,18 +259,18 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
     const allHashtags = [...new Set([
       ...parsed.hashtags,
-      ...topic.hashtags
+      ...topicHashtags
     ])].slice(0, 6);
 
     await logActivity("info", "content_generation_success", {
-      cycleId, topicId: topic.id,
+      cycleId, topicId: topic.slug,
       title: parsed.title,
       wordCount: parsed.body.split(/\s+/).length
     });
 
     return {
       cycleId,
-      topicId: topic.id,
+      topicId: topic.slug,
       title: parsed.title,
       content: parsed.body,
       hashtags: allHashtags,
@@ -265,7 +286,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     };
   } catch (err) {
     await logActivity("error", "content_generation_failed", {
-      cycleId, topicId: topic.id, error: err.message
+      cycleId, topicId: topic.slug, error: err.message
     });
     throw err;
   }

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.0.69",
+  "version": "1.0.83",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -14,7 +14,7 @@
     "test-post": "node scripts/test-post.js",
     "auth": "node scripts/linkedin-auth.js",
     "timesync": "sudo ntpdate -u pool.ntp.org",
-    "build": "npm run build_html && npm run build_js",
+    "build": "npm run build_html && npm run build_js && echo installed version $npm_package_name-$npm_package_version",
     "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
     "build_js": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" src_templates/index.js >src/index.js",
     "start": "npm run timesync && node src/index.js",

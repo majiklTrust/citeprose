@@ -2,24 +2,25 @@
 // News Monitor Service — RSS feed ingestion & article storage
 // ═══════════════════════════════════════════════════════════════
 //
-// Articles are stored per-tenant. The FEEDS config is shared
-// across tenants in v1 (same URLs, same topic mappings) but
-// each tenant gets its own article rows. This duplicates storage
-// but keeps RLS simple and tenant isolation strict. A shared-
-// articles model with a join table is a future optimization.
+// Normalized schema (v2):
+//   articles_v2    — global, one row per URL, no RLS
+//   feeds_v2       — tenant-scoped feed definitions, RLS
+//   feed_articles  — tenant-scoped access boundary, RLS
+//   feed_topics    — many-to-many feed ↔ topic, RLS
+//
+// Articles are stored once globally. Tenant access is enforced
+// through feed_articles. A tenant can only see articles that
+// arrived through their own feeds.
 //
 // Two entry patterns:
-//   1. API routes (api.js) — wrapped in withTenant by the handler.
-//      getArticlesForTopic, searchArticles, getArticleStats,
-//      pollAllFeeds all assume tenant context is set.
-//   2. Cron loop (startMonitor) — no request. The cron callback
-//      iterates all active tenants and wraps each tenant's
-//      pollAllFeeds in its own withTenant block.
+//   1. API routes — wrapped in withTenant by the handler.
+//   2. Cron loop — iterates all active tenants, wraps each
+//      in its own withTenant block.
+// ═══════════════════════════════════════════════════════════════
 
 import Parser from "rss-parser";
 import cron from "node-cron";
 import { logActivity } from "./database.js";
-import { FEEDS } from "../config/feeds.js";
 import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } from "./sanitize-content.js";
 import { currentClient } from "../db/with-tenant.js";
 import { withTenant } from "../db/with-tenant.js";
@@ -33,7 +34,7 @@ const parser = new Parser({
 let monitorJob = null;
 
 // Returns the current tenant's pg.Client from AsyncLocalStorage.
-// Throws if called outside withTenant — same pattern as database.js.
+// Throws if called outside withTenant.
 function client() {
   const c = currentClient();
   if (!c) {
@@ -44,11 +45,13 @@ function client() {
 
 // ── Feed Fetching ────────────────────────────────────────────
 // Must be called inside withTenant.
+// feedRow: a row from feeds_v2 (id, url, name, tier, etc.)
 
-async function fetchFeed(feedConfig) {
+async function fetchFeed(feedRow) {
   try {
-    const feed = await parser.parseURL(feedConfig.url);
-    let newCount = 0;
+    const feed = await parser.parseURL(feedRow.url);
+    let newArticles = 0;
+    let linked = 0;
     const c = client();
 
     for (const item of feed.items || []) {
@@ -65,7 +68,7 @@ async function fetchFeed(feedConfig) {
 
       if (titleInjection.detected || summaryInjection.detected) {
         await logActivity("warn", "prompt_injection_detected", {
-          feed: feedConfig.name,
+          feed: feedRow.name,
           link,
           titlePatterns: titleInjection.patterns,
           summaryPatterns: summaryInjection.patterns
@@ -76,46 +79,75 @@ async function fetchFeed(feedConfig) {
       const published = item.isoDate || item.pubDate || null;
       const hash = simpleHash(link + cleanTitle);
 
-      // INSERT ... ON CONFLICT DO NOTHING replaces SQLite's
-      // INSERT OR IGNORE. The unique constraint is (tenant_id, link)
-      // so re-fetching the same article under the same tenant is a
-      // no-op. tenant_id is set from current_tenant_id() for RLS.
-      const result = await c.query(
-        `INSERT INTO articles
-           (tenant_id, feed_name, feed_tier, topic_slugs, title, link, summary, published_at, content_hash)
-         VALUES (current_tenant_id(), $1, $2::feed_tier, $3::jsonb, $4, $5, $6, $7, $8)
-         ON CONFLICT (tenant_id, link) DO NOTHING
+      // Step 1: Insert into global articles_v2.
+      // No tenant_id, no RLS. ON CONFLICT returns nothing if
+      // the article already exists (another feed already fetched it).
+      const articleResult = await c.query(
+        `INSERT INTO articles_v2 (title, link, summary, published_at, content_hash)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (link) DO NOTHING
          RETURNING id`,
-        [
-          feedConfig.name,
-          feedConfig.tier,
-          JSON.stringify(feedConfig.topicIds),
-          cleanTitle,
-          link,
-          cleanSummary,
-          published,
-          hash
-        ]
+        [cleanTitle, link, cleanSummary, published, hash]
       );
 
-      if (result.rowCount > 0) newCount++;
+      let articleId;
+      if (articleResult.rowCount > 0) {
+        articleId = articleResult.rows[0].id;
+        newArticles++;
+      } else {
+        // Article already exists — look up its id
+        const existing = await c.query(
+          `SELECT id FROM articles_v2 WHERE link = $1`,
+          [link]
+        );
+        if (existing.rows.length === 0) continue;
+        articleId = existing.rows[0].id;
+      }
+
+      // Step 2: Link article to this tenant's feed.
+      // ON CONFLICT means this feed already fetched this article.
+      const linkResult = await c.query(
+        `INSERT INTO feed_articles (tenant_id, feed_id, article_id)
+         VALUES (current_tenant_id(), $1, $2)
+         ON CONFLICT (feed_id, article_id) DO NOTHING`,
+        [feedRow.id, articleId]
+      );
+
+      if (linkResult.rowCount > 0) linked++;
     }
 
-    if (newCount > 0) {
+    // Update feed poll status
+    await c.query(
+      `UPDATE feeds_v2 SET last_polled_at = now(), last_error = NULL
+       WHERE id = $1`,
+      [feedRow.id]
+    );
+
+    if (newArticles > 0 || linked > 0) {
       await logActivity("info", "feed_fetched", {
-        feed: feedConfig.name,
-        newArticles: newCount,
+        feed: feedRow.name,
+        newArticles,
+        linked,
         totalItems: feed.items?.length || 0
       });
     }
 
-    return newCount;
+    return { newArticles, linked };
   } catch (err) {
+    // Record error on the feed row
+    const c = client();
+    try {
+      await c.query(
+        `UPDATE feeds_v2 SET last_error = $1 WHERE id = $2`,
+        [err.message.substring(0, 500), feedRow.id]
+      );
+    } catch { /* best-effort */ }
+
     await logActivity("warn", "feed_fetch_failed", {
-      feed: feedConfig.name,
+      feed: feedRow.name,
       error: err.message
     });
-    return 0;
+    return { newArticles: 0, linked: 0 };
   }
 }
 
@@ -123,25 +155,52 @@ async function fetchFeed(feedConfig) {
 // Must be called inside withTenant.
 
 export async function pollAllFeeds() {
-  await logActivity("info", "feed_poll_started", { feedCount: FEEDS.length });
+  const c = client();
+
+  // Read feeds from the database instead of the hardcoded array
+  const feedsResult = await c.query(
+    `SELECT id, url, name, tier::text, refresh_minutes, last_polled_at
+     FROM feeds_v2
+     WHERE enabled = true
+     ORDER BY last_polled_at ASC NULLS FIRST`
+  );
+
+  const feeds = feedsResult.rows;
+
+  await logActivity("info", "feed_poll_started", { feedCount: feeds.length });
 
   let totalNew = 0;
-  for (const feedConfig of FEEDS) {
-    const count = await fetchFeed(feedConfig);
-    totalNew += count;
+  let totalLinked = 0;
+
+  for (const feedRow of feeds) {
+    // Skip feeds that aren't due for polling yet
+    if (feedRow.last_polled_at) {
+      const minutesSincePoll = (Date.now() - new Date(feedRow.last_polled_at).getTime()) / 60000;
+      if (minutesSincePoll < feedRow.refresh_minutes) continue;
+    }
+
+    const result = await fetchFeed(feedRow);
+    totalNew += result.newArticles;
+    totalLinked += result.linked;
     await new Promise(r => setTimeout(r, 1500));
   }
 
-  // Prune articles older than 60 days. tenant_id filter is enforced
-  // by RLS automatically — the WHERE on published_at is all we add.
-  const c = client();
+  // Prune old feed_articles links for this tenant.
+  // Articles are global — we only remove the tenant's reference.
+  // Orphaned articles_v2 rows can be cleaned by a maintenance job.
   const pruned = await c.query(
-    `DELETE FROM articles WHERE published_at < now() - interval '60 days'`
+    `DELETE FROM feed_articles
+     WHERE tenant_id = current_tenant_id()
+       AND article_id IN (
+         SELECT a.id FROM articles_v2 a
+         WHERE a.published_at < now() - interval '60 days'
+       )`
   );
 
   await logActivity("info", "feed_poll_complete", {
     newArticles: totalNew,
-    pruned: pruned.rowCount
+    linked: totalLinked,
+    prunedLinks: pruned.rowCount
   });
 
   return totalNew;
@@ -150,53 +209,65 @@ export async function pollAllFeeds() {
 // ── Query Articles ───────────────────────────────────────────
 // Must be called inside withTenant.
 
-export async function getArticlesForTopic(topicId, maxAgeDays = 14, limit = 30) {
+export async function getArticlesForTopic(topicSlug, maxAgeDays = 20, limit = 30) {
   const c = client();
-  // JSONB containment: topic_slugs @> '"<slug>"' matches when the
-  // array contains the slug string. Much cleaner than SQLite's
-  // LIKE '%"<slug>"%' pattern and uses the GIN index.
+  // JOIN path: articles_v2 → feed_articles → feeds_v2 → feed_topics → topics
+  // RLS on feed_articles, feeds_v2, feed_topics scopes to current tenant.
+  // articles_v2 has no RLS — accessed via the tenant-scoped JOINs.
   const r = await c.query(
-    `SELECT id, tenant_id, feed_name, feed_tier, topic_slugs AS topic_ids,
-            title, link, summary, published_at, fetched_at, content_hash
-     FROM articles
-     WHERE topic_slugs @> $1::jsonb
-       AND published_at >= now() - ($2 || ' days')::interval
-     ORDER BY published_at DESC
+    `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
+            f.name AS feed_name, f.tier::text AS feed_tier
+     FROM articles_v2 a
+     JOIN feed_articles fa ON fa.article_id = a.id
+     JOIN feeds_v2 f ON f.id = fa.feed_id
+     JOIN feed_topics ft ON ft.feed_id = f.id
+     JOIN topics t ON t.id = ft.topic_id
+     WHERE t.slug = $1
+       AND a.published_at >= now() - ($2 || ' days')::interval
+     ORDER BY a.published_at DESC
      LIMIT $3`,
-    [JSON.stringify(topicId), String(maxAgeDays), limit]
+    [topicSlug, String(maxAgeDays), limit]
   );
   return r.rows;
 }
 
-export async function searchArticles(keywords, topicId = null, maxAgeDays = 30, limit = 20) {
+export async function searchArticles(keywords, topicSlug = null, maxAgeDays = 20, limit = 20) {
   const c = client();
   const conditions = [];
   const params = [];
   let i = 1;
 
   for (const kw of keywords) {
-    conditions.push(`(title ILIKE $${i} OR summary ILIKE $${i})`);
+    conditions.push(`(a.title ILIKE $${i} OR a.summary ILIKE $${i})`);
     params.push(`%${kw}%`);
     i++;
   }
 
-  if (topicId) {
-    conditions.push(`topic_slugs @> $${i}::jsonb`);
-    params.push(JSON.stringify(topicId));
+  if (topicSlug) {
+    conditions.push(`t.slug = $${i}`);
+    params.push(topicSlug);
     i++;
   }
 
-  conditions.push(`published_at >= now() - ($${i} || ' days')::interval`);
+  conditions.push(`a.published_at >= now() - ($${i} || ' days')::interval`);
   params.push(String(maxAgeDays));
   i++;
   params.push(limit);
 
+  const topicJoin = topicSlug
+    ? `JOIN feed_topics ft ON ft.feed_id = f.id
+       JOIN topics t ON t.id = ft.topic_id`
+    : "";
+
   const sql = `
-    SELECT id, tenant_id, feed_name, feed_tier, topic_slugs AS topic_ids,
-           title, link, summary, published_at, fetched_at, content_hash
-    FROM articles
+    SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
+           f.name AS feed_name, f.tier::text AS feed_tier
+    FROM articles_v2 a
+    JOIN feed_articles fa ON fa.article_id = a.id
+    JOIN feeds_v2 f ON f.id = fa.feed_id
+    ${topicJoin}
     WHERE ${conditions.join(" AND ")}
-    ORDER BY published_at DESC
+    ORDER BY a.published_at DESC
     LIMIT $${i}
   `;
 
@@ -207,16 +278,23 @@ export async function searchArticles(keywords, topicId = null, maxAgeDays = 30, 
 export async function getArticleStats() {
   const c = client();
 
-  const total = await c.query("SELECT COUNT(*)::int AS count FROM articles");
+  const total = await c.query(
+    `SELECT COUNT(DISTINCT fa.article_id)::int AS count
+     FROM feed_articles fa`
+  );
   const byFeed = await c.query(
-    `SELECT feed_name, feed_tier, COUNT(*)::int AS count
-     FROM articles
-     GROUP BY feed_name, feed_tier
+    `SELECT f.name AS feed_name, f.tier::text AS feed_tier,
+            COUNT(DISTINCT fa.article_id)::int AS count
+     FROM feed_articles fa
+     JOIN feeds_v2 f ON f.id = fa.feed_id
+     GROUP BY f.name, f.tier
      ORDER BY count DESC`
   );
   const recent = await c.query(
-    `SELECT COUNT(*)::int AS count FROM articles
-     WHERE published_at >= now() - interval '7 days'`
+    `SELECT COUNT(DISTINCT fa.article_id)::int AS count
+     FROM feed_articles fa
+     JOIN articles_v2 a ON a.id = fa.article_id
+     WHERE a.published_at >= now() - interval '7 days'`
   );
 
   return {
@@ -227,10 +305,6 @@ export async function getArticleStats() {
 }
 
 // ── Monitor Lifecycle ────────────────────────────────────────
-//
-// Schema is managed externally by the DDL files in data/pgsql/.
-// initTables() is no longer needed. setDatabase() is gone — the
-// pool and tenant context are resolved via imports from src/db/.
 
 async function runPollForAllTenants() {
   let tenants;

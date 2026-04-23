@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.84
+// v1.0.87
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -568,15 +568,15 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.84
+║           LinkedIn AI Content Agent  v1.0.87
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
 ║                                                           ║
 ║      Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
+║     Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
 ║ Database:  ${(process.env.PGDATABASE)}
 ║     Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
-║     Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
 ║      App:  ${addr.origin}
 ╚═══════════════════════════════════════════════════════════╝
 `);

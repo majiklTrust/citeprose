@@ -32,9 +32,9 @@ const COOLDOWN_MS = 65000;
 // Step 1: Gather material from RSS (no API call)
 // ═══════════════════════════════════════════════════════════════
 
-async function gatherRSSMaterial(topicId, angle) {
-  const maxAge = SOURCE_RULES.maxAgeDays[topicId] || 14;
-  const articles = await getArticlesForTopic(topicId, maxAge, 30);
+async function gatherRSSMaterial(topic, angle) {
+  const maxAge = topic.max_age_days || 20;
+  const articles = await getArticlesForTopic(topic.slug, maxAge, 30);
 
   const angleWords = angle.toLowerCase().split(/\s+/).filter(w => w.length > 3);
 
@@ -54,9 +54,9 @@ async function gatherRSSMaterial(topicId, angle) {
 // Step 2: Gather material from web search (API call #1)
 // ═══════════════════════════════════════════════════════════════
 
-async function gatherWebSearchMaterial(topicId, angle, cycleId) {
-  const topic = await getTopicBySlug(topicId);
-  const topicName = topic?.name || topicId;
+async function gatherWebSearchMaterial(topic, angle, cycleId) {
+  const topicId = topic.slug;
+  const topicName = topic.name || topicId;
   const searchQueries = buildSearchQueries(topicId, angle);
 
   await logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
@@ -407,11 +407,24 @@ function buildDirectBrief(allSources) {
 export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false) {
   await logActivity("info", "research_started", { cycleId, topicId, angle, corroboration: !skipCorroboration });
 
+  // Resolve topic from DB once — both gather functions use it
+  const topic = await getTopicBySlug(topicId);
+  if (!topic) {
+    await logActivity("warn", "research_topic_not_found", { cycleId, topicId });
+    return {
+      context: "", sourceList: [], sourceCount: 0,
+      independentSourceCount: 0, verifiedClaimCount: 0,
+      corroborationSkipped: skipCorroboration,
+      hasEnoughMaterial: false,
+      summary: { rssArticles: 0, webClaims: 0, independentSources: 0, totalSourceItems: 0, verifiedClaims: 0, belowThreshold: 0, uncorroborated: 0 }
+    };
+  }
+
   // Step 1: RSS (instant)
-  const rssArticles = await gatherRSSMaterial(topicId, angle);
+  const rssArticles = await gatherRSSMaterial(topic, angle);
 
   // Step 2: Web search (API call #1)
-  const webClaims = await gatherWebSearchMaterial(topicId, angle, cycleId);
+  const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId);
 
   await logActivity("info", "research_material_gathered", {
     cycleId, rssArticles: rssArticles.length, webClaims: webClaims.length

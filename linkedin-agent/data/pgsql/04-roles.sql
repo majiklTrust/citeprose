@@ -2,7 +2,7 @@
 -- 04-roles.sql — Application and admin role grants
 -- ═══════════════════════════════════════════════════════════════
 -- Target: PostgreSQL 17
--- Prerequisite: 01, 02, 03 applied.
+-- Prerequisite: 01, 02, 02.1, 03 applied.
 -- Idempotent: safe to re-run.
 --
 -- Creates two GROUP roles (NOLOGIN — they're not for logging in
@@ -66,16 +66,32 @@ GRANT SELECT ON tenants, memberships, schema_version TO linkedin_agent_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, memberships, schema_version
   TO linkedin_agent_admin;
 
--- ── Tenant tables: full access for both, RLS does the work ───
--- linkedin_agent_app gets full DML on tenant tables but is
--- constrained by RLS. linkedin_agent_admin gets the same DML
--- and bypasses RLS via the role attribute.
+-- ── Tenant tables: RLS-protected, full DML for app ───────────
+-- linkedin_agent_app gets DML constrained by RLS.
+-- linkedin_agent_admin gets the same DML and bypasses RLS.
 GRANT SELECT, INSERT, UPDATE, DELETE ON
-  topics, feeds, articles, posts, agent_state, activity_log, credentials
+  topics, posts, agent_state, activity_log, credentials
   TO linkedin_agent_app;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON
-  topics, feeds, articles, posts, agent_state, activity_log, credentials
+  topics, posts, agent_state, activity_log, credentials
+  TO linkedin_agent_admin;
+
+-- ── Feed system (normalized v2 tables) ───────────────────────
+-- articles_v2: global, no RLS. App needs SELECT + INSERT only
+--   (append-only content, no UPDATE or DELETE).
+-- feeds_v2: tenant-scoped feed definitions, full DML.
+-- feed_topics: many-to-many mapping, SELECT + INSERT + DELETE
+--   (no UPDATE — mappings are created or removed, not modified).
+-- feed_articles: tenant access boundary, SELECT + INSERT + DELETE
+--   (DELETE for pruning old links).
+GRANT SELECT, INSERT ON articles_v2 TO linkedin_agent_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON feeds_v2 TO linkedin_agent_app;
+GRANT SELECT, INSERT, DELETE ON feed_topics TO linkedin_agent_app;
+GRANT SELECT, INSERT, DELETE ON feed_articles TO linkedin_agent_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  articles_v2, feeds_v2, feed_topics, feed_articles
   TO linkedin_agent_admin;
 
 -- ── Sequences for IDENTITY columns ───────────────────────────

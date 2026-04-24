@@ -2,7 +2,8 @@
 -- 03-rls.sql — Row-Level Security policies for tenant isolation
 -- ═══════════════════════════════════════════════════════════════
 -- Target: PostgreSQL 17
--- Prerequisite: 01-platform.sql and 02-tenant-tables.sql applied.
+-- Prerequisite: 01-platform.sql, 02-tenant-tables.sql, and
+--   02.1-feeds-normalize.sql applied (v2 tables must exist).
 -- Idempotent: safe to re-run with `psql -f 03-rls.sql`
 --
 -- This file enables Row-Level Security (RLS) on every tenant-
@@ -95,21 +96,34 @@ CREATE POLICY tenant_isolation ON topics
   USING (tenant_id = current_tenant_id())
   WITH CHECK (tenant_id = current_tenant_id());
 
--- feeds
-ALTER TABLE feeds ENABLE ROW LEVEL SECURITY;
-ALTER TABLE feeds FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON feeds;
-CREATE POLICY tenant_isolation ON feeds
+-- feeds_v2 (tenant-scoped RSS source definitions)
+ALTER TABLE feeds_v2 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feeds_v2 FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON feeds_v2;
+CREATE POLICY tenant_isolation ON feeds_v2
   USING (tenant_id = current_tenant_id())
   WITH CHECK (tenant_id = current_tenant_id());
 
--- articles
-ALTER TABLE articles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE articles FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON articles;
-CREATE POLICY tenant_isolation ON articles
+-- feed_topics (many-to-many feed ↔ topic)
+ALTER TABLE feed_topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feed_topics FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON feed_topics;
+CREATE POLICY tenant_isolation ON feed_topics
   USING (tenant_id = current_tenant_id())
   WITH CHECK (tenant_id = current_tenant_id());
+
+-- feed_articles (tenant access boundary to global articles)
+ALTER TABLE feed_articles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feed_articles FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON feed_articles;
+CREATE POLICY tenant_isolation ON feed_articles
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
+
+-- articles_v2: NO RLS
+-- Global content table — one row per URL across all tenants.
+-- Access is controlled through feed_articles (RLS-protected).
+-- No tenant_id column exists on this table.
 
 -- posts
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
@@ -144,8 +158,8 @@ CREATE POLICY tenant_isolation ON credentials
   WITH CHECK (tenant_id = current_tenant_id());
 
 -- ── Platform tables: NOT subject to RLS ──────────────────────
--- tenants, memberships, schema_version live ABOVE the tenant
--- boundary. The application needs to read them BEFORE a tenant
--- context is established (to look up which tenant a logged-in
--- user belongs to). Access control on these tables is enforced
--- via GRANTs in 04-roles.sql, not RLS.
+-- tenants, memberships, schema_version, invites live ABOVE the
+-- tenant boundary. The application needs to read them BEFORE a
+-- tenant context is established (to look up which tenant a
+-- logged-in user belongs to). Access control on these tables is
+-- enforced via GRANTs in 04-roles.sql, not RLS.

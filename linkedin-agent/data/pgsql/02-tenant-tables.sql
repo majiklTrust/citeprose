@@ -21,6 +21,10 @@
 -- ON DELETE CASCADE on every tenant_id FK means deleting a
 -- tenant atomically removes all of their data — the silo
 -- equivalent in pool isolation.
+--
+-- Feed and article tables are defined in 02.1-feeds-normalize.sql
+-- (normalized v2 schema with global articles and tenant-scoped
+-- access through feed_articles).
 -- ═══════════════════════════════════════════════════════════════
 
 -- ── Enum types ───────────────────────────────────────────────
@@ -117,76 +121,6 @@ COMMENT ON COLUMN topics.weight IS
   'Topic rotation weight. Permissive positive integer — application interprets the scale.';
 COMMENT ON COLUMN topics.max_age_days IS
   'Research staleness window for this topic, in days. Articles older than this are excluded.';
-
--- ── feeds ────────────────────────────────────────────────────
--- Replaces src/config/feeds.js. URL is the natural identifier
--- but is unique only within a tenant — two tenants can subscribe
--- to the same RSS feed independently. topic_slugs is a JSONB
--- array of topic slugs (NOT topic IDs) so that the application
--- code can join via slug, which is the human-meaningful key.
-CREATE TABLE IF NOT EXISTS feeds (
-  id               BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  tenant_id        UUID         NOT NULL,
-  url              TEXT         NOT NULL,
-  name             VARCHAR(256) NOT NULL,
-  topic_slugs      JSONB        NOT NULL DEFAULT '[]'::jsonb,
-  tier             feed_tier    NOT NULL DEFAULT 'primary',
-  refresh_minutes  INTEGER      NOT NULL DEFAULT 120
-                     CHECK (refresh_minutes > 0),
-  enabled          BOOLEAN      NOT NULL DEFAULT TRUE,
-  last_polled_at   TIMESTAMPTZ,
-  created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  CONSTRAINT fk_feeds_tenant
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  CONSTRAINT uq_feeds_tenant_url
-    UNIQUE (tenant_id, url)
-);
-
-CREATE INDEX IF NOT EXISTS idx_feeds_tenant_enabled
-  ON feeds(tenant_id) WHERE enabled = TRUE;
-CREATE INDEX IF NOT EXISTS idx_feeds_topic_slugs_gin
-  ON feeds USING gin (topic_slugs);
-
-DROP TRIGGER IF EXISTS trg_feeds_updated_at ON feeds;
-CREATE TRIGGER trg_feeds_updated_at
-  BEFORE UPDATE ON feeds
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-COMMENT ON TABLE feeds IS
-  'Per-tenant RSS feed subscriptions. Replaces src/config/feeds.js.';
-
--- ── articles ─────────────────────────────────────────────────
--- News items fetched from feeds. The link is unique per tenant
--- (not globally) so two tenants subscribing to the same feed
--- each get their own ingestion of every article — preserves the
--- tenant boundary for source data. content_hash is used for
--- duplicate detection within a tenant.
-CREATE TABLE IF NOT EXISTS articles (
-  id            BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  tenant_id     UUID         NOT NULL,
-  feed_name     VARCHAR(256) NOT NULL,
-  feed_tier     feed_tier    NOT NULL,
-  topic_slugs   JSONB        NOT NULL DEFAULT '[]'::jsonb,
-  title         TEXT         NOT NULL,
-  link          TEXT         NOT NULL,
-  summary       TEXT,
-  published_at  TIMESTAMPTZ,
-  fetched_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  content_hash  VARCHAR(64),
-  CONSTRAINT fk_articles_tenant
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  CONSTRAINT uq_articles_tenant_link
-    UNIQUE (tenant_id, link)
-);
-
-CREATE INDEX IF NOT EXISTS idx_articles_tenant_published
-  ON articles(tenant_id, published_at DESC);
-CREATE INDEX IF NOT EXISTS idx_articles_topic_slugs_gin
-  ON articles USING gin (topic_slugs);
-
-COMMENT ON TABLE articles IS
-  'Articles fetched from RSS feeds. Per-tenant — same article from same feed produces two rows for two tenants.';
 
 -- ── posts ────────────────────────────────────────────────────
 -- The headline table — generated LinkedIn posts in their lifecycle.
@@ -302,3 +236,20 @@ COMMENT ON TABLE credentials IS
   'Encrypted per-tenant secrets. Plaintext is never stored. encryption_version allows scheme rotation.';
 COMMENT ON COLUMN credentials.value_enc IS
   'AES-256-GCM ciphertext: iv (12 bytes) || authTag (16 bytes) || ciphertext.';
+
+-- ── Shared utility function ──────────────────────────────────
+-- set_updated_at() is used by triggers on multiple tables.
+-- Defined here (idempotent) since 01-platform.sql creates it
+-- but this file uses it extensively.
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION set_updated_at() IS
+  'Trigger function: auto-sets updated_at to now() on UPDATE.';

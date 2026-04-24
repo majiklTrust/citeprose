@@ -2,3 +2,5 @@
 *.conf
 data
 pgsql
+seed-feeds.sql
+*dump*

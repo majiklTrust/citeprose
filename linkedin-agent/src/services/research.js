@@ -152,7 +152,7 @@ The chain:
 4 research.js::buildSearchQueries(topicId, angle) — extracts keywords from that angle via extractKeywords(angle)
 
 **/
-function buildSearchQueries(topicId, angle) {
+function _buildSearchQueries(topicId, angle) {
   const kw = extractKeywords(angle);
   const queries = {
     "cybersecurity-incidents": [
@@ -169,6 +169,34 @@ function buildSearchQueries(topicId, angle) {
     ]
   };
   return queries[topicId] || [`${angle}`, `${kw} latest news`];
+}
+function buildSearchQueries(topicId, angle) {
+  const kw = extractKeywords(angle);
+  const year = new Date().getFullYear();
+  const yearRange = `${year - 1} ${year}`;
+  const queries = {
+    "cybersecurity-incidents": [
+      `${angle} ${yearRange}`, `recent cybersecurity breach ${kw}`, `${kw} incident report`
+    ],
+    "cybersecurity-advances": [
+      `${angle} new technology ${yearRange}`, `${kw} cybersecurity advancement`, `${kw} security tool release`
+    ],
+    "ai-practical-benefit": [
+      `${angle} real world results`, `${kw} AI implementation case study`, `${kw} enterprise AI ${yearRange}`
+    ],
+    "ai-guardrails": [
+      `${angle} AI safety framework`, `${kw} AI governance policy`, `${kw} responsible AI implementation`
+    ]
+  };
+  if (queries[topicId]) return queries[topicId];
+
+  // Generic catchall for any topic not in the map above
+  const topicName = topicId.replace(/-/g, ' ');
+  return [
+    `${topicName} ${kw} ${yearRange}`,
+    `${kw} ${topicName} case study analysis`,
+    `${topicName} ${kw} expert report`
+  ];
 }
 
 function extractKeywords(text) {

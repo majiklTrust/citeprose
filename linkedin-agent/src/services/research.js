@@ -125,6 +125,33 @@ Rules:
   }
 }
 
+/*
+The function feeds into `gatherWebSearchMaterial()`. Here's the chain:
+
+1. `conductResearch()` calls `gatherWebSearchMaterial(topic, angle, cycleId)`
+2. `gatherWebSearchMaterial()` calls `buildSearchQueries(topicId, angle)` to get 3 query strings
+3. Those queries are sent to Anthropic with the `web_search` tool enabled
+4. Anthropic searches the web using those queries and returns claims
+5. The claims are scored, corroborated, and fed to the content generator as research material
+
+For an original topic like `cybersecurity-incidents`, the queries are crafted to find
+ relevant content — "recent cybersecurity breach ransomware", "ransomware incident report".
+ These produce targeted results that the corroboration engine can work with.
+ Better queries → better sources → higher verified claim count → post passes the quality gate.
+
+For a new topic, it's not skipped — it still runs. But the two generic queries produce unfocused results.
+ The web search returns broad, shallow content instead of domain-specific material.
+ Fewer claims corroborate across sources, so the `hasEnoughMaterial` check is more likely to fail,
+ and the post gets blocked with "insufficient sources."
+
+The chain:
+
+1 content-generator.js::selectNextTopic(userSub) — picks a topic from DB via topic-store.js::getTopicsForGeneration(userSub)
+2 content-generator.js::selectContentAngle(topic, recentPosts) — reads topic.content_angles (the JSONB array from the database), picks one angle string
+3 That angle string is passed to conductResearch(topic.slug, angle, cycleId, ...)
+4 research.js::buildSearchQueries(topicId, angle) — extracts keywords from that angle via extractKeywords(angle)
+
+**/
 function buildSearchQueries(topicId, angle) {
   const kw = extractKeywords(angle);
   const queries = {

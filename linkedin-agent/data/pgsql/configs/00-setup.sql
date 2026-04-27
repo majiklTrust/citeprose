@@ -1,0 +1,2 @@
+CREATE ROLE ***REMOVED*** LOGIN PASSWORD ;
+GRANT linkedin_agent_app TO ***REMOVED***;

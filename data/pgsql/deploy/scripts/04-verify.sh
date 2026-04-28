@@ -61,10 +61,6 @@ fi
 
 echo
 echo "==> Port binding (expect ${EXPECTED_BIND})"
-# Use 'podman port' rather than Go templates against .NetworkSettings.Ports or
-# .HostConfig.PortBindings — both have schema differences (HostIp vs HostIP)
-# and behavior variations across Podman networking backends. 'podman port'
-# output is stable: "<host-ip>:<host-port>" per line.
 PORT_OUTPUT=$(podman port "$CONTAINER_NAME" 5432/tcp 2>/dev/null || true)
 echo "  $PORT_OUTPUT"
 if [[ "$PORT_OUTPUT" == "$EXPECTED_BIND" ]]; then
@@ -97,16 +93,25 @@ else
 fi
 
 echo
-echo "==> Bootstrap SQL applied (lists user-defined tables in public schema)"
-TABLE_COUNT=$(podman exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
-    "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null || echo "ERR")
-echo "  public schema table count: $TABLE_COUNT"
-if [[ "$TABLE_COUNT" =~ ^[0-9]+$ ]] && [[ "$TABLE_COUNT" -gt 0 ]]; then
-    check "bootstrap created tables" pass
-elif [[ "$TABLE_COUNT" == "0" ]]; then
-    check "bootstrap created tables (none found; check bootstrap/*.sql ran on first init)" fail
+echo "==> Application database exists and is owned by superuser"
+# Verifies that the image entrypoint created POSTGRES_DB and that the
+# superuser owns it. Counts rows from pg_database joined to pg_roles —
+# expects exactly 1 row matching the database name and owner.
+DB_OWNER=$(podman exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d postgres -tAc \
+    "SELECT pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d WHERE d.datname='${POSTGRES_DB}'" 2>/dev/null || echo "ERR")
+echo "  Owner of '${POSTGRES_DB}': ${DB_OWNER}"
+if [[ "$DB_OWNER" == "$POSTGRES_USER" ]]; then
+    check "database '${POSTGRES_DB}' owned by '${POSTGRES_USER}'" pass
 else
-    check "bootstrap query succeeded" fail
+    check "database '${POSTGRES_DB}' owned by '${POSTGRES_USER}' (got: '${DB_OWNER}')" fail
+fi
+
+echo
+echo "==> Application database accepts queries as superuser"
+if podman exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1" 2>/dev/null | grep -q "^1$"; then
+    check "SELECT 1 succeeds against ${POSTGRES_DB}" pass
+else
+    check "SELECT 1 succeeds against ${POSTGRES_DB}" fail
 fi
 
 echo

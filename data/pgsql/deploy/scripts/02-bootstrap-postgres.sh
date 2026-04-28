@@ -3,15 +3,17 @@
 # 02-bootstrap-postgres.sh
 #
 # Pulls the postgres:17 image, creates the named volume, and starts the
-# marketing_ai_instance container. First-run only triggers initdb and runs
-# bootstrap SQL files from ./bootstrap/.
+# marketing_ai_instance container. The image entrypoint creates the
+# superuser (POSTGRES_USER) and the application database (POSTGRES_DB) on
+# first init. Any *.sh or *.sql files in $PROJECT_ROOT/bootstrap/ are also
+# executed on first init by the image entrypoint, in lexical order.
 #
 # Run as: ubuntu user.
 # Prerequisites:
-#   - 01-install-podman.sh has been run.
+#   - 01-install-podman.sh has been run (and host rebooted if it requested).
 #   - $PROJECT_ROOT/configs/postgresql.conf.17.appdev exists.
 #   - $PROJECT_ROOT/configs/pg_hba.conf.17.appdev exists.
-#   - $PROJECT_ROOT/bootstrap/*.sql exists (optional but expected).
+#   - $PROJECT_ROOT/bootstrap/ exists (may be empty).
 #   - $PROJECT_ROOT/.env exists with mode 0600 and contains POSTGRES_PASSWORD.
 #
 # Idempotency:
@@ -58,7 +60,7 @@ done
 
 if [[ ! -d "${PROJECT_ROOT}/bootstrap" ]]; then
     echo "WARNING: ${PROJECT_ROOT}/bootstrap/ does not exist." >&2
-    echo "         Container will start without running bootstrap SQL." >&2
+    echo "         Container will start without an initdb.d mount." >&2
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -110,6 +112,8 @@ echo "    CPU cap:      $CPU_LIMIT"
 echo "    Volume:       $VOLUME_NAME -> /var/lib/postgresql/data"
 echo "    Bootstrap:    ${PROJECT_ROOT}/bootstrap -> /docker-entrypoint-initdb.d (ro)"
 echo "    Configs:      ${PROJECT_ROOT}/configs/*.appdev -> /etc/postgresql/ (ro)"
+echo "    Superuser:    $POSTGRES_USER"
+echo "    Database:     $POSTGRES_DB (owned by $POSTGRES_USER)"
 
 podman run -d \
     --name "$CONTAINER_NAME" \

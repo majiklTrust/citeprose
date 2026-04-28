@@ -56,7 +56,7 @@ COMMENT ON TABLE articles_v2 IS
 -- ── Step 3: feeds_v2 — tenant-scoped RSS source definitions ──
 CREATE TABLE IF NOT EXISTS feeds_v2 (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   url             TEXT NOT NULL,
   name            TEXT NOT NULL,
   tier            feed_tier NOT NULL DEFAULT 'secondary',
@@ -83,7 +83,7 @@ COMMENT ON TABLE feeds_v2 IS
 -- ── Step 4: feed_topics — many-to-many feed ↔ topic ──────────
 CREATE TABLE IF NOT EXISTS feed_topics (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   feed_id         BIGINT NOT NULL REFERENCES feeds_v2(id) ON DELETE CASCADE,
   topic_id        BIGINT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
 
@@ -102,7 +102,7 @@ COMMENT ON TABLE feed_topics IS
 -- ── Step 5: feed_articles — tenant access boundary ───────────
 CREATE TABLE IF NOT EXISTS feed_articles (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   feed_id         BIGINT NOT NULL REFERENCES feeds_v2(id) ON DELETE CASCADE,
   article_id      BIGINT NOT NULL REFERENCES articles_v2(id) ON DELETE CASCADE,
   fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/app/favicon.png">
   <title>LinkedIn AI Agent — Command Center</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -99,6 +100,15 @@
         try {
           // Status is public (uses optionalAuth) — always fetch with regular fetch
           const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
+
+          // Safe defaults for new tenants with no agent_state rows.
+          // Without this, status.mode.toUpperCase() crashes when
+          // the tenant exists but has never set a mode.
+          if (statusRes.user && !statusRes.mode) statusRes.mode = 'manual';
+          if (statusRes.user && !statusRes.stats) statusRes.stats = {
+            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
+          };
+
           setStatus(statusRes);
 
           // If auth is required and no user, don't fetch protected routes
@@ -375,7 +385,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.0.94</div>
+                <div className="header-subtitle">v1.0.95</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -415,7 +425,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.0.94 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.0.95 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (
@@ -437,7 +447,7 @@
                 <div className="toggle-thumb"></div>
               </div>
               <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
-                {status.mode.toUpperCase()}
+                {(status.mode || 'manual').toUpperCase()}
               </span>
             </div>
             </div>

@@ -488,7 +488,7 @@ export async function buildAppForTests() {
 export async function start() {
   // STEP 1: Load .env
   const envPath = path.resolve(__dirname, "../.env");
-  const envResult = dotenv.config({ path: envPath, override: true });
+  const envResult = dotenv.config({ path: envPath, override: false });
   if (envResult.error) {
     console.error("[WARN] Could not load .env — falling back to OS environment variables.");
   }

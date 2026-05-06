@@ -57,12 +57,15 @@ ALTER ROLE linkedin_agent_admin BYPASSRLS;
 GRANT USAGE ON SCHEMA public TO linkedin_agent_app;
 GRANT USAGE ON SCHEMA public TO linkedin_agent_admin;
 
--- ── Platform tables: read-only for app, full for admin ───────
--- The app needs to look up tenants and memberships before any
--- tenant context is set (to resolve "which tenant does this
--- logged-in user belong to?"). It does NOT need to write to
--- these tables — tenant creation is an admin operation.
-GRANT SELECT ON tenants, memberships, schema_version TO linkedin_agent_app;
+-- ── Platform tables ───────────────────────────────────────────
+-- The app reads tenants and memberships before any tenant context
+-- is set (to resolve "which tenant does this user belong to?").
+-- INSERT on tenants is required for self-service registration —
+-- the app creates a new tenant row when a registrant completes
+-- the signup form. memberships and schema_version remain read-only
+-- for the app role.
+GRANT SELECT, INSERT ON tenants TO linkedin_agent_app;
+GRANT SELECT ON memberships, schema_version TO linkedin_agent_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, memberships, schema_version
   TO linkedin_agent_admin;
 

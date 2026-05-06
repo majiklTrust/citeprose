@@ -121,23 +121,23 @@ export async function findPendingInviteByEmail(email) {
  * The membership INSERT uses the invite's tenant_id and role.
  */
 export async function claimInvite(inviteId, provider, sub) {
-  // Create membership from the invite
+  // Atomic: CTE INSERT + UPDATE runs as a single statement.
+  // If the membership INSERT fails (e.g., constraint violation),
+  // the invite UPDATE does not execute. No orphaned state.
   await query(
-    `INSERT INTO memberships (tenant_id, auth_provider, auth_sub, role)
-     SELECT i.tenant_id, $2::auth_provider, $3, i.role
-     FROM invites i
-     WHERE i.id = $1 AND i.status = 'pending'::invite_status`,
-    [inviteId, provider, sub]
-  );
-
-  // Mark invite as claimed
-  await query(
-    `UPDATE invites
+    `WITH new_membership AS (
+       INSERT INTO memberships (tenant_id, auth_provider, auth_sub, role)
+       SELECT i.tenant_id, $2::auth_provider, $3, i.role
+       FROM invites i
+       WHERE i.id = $1 AND i.status = 'pending'::invite_status
+       RETURNING tenant_id
+     )
+     UPDATE invites
      SET status = 'claimed'::invite_status,
          claimed_at = now(),
-         claimed_by_sub = $2
-     WHERE id = $1`,
-    [inviteId, sub]
+         claimed_by_sub = $3
+     WHERE id = $1 AND EXISTS (SELECT 1 FROM new_membership)`,
+    [inviteId, provider, sub]
   );
 
   // Return the tenant via the newly created membership

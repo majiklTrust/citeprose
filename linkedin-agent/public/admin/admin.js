@@ -254,12 +254,21 @@
 
         var expires = new Date(data.expiresAt).toLocaleString();
         var resultHtml = [
-          '<div style="margin-top:1rem; padding:1rem; background:#12141c; border:1px solid #2a2d3a; border-radius:8px;">',
-          '  <p style="font-weight:600; margin-bottom:0.5rem; color:#3b82f6;">Registration Link</p>',
-          '  <input type="text" readonly value="' + escapeHtml(data.registerUrl) + '" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.8rem; margin-bottom:0.75rem;" onclick="this.select()">',
-          '  <p style="font-weight:600; margin-bottom:0.5rem; color:#3b82f6;">Email Template (copy &amp; paste)</p>',
-          '  <textarea readonly rows="8" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.8rem; resize:vertical;" onclick="this.select()">' + escapeHtml(data.emailTemplate) + '</textarea>',
-          '  <p style="font-size:0.75rem; color:#666; margin-top:0.5rem;">Expires: ' + escapeHtml(expires) + '</p>',
+          '<div style="margin-top:1rem; padding:1.25rem; background:#12141c; border:1px solid #2a2d3a; border-radius:8px;">',
+          '  <p style="font-weight:600; margin-bottom:1rem; color:#10b981; font-size:0.95rem;">Invite Created — Copy the fields below into your email client</p>',
+          '  <div style="margin-bottom:0.75rem;">',
+          '    <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem; font-weight:600;">To</label>',
+          '    <input type="text" readonly value="' + escapeHtml(data.email) + '" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;" onclick="this.select()">',
+          '  </div>',
+          '  <div style="margin-bottom:0.75rem;">',
+          '    <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem; font-weight:600;">Subject</label>',
+          '    <input type="text" readonly value="' + escapeHtml(data.emailSubject) + '" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;" onclick="this.select()">',
+          '  </div>',
+          '  <div style="margin-bottom:0.75rem;">',
+          '    <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem; font-weight:600;">Body</label>',
+          '    <textarea readonly rows="12" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem; resize:vertical; line-height:1.5;" onclick="this.select()">' + escapeHtml(data.emailBody) + '</textarea>',
+          '  </div>',
+          '  <p style="font-size:0.75rem; color:#666;">Expires: ' + escapeHtml(expires) + '</p>',
           '</div>'
         ].join('\n');
         $('reg-result').innerHTML = resultHtml;

@@ -79,17 +79,29 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     // Build the registration URL and email template
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
+    const brandName = process.env.BRAND_NAME || "LinkedIn AI Content Agent";
     const registerUrl = `${origin}/app/register#token=${invite.token}`;
 
-    const emailTemplate = [
-      `You've been invited to set up a workspace on the LinkedIn AI Content Agent.`,
+    const emailSubject = `Your ${brandName} workspace is ready to set up`;
+
+    const emailBody = [
+      `Hello,`,
       ``,
-      `Click the link below to complete your registration:`,
+      `Your workspace on ${brandName} is ready for setup. This platform helps you create researched, professional LinkedIn content powered by AI.`,
+      ``,
+      `To get started, click the link below and follow the registration steps:`,
       `${registerUrl}`,
       ``,
-      `This link expires at ${new Date(invite.expires_at).toLocaleString()}.`,
+      `What you'll need:`,
+      `  • An Anthropic API key (https://console.anthropic.com/settings/keys)`,
+      `  • A name for your workspace`,
       ``,
-      `If you did not expect this invitation, please disregard this message.`
+      `This link expires on ${new Date(invite.expires_at).toLocaleString()} and can only be used once.`,
+      ``,
+      `If you have any questions or did not expect this invitation, please contact your account administrator.`,
+      ``,
+      `Welcome aboard,`,
+      `The ${brandName} Team`
     ].join("\n");
 
     platformLog("info", "registration_invite_created", {
@@ -102,7 +114,8 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       id: invite.id,
       email: invite.email,
       registerUrl,
-      emailTemplate,
+      emailSubject,
+      emailBody,
       expiresAt: invite.expires_at
     });
   } catch (err) {
@@ -256,10 +269,10 @@ router.post("/complete", async (req, res) => {
         const { setAgentState } = await import("../services/database.js");
         await setAgentState("mode", "manual");
         await setAgentState("corroboration", "enabled");
-        await setAgentState("anthropic_model", model_id.trim());
 
-        // Encrypted credentials — API key only (model is config, not secret)
+        // Encrypted credentials
         await storeCredential("anthropic_api_key", api_key.trim());
+        await storeCredential("anthropic_model", model_id.trim());
       });
     } catch (provisionErr) {
       // Tenant was created but provisioning failed.

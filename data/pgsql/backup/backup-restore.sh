@@ -5,7 +5,7 @@
 read -p "origin database ($PGDATABASE) " ORIGIN
 echo
 if [ -z "$ORIGIN" ];then ORIGIN=$PGDATABASE;fi
-pg_dump -U $PGUSER -d $PGDATABASE -Fc -f ./backup_${ORIGIN}_$(date +%Y%m%d).dump
+pg_dump -U $PGUSER -d $ORIGIN -Fc -f ./backup_${ORIGIN}_$(date +%Y%m%d).dump
 
 read -p "destination database: " DESTINATION
 echo

@@ -53,7 +53,7 @@ export function platformLog(level, action, details) {
 // ═════════════════════════════════════════════════════════════
 export function createApp(ctx) {
   const {
-    apiRoutes, adminRoutes, topicsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -113,6 +113,9 @@ export function createApp(ctx) {
   const dashboardHtml = path.join(__dirname, "../public/index.html");
   const alphaDir = path.join(__dirname, "../***REMOVED***");
   const alphaHtml = path.join(alphaDir, "index.html");
+
+  // Registration page — unauthenticated, token-based access
+  instance.use("/app/register", express.static(path.join(__dirname, "../public/register"), { index: "index.html" }));
 
   // Topics page — accessible to owners and editors (manage_own_topics)
   instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html" }));
@@ -408,6 +411,11 @@ export function createApp(ctx) {
   // enforce manage_topics for global operations.
   instance.use("/api/topics", topicsRoutes);
 
+  // Registration API routes — mounted at /api/register. Mixed auth:
+  // /invite requires auth + platform admin, all others are
+  // unauthenticated (token-based). Must be before apiRoutes.
+  instance.use("/api/register", registrationRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -445,6 +453,7 @@ export async function buildAppForTests() {
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
+  const { default: registrationRoutes }  = await import("./routes/registration-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -468,7 +477,7 @@ export async function buildAppForTests() {
   await initRegistry(platformLog);
 
   return createApp({
-    apiRoutes, adminRoutes, topicsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -513,6 +522,7 @@ export async function start() {
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
+  const { default: registrationRoutes }  = await import("./routes/registration-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -549,7 +559,7 @@ export async function start() {
 
   // STEP 6: Build app
   app = createApp({
-    apiRoutes, adminRoutes, topicsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,

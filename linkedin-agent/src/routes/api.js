@@ -39,6 +39,7 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
 import { createTenantResolver } from "../tenant/resolver.js";
+import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
@@ -153,6 +154,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
         email: req.user.email || null,
         sub: req.user.sub || null,
         role: tenantRole,
+        isPlatformAdmin: isPlatformAdmin(req.user.sub),
       } : null,
       serverAddress,
       mode,

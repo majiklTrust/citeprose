@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { query } from "../db/pool.js";
+import { randomBytes } from "node:crypto";
 
 // Looks up a tenant by the authenticated user's identity.
 // Returns { id, slug, name, status, role, created_at } or null.
@@ -142,4 +143,133 @@ export async function claimInvite(inviteId, provider, sub) {
 
   // Return the tenant via the newly created membership
   return findTenantByAuthIdentity(provider, sub);
+}
+
+// ── Platform Admin ───────────────────────────────────────────
+// Identified by PLATFORM_ADMIN_SUBS in .env. No database role —
+// this is a backend-only designation. The admin retains their
+// normal tenant role and permissions. This flag is additive.
+
+/**
+ * Check if a user sub is a platform admin.
+ * Reads PLATFORM_ADMIN_SUBS from environment (comma-separated).
+ */
+export function isPlatformAdmin(sub) {
+  if (!sub || typeof sub !== "string") return false;
+  const adminSubs = process.env.PLATFORM_ADMIN_SUBS;
+  if (!adminSubs) return false;
+  const list = adminSubs.split(",").map(s => s.trim()).filter(Boolean);
+  return list.includes(sub);
+}
+
+// ── Tenant Registration ──────────────────────────────────────
+// Self-service registration flow. A platform admin creates a
+// registration invite (token + email). The invitee visits the
+// registration page, fills the form, and the system creates a
+// tenant + pending owner invite. The invitee then logs in via
+// Auth0, the resolver claims the invite, and they land on their
+// new dashboard.
+
+const DEFAULT_TTL_MINUTES = 15;
+
+function getRegistrationTTL() {
+  const envVal = parseInt(process.env.REGISTRATION_INVITE_TTL_MINUTES, 10);
+  return envVal > 0 ? envVal : DEFAULT_TTL_MINUTES;
+}
+
+/**
+ * Create a registration invite. Platform admin only.
+ * Returns { id, token, email, expires_at }.
+ */
+export async function createRegistrationInvite(email, invitedBySub) {
+  const token = randomBytes(32).toString("base64url");
+  const ttl = getRegistrationTTL();
+  const result = await query(
+    `INSERT INTO tenant_registrations (token, email, invited_by_sub, expires_at)
+     VALUES ($1, lower($2), $3, now() + ($4 || ' minutes')::interval)
+     RETURNING id, token, email, expires_at`,
+    [token, email.trim(), invitedBySub, String(ttl)]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Validate a registration token. Returns the registration row
+ * if valid (pending or active, not expired). Returns null otherwise.
+ */
+export async function validateRegistrationToken(token) {
+  if (!token || typeof token !== "string") return null;
+  const result = await query(
+    `SELECT id, token, email, status, invited_by_sub, tenant_id, expires_at, created_at
+     FROM tenant_registrations
+     WHERE token = $1
+       AND status IN ('pending', 'active')
+       AND expires_at > now()`,
+    [token]
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * Mark a token as active (page loaded). Only transitions from pending.
+ */
+export async function activateRegistrationToken(token) {
+  const result = await query(
+    `UPDATE tenant_registrations
+     SET status = 'active'
+     WHERE token = $1 AND status = 'pending'
+     RETURNING id, email, expires_at`,
+    [token]
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * Complete registration. Atomic: creates tenant, marks token as
+ * claimed, sets tenant_id on the registration row.
+ *
+ * Returns the new tenant UUID or null on failure.
+ * Caller is responsible for creating agent_state, credentials,
+ * and the pending owner invite inside withTenant.
+ */
+export async function completeRegistration(token, slug, name) {
+  // SELECT FOR UPDATE prevents race conditions on the same token.
+  // The entire operation is a single statement via CTE — atomic.
+  const result = await query(
+    `WITH valid_reg AS (
+       SELECT id FROM tenant_registrations
+       WHERE token = $1 AND status = 'active' AND expires_at > now()
+       FOR UPDATE
+     ),
+     new_tenant AS (
+       INSERT INTO tenants (slug, name, status)
+       SELECT $2, $3, 'active'::tenant_status
+       FROM valid_reg
+       WHERE EXISTS (SELECT 1 FROM valid_reg)
+       RETURNING id
+     )
+     UPDATE tenant_registrations
+     SET status = 'claimed',
+         claimed_at = now(),
+         tenant_id = (SELECT id FROM new_tenant)
+     WHERE token = $1
+       AND EXISTS (SELECT 1 FROM new_tenant)
+     RETURNING tenant_id`,
+    [token, slug, name]
+  );
+  return result.rows[0]?.tenant_id || null;
+}
+
+/**
+ * Expire stale registrations. Called by a cleanup job.
+ * Transitions pending/active tokens past their expires_at to expired.
+ */
+export async function expireStaleRegistrations() {
+  const result = await query(
+    `UPDATE tenant_registrations
+     SET status = 'expired'
+     WHERE status IN ('pending', 'active')
+       AND expires_at <= now()`
+  );
+  return result.rowCount;
 }

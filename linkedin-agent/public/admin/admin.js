@@ -28,6 +28,8 @@
 
   // ── Access check ───────────────────────────────────────────
 
+  var _isPlatformAdmin = false;
+
   function checkAccess() {
     return fetch(API + '/api/status', {
       credentials: 'include',
@@ -45,6 +47,8 @@
         if (data.devBypass) {
           return false;
         }
+        // Capture platform admin flag
+        _isPlatformAdmin = !!user.isPlatformAdmin;
         return true;
       })
       .catch(function () { return false; });
@@ -207,6 +211,66 @@
       .catch(function (err) { showMessage(err.message, 'error'); });
   }
 
+  // ── Tenant Registration (platform admin only) ───────────────
+
+  function buildRegistrationSection() {
+    var section = document.createElement('div');
+    section.id = 'registration-section';
+    section.innerHTML = [
+      '<h2 style="margin-top:2rem;">New Tenant Registration</h2>',
+      '<p style="color:#888; font-size:0.85rem; margin-bottom:1rem;">Create a registration invite for a new tenant. The link expires after the configured TTL.</p>',
+      '<div class="invite-form">',
+      '  <input type="email" id="reg-invite-email" placeholder="Email address">',
+      '  <button class="btn btn-primary" id="reg-invite-btn">Create Registration Invite</button>',
+      '</div>',
+      '<div id="reg-result"></div>'
+    ].join('\n');
+    return section;
+  }
+
+  function createRegistrationInvite() {
+    var email = $('reg-invite-email').value.trim();
+    if (!email || !email.includes('@')) {
+      showMessage('Valid email address required', 'error');
+      return;
+    }
+
+    $('reg-invite-btn').disabled = true;
+    $('reg-invite-btn').textContent = 'Creating...';
+
+    fetch(API + '/api/register/invite', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        $('reg-invite-email').value = '';
+        showMessage('Registration invite created for ' + escapeHtml(data.email), 'success');
+
+        var expires = new Date(data.expiresAt).toLocaleString();
+        var resultHtml = [
+          '<div style="margin-top:1rem; padding:1rem; background:#12141c; border:1px solid #2a2d3a; border-radius:8px;">',
+          '  <p style="font-weight:600; margin-bottom:0.5rem; color:#3b82f6;">Registration Link</p>',
+          '  <input type="text" readonly value="' + escapeHtml(data.registerUrl) + '" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.8rem; margin-bottom:0.75rem;" onclick="this.select()">',
+          '  <p style="font-weight:600; margin-bottom:0.5rem; color:#3b82f6;">Email Template (copy &amp; paste)</p>',
+          '  <textarea readonly rows="8" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.8rem; resize:vertical;" onclick="this.select()">' + escapeHtml(data.emailTemplate) + '</textarea>',
+          '  <p style="font-size:0.75rem; color:#666; margin-top:0.5rem;">Expires: ' + escapeHtml(expires) + '</p>',
+          '</div>'
+        ].join('\n');
+        $('reg-result').innerHTML = resultHtml;
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('reg-invite-btn').disabled = false;
+        $('reg-invite-btn').textContent = 'Create Registration Invite';
+      });
+  }
+
   // ── Init ───────────────────────────────────────────────────
 
   checkAccess().then(function (allowed) {
@@ -224,5 +288,15 @@
     $('invite-email').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') createInvite();
     });
+
+    // Platform admin: show registration section
+    if (_isPlatformAdmin) {
+      var section = buildRegistrationSection();
+      $('admin').appendChild(section);
+      $('reg-invite-btn').addEventListener('click', createRegistrationInvite);
+      $('reg-invite-email').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') createRegistrationInvite();
+      });
+    }
   });
 })();

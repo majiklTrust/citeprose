@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — LinkedIn AI Content Agent</title>
+  <link rel="icon" type="image/png" href="/app/favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 520px; width: 100%; }
+    .card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px; padding: 2rem; }
+    h1 { font-size: 1.3rem; margin-bottom: 0.25rem; color: #fff; }
+    .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .form-row { margin-bottom: 1rem; }
+    .form-row label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.85rem; color: #aaa; }
+    .form-row input, .form-row select { width: 100%; padding: 0.5rem 0.7rem; border: 1px solid #2a2d3a; border-radius: 6px; background: #12141c; color: #e0e0e0; font-size: 0.9rem; }
+    .form-row input:focus, .form-row select:focus { outline: none; border-color: #3b82f6; }
+    .form-row input[readonly] { opacity: 0.6; cursor: not-allowed; }
+    .form-row .hint { font-size: 0.75rem; color: #666; margin-top: 0.2rem; }
+    .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2563eb; }
+    .btn-secondary { background: #2a2d3a; color: #e0e0e0; }
+    .btn-secondary:hover:not(:disabled) { background: #3a3d4a; }
+    .btn-success { background: #10b981; color: #fff; }
+    .actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+    .msg { padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; }
+    .msg-error { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+    .msg-success { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .msg-info { background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
+    .loading { text-align: center; padding: 3rem; color: #888; }
+    .key-status { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem; }
+    .key-valid { background: rgba(16,185,129,0.15); color: #10b981; }
+    .key-invalid { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .key-checking { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .model-select { display: none; }
+    .model-select.visible { display: block; }
+    .success-panel { text-align: center; padding: 2rem 0; }
+    .success-panel h2 { color: #10b981; margin-bottom: 1rem; }
+    .success-panel p { color: #aaa; margin-bottom: 1.5rem; }
+    .expires { font-size: 0.78rem; color: #666; text-align: right; margin-top: 0.5rem; }
+    #step-form { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="loading" class="loading">Validating registration link...</div>
+
+    <div id="invalid" style="display:none;">
+      <div class="card">
+        <h1>Registration Link Invalid</h1>
+        <p class="subtitle">This link is expired, already used, or invalid.</p>
+        <p style="color:#888; font-size:0.85rem;">Contact your administrator for a new registration link.</p>
+      </div>
+    </div>
+
+    <div id="step-form" class="card">
+      <h1>Set Up Your Workspace</h1>
+      <p class="subtitle">Complete the form below to create your LinkedIn AI content workspace.</p>
+
+      <div id="message"></div>
+
+      <div class="form-row">
+        <label>Email</label>
+        <input type="email" id="reg-email" readonly>
+      </div>
+
+      <div class="form-row">
+        <label>Organization Name</label>
+        <input type="text" id="reg-org" placeholder="e.g., Acme Corp">
+        <div class="hint">This becomes your workspace name</div>
+      </div>
+
+      <div class="form-row">
+        <label>
+          Anthropic API Key
+          <span id="key-status"></span>
+        </label>
+        <input type="password" id="reg-key" placeholder="sk-ant-...">
+        <div class="hint">Your key is encrypted before storage. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:#3b82f6;">Get a key</a></div>
+      </div>
+
+      <div class="actions" id="verify-actions">
+        <button class="btn btn-secondary" id="verify-btn">Verify Key</button>
+      </div>
+
+      <div class="model-select" id="model-section">
+        <div class="form-row">
+          <label>Select Model</label>
+          <select id="reg-model">
+            <option value="">Choose a model...</option>
+          </select>
+          <div class="hint">Determines which Claude model generates your content</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="register-btn">Create Workspace</button>
+        </div>
+      </div>
+
+      <div class="expires" id="expires-info"></div>
+    </div>
+
+    <div id="success" style="display:none;">
+      <div class="card">
+        <div class="success-panel">
+          <h2>Workspace Created</h2>
+          <p>Your workspace <strong id="success-slug"></strong> is ready.</p>
+          <p>Sign in to access your dashboard.</p>
+          <a href="/auth/login" class="btn btn-success" style="text-decoration:none; display:inline-block;">Sign In</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="register.js"></script>
+</body>
+</html>

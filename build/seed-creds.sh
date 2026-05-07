@@ -14,10 +14,11 @@ echo
 node --input-type=module -e "
 import { withTenant } from './src/db/with-tenant.js';
 import { storeCredential } from './src/tenant/credential-store.js';
+import { setAgentState } from './src/tenant/credential-store.js';
 
 await withTenant('$TENANT_ID', async () => {
   await storeCredential('anthropic_api_key', '$API_KEY');
-  await storeCredential('anthropic_model', '$MODEL');
+  await setAgentState('anthropic_model', '$MODEL');
   console.log('Credentials stored.');
 });
 

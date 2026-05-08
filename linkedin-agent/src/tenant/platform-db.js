@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { query } from "../db/pool.js";
-import { randomBytes } from "node:crypto";
+import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from "node:crypto";
 
 // Looks up a tenant by the authenticated user's identity.
 // Returns { id, slug, name, status, role, created_at } or null.
@@ -177,20 +177,65 @@ function getRegistrationTTL() {
   return envVal > 0 ? envVal : DEFAULT_TTL_MINUTES;
 }
 
+// ── Registration-scoped encryption ───────────────────────────
+// Same AES-256-GCM + PBKDF2 pattern as credential-store.js,
+// but uses registration.id as salt instead of tenant.id.
+// The key exists in this table only during the registration
+// window — NULLed on completion or expiry.
+
+function deriveRegKey(registrationId) {
+  const secret = process.env.ENCRYPTION_SECRET;
+  if (!secret) throw new Error("ENCRYPTION_SECRET is required");
+  return pbkdf2Sync(secret, `reg:${registrationId}`, 100000, 32, "sha512");
+}
+
+function encryptForRegistration(plaintext, registrationId) {
+  const key = deriveRegKey(registrationId);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  // Format: iv (12) + authTag (16) + ciphertext
+  return Buffer.concat([iv, authTag, encrypted]);
+}
+
+function decryptForRegistration(encBuffer, registrationId) {
+  const key = deriveRegKey(registrationId);
+  const iv = encBuffer.subarray(0, 12);
+  const authTag = encBuffer.subarray(12, 28);
+  const ciphertext = encBuffer.subarray(28);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  return decipher.update(ciphertext, null, "utf8") + decipher.final("utf8");
+}
+
 /**
  * Create a registration invite. Platform admin only.
- * Returns { id, token, email, expires_at }.
+ * Optionally stores an admin-provided API key (encrypted) and model ID.
+ * Returns { id, token, email, expires_at, keyProvided }.
  */
-export async function createRegistrationInvite(email, invitedBySub) {
+export async function createRegistrationInvite(email, invitedBySub, apiKey = null, modelId = null) {
   const token = randomBytes(32).toString("base64url");
   const ttl = getRegistrationTTL();
   const result = await query(
-    `INSERT INTO tenant_registrations (token, email, invited_by_sub, expires_at)
-     VALUES ($1, lower($2), $3, now() + ($4 || ' minutes')::interval)
+    `INSERT INTO tenant_registrations (token, email, invited_by_sub, expires_at, model_id)
+     VALUES ($1, lower($2), $3, now() + ($4 || ' minutes')::interval, $5)
      RETURNING id, token, email, expires_at`,
-    [token, email.trim(), invitedBySub, String(ttl)]
+    [token, email.trim(), invitedBySub, String(ttl), modelId]
   );
-  return result.rows[0];
+
+  const reg = result.rows[0];
+
+  // Encrypt and store the API key if provided
+  if (apiKey && reg.id) {
+    const enc = encryptForRegistration(apiKey, reg.id);
+    await query(
+      `UPDATE tenant_registrations SET api_key_enc = $1 WHERE id = $2`,
+      [enc, reg.id]
+    );
+  }
+
+  return { ...reg, keyProvided: !!apiKey };
 }
 
 /**
@@ -200,7 +245,9 @@ export async function createRegistrationInvite(email, invitedBySub) {
 export async function validateRegistrationToken(token) {
   if (!token || typeof token !== "string") return null;
   const result = await query(
-    `SELECT id, token, email, status, invited_by_sub, tenant_id, expires_at, created_at
+    `SELECT id, token, email, status, invited_by_sub, tenant_id,
+            expires_at, created_at, model_id,
+            (api_key_enc IS NOT NULL) AS key_provided
      FROM tenant_registrations
      WHERE token = $1
        AND status IN ('pending', 'active')
@@ -263,13 +310,44 @@ export async function completeRegistration(token, slug, name) {
 /**
  * Expire stale registrations. Called by a cleanup job.
  * Transitions pending/active tokens past their expires_at to expired.
+ * NULLs encrypted API keys — don't keep secrets beyond their useful life.
  */
 export async function expireStaleRegistrations() {
   const result = await query(
     `UPDATE tenant_registrations
-     SET status = 'expired'
+     SET status = 'expired',
+         api_key_enc = NULL
      WHERE status IN ('pending', 'active')
        AND expires_at <= now()`
   );
   return result.rowCount;
+}
+
+/**
+ * Retrieve and decrypt the admin-provided API key for a registration.
+ * Returns { apiKey, modelId } or null if no key was provided.
+ */
+export async function getRegistrationAdminKey(registrationId) {
+  const result = await query(
+    `SELECT id, api_key_enc, model_id FROM tenant_registrations WHERE id = $1`,
+    [registrationId]
+  );
+  const row = result.rows[0];
+  if (!row || !row.api_key_enc) return null;
+
+  const apiKey = decryptForRegistration(row.api_key_enc, row.id);
+  return { apiKey, modelId: row.model_id };
+}
+
+/**
+ * Clear the encrypted API key from a registration row.
+ * Called after successful transfer to tenant credentials,
+ * or on cancellation. Zero Trust: don't keep secrets longer
+ * than needed.
+ */
+export async function clearRegistrationKey(registrationId) {
+  await query(
+    `UPDATE tenant_registrations SET api_key_enc = NULL WHERE id = $1`,
+    [registrationId]
+  );
 }

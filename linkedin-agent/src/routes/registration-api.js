@@ -25,7 +25,9 @@ import {
   createRegistrationInvite,
   validateRegistrationToken,
   activateRegistrationToken,
-  completeRegistration
+  completeRegistration,
+  getRegistrationAdminKey,
+  clearRegistrationKey
 } from "../tenant/platform-db.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
@@ -60,7 +62,7 @@ function safeError(res, status, message) {
 // Authenticated: Create registration invite (platform admin)
 // ══════════════════════════════════════════════════════════════
 
-const { requireAuth } = createAuthMiddleware(platformLog);
+const { requireAuth, optionalAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
 router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
@@ -70,12 +72,38 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       return safeError(res, 403, "Permission denied");
     }
 
-    const { email } = req.body || {};
+    const { email, api_key, model_id } = req.body || {};
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return safeError(res, 400, "Valid email address required");
     }
 
-    const invite = await createRegistrationInvite(email.trim(), req.user.sub);
+    // If admin is providing an API key, validate it first
+    let validatedKey = null;
+    let validatedModel = null;
+    if (api_key && typeof api_key === "string" && api_key.trim().length > 0) {
+      if (!model_id || typeof model_id !== "string") {
+        return safeError(res, 400, "Model selection required when providing an API key");
+      }
+      // Validate with Anthropic — zero token cost
+      const keyResponse = await fetch("https://api.anthropic.com/v1/models", {
+        headers: {
+          "x-api-key": api_key.trim(),
+          "anthropic-version": "2023-06-01"
+        }
+      });
+      if (keyResponse.status === 401) {
+        return safeError(res, 401, "Invalid API key");
+      }
+      if (!keyResponse.ok) {
+        return safeError(res, 502, "Unable to verify API key with Anthropic");
+      }
+      validatedKey = api_key.trim();
+      validatedModel = model_id.trim();
+    }
+
+    const invite = await createRegistrationInvite(
+      email.trim(), req.user.sub, validatedKey, validatedModel
+    );
 
     // Build the registration URL and email template
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
@@ -83,6 +111,11 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
     const registerUrl = `${origin}/app/register#token=${invite.token}`;
 
     const emailSubject = `Your ${brandName} workspace is ready to set up`;
+
+    // Adjust email body based on whether key was provided
+    const whatYouNeed = validatedKey
+      ? `  • A name for your workspace\n\n  Your API key has been configured by your administrator — no additional setup needed.`
+      : `  • An Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
 
     const emailBody = [
       `Hello,`,
@@ -93,10 +126,9 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       `${registerUrl}`,
       ``,
       `What you'll need:`,
-      `  • An Anthropic API key (https://console.anthropic.com/settings/keys)`,
-      `  • A name for your workspace`,
+      whatYouNeed,
       ``,
-      `This link expires on ${new Date(invite.expires_at).toLocaleString()} and can only be used once.`,
+      `This link expires on ${new Date(invite.expires_at).toLocaleString("en-US", { timeZoneName: "short" })} and can only be used once.`,
       ``,
       `If you have any questions or did not expect this invitation, please contact your account administrator.`,
       ``,
@@ -107,6 +139,7 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
     platformLog("info", "registration_invite_created", {
       email: invite.email,
       invitedBy: req.user.sub,
+      keyProvided: !!validatedKey,
       expiresAt: invite.expires_at
     });
 
@@ -148,7 +181,9 @@ router.post("/init", async (req, res) => {
     // Return non-sensitive registration info
     res.json({
       email: reg.email,
-      expiresAt: reg.expires_at
+      expiresAt: reg.expires_at,
+      keyProvided: reg.key_provided || false,
+      modelId: reg.model_id || null
     });
   } catch (err) {
     platformLog("error", "registration_init_failed", { error: err.message });
@@ -160,26 +195,32 @@ router.post("/init", async (req, res) => {
 // Unauthenticated: Validate Anthropic API key + list models
 // ══════════════════════════════════════════════════════════════
 
-router.post("/validate-key", async (req, res) => {
+router.post("/validate-key", optionalAuth, async (req, res) => {
   try {
     const { token, api_key } = req.body || {};
 
-    // Token required — prevents oracle attacks
-    if (!token || typeof token !== "string") {
-      return safeError(res, 400, "Registration token required");
-    }
+    // Authorization: either a valid registration token OR platform admin session.
+    // Platform admins validate keys during invite creation (before a token exists).
+    const isAdmin = req.user && isPlatformAdmin(req.user.sub);
 
-    const reg = await validateRegistrationToken(token);
-    if (!reg) {
-      return safeError(res, 404, "Invalid or expired registration link");
-    }
+    if (!isAdmin) {
+      // Token required for non-admin callers — prevents oracle attacks
+      if (!token || typeof token !== "string") {
+        return safeError(res, 400, "Registration token required");
+      }
 
-    // Rate limit per token
-    const attempts = validationAttempts.get(token) || 0;
-    if (attempts >= MAX_VALIDATION_ATTEMPTS) {
-      return safeError(res, 429, "Too many validation attempts. Please request a new registration link.");
+      const reg = await validateRegistrationToken(token);
+      if (!reg) {
+        return safeError(res, 404, "Invalid or expired registration link");
+      }
+
+      // Rate limit per token
+      const attempts = validationAttempts.get(token) || 0;
+      if (attempts >= MAX_VALIDATION_ATTEMPTS) {
+        return safeError(res, 429, "Too many validation attempts. Please request a new registration link.");
+      }
+      validationAttempts.set(token, attempts + 1);
     }
-    validationAttempts.set(token, attempts + 1);
 
     if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
       return safeError(res, 400, "API key required");
@@ -237,17 +278,30 @@ router.post("/complete", async (req, res) => {
     if (!org_name || typeof org_name !== "string" || org_name.trim().length < 2) {
       return safeError(res, 400, "Organization name required (min 2 characters)");
     }
-    if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
-      return safeError(res, 400, "Anthropic API key required");
-    }
-    if (!model_id || typeof model_id !== "string") {
-      return safeError(res, 400, "Model selection required");
-    }
 
     // Validate token is still active
     const reg = await validateRegistrationToken(token);
     if (!reg) {
       return safeError(res, 404, "Invalid or expired registration link");
+    }
+
+    // Resolve API key + model: admin-provided takes priority over form
+    let finalKey = null;
+    let finalModel = null;
+    const adminKey = await getRegistrationAdminKey(reg.id);
+
+    if (adminKey) {
+      finalKey = adminKey.apiKey;
+      finalModel = adminKey.modelId;
+    } else {
+      if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
+        return safeError(res, 400, "Anthropic API key required");
+      }
+      if (!model_id || typeof model_id !== "string") {
+        return safeError(res, 400, "Model selection required");
+      }
+      finalKey = api_key.trim();
+      finalModel = model_id.trim();
     }
 
     const slug = generateSlug(org_name.trim());
@@ -256,7 +310,6 @@ router.post("/complete", async (req, res) => {
     }
 
     // Atomic: create tenant + mark token claimed
-    // completeRegistration uses SELECT FOR UPDATE to prevent races
     const tenantId = await completeRegistration(token, slug, org_name.trim());
     if (!tenantId) {
       return safeError(res, 409, "Registration could not be completed. The link may have already been used.");
@@ -265,23 +318,24 @@ router.post("/complete", async (req, res) => {
     // Provision tenant data inside tenant context (RLS-scoped)
     try {
       await withTenant(tenantId, async () => {
-        // Agent state defaults
         const { setAgentState } = await import("../services/database.js");
         await setAgentState("mode", "manual");
         await setAgentState("corroboration", "enabled");
+        await setAgentState("anthropic_model", finalModel);
 
-        // Encrypted credentials
-        await storeCredential("anthropic_api_key", api_key.trim());
-        await storeCredential("anthropic_model", model_id.trim());
+        // Encrypted credentials — API key only
+        await storeCredential("anthropic_api_key", finalKey);
       });
     } catch (provisionErr) {
-      // Tenant was created but provisioning failed.
-      // Log the error but don't fail the registration —
-      // the tenant exists and can be fixed by the admin.
       platformLog("error", "registration_provision_partial", {
         tenantId,
         error: provisionErr.message
       });
+    }
+
+    // Zero Trust: clear encrypted key from registration row
+    if (adminKey) {
+      try { await clearRegistrationKey(reg.id); } catch { /* best-effort */ }
     }
 
     // Create a pending owner invite for the registrant's email.

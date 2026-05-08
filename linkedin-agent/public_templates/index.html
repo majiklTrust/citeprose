@@ -435,11 +435,11 @@
                 </div>
               )}
               <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
-              {status?.user?.role === 'owner' && !status.devBypass && (
-                <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
-              )}
               {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && !status.devBypass && (
                 <a href="/app/topics/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Topics</a>
+              )}
+              {status?.user?.role === 'owner' && !status.devBypass && (
+                <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
               )}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>

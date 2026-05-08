@@ -216,16 +216,87 @@
   function buildRegistrationSection() {
     var section = document.createElement('div');
     section.id = 'registration-section';
+    section.className = 'section';
     section.innerHTML = [
-      '<h2 style="margin-top:2rem;">New Tenant Registration</h2>',
+      '<h2>New Tenant Registration</h2>',
       '<p style="color:#888; font-size:0.85rem; margin-bottom:1rem;">Create a registration invite for a new tenant. The link expires after the configured TTL.</p>',
       '<div class="invite-form">',
       '  <input type="email" id="reg-invite-email" placeholder="Email address">',
-      '  <button class="btn btn-primary" id="reg-invite-btn">Create Registration Invite</button>',
+      '  <div style="margin-top:0.75rem;">',
+      '    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem; color:#aaa;">',
+      '      <input type="checkbox" id="reg-provide-key">',
+      '      Provide Anthropic API key for this tenant',
+      '    </label>',
+      '  </div>',
+      '  <div id="reg-key-section" style="display:none; margin-top:0.75rem; padding:0.75rem; background:#12141c; border:1px solid #2a2d3a; border-radius:6px;">',
+      '    <div style="margin-bottom:0.5rem;">',
+      '      <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem;">API Key</label>',
+      '      <input type="password" id="reg-admin-key" placeholder="sk-ant-..." style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;">',
+      '    </div>',
+      '    <button class="btn btn-secondary" id="reg-verify-key-btn" style="margin-bottom:0.5rem;">Verify Key</button>',
+      '    <span id="reg-key-status" style="margin-left:0.5rem; font-size:0.8rem;"></span>',
+      '    <div id="reg-model-section" style="display:none; margin-top:0.5rem;">',
+      '      <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem;">Model</label>',
+      '      <select id="reg-admin-model" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;">',
+      '        <option value="">Choose a model...</option>',
+      '      </select>',
+      '    </div>',
+      '  </div>',
+      '  <button class="btn btn-primary" id="reg-invite-btn" style="margin-top:0.75rem;">Create Registration Invite</button>',
       '</div>',
       '<div id="reg-result"></div>'
     ].join('\n');
     return section;
+  }
+
+  var _adminKeyValidated = false;
+
+  function verifyAdminKey() {
+    var key = $('reg-admin-key').value.trim();
+    if (!key) return;
+
+    $('reg-verify-key-btn').disabled = true;
+    $('reg-verify-key-btn').textContent = 'Verifying...';
+    $('reg-key-status').innerHTML = '<span style="color:#f59e0b;">checking...</span>';
+
+    fetch(API + '/api/register/validate-key', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '_admin_validation_', api_key: key })
+    })
+      .then(function (res) {
+        if (res.status === 401) {
+          $('reg-key-status').innerHTML = '<span style="color:#ef4444;">invalid key</span>';
+          _adminKeyValidated = false;
+          return null;
+        }
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error); });
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data) return;
+        $('reg-key-status').innerHTML = '<span style="color:#10b981;">verified</span>';
+        _adminKeyValidated = true;
+
+        var select = $('reg-admin-model');
+        select.innerHTML = '<option value="">Choose a model...</option>';
+        (data.models || []).forEach(function (m) {
+          var opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          select.appendChild(opt);
+        });
+        $('reg-model-section').style.display = 'block';
+      })
+      .catch(function (err) {
+        $('reg-key-status').innerHTML = '<span style="color:#ef4444;">' + escapeHtml(err.message) + '</span>';
+        _adminKeyValidated = false;
+      })
+      .finally(function () {
+        $('reg-verify-key-btn').disabled = false;
+        $('reg-verify-key-btn').textContent = 'Verify Key';
+      });
   }
 
   function createRegistrationInvite() {
@@ -235,6 +306,24 @@
       return;
     }
 
+    var provideKey = $('reg-provide-key').checked;
+    var payload = { email: email };
+
+    if (provideKey) {
+      var key = $('reg-admin-key').value.trim();
+      var model = $('reg-admin-model').value;
+      if (!key || !_adminKeyValidated) {
+        showMessage('Please verify the API key first', 'error');
+        return;
+      }
+      if (!model) {
+        showMessage('Please select a model', 'error');
+        return;
+      }
+      payload.api_key = key;
+      payload.model_id = model;
+    }
+
     $('reg-invite-btn').disabled = true;
     $('reg-invite-btn').textContent = 'Creating...';
 
@@ -242,7 +331,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email })
+      body: JSON.stringify(payload)
     })
       .then(function (res) {
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed'); });
@@ -298,14 +387,29 @@
       if (e.key === 'Enter') createInvite();
     });
 
-    // Platform admin: show registration section
+    // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {
       var section = buildRegistrationSection();
-      $('admin').appendChild(section);
+      var inviteSection = $('invite-email').closest('.section');
+      if (inviteSection) {
+        inviteSection.parentElement.insertBefore(section, inviteSection);
+      } else {
+        $('admin').appendChild(section);
+      }
       $('reg-invite-btn').addEventListener('click', createRegistrationInvite);
       $('reg-invite-email').addEventListener('keydown', function (e) {
         if (e.key === 'Enter') createRegistrationInvite();
       });
+      $('reg-provide-key').addEventListener('change', function () {
+        $('reg-key-section').style.display = this.checked ? 'block' : 'none';
+        if (!this.checked) {
+          _adminKeyValidated = false;
+          $('reg-admin-key').value = '';
+          $('reg-key-status').innerHTML = '';
+          $('reg-model-section').style.display = 'none';
+        }
+      });
+      $('reg-verify-key-btn').addEventListener('click', verifyAdminKey);
     }
   });
 })();

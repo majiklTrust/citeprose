@@ -72,6 +72,20 @@
         $('step-form').style.display = 'block';
         $('reg-email').value = data.email;
 
+        // If admin pre-provided the API key, hide key section
+        if (data.keyProvided) {
+          $('reg-key').parentElement.style.display = 'none';
+          $('verify-actions').style.display = 'none';
+          // Show "provided" message and the register button directly
+          var infoDiv = document.createElement('div');
+          infoDiv.className = 'msg msg-info';
+          infoDiv.textContent = 'Your API key and model have been configured by your administrator.';
+          $('message').appendChild(infoDiv);
+          $('model-section').classList.add('visible');
+          $('model-section').innerHTML = '<div class="form-row"><label>Model</label><input type="text" readonly value="' + esc(data.modelId || 'Configured by admin') + '" style="opacity:0.6;"></div><div class="actions"><button class="btn btn-primary" id="register-btn">Create Workspace</button></div>';
+          $('register-btn').addEventListener('click', completeRegistration);
+        }
+
         // Show expiry countdown
         var expires = new Date(data.expiresAt);
         $('expires-info').textContent = 'Link expires: ' + expires.toLocaleTimeString();
@@ -158,34 +172,31 @@
 
   function completeRegistration() {
     var orgName = $('reg-org').value.trim();
-    var apiKey = $('reg-key').value.trim();
-    var modelId = $('reg-model').value;
+    var apiKey = $('reg-key') ? $('reg-key').value.trim() : '';
+    var modelSelect = $('reg-model');
+    var modelId = modelSelect ? modelSelect.value : '';
 
     if (!orgName || orgName.length < 2) {
       showMessage('Organization name is required (min 2 characters)', 'error');
       return;
     }
-    if (!apiKey) {
-      showMessage('API key is required', 'error');
-      return;
-    }
-    if (!modelId) {
-      showMessage('Please select a model', 'error');
-      return;
-    }
 
-    $('register-btn').disabled = true;
-    $('register-btn').textContent = 'Creating workspace...';
+    // Build payload — key and model are optional when admin-provided
+    var payload = {
+      token: registrationToken,
+      org_name: orgName
+    };
+    if (apiKey) payload.api_key = apiKey;
+    if (modelId) payload.model_id = modelId;
+
+    var btn = $('register-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creating workspace...';
 
     fetch(API + '/api/register/complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: registrationToken,
-        org_name: orgName,
-        api_key: apiKey,
-        model_id: modelId
-      })
+      body: JSON.stringify(payload)
     })
       .then(function (res) {
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Registration failed'); });
@@ -201,8 +212,8 @@
       })
       .catch(function (err) {
         showMessage(err.message || 'Registration failed', 'error');
-        $('register-btn').disabled = false;
-        $('register-btn').textContent = 'Create Workspace';
+        btn.disabled = false;
+        btn.textContent = 'Create Workspace';
       });
   }
 

@@ -385,7 +385,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.0.100</div>
+                <div className="header-subtitle">v1.0.104</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -425,7 +425,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.0.100 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.0.104 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (
@@ -435,11 +435,11 @@
                 </div>
               )}
               <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
-              {status?.user?.role === 'owner' && !status.devBypass && (
-                <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
-              )}
               {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && !status.devBypass && (
                 <a href="/app/topics/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Topics</a>
+              )}
+              {status?.user?.role === 'owner' && !status.devBypass && (
+                <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
               )}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>

@@ -54,7 +54,26 @@ async function fetchFeed(feedRow) {
     let linked = 0;
     const c = client();
 
+    // Capture channel-level metadata from RSS XML
+    const channelDescription = (feed.description || "").substring(0, 1000).trim();
+    const channelCategories = Array.isArray(feed.categories)
+      ? feed.categories.map(c => String(c).trim()).filter(Boolean)
+      : [];
+
+    // Collect item-level categories across all articles in this poll
+    const itemCategorySet = new Set(channelCategories);
+
     for (const item of feed.items || []) {
+      // Aggregate item categories for feed-level classification
+      if (Array.isArray(item.categories)) {
+        for (const cat of item.categories) {
+          const trimmed = String(cat).trim();
+          if (trimmed && itemCategorySet.size < 50) {
+            itemCategorySet.add(trimmed);
+          }
+        }
+      }
+
       const link = sanitizeLink(item.link || item.guid);
       if (!link) continue;
 
@@ -116,11 +135,19 @@ async function fetchFeed(feedRow) {
       if (linkResult.rowCount > 0) linked++;
     }
 
-    // Update feed poll status
+    // Update feed poll status + metadata from RSS channel
+    const categories = [...itemCategorySet];
     await c.query(
-      `UPDATE feeds_v2 SET last_polled_at = now(), last_error = NULL
+      `UPDATE feeds_v2
+       SET last_polled_at = now(),
+           last_error = NULL,
+           feed_description = COALESCE(NULLIF($2, ''), feed_description),
+           feed_categories = CASE
+             WHEN $3::jsonb != '[]'::jsonb THEN $3::jsonb
+             ELSE feed_categories
+           END
        WHERE id = $1`,
-      [feedRow.id]
+      [feedRow.id, channelDescription, JSON.stringify(categories)]
     );
 
     if (newArticles > 0 || linked > 0) {
@@ -211,18 +238,21 @@ export async function pollAllFeeds() {
 
 export async function getArticlesForTopic(topicSlug, maxAgeDays = 20, limit = 30) {
   const c = client();
-  // JOIN path: articles_v2 → feed_articles → feeds_v2 → feed_topics → topics
-  // RLS on feed_articles, feeds_v2, feed_topics scopes to current tenant.
-  // articles_v2 has no RLS — accessed via the tenant-scoped JOINs.
+  // Two paths to articles:
+  //   1. Topic-specific: feed_topics maps a feed to this topic
+  //   2. Catchall: feed.is_catchall = true (serves all topics)
+  // LEFT JOINs ensure catchall feeds are included even without
+  // feed_topics rows. RLS on feeds_v2 and feed_articles scopes
+  // to the current tenant.
   const r = await c.query(
     `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
             f.name AS feed_name, f.tier::text AS feed_tier
      FROM articles_v2 a
      JOIN feed_articles fa ON fa.article_id = a.id
      JOIN feeds_v2 f ON f.id = fa.feed_id
-     JOIN feed_topics ft ON ft.feed_id = f.id
-     JOIN topics t ON t.id = ft.topic_id
-     WHERE t.slug = $1
+     LEFT JOIN feed_topics ft ON ft.feed_id = f.id
+     LEFT JOIN topics t ON t.id = ft.topic_id AND t.slug = $1
+     WHERE (t.id IS NOT NULL OR f.is_catchall = true)
        AND a.published_at >= now() - ($2 || ' days')::interval
      ORDER BY a.published_at DESC
      LIMIT $3`,

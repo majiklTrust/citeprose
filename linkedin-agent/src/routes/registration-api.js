@@ -32,6 +32,7 @@ import {
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
+import { seedTenantDefaults } from "../tenant/seed-defaults.js";
 
 const router = Router();
 
@@ -325,6 +326,10 @@ router.post("/complete", async (req, res) => {
 
         // Encrypted credentials — API key only
         await storeCredential("anthropic_api_key", finalKey);
+
+        // Seed catchall feeds — broad-coverage RSS sources that
+        // serve any topic the tenant creates
+        await seedTenantDefaults();
       });
     } catch (provisionErr) {
       platformLog("error", "registration_provision_partial", {

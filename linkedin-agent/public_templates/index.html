@@ -129,7 +129,14 @@
           // Fetch topics for the selector — 403 is expected for viewers
           try {
             const topicsRes = await fetch(`${API}/api/topics`).then(r => r.ok ? r.json() : null);
-            setTopics((topicsRes && topicsRes.topics) || []);
+            const topicsList = (topicsRes && topicsRes.topics) || [];
+            setTopics(topicsList);
+
+            // New tenant with zero topics → steer to Topics manager
+            if (statusRes.user && topicsList.length === 0) {
+              window.location.href = '/app/topics/';
+              return;
+            }
           } catch { setTopics([]); }
           setError(null);
         } catch (err) {

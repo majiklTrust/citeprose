@@ -189,7 +189,7 @@
     $('topic-angles').value = '';
     $('topic-hashtags').value = '';
     $('topic-weight').value = '1';
-    $('topic-scope').value = 'personal';
+    $('topic-scope').value = 'global';
     $('generate-result').style.display = 'none';
     generatedSystemContext = '';
   }
@@ -290,5 +290,21 @@
       resetCreateForm();
       $('create-form').classList.remove('open');
     });
+
+    // Generate Suggestions button: grey when form incomplete, green when ready
+    function updateGenerateBtn() {
+      var name = $('topic-name').value.trim();
+      var desc = $('topic-desc').value.trim();
+      var btn = $('generate-btn');
+      if (name && desc) {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-ready');
+      } else {
+        btn.classList.remove('btn-ready');
+        btn.classList.add('btn-secondary');
+      }
+    }
+    $('topic-name').addEventListener('input', updateGenerateBtn);
+    $('topic-desc').addEventListener('input', updateGenerateBtn);
   });
 })();

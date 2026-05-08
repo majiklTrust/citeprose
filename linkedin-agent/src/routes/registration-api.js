@@ -321,7 +321,7 @@ router.post("/complete", async (req, res) => {
       await withTenant(tenantId, async () => {
         const { setAgentState } = await import("../services/database.js");
         await setAgentState("mode", "manual");
-        await setAgentState("corroboration", "enabled");
+        await setAgentState("corroboration", "disabled");
         await setAgentState("anthropic_model", finalModel);
 
         // Encrypted credentials — API key only

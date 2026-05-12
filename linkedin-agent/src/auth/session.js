@@ -19,7 +19,9 @@ import { createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:cr
 
 export const SESSION_COOKIE_NAME = '__la_session';
 
-export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 86400000; // 24h
+// export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 86400000; // 24h
+// export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 3600000; // 1h
+export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 300000; // 5m
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;          // 96 bits — NIST SP 800-38D recommended for GCM

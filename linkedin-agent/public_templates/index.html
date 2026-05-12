@@ -625,7 +625,16 @@
                   <button className="btn btn-primary" style={{ width: '100%' }} onClick={handlePreview}>
                     {loading.preview ? <span className="loading-spinner"></span> : '✦ Preview New Post'}
                   </button>
-                  <button className="btn btn-ghost" style={{ width: '100%' }} onClick={handleForceCycle}>
+                  <button
+                    className={`btn ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{
+                      width: '100%',
+                      ...((status.mode || 'manual') !== 'auto' ? { opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' } : {})
+                    }}
+                    onClick={handleForceCycle}
+                    disabled={(status.mode || 'manual') !== 'auto'}
+                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Auto mode to enable' : 'Run one scheduler cycle now'}
+                  >
                     {loading.forceCycle ? <span className="loading-spinner"></span> : '⟳ Force Scheduler Cycle'}
                   </button>
                 </div>
@@ -665,7 +674,7 @@
                         </div>
                       ))}
                     </div>
-                    <button className="btn btn-ghost" style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem' }}
+                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem' }}
                       onClick={handleRefreshFeeds}>
                       {loading.feeds ? <span className="loading-spinner"></span> : '↻ Refresh Feeds Now'}
                     </button>

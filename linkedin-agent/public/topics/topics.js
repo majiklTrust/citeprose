@@ -7,6 +7,7 @@
   var isOwner = false;
   var userSub = null;
   var generatedSystemContext = '';
+  var feedSummary = { catchall: 0, topics: [] };
 
   function $(id) { return document.getElementById(id); }
 
@@ -60,6 +61,15 @@
     html += '</div>';
     html += '<div class="topic-meta">' + esc(t.slug) + '</div>';
 
+    // Feed count summary
+    var topicFeeds = feedSummary.topics.find(function (fs) { return fs.slug === t.slug; });
+    var topicFeedCount = topicFeeds ? topicFeeds.feedCount : 0;
+    html += '<div class="topic-meta" style="margin-top:0.25rem;">';
+    html += topicFeedCount + ' topic feed' + (topicFeedCount !== 1 ? 's' : '');
+    html += ' · ' + feedSummary.catchall + ' catchall feed' + (feedSummary.catchall !== 1 ? 's' : '');
+    html += ' · <a href="/app/feeds/?topic=' + encodeURIComponent(t.slug) + '" style="color:#0073b1;">Manage Feeds →</a>';
+    html += '</div>';
+
     html += '<div class="topic-details" id="details-' + t.id + '">';
     if (t.description) {
       html += '<p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">' + esc(t.description) + '</p>';
@@ -89,7 +99,13 @@
   }
 
   function loadTopics() {
-    fetch(API + '/api/topics', { credentials: 'include' })
+    // Fetch feed summary first, then topics
+    fetch(API + '/api/feeds/summary', { credentials: 'include' })
+      .then(function (res) { return res.ok ? res.json() : { catchall: 0, topics: [] }; })
+      .then(function (summary) {
+        feedSummary = summary;
+        return fetch(API + '/api/topics', { credentials: 'include' });
+      })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         var topics = data.topics || [];

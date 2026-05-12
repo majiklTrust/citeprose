@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.108
+// v1.0.111
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -53,7 +53,7 @@ export function platformLog(level, action, details) {
 // ═════════════════════════════════════════════════════════════
 export function createApp(ctx) {
   const {
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -116,6 +116,9 @@ export function createApp(ctx) {
 
   // Registration page — unauthenticated, token-based access
   instance.use("/app/register", express.static(path.join(__dirname, "../public/register"), { index: "index.html" }));
+
+  // Feeds Manager — accessible to owners and editors
+  instance.use("/app/feeds", express.static(path.join(__dirname, "../public/feeds"), { index: "index.html" }));
 
   // Topics page — accessible to owners and editors (manage_own_topics)
   instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html" }));
@@ -416,6 +419,10 @@ export function createApp(ctx) {
   // unauthenticated (token-based). Must be before apiRoutes.
   instance.use("/api/register", registrationRoutes);
 
+  // Feeds API routes — mounted at /api/feeds. Blanket middleware
+  // requires manage_own_topics (same gate as topics).
+  instance.use("/api/feeds", feedsRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -454,6 +461,7 @@ export async function buildAppForTests() {
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { default: registrationRoutes }  = await import("./routes/registration-api.js");
+  const { default: feedsRoutes }          = await import("./routes/feeds-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -477,7 +485,7 @@ export async function buildAppForTests() {
   await initRegistry(platformLog);
 
   return createApp({
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -523,6 +531,7 @@ export async function start() {
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { default: registrationRoutes }  = await import("./routes/registration-api.js");
+  const { default: feedsRoutes }          = await import("./routes/feeds-api.js");
   const { getAuthorizationUrl,
           exchangeCodeForToken,
           getProfile,
@@ -559,7 +568,7 @@ export async function start() {
 
   // STEP 6: Build app
   app = createApp({
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -578,7 +587,7 @@ export async function start() {
 
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.108
+║           LinkedIn AI Content Agent  v1.0.111
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║

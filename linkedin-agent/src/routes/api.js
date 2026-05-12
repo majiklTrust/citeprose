@@ -164,6 +164,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       stats,
       maxPostsPer10Days,
       researchStats,
+      feedLimit: parseInt(process.env.DASHBOARD_FEED_LIMIT) || 8,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
       anthropicModel

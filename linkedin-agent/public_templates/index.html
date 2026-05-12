@@ -657,7 +657,7 @@
                       </span>
                     </div>
                     <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                      {(status.researchStats.byFeed || []).slice(0, 8).map((f, i) => (
+                      {(status.researchStats.byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
                         <div key={i} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           padding: '0.25rem 0', fontSize: '0.75rem'

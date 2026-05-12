@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.0.112",
+  "version": "1.0.114",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -21,7 +21,7 @@
     "nodemon": "nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "production": "PGDATABASE=linkedin_clean PGUSER=***REMOVED*** NODE_ENV=production npm run start",
     "nonprod": "NODE_ENV=nonprod npm run nodemon",
-    "nonprod_devdb":   "PGDATABASE=linkedin_dev npm run nonprod",
+    "nonprod_devdb": "PGDATABASE=linkedin_dev npm run nonprod",
     "nonprod_cleandb": "PGDATABASE=linkedin_clean npm run nonprod",
     "dev": "PGUSER=***REMOVED*** NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
     "kill3001": "lsof -ti:3001 | xargs kill -9",

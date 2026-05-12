@@ -1,0 +1,44 @@
+/* ═══════════════════════════════════════════════════════════════
+   public/shared/manager-nav.css — Styling for manager navigation
+   ═══════════════════════════════════════════════════════════════ */
+
+.manager-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.manager-nav-link {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: #0073b1;
+  transition: background 0.15s;
+}
+
+.manager-nav-link:hover {
+  background: rgba(0, 115, 177, 0.08);
+  text-decoration: none;
+}
+
+.manager-nav-active {
+  color: #333;
+  font-weight: 600;
+  background: #e0e0e0;
+  cursor: default;
+}
+
+.manager-nav-active:hover {
+  background: #e0e0e0;
+}
+
+/* Separator dot between links */
+.manager-nav-link + .manager-nav-link::before {
+  content: '·';
+  margin-right: 0.5rem;
+  color: #ccc;
+}

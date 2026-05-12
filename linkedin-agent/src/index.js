@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.111
+// v1.0.112
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -584,19 +584,19 @@ export async function start() {
   const server = app.listen(PORT, () => {
     setBoundAddress(server.address());
     const addr = getServerAddress();
-
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.111
+║           LinkedIn AI Content Agent  v1.0.112
 ║                                                           ║
 ║   Topics: AI Benefits · AI Guardrails                     ║
 ║           Cyber Incidents · Cyber Advances                ║
 ║                                                           ║
-║      Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
+║     Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║     Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
 ║ Database:  ${(process.env.PGDATABASE)}
-║     Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
+║  DB User:  ${(process.env.PGUSER)}
 ║      App:  ${addr.origin}
+║      Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
 ╚═══════════════════════════════════════════════════════════╝
 `);
     console.log(`🖥  Homepage at      ${addr.origin}/`);

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/app/favicon.png">
+  <link rel="stylesheet" href="/app/shared/manager-nav.css">
   <title>User Management — LinkedIn Agent</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,7 +49,7 @@
       <a href="/app">Back to Dashboard</a>
     </div>
     <div id="admin" style="display:none;">
-      <a href="/app" class="back-link">&larr; Back to Dashboard</a>
+      <div id="manager-nav"></div>
       <h1>User Management</h1>
       <p class="subtitle">Manage workspace members and invitations</p>
 
@@ -77,6 +78,7 @@
       </div>
     </div>
   </div>
+  <script src="/app/shared/manager-nav.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

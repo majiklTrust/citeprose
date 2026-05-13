@@ -22,6 +22,7 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { getMaxAgeDays } from "../config/research.js";
 
 const router = Router();
 
@@ -45,16 +46,16 @@ router.get("/", async (req, res) => {
     const topicFilter = req.query.topic || null;
 
     const result = await withTenant(req.tenant.id, async (client) => {
+      const ageDays = getMaxAgeDays();
+
       // Single query: all feeds with topic mappings and recent article counts.
-      // RLS on feeds_v2, feed_topics, feed_articles scopes to current tenant.
-      // articles_v2 has no RLS — accessed via tenant-scoped JOINs.
       const r = await client.query(
         `SELECT f.id, f.name, f.url, f.tier::text AS tier,
                 f.is_catchall, f.enabled, f.refresh_minutes,
                 f.last_polled_at, f.feed_description,
                 f.feed_categories,
                 count(DISTINCT fa.article_id) FILTER (
-                  WHERE a.published_at >= now() - interval '20 days'
+                  WHERE a.published_at >= now() - ($1 || ' days')::interval
                 ) AS recent_articles,
                 COALESCE(
                   json_agg(DISTINCT jsonb_build_object(
@@ -68,7 +69,8 @@ router.get("/", async (req, res) => {
          LEFT JOIN feed_topics ft ON ft.feed_id = f.id
          LEFT JOIN topics t ON t.id = ft.topic_id
          GROUP BY f.id
-         ORDER BY f.is_catchall DESC, f.name`
+         ORDER BY f.is_catchall DESC, f.name`,
+        [String(ageDays)]
       );
 
       let feeds = r.rows.map(row => ({

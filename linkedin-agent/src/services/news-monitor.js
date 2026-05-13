@@ -33,6 +33,10 @@ const parser = new Parser({
 
 let monitorJob = null;
 
+// ── Configurable age windows ─────────────────────────────────
+// Centralized in src/config/research.js to avoid duplication.
+import { getMaxAgeDays, getMaxAgeDaysPrune } from "../config/research.js";
+
 // Returns the current tenant's pg.Client from AsyncLocalStorage.
 // Throws if called outside withTenant.
 function client() {
@@ -215,13 +219,15 @@ export async function pollAllFeeds() {
   // Prune old feed_articles links for this tenant.
   // Articles are global — we only remove the tenant's reference.
   // Orphaned articles_v2 rows can be cleaned by a maintenance job.
+  const pruneWindow = getMaxAgeDaysPrune();
   const pruned = await c.query(
     `DELETE FROM feed_articles
      WHERE tenant_id = current_tenant_id()
        AND article_id IN (
          SELECT a.id FROM articles_v2 a
-         WHERE a.published_at < now() - interval '60 days'
-       )`
+         WHERE a.published_at < now() - ($1 || ' days')::interval
+       )`,
+    [String(pruneWindow)]
   );
 
   await logActivity("info", "feed_poll_complete", {
@@ -236,7 +242,8 @@ export async function pollAllFeeds() {
 // ── Query Articles ───────────────────────────────────────────
 // Must be called inside withTenant.
 
-export async function getArticlesForTopic(topicSlug, maxAgeDays = 20, limit = 30) {
+export async function getArticlesForTopic(topicSlug, maxAgeDays = null, limit = 30) {
+  const ageDays = maxAgeDays || getMaxAgeDays();
   const c = client();
   // Two paths to articles:
   //   1. Topic-specific: feed_topics maps a feed to this topic
@@ -256,12 +263,13 @@ export async function getArticlesForTopic(topicSlug, maxAgeDays = 20, limit = 30
        AND a.published_at >= now() - ($2 || ' days')::interval
      ORDER BY a.published_at DESC
      LIMIT $3`,
-    [topicSlug, String(maxAgeDays), limit]
+    [topicSlug, String(ageDays), limit]
   );
   return r.rows;
 }
 
-export async function searchArticles(keywords, topicSlug = null, maxAgeDays = 20, limit = 20) {
+export async function searchArticles(keywords, topicSlug = null, maxAgeDays = null, limit = 20) {
+  const ageDays = maxAgeDays || getMaxAgeDays();
   const c = client();
   const conditions = [];
   const params = [];
@@ -280,7 +288,7 @@ export async function searchArticles(keywords, topicSlug = null, maxAgeDays = 20
   }
 
   conditions.push(`a.published_at >= now() - ($${i} || ' days')::interval`);
-  params.push(String(maxAgeDays));
+  params.push(String(ageDays));
   i++;
   params.push(limit);
 
@@ -307,6 +315,7 @@ export async function searchArticles(keywords, topicSlug = null, maxAgeDays = 20
 
 export async function getArticleStats() {
   const c = client();
+  const ageDays = getMaxAgeDays();
 
   const total = await c.query(
     `SELECT COUNT(DISTINCT fa.article_id)::int AS count
@@ -317,19 +326,29 @@ export async function getArticleStats() {
             COUNT(DISTINCT fa.article_id)::int AS count
      FROM feed_articles fa
      JOIN feeds_v2 f ON f.id = fa.feed_id
+     JOIN articles_v2 a ON a.id = fa.article_id
+     WHERE a.published_at >= now() - ($1 || ' days')::interval
      GROUP BY f.name, f.tier
-     ORDER BY count DESC`
+     ORDER BY CASE f.tier::text
+                WHEN 'authoritative' THEN 1
+                WHEN 'primary' THEN 2
+                WHEN 'secondary' THEN 3
+                ELSE 4
+              END, f.name`,
+    [String(ageDays)]
   );
   const recent = await c.query(
     `SELECT COUNT(DISTINCT fa.article_id)::int AS count
      FROM feed_articles fa
      JOIN articles_v2 a ON a.id = fa.article_id
-     WHERE a.published_at >= now() - interval '7 days'`
+     WHERE a.published_at >= now() - ($1 || ' days')::interval`,
+    [String(ageDays)]
   );
 
   return {
     totalArticles: total.rows[0].count,
-    last7Days: recent.rows[0].count,
+    recentArticles: recent.rows[0].count,
+    maxAgeDays: ageDays,
     byFeed: byFeed.rows
   };
 }

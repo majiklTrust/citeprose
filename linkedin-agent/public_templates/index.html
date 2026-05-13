@@ -642,32 +642,24 @@
 
               {/* Research Monitor */}
               <div className="sidebar-panel">
-                <div className="section-title">
-                  Research Monitor
-                  <span className="badge" style={{ background: 'var(--accent-cyan)' }}>
-                    {status.researchStats?.totalArticles || 0}
-                  </span>
+                <div className="section-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>Research Monitor <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-secondary)' }}>(<span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{status.researchStats?.byFeed?.length || 0}</span> feeds)</span></div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.15rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'baseline' }}>
+                  using <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, margin: '0 0.2rem' }}>{status.researchStats?.recentArticles || 0}</span> articles · last <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, margin: '0 0.2rem' }}>{status.researchStats?.maxAgeDays || 20}</span> days
                 </div>
                 {status.researchStats ? (
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Articles (7 days)</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>
-                        {status.researchStats.last7Days}
-                      </span>
-                    </div>
                     <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                       {(status.researchStats.byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
                         <div key={i} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '0.25rem 0', fontSize: '0.75rem'
+                          padding: '0.2rem 0', fontSize: '0.75rem'
                         }}>
-                          <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
+                          <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontSize: '0.75rem' }}>
                             {f.feed_name}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span className={`source-tier tier-${f.feed_tier}`}>{f.feed_tier}</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+                            <span className={`source-tier tier-${f.feed_tier}`} style={{ fontSize: '0.55rem', padding: '0.05rem 0.3rem' }}>{{ authoritative: 'auth', primary: 'prim', secondary: 'sec' }[f.feed_tier] || f.feed_tier}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
                               {f.count}
                             </span>
                           </div>

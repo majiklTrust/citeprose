@@ -108,7 +108,7 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     // Build the registration URL and email template
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
-    const brandName = process.env.BRAND_NAME || "LinkedIn AI Content Agent";
+    const brandName = process.env.BRAND_NAME || "Content Agent";
     const registerUrl = `${origin}/app/register#token=${invite.token}`;
 
     const emailSubject = `Your ${brandName} workspace is ready to set up`;

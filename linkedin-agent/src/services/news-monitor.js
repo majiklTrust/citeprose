@@ -286,6 +286,60 @@ export async function pollAllFeeds() {
   return totalNew;
 }
 
+// ── Polling One Feed ─────────────────────────────────────────
+// Must be called inside withTenant.
+// feedId: UUID from feeds_v2.id — identifies the specific feed
+// to test. Skips the refresh_minutes cooldown so it always
+// polls regardless of when the feed was last checked. Returns
+// diagnostic payload (feed name, URL, success/error, counts).
+
+export async function pollSingleFeed(feedId) {
+  const c = client();
+
+  const feedResult = await c.query(
+    `SELECT id, url, name, tier::text, refresh_minutes, last_polled_at, last_error
+     FROM feeds_v2
+     WHERE id = $1 AND enabled = true`,
+    [feedId]
+  );
+
+  if (feedResult.rows.length === 0) {
+    return { success: false, error: "Feed not found or disabled", feedId };
+  }
+
+  const feedRow = feedResult.rows[0];
+
+  platformLog("info", "single_feed_poll_started", {
+    feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
+  });
+
+    const result = await fetchFeed(feedRow);
+
+  // Re-read the feed row to capture the updated last_error and
+  // last_polled_at written by fetchFeed — this surfaces HTTP
+  // failures and parse errors back to the caller without
+  // changing fetchFeed's contract.
+  const updated = await c.query(
+    `SELECT last_polled_at, last_error FROM feeds_v2 WHERE id = $1`,
+    [feedId]
+  );
+  const updatedRow = updated.rows[0] || {};
+
+  return {
+    success: !updatedRow.last_error,
+    feed: {
+      id: feedRow.id,
+      name: feedRow.name,
+      url: feedRow.url,
+      tier: feedRow.tier
+    },
+    newArticles: result.newArticles,
+    linked: result.linked,
+    lastPolledAt: updatedRow.last_polled_at,
+    lastError: updatedRow.last_error || null
+  };
+}
+
 // ── Query Articles ───────────────────────────────────────────
 // Must be called inside withTenant.
 
@@ -301,6 +355,7 @@ export async function getArticlesForTopic(topicSlug, maxAgeDays = null, limit = 
 }
 
 // ── v1: feed_topics + catchall (today's behavior) ────────────
+// Smart sort: topic-specific articles fill first, catchall second.
 
 async function _getArticlesForTopicV1(topicSlug, ageDays, articleLimit) {
   const c = client();
@@ -323,29 +378,24 @@ async function _getArticlesForTopicV1(topicSlug, ageDays, articleLimit) {
 }
 
 // ── v2: feed_topics + domain matching + catchall ─────────────
-// Returns articles from three tiers, sorted by priority:
-//   Priority 0: explicit feed_topics mapping (topic-specific)
-//   Priority 1: domain tag overlap score > threshold
-//   Priority 2: catchall baseline
+// Three-tier priority:
+//   0: explicit feed_topics mapping (topic-specific)
+//   1: domain tag overlap score > threshold
+//   2: catchall baseline
 //
-// Application-side filtering: the query returns all candidate
-// articles (topic-specific + domain-tagged + catchall). JavaScript
-// scores domain matches and sorts. This avoids complex SQL and
-// keeps the scoring logic in one place (research.js).
+// Application-side filtering: query returns all candidates,
+// JavaScript scores domain matches and sorts.
 
 async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
   const c = client();
   const threshold = getDomainMatchThreshold();
 
-  // Look up topic domains
   const topicResult = await c.query(
     `SELECT domains FROM topics WHERE slug = $1`,
     [topicSlug]
   );
   const topicDomains = topicResult.rows[0]?.domains || [];
 
-  // Expanded query: includes domain-tagged feeds alongside
-  // topic-specific and catchall. No LIMIT — sorting in JS.
   const r = await c.query(
     `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
             f.name AS feed_name, f.tier::text AS feed_tier,
@@ -363,27 +413,19 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
     [topicSlug, String(ageDays)]
   );
 
-  // Score and assign priority tiers
   const scored = [];
   for (const a of r.rows) {
     let priority;
 
     if (a.is_topic_specific) {
-      // Tier 0: explicit feed_topics mapping
       priority = 0;
     } else {
-      // Check domain overlap
-      const feedDomains = a.feed_domains || [];
-      const score = domainMatchScore(feedDomains, topicDomains);
-
+      const score = domainMatchScore(a.feed_domains || [], topicDomains);
       if (score > threshold) {
-        // Tier 1: domain tag match above threshold
         priority = 1;
       } else if (a.is_catchall) {
-        // Tier 2: catchall baseline
         priority = 2;
       } else {
-        // No match — exclude
         continue;
       }
     }
@@ -395,9 +437,8 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
     });
   }
 
-  // Sort: priority ascending, then newest first within each tier
   scored.sort((a, b) =>
-    a._priority - b._priority ||
+    (a._priority || 0) - (b._priority || 0) ||
     new Date(b.published_at) - new Date(a.published_at)
   );
 

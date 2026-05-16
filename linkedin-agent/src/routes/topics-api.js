@@ -79,11 +79,16 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { name, description, content_angles, hashtags, weight, scope } = req.body || {};
+    const { name, description, content_angles, hashtags, weight, scope, domains } = req.body || {};
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return res.status(400).json({ error: "Topic name is required" });
     }
+
+    // Validate domains: must be array of lowercase strings
+    const cleanDomains = Array.isArray(domains)
+      ? domains.map(d => String(d).toLowerCase().trim()).filter(Boolean).slice(0, 20)
+      : [];
 
     const resolvedScope = scope || "personal";
 
@@ -104,7 +109,8 @@ router.post("/", async (req, res) => {
         systemContext: req.body.system_context || "",
         weight: weight || 1,
         scope: resolvedScope,
-        callerSub: req.user.sub
+        callerSub: req.user.sub,
+        domains: cleanDomains
       });
     });
 

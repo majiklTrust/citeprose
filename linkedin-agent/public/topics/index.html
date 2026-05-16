@@ -43,6 +43,7 @@
     .topic-details { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee; }
     .topic-details.open { display: block; }
     .tag { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; margin: 0.1rem; }
+    .domain-tag { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; margin: 0.1rem; }
     .angle-list { list-style: decimal; padding-left: 1.5rem; font-size: 0.88rem; }
     .angle-list li { margin-bottom: 0.25rem; }
     .weight-badge { display: inline-block; background: #fff3e0; color: #e65100; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; }
@@ -105,6 +106,10 @@
             <div class="form-row">
               <label>Hashtags</label>
               <input type="text" id="topic-hashtags" placeholder="#Tag1, #Tag2, #Tag3">
+            </div>
+            <div class="form-row">
+              <label>Domain Tags <span style="font-weight:normal;font-size:0.8rem;color:#999;">(v2.0 — comma-separated)</span></label>
+              <input type="text" id="topic-domains" placeholder="security, regulatory, ai-safety">
             </div>
             <div class="form-row">
               <label>Weight (higher = more frequent)</label>

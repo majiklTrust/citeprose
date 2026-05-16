@@ -85,6 +85,13 @@
       hashtags.forEach(function (h) { html += '<span class="tag">' + esc(h) + '</span> '; });
       html += '</div>';
     }
+    var domains = t.domains || [];
+    if (domains.length > 0) {
+      html += '<div style="margin-bottom:0.5rem;">';
+      html += '<strong style="font-size:0.85rem;">Domains:</strong> ';
+      domains.forEach(function (d) { html += '<span class="domain-tag">' + esc(d) + '</span> '; });
+      html += '</div>';
+    }
     if (canModify) {
       html += '<div style="margin-top:0.75rem; display:flex; gap:0.4rem;">';
       html += '<button class="btn btn-sm btn-secondary btn-toggle-enabled" data-id="' + t.id + '" data-enabled="' + t.enabled + '">';
@@ -246,6 +253,7 @@
     var desc = $('topic-desc').value.trim();
     var anglesText = $('topic-angles').value.trim();
     var hashtagsText = $('topic-hashtags').value.trim();
+    var domainsText = $('topic-domains') ? $('topic-domains').value.trim() : '';
     var weight = parseInt($('topic-weight').value) || 1;
     var scope = $('topic-scope').value;
 
@@ -253,6 +261,7 @@
 
     var angles = anglesText ? anglesText.split('\n').map(function (a) { return a.trim(); }).filter(Boolean) : [];
     var hashtags = hashtagsText ? hashtagsText.split(',').map(function (h) { return h.trim(); }).filter(Boolean) : [];
+    var domains = domainsText ? domainsText.split(',').map(function (d) { return d.trim().toLowerCase(); }).filter(Boolean) : [];
 
     $('save-topic-btn').disabled = true;
 
@@ -264,6 +273,7 @@
         description: desc,
         content_angles: angles,
         hashtags: hashtags,
+        domains: domains,
         system_context: generatedSystemContext,
         weight: weight,
         scope: scope

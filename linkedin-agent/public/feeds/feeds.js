@@ -96,6 +96,17 @@
       html += '</div>';
     }
 
+    // Domain tags (v2.0)
+    var domains = f.domains || [];
+    html += '<div class="feed-domains" data-feed-id="' + f.id + '">';
+    if (domains.length > 0) {
+      domains.forEach(function (d) {
+        html += '<span class="domain-tag">' + esc(d) + '</span>';
+      });
+    }
+    html += ' <a href="#" class="edit-domains-link" data-feed-id="' + f.id + '" data-domains="' + esc(domains.join(', ')) + '" style="font-size:0.72rem;color:#0073b1;">edit tags</a>';
+    html += '</div>';
+
     html += '</div>';
     return html;
   }
@@ -186,6 +197,32 @@
       var url = slug ? '?topic=' + encodeURIComponent(slug) : window.location.pathname;
       window.history.replaceState(null, '', url);
       loadFeeds(slug || null);
+    });
+
+    // ── Domain tag editing (delegated) ─────────────────────────
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('.edit-domains-link');
+      if (!link) return;
+      e.preventDefault();
+      var feedId = link.dataset.feedId;
+      var currentDomains = link.dataset.domains || '';
+      var input = prompt('Domain tags (comma-separated):', currentDomains);
+      if (input === null) return;
+
+      var domains = input.split(',').map(function (d) { return d.trim().toLowerCase(); }).filter(Boolean);
+
+      fetch(API + '/api/feeds/' + feedId + '/domains', {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domains: domains })
+      })
+        .then(function (res) {
+          if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed'); });
+          loadFeeds();
+        })
+        .catch(function (err) {
+          alert('Failed to update domains: ' + err.message);
+        });
     });
   });
 })();

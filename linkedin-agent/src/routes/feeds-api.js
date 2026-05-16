@@ -54,6 +54,7 @@ router.get("/", async (req, res) => {
                 f.is_catchall, f.enabled, f.refresh_minutes,
                 f.last_polled_at, f.feed_description,
                 f.feed_categories,
+                f.domains,
                 count(DISTINCT fa.article_id) FILTER (
                   WHERE a.published_at >= now() - ($1 || ' days')::interval
                 ) AS recent_articles,
@@ -134,6 +135,53 @@ router.get("/summary", async (req, res) => {
   } catch (err) {
     platformLog("error", "feeds_summary_failed", { error: err.message });
     res.status(500).json({ error: "Failed to get feed summary" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Update feed domains — Feeds Manager v2.0
+// ══════════════════════════════════════════════════════════════
+// PATCH /api/feeds/:id/domains
+// Body: { domains: ["security", "regulatory"] }
+//
+// Zero Trust:
+//   • Feed lookup is RLS-scoped via withTenant
+//   • Domains validated: array of lowercase strings, max 20 tags
+//   • Tag length capped at 50 chars to prevent abuse
+
+router.patch("/:id/domains", async (req, res) => {
+  try {
+    const feedId = parseInt(req.params.id);
+    if (!feedId || isNaN(feedId)) {
+      return res.status(400).json({ error: "Valid feed ID required" });
+    }
+
+    const { domains } = req.body || {};
+    if (!Array.isArray(domains)) {
+      return res.status(400).json({ error: "domains must be an array" });
+    }
+
+    const cleanDomains = domains
+      .map(d => String(d).toLowerCase().trim().substring(0, 50))
+      .filter(Boolean)
+      .slice(0, 20);
+
+    const result = await withTenant(req.tenant.id, async (client) => {
+      const r = await client.query(
+        `UPDATE feeds_v2 SET domains = $1::jsonb WHERE id = $2 RETURNING id, name, domains`,
+        [JSON.stringify(cleanDomains), feedId]
+      );
+      return r.rows[0] || null;
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: "Feed not found" });
+    }
+
+    res.json(result);
+  } catch (err) {
+    platformLog("error", "feed_domains_update_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to update feed domains" });
   }
 });
 

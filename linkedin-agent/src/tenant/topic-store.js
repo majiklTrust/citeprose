@@ -117,7 +117,7 @@ export async function getTopicById(id) {
  */
 export async function createTopic({
   name, description, contentAngles, hashtags, systemContext,
-  weight, scope, callerSub
+  weight, scope, callerSub, domains
 }) {
   const c = currentClient();
   const slug = generateSlug(name);
@@ -126,17 +126,18 @@ export async function createTopic({
   const r = await c.query(
     `INSERT INTO topics
        (tenant_id, slug, name, description, user_sub,
-        system_context, content_angles, hashtags, weight)
+        system_context, content_angles, hashtags, weight, domains)
      VALUES
        (current_tenant_id(), $1, $2, $3, $4,
-        $5, $6::jsonb, $7::jsonb, $8)
+        $5, $6::jsonb, $7::jsonb, $8, $9::jsonb)
      RETURNING ${CLIENT_COLUMNS}`,
     [
       slug, name, description || "", userSub,
       systemContext || "",
       JSON.stringify(contentAngles || []),
       JSON.stringify(hashtags || []),
-      weight || 1
+      weight || 1,
+      JSON.stringify(domains || [])
     ]
   );
   return r.rows[0];
@@ -161,13 +162,14 @@ export async function updateTopic(id, fields) {
     weight: "weight",
     sort_order: "sort_order",
     max_age_days: "max_age_days",
-    search_templates: "search_templates"
+    search_templates: "search_templates",
+    domains: "domains"
   };
 
   for (const [key, col] of Object.entries(allowedFields)) {
     if (key in fields) {
       const val = fields[key];
-      if (["content_angles", "hashtags", "search_templates"].includes(key)) {
+      if (["content_angles", "hashtags", "search_templates", "domains"].includes(key)) {
         sets.push(`${col} = $${idx}::jsonb`);
         params.push(JSON.stringify(val));
       } else {

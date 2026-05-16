@@ -283,6 +283,60 @@ export async function pollAllFeeds() {
   return totalNew;
 }
 
+// ── Polling One Feed ─────────────────────────────────────────
+// Must be called inside withTenant.
+// feedId: UUID from feeds_v2.id — identifies the specific feed
+// to test. Skips the refresh_minutes cooldown so it always
+// polls regardless of when the feed was last checked. Returns
+// diagnostic payload (feed name, URL, success/error, counts).
+
+export async function pollSingleFeed(feedId) {
+  const c = client();
+
+  const feedResult = await c.query(
+    `SELECT id, url, name, tier::text, refresh_minutes, last_polled_at, last_error
+     FROM feeds_v2
+     WHERE id = $1 AND enabled = true`,
+    [feedId]
+  );
+
+  if (feedResult.rows.length === 0) {
+    return { success: false, error: "Feed not found or disabled", feedId };
+  }
+
+  const feedRow = feedResult.rows[0];
+
+  platformLog("info", "single_feed_poll_started", {
+    feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
+  });
+
+    const result = await fetchFeed(feedRow);
+
+  // Re-read the feed row to capture the updated last_error and
+  // last_polled_at written by fetchFeed — this surfaces HTTP
+  // failures and parse errors back to the caller without
+  // changing fetchFeed's contract.
+  const updated = await c.query(
+    `SELECT last_polled_at, last_error FROM feeds_v2 WHERE id = $1`,
+    [feedId]
+  );
+  const updatedRow = updated.rows[0] || {};
+
+  return {
+    success: !updatedRow.last_error,
+    feed: {
+      id: feedRow.id,
+      name: feedRow.name,
+      url: feedRow.url,
+      tier: feedRow.tier
+    },
+    newArticles: result.newArticles,
+    linked: result.linked,
+    lastPolledAt: updatedRow.last_polled_at,
+    lastError: updatedRow.last_error || null
+  };
+}
+
 // ── Query Articles ───────────────────────────────────────────
 // Must be called inside withTenant.
 

@@ -34,7 +34,7 @@ import {
 } from "../services/scheduler.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { validateToken } from "../services/linkedin-api.js";
-import { getArticleStats, getArticlesForTopic, pollAllFeeds } from "../services/news-monitor.js";
+import { getArticleStats, getArticlesForTopic, pollAllFeeds, pollSingleFeed } from "../services/news-monitor.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
@@ -438,6 +438,20 @@ router.post("/api/research/poll", requirePermission("refresh_feeds"), async (req
   try {
     const newArticles = await withTenant(req.tenant.id, async () => pollAllFeeds());
     res.json({ success: true, newArticles });
+  } catch (err) {
+    platformLog("error", "api_error", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+router.post("/api/research/single", requirePermission("refresh_feeds"), async (req, res) => {
+  try {
+    const { feedId } = req.body;
+    if (!feedId) {
+      return res.status(400).json({ error: "feedId is required" });
+    }
+    const result = await withTenant(req.tenant.id, async () => pollSingleFeed(feedId));
+    res.json(result);
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });

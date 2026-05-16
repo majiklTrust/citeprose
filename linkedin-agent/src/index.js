@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.138
+// v1.0.139
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with

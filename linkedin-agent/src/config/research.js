@@ -110,6 +110,7 @@ export function domainMatchScore(feedDomains, topicDomains) {
   if (!Array.isArray(feedDomains) || !feedDomains.length) return 0;
   if (!Array.isArray(topicDomains) || !topicDomains.length) return 0;
   const feedSet = new Set(feedDomains.map(d => String(d).toLowerCase()));
-  const overlap = topicDomains.filter(d => feedSet.has(String(d).toLowerCase())).length;
-  return overlap / Math.min(feedDomains.length, topicDomains.length);
+  const topicSet = new Set(topicDomains.map(d => String(d).toLowerCase()));
+  const overlap = [...topicSet].filter(d => feedSet.has(d)).length;
+  return overlap / Math.min(feedSet.size, topicSet.size);
 }

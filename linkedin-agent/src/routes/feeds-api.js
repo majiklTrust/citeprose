@@ -161,10 +161,9 @@ router.patch("/:id/domains", async (req, res) => {
       return res.status(400).json({ error: "domains must be an array" });
     }
 
-    const cleanDomains = domains
-      .map(d => String(d).toLowerCase().trim().substring(0, 50))
-      .filter(Boolean)
-      .slice(0, 20);
+    const cleanDomains = [...new Set(
+      domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean)
+    )].slice(0, 20);
 
     const result = await withTenant(req.tenant.id, async (client) => {
       const r = await client.query(

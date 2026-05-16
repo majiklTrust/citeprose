@@ -85,9 +85,9 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Topic name is required" });
     }
 
-    // Validate domains: must be array of lowercase strings
+    // Validate domains: must be array of unique lowercase strings
     const cleanDomains = Array.isArray(domains)
-      ? domains.map(d => String(d).toLowerCase().trim()).filter(Boolean).slice(0, 20)
+      ? [...new Set(domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
       : [];
 
     const resolvedScope = scope || "personal";
@@ -142,8 +142,16 @@ router.patch("/:id", async (req, res) => {
       return res.status(403).json({ error: "Permission denied" });
     }
 
+    // Sanitize domains if present in the update payload
+    const body = { ...req.body };
+    if (body.domains !== undefined) {
+      body.domains = Array.isArray(body.domains)
+        ? [...new Set(body.domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
+        : [];
+    }
+
     const updated = await withTenant(req.tenant.id, async () => {
-      return updateTopic(req.params.id, req.body);
+      return updateTopic(req.params.id, body);
     });
     if (!updated) {
       return res.status(400).json({ error: "No valid fields to update" });

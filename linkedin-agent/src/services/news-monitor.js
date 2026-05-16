@@ -21,6 +21,7 @@
 import Parser from "rss-parser";
 import cron from "node-cron";
 import { logActivity } from "./database.js";
+import { platformLog } from "./platform-log.js";
 import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } from "./sanitize-content.js";
 import { currentClient } from "../db/with-tenant.js";
 import { withTenant } from "../db/with-tenant.js";
@@ -52,8 +53,34 @@ function client() {
 // feedRow: a row from feeds_v2 (id, url, name, tier, etc.)
 
 async function fetchFeed(feedRow) {
+  let httpStatus = null;
   try {
-    const feed = await parser.parseURL(feedRow.url);
+    // Fetch RSS manually to capture HTTP status code.
+    // parser.parseURL() hides the status — we need it for logging.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let response;
+    try {
+      response = await fetch(feedRow.url, {
+        headers: {
+          "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)",
+          "Accept": "application/rss+xml, application/xml, text/xml"
+        },
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    httpStatus = response.status;
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const xml = await response.text();
+    const feed = await parser.parseString(xml);
     let newArticles = 0;
     let linked = 0;
     const c = client();
@@ -93,6 +120,11 @@ async function fetchFeed(feedRow) {
         await logActivity("warn", "prompt_injection_detected", {
           feed: feedRow.name,
           link,
+          titlePatterns: titleInjection.patterns,
+          summaryPatterns: summaryInjection.patterns
+        });
+        platformLog("warn", "prompt_injection_detected", {
+          feed: feedRow.name, link,
           titlePatterns: titleInjection.patterns,
           summaryPatterns: summaryInjection.patterns
         });
@@ -154,14 +186,17 @@ async function fetchFeed(feedRow) {
       [feedRow.id, channelDescription, JSON.stringify(categories)]
     );
 
-    if (newArticles > 0 || linked > 0) {
-      await logActivity("info", "feed_fetched", {
-        feed: feedRow.name,
-        newArticles,
-        linked,
-        totalItems: feed.items?.length || 0
-      });
-    }
+    await logActivity("info", "feed_fetched", {
+      feed: feedRow.name,
+      status: httpStatus,
+      newArticles,
+      linked,
+      totalItems: feed.items?.length || 0
+    });
+    platformLog("info", "feed_fetched", {
+      feed: feedRow.name, status: httpStatus,
+      newArticles, linked, totalItems: feed.items?.length || 0
+    });
 
     return { newArticles, linked };
   } catch (err) {
@@ -176,7 +211,12 @@ async function fetchFeed(feedRow) {
 
     await logActivity("warn", "feed_fetch_failed", {
       feed: feedRow.name,
-      error: err.message
+      status: httpStatus,
+      error: err.message.substring(0, 300)
+    });
+    platformLog("warn", "feed_fetch_failed", {
+      feed: feedRow.name, status: httpStatus,
+      error: err.message.substring(0, 300)
     });
     return { newArticles: 0, linked: 0 };
   }
@@ -199,6 +239,7 @@ export async function pollAllFeeds() {
   const feeds = feedsResult.rows;
 
   await logActivity("info", "feed_poll_started", { feedCount: feeds.length });
+  platformLog("info", "feed_poll_started", { feedCount: feeds.length });
 
   let totalNew = 0;
   let totalLinked = 0;
@@ -234,6 +275,9 @@ export async function pollAllFeeds() {
     newArticles: totalNew,
     linked: totalLinked,
     prunedLinks: pruned.rowCount
+  });
+  platformLog("info", "feed_poll_complete", {
+    newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount
   });
 
   return totalNew;

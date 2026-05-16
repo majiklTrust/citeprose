@@ -33,11 +33,10 @@ import { currentClient } from "../db/with-tenant.js";
 //
 // Categories:
 //   Technology (broad)     — MIT Tech Review, Wired, Ars Technica, The Verge, ZDNet
-//   Business & Strategy    — HBR, Forbes Innovation, Fast Company
-//   Global News            — BBC Technology, Reuters, NPR Technology
-//   Science & Research     — Nature News, Scientific American
+//   Business & Strategy    — Fast Company
+//   Global News            — BBC Technology, NPR Technology
+//   Science & Research     — Nature News
 //   Healthcare             — STAT News
-//   Government & Policy    — Brookings Institution
 
 const CATCHALL_FEEDS = Object.freeze([
   // ── Technology (broad) ─────────────────────────────────────
@@ -74,18 +73,6 @@ const CATCHALL_FEEDS = Object.freeze([
 
   // ── Business & Strategy ────────────────────────────────────
   {
-    url: "https://hbr.org/feed",
-    name: "Harvard Business Review",
-    tier: "primary",
-    refresh: 360
-  },
-  {
-    url: "https://www.forbes.com/innovation/feed/",
-    name: "Forbes Innovation",
-    tier: "secondary",
-    refresh: 180
-  },
-  {
     url: "https://www.fastcompany.com/latest/rss",
     name: "Fast Company",
     tier: "secondary",
@@ -98,12 +85,6 @@ const CATCHALL_FEEDS = Object.freeze([
     name: "BBC Technology",
     tier: "primary",
     refresh: 180
-  },
-  {
-    url: "https://www.reutersagency.com/feed/",
-    name: "Reuters",
-    tier: "primary",
-    refresh: 120
   },
   {
     url: "https://feeds.npr.org/1019/rss.xml",
@@ -119,12 +100,6 @@ const CATCHALL_FEEDS = Object.freeze([
     tier: "primary",
     refresh: 360
   },
-  {
-    url: "https://rss.sciam.com/ScientificAmerican-Global",
-    name: "Scientific American",
-    tier: "primary",
-    refresh: 360
-  },
 
   // ── Healthcare & Life Sciences ─────────────────────────────
   {
@@ -132,14 +107,6 @@ const CATCHALL_FEEDS = Object.freeze([
     name: "STAT News",
     tier: "primary",
     refresh: 240
-  },
-
-  // ── Government & Policy ────────────────────────────────────
-  {
-    url: "https://www.brookings.edu/feed/",
-    name: "Brookings Institution",
-    tier: "primary",
-    refresh: 360
   }
 ]);
 

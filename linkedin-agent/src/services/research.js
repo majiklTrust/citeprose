@@ -14,6 +14,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getArticlesForTopic } from "./news-monitor.js";
 import { logActivity } from "./database.js";
+import { platformLog } from "./platform-log.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
@@ -481,9 +482,36 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   // Step 2: Web search (API call #1)
   const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId);
 
-  await logActivity("info", "research_material_gathered", {
-    cycleId, rssArticles: rssArticles.length, webClaims: webClaims.length
-  });
+  // ── Stage 1 logging: research material breakdown ────────────
+  // Shows which feeds contributed, topic-specific vs catchall split,
+  // and article freshness range. Helps the user understand what
+  // material the AI will work with.
+  const feedBreakdown = {};
+  for (const a of rssArticles) {
+    const key = a.feed_name || "unknown";
+    if (!feedBreakdown[key]) {
+      feedBreakdown[key] = { feed: key, tier: a.feed_tier || "secondary", count: 0 };
+    }
+    feedBreakdown[key].count++;
+  }
+
+  const dates = rssArticles
+    .map(a => a.published_at)
+    .filter(Boolean)
+    .sort();
+
+  const researchGatheredDetails = {
+    cycleId,
+    topicId,
+    rssArticles: rssArticles.length,
+    webClaims: webClaims.length,
+    feedBreakdown: Object.values(feedBreakdown),
+    oldestArticle: dates[0] || null,
+    newestArticle: dates[dates.length - 1] || null
+  };
+
+  await logActivity("info", "research_material_gathered", researchGatheredDetails);
+  platformLog("info", "research_material_gathered", researchGatheredDetails);
 
   const allSources = assembleAllSources(webClaims, rssArticles);
 
@@ -498,18 +526,24 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     await logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before corroboration call" });
     await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
 
+    const corrobStart = Date.now();
     const corroboration = await corroborateClaims(allSources, cycleId);
     brief = buildVerifiedBrief(corroboration, allSources);
+    brief._corrobDurationMs = Date.now() - corrobStart;
   }
 
-  await logActivity("info", "research_complete", {
+  const researchCompleteDetails = {
     cycleId, topicId,
     corroborationSkipped: skipCorroboration,
     verifiedClaims: brief.verifiedClaimCount,
     independentSources: brief.independentSourceCount,
     hasEnoughMaterial: brief.hasEnoughMaterial,
-    totalItems: brief.summary.totalSourceItems
-  });
+    totalItems: brief.summary.totalSourceItems,
+    corrobDurationMs: brief._corrobDurationMs || null
+  };
+
+  await logActivity("info", "research_complete", researchCompleteDetails);
+  platformLog("info", "research_complete", researchCompleteDetails);
 
   return brief;
 }

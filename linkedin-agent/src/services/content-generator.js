@@ -5,6 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
+import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
@@ -143,6 +144,13 @@ export async function generatePost(topic = null, userSub = null) {
       totalItems: researchBrief.summary.totalSourceItems,
       hasEnoughMaterial: researchBrief.hasEnoughMaterial
     });
+    platformLog("info", "research_integrated", {
+      cycleId, topicId: topic.slug,
+      verified: researchBrief.verifiedClaimCount,
+      sources: researchBrief.independentSourceCount,
+      items: researchBrief.summary.totalSourceItems,
+      enough: researchBrief.hasEnoughMaterial
+    });
   } catch (err) {
     await logActivity("warn", "research_unavailable", {
       cycleId, topicId: topic.slug, error: err.message
@@ -159,6 +167,9 @@ export async function generatePost(topic = null, userSub = null) {
 
     await logActivity("info", "post_blocked_insufficient_sources", {
       cycleId, topicId: topic.slug, angle, reason
+    });
+    platformLog("warn", "post_blocked_insufficient_sources", {
+      cycleId, topicId: topic.slug, reason
     });
 
     return { blocked: true, reason, topicId: topic.slug, angle, cycleId };
@@ -242,6 +253,9 @@ Respond in this exact JSON format:
 Return ONLY valid JSON. No markdown fencing, no preamble.`;
 
   await logActivity("info", "content_generation_started", { cycleId, topicId: topic.slug, angle });
+  platformLog("info", "content_generation_started", { cycleId, topicId: topic.slug, angle });
+
+  const genStartMs = Date.now();
 
   try {
     const client = await newAnthropicClient();
@@ -262,11 +276,19 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       ...topicHashtags
     ])].slice(0, 6);
 
-    await logActivity("info", "content_generation_success", {
-      cycleId, topicId: topic.slug,
+    const genDurationMs = Date.now() - genStartMs;
+    const genSuccessDetails = {
+      cycleId,
+      topicId: topic.slug,
+      model,
       title: parsed.title,
-      wordCount: parsed.body.split(/\s+/).length
-    });
+      wordCount: parsed.body.split(/\s+/).length,
+      sourcesUsed: (parsed.sources_used || []).length,
+      durationMs: genDurationMs
+    };
+
+    await logActivity("info", "content_generation_success", genSuccessDetails);
+    platformLog("info", "content_generation_success", genSuccessDetails);
 
     return {
       cycleId,
@@ -286,6 +308,9 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     };
   } catch (err) {
     await logActivity("error", "content_generation_failed", {
+      cycleId, topicId: topic.slug, error: err.message
+    });
+    platformLog("error", "content_generation_failed", {
       cycleId, topicId: topic.slug, error: err.message
     });
     throw err;

@@ -442,7 +442,7 @@
                 </div>
               )}
               <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
-              {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && !status.devBypass && (
+              {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && (
                 <a href="/app/topics/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Topics</a>
               )}
               {status?.user?.role === 'owner' && !status.devBypass && (
@@ -704,15 +704,38 @@
                 <div style={{ maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                   {logs.slice(0, 30).map(log => {
                     let cycleId = null;
+                    let detail = '';
                     try {
                       const d = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
-                      if (d && d.cycleId) cycleId = d.cycleId;
+                      if (d) {
+                        if (d.cycleId) cycleId = d.cycleId;
+                        // Build contextual detail from known actions
+                        if (d.feed) {
+                          detail = d.feed;
+                          if (d.status != null) detail += ' · ' + d.status;
+                          if (d.newArticles > 0) detail += ' · ' + d.newArticles + ' new';
+                          if (d.linked > 0) detail += ' · ' + d.linked + ' linked';
+                          if (d.error) detail += ' · ' + d.error.split('\n')[0];
+                        } else if (d.feedCount != null) {
+                          detail = d.feedCount + ' feeds';
+                        } else if (d.newArticles != null && d.prunedLinks != null) {
+                          detail = d.newArticles + ' new · ' + d.linked + ' linked · ' + d.prunedLinks + ' pruned';
+                        } else if (d.postId) {
+                          detail = 'post #' + d.postId;
+                          if (d.title) detail += ' · ' + d.title.substring(0, 40);
+                        } else if (d.topicSlug || d.slug) {
+                          detail = d.topicSlug || d.slug;
+                        }
+                      }
                     } catch {}
                     return (
                     <div key={log.id} className="log-entry">
                       <div className={`log-dot ${log.level}`}></div>
                       <div>
-                        <div className="log-text">{log.action.replace(/_/g, ' ')}</div>
+                        <div className="log-text">
+                          {log.action.replace(/_/g, ' ')}
+                          {detail && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> — {detail}</span>}
+                        </div>
                         <div className="log-meta">
                           <span className="log-id">#{log.id}</span>
                           {cycleId && <span className="log-cycle">{cycleId}</span>}

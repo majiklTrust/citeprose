@@ -1,9 +1,10 @@
 #!/bin/bash
 
 (
+ver="${*}"
 if [ -z "$1" ];then echo need version && exit 1;fi
-touch /datavol/linkedin-ai-agent/drop/LinkedIn_Agent-$1.zip
+touch "/datavol/linkedin-ai-agent/drop/LinkedIn_Agent-$ver.zip"
 
-echo touch /datavol/linkedin-ai-agent/drop/LinkedIn_Agent-$1.zip
+ls -l "/datavol/linkedin-ai-agent/drop/LinkedIn_Agent-$ver.zip"
 )
 

@@ -32,7 +32,7 @@
     "getroutes": "grep -E \"router\\.(get|post|put|patch|delete)\" src/routes/api.js",
     "endpoints": "npm run getroutes",
     "400":"",
-    "single":"/datavol/LinkedIn_Agent_drop/bin/refresh-single-feed.sh",
+    "pollsingle":"/datavol/LinkedIn_Agent_drop/bin/refresh-single-feed.sh",
     "getlog": "/datavol/LinkedIn_Agent_drop/bin/getlog.sh",
     "touch": "/datavol/LinkedIn_Agent_drop/bin/touch-agent-zip.sh",
     "lastdrop": "/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1",

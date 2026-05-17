@@ -1,0 +1,121 @@
+his Privacy Policy explains how majiklTrust Market Intelligence, LLC ("Company," "we," "us," or "our") collects, uses, stores, and shares information when you use our AI-powered content research and social media publishing platform ("Service"). By accessing or using our Service, you agree to the practices described below.
+1. Who We Are
+majiklTrust Market Intelligence, LLC is a limited liability company organized under the laws of the State of Illinois. We operate a business-to-business Software-as-a-Service (SaaS) platform that assists organizations in generating and publishing professional content to LinkedIn and other social media platforms.
+
+Our principal place of business is in Illinois. Questions about this policy may be directed to accountsupport@***REMOVED***.
+
+2. Information We Collect
+2a. Information You Provide
+Account registration: Business name, contact name, business email address, organization website, and billing information.
+Platform configuration: Content topics, RSS feed subscriptions, publishing preferences, and API credentials you supply (such as your Anthropic API key).
+Communications: Any messages you send to us via email or support channels.
+2b. Information Collected Automatically
+Usage data: Pages visited, features accessed, actions taken within the platform, timestamps, and session duration.
+Device and log data: IP address, browser type, operating system, referral URL, and server log data.
+Cookies and similar technologies: See Section 9 for details.
+2c. Information from Third Parties
+LinkedIn: When you connect your LinkedIn account or organization page, we receive OAuth tokens and, subject to the permissions you grant, organization page data, post engagement data, and basic profile information as described in Section 4.
+Identity providers: If you authenticate via Auth0, WorkOS, or a similar identity provider, we receive authentication tokens and the profile attributes those services share.
+RSS and web content feeds: We collect publicly available content from third-party news and media sources you configure for research purposes.
+3. How We Use Your Information
+We use the information we collect to:
+
+Provision, operate, and improve the Service;
+Authenticate users and manage tenant accounts;
+Generate AI-assisted research summaries and draft social media content on your behalf;
+Publish content to LinkedIn or other platforms at your direction and with your authorization;
+Process payments and maintain billing records;
+Respond to support requests and communicate service updates;
+Monitor system performance, detect errors, and ensure platform security;
+Comply with applicable legal obligations; and
+Enforce our Terms of Service.
+We do not use your data to train external AI models, sell your data to advertisers, or engage in behavioral advertising.
+
+4. LinkedIn Integration and Data Use
+Our Service integrates with the LinkedIn Community Management API. This section describes specifically how we handle LinkedIn member and organization data in compliance with LinkedIn's API Terms of Service.
+
+4a. Data We Access from LinkedIn
+When you connect your LinkedIn organization page to our Service, we may access, consistent with the permissions you grant:
+
+Organization page identity (name, logo, page URN);
+Organization page posts, comments, and reactions;
+Basic profile information of members who interact with your page (name, headline, public profile URL), as returned by LinkedIn's API;
+Page follower counts and engagement analytics; and
+OAuth access tokens and refresh tokens required to perform actions on your behalf.
+4b. How We Use LinkedIn Data
+To publish content to your connected LinkedIn organization page at your explicit direction;
+To display engagement data (comments, reactions, analytics) within your dashboard; and
+To maintain authentication tokens necessary to maintain your connected session.
+4c. Restrictions on LinkedIn Data
+We do not sell LinkedIn member data to third parties;
+We do not use LinkedIn member data for advertising or retargeting;
+We do not combine LinkedIn member data with data from other sources to build profiles of individual members;
+We do not store LinkedIn member personal data beyond the period required to render the Service features you have requested; and
+We comply with LinkedIn's data storage and deletion requirements, including removing LinkedIn data upon account disconnection or termination.
+4d. Revoking LinkedIn Access
+You may disconnect your LinkedIn account or organization page from within the Service settings at any time, or by revoking access directly through your LinkedIn account settings at linkedin.com/psettings/permitted-services. Upon disconnection, we will delete stored LinkedIn OAuth tokens promptly.
+
+5. Sharing and Disclosure
+We do not sell, rent, or trade your personal information. We may share information in the following limited circumstances:
+
+5a. Service Providers
+We engage vetted third-party service providers who process data on our behalf, including cloud hosting providers (AWS), authentication services (Auth0, WorkOS), payment processors, and email delivery services. These providers are contractually restricted from using your data for any purpose other than performing services for us.
+
+5b. AI Processing
+The Service uses the Anthropic API to generate research summaries and content drafts. Research content (articles and topic data from RSS feeds) may be transmitted to Anthropic for processing. We do not transmit LinkedIn member personal data or your account credentials to Anthropic. Anthropic's use of data is governed by their privacy policy and API terms.
+
+5c. Legal Requirements
+We may disclose information if required by law, subpoena, court order, or governmental authority, or when we believe in good faith that disclosure is necessary to protect the rights, property, or safety of the Company, our users, or the public.
+
+5d. Business Transfers
+In the event of a merger, acquisition, sale of assets, or similar transaction, your information may be transferred as part of that transaction. We will provide notice before your information is transferred and becomes subject to a different privacy policy.
+
+6. Data Retention
+We retain account and usage data for as long as your account is active or as needed to provide the Service, plus a reasonable period thereafter to comply with legal obligations, resolve disputes, and enforce agreements.
+
+LinkedIn-sourced data is retained only for as long as necessary to render the dashboard features you have requested. Upon account cancellation or LinkedIn disconnection, LinkedIn OAuth tokens and cached member data are deleted within 30 days.
+
+Billing records are retained for a minimum of seven (7) years as required by Illinois law and standard accounting practices.
+
+7. Your Privacy Rights
+Depending on your location, you may have the following rights with respect to your personal information:
+
+Access: Request a copy of the personal information we hold about you.
+Correction: Request correction of inaccurate or incomplete information.
+Deletion: Request deletion of your personal information, subject to legal retention requirements.
+Portability: Request a machine-readable export of data you have provided to us.
+Objection / Restriction: Object to or request restriction of certain processing activities.
+Withdrawal of consent: Where processing is based on consent, withdraw that consent at any time without affecting the lawfulness of prior processing.
+Illinois residents may have additional rights under the Illinois Personal Information Protection Act (PIPA) and, where applicable, the Illinois Biometric Information Privacy Act (BIPA). We do not collect biometric data.
+
+To exercise any of these rights, contact us at accountsupport@***REMOVED***. We will respond within 30 days. We may need to verify your identity before processing your request.
+
+8. Security
+We implement industry-standard technical and organizational measures to protect your information, including:
+
+Encryption of data at rest using AES-256-GCM;
+Encrypted transmission of data in transit via TLS;
+Tenant-level data isolation;
+Role-based access controls and least-privilege principles;
+Secure, httpOnly session cookies; and
+Regular security testing of production systems.
+No method of transmission or storage is 100% secure. While we strive to protect your information, we cannot guarantee absolute security. You are responsible for maintaining the confidentiality of your account credentials.
+
+9. Cookies and Tracking Technologies
+We use the following types of cookies and similar technologies:
+
+Essential cookies: Required for authentication, session management, and core platform functionality. These cannot be disabled without impairing the Service.
+Analytics cookies: Used to understand how the platform is used and to improve performance. These are first-party only; we do not use third-party advertising trackers.
+You can manage cookie preferences through your browser settings. Disabling essential cookies will prevent you from logging in to the Service.
+
+10. Children's Privacy
+Our Service is designed for business use and is not directed to individuals under the age of 18. We do not knowingly collect personal information from minors. If you believe a minor has provided us with personal information, please contact us at accountsupport@***REMOVED*** and we will promptly delete it.
+
+11. Changes to This Policy
+We may update this Privacy Policy from time to time. When we make material changes, we will update the "Last Updated" date at the top of this page and, where appropriate, notify active account holders by email.
+
+Your continued use of the Service after the effective date of a revised policy constitutes your acceptance of the changes. We encourage you to review this page periodically.
+
+12. Contact Us
+If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us:
+

@@ -8,6 +8,7 @@
   var userSub = null;
   var generatedSystemContext = '';
   var feedSummary = { catchall: 0, topics: [] };
+  var _fmVersion = 1;
 
   function $(id) { return document.getElementById(id); }
 
@@ -86,7 +87,7 @@
       html += '</div>';
     }
     var domains = t.domains || [];
-    if (domains.length > 0) {
+    if (_fmVersion === 2 && domains.length > 0) {
       html += '<div style="margin-bottom:0.5rem;">';
       html += '<strong style="font-size:0.85rem;">Domains:</strong> ';
       domains.forEach(function (d) { html += '<span class="domain-tag">' + esc(d) + '</span> '; });
@@ -115,6 +116,11 @@
       })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        _fmVersion = data.feedsManagerVersion || 1;
+        // Show/hide the domain tags form field based on version
+        var domainRow = document.getElementById('domain-tags-row');
+        if (domainRow) domainRow.style.display = _fmVersion === 2 ? '' : 'none';
+
         var topics = data.topics || [];
         var globalTopics = topics.filter(function (t) { return !t.user_sub; });
         var personalTopics = topics.filter(function (t) { return t.user_sub === userSub; });
@@ -253,7 +259,7 @@
     var desc = $('topic-desc').value.trim();
     var anglesText = $('topic-angles').value.trim();
     var hashtagsText = $('topic-hashtags').value.trim();
-    var domainsText = $('topic-domains') ? $('topic-domains').value.trim() : '';
+    var domainsText = (_fmVersion === 2 && $('topic-domains')) ? $('topic-domains').value.trim() : '';
     var weight = parseInt($('topic-weight').value) || 1;
     var scope = $('topic-scope').value;
 

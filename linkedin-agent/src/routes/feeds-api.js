@@ -22,7 +22,7 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
-import { getMaxAgeDays } from "../config/research.js";
+import { getMaxAgeDays, getFeedsManagerVersion } from "../config/research.js";
 
 const router = Router();
 
@@ -91,7 +91,7 @@ router.get("/", async (req, res) => {
       return feeds;
     });
 
-    res.json({ feeds: result });
+    res.json({ feeds: result, maxAgeDays: getMaxAgeDays(), feedsManagerVersion: getFeedsManagerVersion() });
   } catch (err) {
     platformLog("error", "feeds_list_failed", { error: err.message });
     res.status(500).json({ error: "Failed to list feeds" });
@@ -151,6 +151,13 @@ router.get("/summary", async (req, res) => {
 
 router.patch("/:id/domains", async (req, res) => {
   try {
+    // Security guard: domain tagging is a v2 feature.
+    // Reject requests when FEEDS_MANAGER_VERSION=1 to prevent
+    // manual trigger or scripted bypass of the version gate.
+    if (getFeedsManagerVersion() !== 2) {
+      return res.status(403).json({ error: "Domain tagging requires FEEDS_MANAGER_VERSION=2" });
+    }
+
     const feedId = parseInt(req.params.id);
     if (!feedId || isNaN(feedId)) {
       return res.status(400).json({ error: "Valid feed ID required" });

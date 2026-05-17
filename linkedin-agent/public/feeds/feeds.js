@@ -96,22 +96,26 @@
       html += '</div>';
     }
 
-    // Domain tags (v2.0)
-    var domains = f.domains || [];
-    html += '<div class="feed-domains" data-feed-id="' + f.id + '">';
-    if (domains.length > 0) {
-      domains.forEach(function (d) {
-        html += '<span class="domain-tag">' + esc(d) + '</span>';
-      });
+    // Domain tags (v2.0 — hidden when FEEDS_MANAGER_VERSION=1)
+    if (_fmVersion === 2) {
+      var domains = f.domains || [];
+      html += '<div class="feed-domains" data-feed-id="' + f.id + '">';
+      if (domains.length > 0) {
+        domains.forEach(function (d) {
+          html += '<span class="domain-tag">' + esc(d) + '</span>';
+        });
+      }
+      html += ' <a href="#" class="edit-domains-link" data-feed-id="' + f.id + '" data-domains="' + esc(domains.join(', ')) + '" style="font-size:0.72rem;color:#0073b1;">edit tags</a>';
+      html += '</div>';
     }
-    html += ' <a href="#" class="edit-domains-link" data-feed-id="' + f.id + '" data-domains="' + esc(domains.join(', ')) + '" style="font-size:0.72rem;color:#0073b1;">edit tags</a>';
-    html += '</div>';
 
     html += '</div>';
     return html;
   }
 
   // ── Load feeds ─────────────────────────────────────────────
+
+  var _fmVersion = 1; // Feeds Manager version — controls v2 UI visibility
 
   function loadFeeds(topicFilter) {
     var url = API + '/api/feeds';
@@ -120,6 +124,7 @@
     fetch(url, { credentials: 'include' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        _fmVersion = data.feedsManagerVersion || 1;
         var feeds = data.feeds || [];
         var catchall = feeds.filter(function (f) { return f.is_catchall; });
         var topicSpecific = feeds.filter(function (f) { return !f.is_catchall; });
@@ -199,11 +204,14 @@
       loadFeeds(slug || null);
     });
 
-    // ── Domain tag editing (delegated) ─────────────────────────
+    // ── Domain tag editing (delegated, v2 only) ──────────────────
     document.addEventListener('click', function (e) {
       var link = e.target.closest('.edit-domains-link');
       if (!link) return;
       e.preventDefault();
+
+      // Client-side guard — server also rejects in v1 mode
+      if (_fmVersion !== 2) return;
       var feedId = link.dataset.feedId;
       var currentDomains = link.dataset.domains || '';
       var input = prompt('Domain tags (comma-separated):', currentDomains);

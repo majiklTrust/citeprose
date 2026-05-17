@@ -18,6 +18,7 @@ import { requirePermission } from "../tenant/permissions.js";
 import { hasPermission } from "../tenant/platform-db.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import {
@@ -66,7 +67,7 @@ router.get("/", async (req, res) => {
     const topics = await withTenant(req.tenant.id, async () => {
       return listTopicsForUser(req.user.sub, isOwner);
     });
-    res.json({ topics });
+    res.json({ topics, feedsManagerVersion: getFeedsManagerVersion() });
   } catch (err) {
     platformLog("error", "topics_list_failed", { error: err.message });
     res.status(500).json({ error: "Failed to list topics" });
@@ -85,8 +86,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Topic name is required" });
     }
 
-    // Validate domains: must be array of unique lowercase strings
-    const cleanDomains = Array.isArray(domains)
+    // Validate domains: must be array of unique lowercase strings.
+    // Security guard: domains are silently stripped in v1 mode
+    // to prevent pre-population via scripted bypass.
+    const cleanDomains = (getFeedsManagerVersion() === 2 && Array.isArray(domains))
       ? [...new Set(domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
       : [];
 
@@ -142,12 +145,17 @@ router.patch("/:id", async (req, res) => {
       return res.status(403).json({ error: "Permission denied" });
     }
 
-    // Sanitize domains if present in the update payload
+    // Sanitize domains if present in the update payload.
+    // Security guard: domains are silently stripped in v1 mode.
     const body = { ...req.body };
     if (body.domains !== undefined) {
-      body.domains = Array.isArray(body.domains)
-        ? [...new Set(body.domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
-        : [];
+      if (getFeedsManagerVersion() !== 2) {
+        delete body.domains;
+      } else {
+        body.domains = Array.isArray(body.domains)
+          ? [...new Set(body.domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
+          : [];
+      }
     }
 
     const updated = await withTenant(req.tenant.id, async () => {

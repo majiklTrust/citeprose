@@ -17,12 +17,42 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import Parser from "rss-parser";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { getMaxAgeDays, getFeedsManagerVersion } from "../config/research.js";
+import { getAnthropicApiKey } from "../tenant/credential-store.js";
+import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+
+const rssParser = new Parser({ timeout: 10000 });
+
+// ── SSRF protection ──────────────────────────────────────────
+// Validates that a URL is safe to fetch from the server.
+// Blocks: non-HTTPS, localhost, private IP ranges, link-local,
+// internal hostnames. Prevents AI-suggested URLs from probing
+// internal infrastructure.
+
+function isSafeUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return false;
+    if (host.startsWith("10.")) return false;
+    if (host.startsWith("192.168.")) return false;
+    if (host.startsWith("172.")) {
+      const octet = parseInt(host.split(".")[1], 10);
+      if (octet >= 16 && octet <= 31) return false;
+    }
+    if (host === "169.254.169.254") return false;
+    if (host.endsWith(".internal") || host.endsWith(".local")) return false;
+    return true;
+  } catch { return false; }
+}
 
 const router = Router();
 
@@ -188,6 +218,270 @@ router.patch("/:id/domains", async (req, res) => {
   } catch (err) {
     platformLog("error", "feed_domains_update_failed", { error: err.message });
     res.status(500).json({ error: "Failed to update feed domains" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Discover feeds — AI-powered feed suggestion + RSS validation
+// ══════════════════════════════════════════════════════════════
+// POST /api/feeds/discover
+// Body: { topicId: number }
+//
+// Feeds Manager v2 only. Reads topic context, asks Anthropic for
+// RSS feed suggestions, validates each URL, returns validated
+// suggestions with live metadata.
+//
+// Zero Trust:
+//   • v2 gate — rejects in v1 mode
+//   • Topic read is RLS-scoped via withTenant
+//   • AI prompt contains only the tenant's own topic data
+//   • RSS validation uses server-side fetch with timeout
+//   • Generic errors — no AI response details leaked
+
+router.post("/discover", async (req, res) => {
+  try {
+    if (getFeedsManagerVersion() !== 2) {
+      return res.status(403).json({ error: "Feed discovery requires FEEDS_MANAGER_VERSION=2" });
+    }
+
+    const { topicId } = req.body || {};
+    if (!topicId || typeof topicId !== "number") {
+      return res.status(400).json({ error: "topicId (number) required" });
+    }
+
+    const result = await withTenant(req.tenant.id, async (client) => {
+      const topicResult = await client.query(
+        `SELECT id, name, slug, description, content_angles
+         FROM topics WHERE id = $1`,
+        [topicId]
+      );
+      const topic = topicResult.rows[0];
+      if (!topic) {
+        return { error: "Topic not found", status: 404 };
+      }
+
+      const angles = topic.content_angles || [];
+      const prompt = [
+        `Given this LinkedIn content topic:`,
+        `Name: ${topic.name}`,
+        `Description: ${topic.description || "Not specified"}`,
+        `Content angles: ${JSON.stringify(angles)}`,
+        ``,
+        `Suggest 8-10 RSS or Atom feeds that would provide high-quality`,
+        `research material for generating professional LinkedIn posts`,
+        `about this topic.`,
+        ``,
+        `For each feed, provide:`,
+        `- name: The publication or organization name`,
+        `- url: The exact RSS or Atom feed URL`,
+        `- tier: authoritative | primary | secondary`,
+        `- relevance: Why this feed is valuable for this topic (1 sentence)`,
+        ``,
+        `Prioritize:`,
+        `- Government agencies and standards bodies (authoritative tier)`,
+        `- Established industry publications with editorial oversight (primary)`,
+        `- Respected blogs and analysis sites (primary or secondary)`,
+        `- Mix of technical depth and business/leadership perspective`,
+        `- Sources that publish regularly (at least weekly)`,
+        ``,
+        `Return ONLY a JSON array, no other text or markdown.`
+      ].join("\n");
+
+      const apiKey = await getAnthropicApiKey();
+      const anthropic = new Anthropic({ apiKey });
+      const model = await getAnthropicModel();
+
+      const aiResponse = await callAnthropic(anthropic, {
+        model,
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }]
+      });
+
+      const rawText = aiResponse.content
+        .filter(b => b.type === "text")
+        .map(b => b.text)
+        .join("")
+        .replace(/```json|```/g, "")
+        .trim();
+
+      let suggestions;
+      try {
+        suggestions = JSON.parse(rawText);
+      } catch {
+        platformLog("warn", "feed_discover_parse_failed", { rawText: rawText.substring(0, 200) });
+        return { error: "AI response was not valid JSON", status: 502 };
+      }
+
+      if (!Array.isArray(suggestions)) {
+        return { error: "AI response was not an array", status: 502 };
+      }
+
+      const existingResult = await client.query(
+        `SELECT url FROM feeds_v2`
+      );
+      const existingUrls = new Set(existingResult.rows.map(r => r.url));
+
+      const validated = [];
+      for (const s of suggestions.slice(0, 12)) {
+        if (!s.url || typeof s.url !== "string") continue;
+        if (existingUrls.has(s.url)) continue;
+
+        // SSRF guard: reject non-HTTPS and private network URLs
+        if (!isSafeUrl(s.url)) {
+          platformLog("warn", "feed_discover_url_blocked", {
+            url: s.url, reason: "SSRF protection"
+          });
+          continue;
+        }
+
+        let httpStatus = null;
+        try {
+          // Fetch manually to capture HTTP status — same pattern
+          // as news-monitor.js::fetchFeed for consistency.
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15000);
+
+          let response;
+          try {
+            response = await fetch(s.url, {
+              headers: {
+                "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)",
+                "Accept": "application/rss+xml, application/xml, text/xml"
+              },
+              signal: controller.signal
+            });
+          } finally {
+            clearTimeout(timeout);
+          }
+
+          httpStatus = response.status;
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status} ${response.statusText}`);
+          }
+
+          const xml = await response.text();
+          const feed = await rssParser.parseString(xml);
+          const items = feed.items || [];
+
+          validated.push({
+            name: feed.title || s.name || "Unknown",
+            url: s.url,
+            suggestedTier: ["authoritative", "primary", "secondary"].includes(s.tier) ? s.tier : "secondary",
+            relevance: s.relevance || "",
+            description: (feed.description || "").substring(0, 500),
+            recentHeadlines: items.slice(0, 4).map(i => i.title || "Untitled"),
+            itemCount: items.length
+          });
+
+          platformLog("info", "feed_discover_validated", {
+            url: s.url, status: httpStatus, items: items.length
+          });
+        } catch (err) {
+          platformLog("warn", "feed_discover_validation_failed", {
+            url: s.url, status: httpStatus,
+            error: err.message.substring(0, 200)
+          });
+        }
+      }
+
+      platformLog("info", "feed_discover_complete", {
+        topicId: topic.id, topicSlug: topic.slug,
+        aiSuggested: suggestions.length, validated: validated.length,
+        skippedExisting: suggestions.filter(s => existingUrls.has(s.url)).length
+      });
+
+      return { suggestions: validated };
+    });
+
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.json(result);
+  } catch (err) {
+    platformLog("error", "feed_discover_failed", { error: err.message });
+    res.status(500).json({ error: "Feed discovery failed" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Add discovered feeds — creates feeds + topic mappings
+// ══════════════════════════════════════════════════════════════
+// POST /api/feeds/add
+// Body: { topicId: number, feeds: [{ url, name, tier }] }
+//
+// Feeds Manager v2 only. Creates feed rows in feeds_v2 and maps
+// them to the topic via feed_topics. Idempotent.
+
+router.post("/add", async (req, res) => {
+  try {
+    if (getFeedsManagerVersion() !== 2) {
+      return res.status(403).json({ error: "Feed add requires FEEDS_MANAGER_VERSION=2" });
+    }
+
+    const { topicId, feeds } = req.body || {};
+    if (!topicId || !Array.isArray(feeds) || feeds.length === 0) {
+      return res.status(400).json({ error: "topicId and feeds array required" });
+    }
+
+    const result = await withTenant(req.tenant.id, async (client) => {
+      const topicResult = await client.query(
+        `SELECT id FROM topics WHERE id = $1`,
+        [topicId]
+      );
+      if (topicResult.rows.length === 0) {
+        return { error: "Topic not found", status: 404 };
+      }
+
+      let added = 0;
+      let mapped = 0;
+
+      for (const f of feeds.slice(0, 15)) {
+        if (!f.url || !f.name) continue;
+        const tier = ["authoritative", "primary", "secondary"].includes(f.tier) ? f.tier : "secondary";
+
+        const feedResult = await client.query(
+          `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes)
+           VALUES (current_tenant_id(), $1, $2, $3::feed_tier, 240)
+           ON CONFLICT (tenant_id, url) DO NOTHING
+           RETURNING id`,
+          [f.url, f.name.substring(0, 200), tier]
+        );
+
+        let feedId;
+        if (feedResult.rows.length > 0) {
+          feedId = feedResult.rows[0].id;
+          added++;
+        } else {
+          const existing = await client.query(
+            `SELECT id FROM feeds_v2 WHERE url = $1`,
+            [f.url]
+          );
+          feedId = existing.rows[0]?.id;
+        }
+
+        if (feedId) {
+          const mapResult = await client.query(
+            `INSERT INTO feed_topics (tenant_id, feed_id, topic_id)
+             VALUES (current_tenant_id(), $1, $2)
+             ON CONFLICT (feed_id, topic_id) DO NOTHING`,
+            [feedId, topicId]
+          );
+          if (mapResult.rowCount > 0) mapped++;
+        }
+      }
+
+      platformLog("info", "feeds_added", { topicId, added, mapped });
+      return { added, mapped };
+    });
+
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.json({ success: true, ...result });
+  } catch (err) {
+    platformLog("error", "feeds_add_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to add feeds" });
   }
 });
 

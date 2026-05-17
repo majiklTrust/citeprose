@@ -69,6 +69,9 @@
     html += topicFeedCount + ' topic feed' + (topicFeedCount !== 1 ? 's' : '');
     html += ' · ' + feedSummary.catchall + ' catchall feed' + (feedSummary.catchall !== 1 ? 's' : '');
     html += ' · <a href="/app/feeds/?topic=' + encodeURIComponent(t.slug) + '" style="color:#0073b1;">Manage Feeds →</a>';
+    if (_fmVersion === 2) {
+      html += ' · <a href="#" class="discover-feeds-link" data-id="' + t.id + '" data-name="' + esc(t.name) + '" style="color:#2e7d32;">Discover Feeds</a>';
+    }
     html += '</div>';
 
     html += '<div class="topic-details" id="details-' + t.id + '">';
@@ -338,5 +341,134 @@
     }
     $('topic-name').addEventListener('input', updateGenerateBtn);
     $('topic-desc').addEventListener('input', updateGenerateBtn);
+
+    // ── Feed Discovery (v2 only) ───────────────────────────────
+
+    var _discoverTopicId = null;
+    var _discoverResults = [];
+
+    function discoverFeeds(topicId, topicName) {
+      _discoverTopicId = topicId;
+      _discoverResults = [];
+      $('discover-title').textContent = 'Discovering Feeds for "' + topicName + '"';
+      $('discover-subtitle').textContent = 'Asking AI to suggest feeds, then validating each one...';
+      $('discover-content').innerHTML = '<div class="loading">Searching for feeds... This may take 15-30 seconds.</div>';
+      $('discover-actions').style.display = 'none';
+      $('discover-overlay').style.display = 'block';
+
+      fetch(API + '/api/feeds/discover', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topicId: topicId })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.error) {
+            $('discover-content').innerHTML = '<div class="msg msg-error">' + esc(data.error) + '</div>';
+            return;
+          }
+          _discoverResults = data.suggestions || [];
+          if (_discoverResults.length === 0) {
+            $('discover-content').innerHTML = '<div class="empty">No valid feeds found. The AI may have suggested feeds with broken URLs.</div>';
+            return;
+          }
+          $('discover-subtitle').textContent = _discoverResults.length + ' validated feed' + (_discoverResults.length !== 1 ? 's' : '') + ' found';
+          renderDiscoverResults();
+          $('discover-actions').style.display = 'flex';
+        })
+        .catch(function (err) {
+          $('discover-content').innerHTML = '<div class="msg msg-error">Discovery failed: ' + esc(err.message) + '</div>';
+        });
+    }
+
+    function renderDiscoverResults() {
+      var html = '';
+      _discoverResults.forEach(function (f, i) {
+        html += '<div class="discover-feed">';
+        html += '<label>';
+        html += '<input type="checkbox" checked data-idx="' + i + '">';
+        html += '<div class="discover-feed-info">';
+        html += '<span class="discover-feed-name">' + esc(f.name) + '</span> ';
+        html += '<span class="badge-tier-discover">' + esc(f.suggestedTier) + '</span>';
+        html += '<div class="discover-feed-url">' + esc(f.url) + '</div>';
+        if (f.description) {
+          html += '<div class="discover-feed-desc">' + esc(f.description) + '</div>';
+        }
+        if (f.relevance) {
+          html += '<div class="discover-feed-relevance">AI: ' + esc(f.relevance) + '</div>';
+        }
+        if (f.recentHeadlines && f.recentHeadlines.length > 0) {
+          html += '<ul class="discover-feed-headlines">';
+          f.recentHeadlines.forEach(function (h) {
+            html += '<li>' + esc(h) + '</li>';
+          });
+          html += '</ul>';
+        }
+        html += '</div>';
+        html += '</label>';
+        html += '</div>';
+      });
+      $('discover-content').innerHTML = html;
+    }
+
+    function addDiscoveredFeeds() {
+      var selected = [];
+      document.querySelectorAll('#discover-content input[type="checkbox"]:checked').forEach(function (cb) {
+        var idx = parseInt(cb.dataset.idx);
+        var f = _discoverResults[idx];
+        if (f) selected.push({ url: f.url, name: f.name, tier: f.suggestedTier });
+      });
+
+      if (selected.length === 0) {
+        showMessage('No feeds selected', 'error');
+        return;
+      }
+
+      $('discover-add-btn').disabled = true;
+      $('discover-add-btn').textContent = 'Adding...';
+
+      fetch(API + '/api/feeds/add', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topicId: _discoverTopicId, feeds: selected })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.error) {
+            showMessage(data.error, 'error');
+          } else {
+            showMessage(data.added + ' feed(s) added, ' + data.mapped + ' mapped to topic', 'success');
+            loadTopics();
+          }
+          $('discover-overlay').style.display = 'none';
+        })
+        .catch(function (err) {
+          showMessage('Failed to add feeds: ' + err.message, 'error');
+        })
+        .finally(function () {
+          $('discover-add-btn').disabled = false;
+          $('discover-add-btn').textContent = 'Add Selected Feeds';
+        });
+    }
+
+    // Modal buttons — safe to bind even in v1 (elements exist but modal never opens)
+    var cancelBtn = document.getElementById('discover-cancel-btn');
+    var addBtn = document.getElementById('discover-add-btn');
+    if (cancelBtn) cancelBtn.addEventListener('click', function () {
+      $('discover-overlay').style.display = 'none';
+    });
+    if (addBtn) addBtn.addEventListener('click', addDiscoveredFeeds);
+
+    // Delegated click for discover links — v2 guard
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('.discover-feeds-link');
+      if (link) {
+        e.preventDefault();
+        if (_fmVersion !== 2) return;
+        discoverFeeds(parseInt(link.dataset.id), link.dataset.name);
+      }
+    });
   });
 })();

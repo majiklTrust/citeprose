@@ -118,6 +118,7 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       ? `  • A name for your workspace\n\n  Your API key has been configured by your administrator — no additional setup needed.`
       : `  • An Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
 
+    const expires = new Date(invite.expires_at)
     const emailBody = [
       `Hello,`,
       ``,

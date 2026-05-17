@@ -130,19 +130,31 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       `What you'll need:`,
       whatYouNeed,
       ``,
-`This link expires on ${
-  expires.toLocaleString("en-US", {
-    timeZone: "UTC",
-    hour12: true
-  })
-} UTC / ${
+      `This link can only be used once and expires at: ${
   expires.toLocaleString("en-US", {
     timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
     hour12: true,
     timeZoneName: "short"
   })
-} (Eastern).`,
-      `The link can only be used once.`,
+} on ${
+  expires.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric"
+  })
+} (${
+  expires.toLocaleString("en-US", {
+    timeZone: "UTC",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  })
+} UTC).`,
       ``,
       `If you have any questions or did not expect this invitation, please contact your account administrator.`,
       ``,

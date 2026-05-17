@@ -101,23 +101,38 @@
           // Status is public (uses optionalAuth) — always fetch with regular fetch
           const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
 
-          // Safe defaults for new tenants with no agent_state rows.
-          // Without this, status.mode.toUpperCase() crashes when
-          // the tenant exists but has never set a mode.
-          if (statusRes.user && !statusRes.mode) statusRes.mode = 'manual';
-          if (statusRes.user && !statusRes.stats) statusRes.stats = {
-            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
-          };
-
-          setStatus(statusRes);
-
           // If auth is required and no user, don't fetch protected routes
           if (statusRes.authRequired && !statusRes.user) {
+            setStatus(statusRes);
             setPosts([]);
             setLogs([]);
             setError(null);
             return;
           }
+
+          // Authenticated but no tenant — user.role is null when
+          // findTenantByAuthIdentity returns no membership. Set status
+          // with the RAW response (stats stays null) so the no-tenant
+          // panel renders. Do NOT apply safe defaults or fetch protected
+          // routes — every one of them will 403 without a tenant.
+          if (statusRes.user && !statusRes.user.role) {
+            setStatus(statusRes);
+            setPosts([]);
+            setLogs([]);
+            setError(null);
+            return;
+          }
+
+          // Safe defaults for new tenants with no agent_state rows.
+          // Without this, status.mode.toUpperCase() crashes when
+          // the tenant exists but has never set a mode.
+          // These ONLY run when a tenant exists (role is non-null above).
+          if (!statusRes.mode) statusRes.mode = 'manual';
+          if (!statusRes.stats) statusRes.stats = {
+            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
+          };
+
+          setStatus(statusRes);
 
           const [postsRes, logsRes] = await Promise.all([
             authFetch(`${API}/api/posts?limit=30`).then(r => r.json()),
@@ -132,8 +147,14 @@
             const topicsList = (topicsRes && topicsRes.topics) || [];
             setTopics(topicsList);
 
-            // New tenant with zero topics → steer to Topics manager
-            if (statusRes.user && topicsList.length === 0) {
+            // New tenant with zero topics → steer to Topics manager,
+            // but ONLY if the topics API responded successfully (topicsRes
+            // is truthy — a 403 sets it to null) AND the user's role can
+            // actually manage topics. Without both checks, viewers loop:
+            //   dashboard (empty topics) → /app/topics/ (403) → dashboard
+            const role = statusRes.user?.role;
+            if (topicsRes && topicsList.length === 0 &&
+                (role === 'owner' || role === 'editor')) {
               window.location.href = '/app/topics/';
               return;
             }
@@ -392,7 +413,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.0.136</div>
+                <div className="header-subtitle">v1.0.15-0.2</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -432,7 +453,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.0.136 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.0.15-0.2 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (

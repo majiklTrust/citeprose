@@ -36,7 +36,7 @@
     "extract": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\" -d ..",
     "420_": "",
     "extract-d": "v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v",
-    "extractit": "noyes() { read -p \"$1 yes or no (default): \" && if [[ ${REPLY,,} = y ]] || [[ ${REPLY,,} = yes ]]; then return 0; fi; return 9; }; npm run extract-l && if noyes;then echo going;fi",
+    "extractit": "/datavol/LinkedIn_Agent_drop/bin/extractit.sh",
     "lastdrop": "/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1",
     "unzip": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d",
     "440_": "",

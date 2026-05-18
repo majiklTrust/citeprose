@@ -29,7 +29,7 @@ import {
   getPost
 } from "./database.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
-import { publishPost } from "./linkedin-api.js";
+import { publishPost } from "./linkedin-publisher.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
@@ -220,7 +220,7 @@ export async function executePost(postId) {
   }
 
   try {
-    const result = await publishPost(post.content, post.hashtags);
+    const result = await publishPost(post.content, post.hashtags, post.image_url);
 
     await updatePostStatus(postId, "posted", {
       linkedinId: result.postId,

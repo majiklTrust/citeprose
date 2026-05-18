@@ -141,7 +141,7 @@ export function initDatabase() {
 
 // ── Post CRUD ────────────────────────────────────────────────
 
-export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor }) {
+export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl }) {
   const c = client();
   const scheduled = validateScheduledFor(scheduledFor);
   const topicIntId = await resolveTopicIdBySlug(c, topicId);
@@ -155,10 +155,10 @@ export async function createPost({ topicId, title, content, hashtags, newsContex
   }
 
   const r = await c.query(
-    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, status)
-     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, 'draft')
+    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status)
+     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft')
      RETURNING id`,
-    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled]
+    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null]
   );
   return r.rows[0].id;
 }
@@ -172,7 +172,8 @@ export async function getPost(id) {
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.created_at,
-            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context,
+            p.image_url
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.id = $1`,
@@ -286,7 +287,8 @@ export async function getPostsByStatus(status) {
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.created_at,
-            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context,
+            p.image_url
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.status = $1::post_status
@@ -301,7 +303,8 @@ export async function getRecentPosts(days = 10) {
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.created_at,
-            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context,
+            p.image_url
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.posted_at >= now() - ($1 || ' days')::interval
@@ -317,7 +320,8 @@ export async function getAllPosts(limit = 50) {
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.created_at,
-            p.scheduled_for, p.posted_at, p.error_message, p.news_context
+            p.scheduled_for, p.posted_at, p.error_message, p.news_context,
+            p.image_url
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      ORDER BY p.created_at DESC

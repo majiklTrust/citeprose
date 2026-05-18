@@ -39,7 +39,8 @@ const AES_AUTH_TAG_LENGTH_BYTES = 16;
 const STORAGE_KEY = Object.freeze({
   ANTHROPIC_API_KEY:     "anthropic_api_key",
   LINKEDIN_ACCESS_TOKEN: "linkedin_access_token",
-  LINKEDIN_PERSON_URN:   "linkedin_person_urn"
+  LINKEDIN_PERSON_URN:   "linkedin_person_urn",
+  LINKEDIN_ORG_URN:      "linkedin_org_urn"
 });
 
 // ── Derived-key cache (per tenant UUID) ──────────────────────
@@ -170,6 +171,15 @@ export async function getLinkedInAccessToken() {
 // Must be called inside a withTenant() block.
 export async function getLinkedInPersonUrn() {
   return fetchDecrypted(STORAGE_KEY.LINKEDIN_PERSON_URN);
+}
+
+// Returns the current tenant's LinkedIn organization page URN.
+// Format: "urn:li:organization:<id>". Used as the author field
+// when publishing to an org page via the Community Management API.
+// Throws if the credential is missing — indicates the tenant
+// has not connected an org page via /auth/linkedin.
+export async function getLinkedInOrgUrn() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_ORG_URN);
 }
 
 // ── Public API — generic store ───────────────────────────────

@@ -100,6 +100,88 @@ function restHeaders(token, contentType = "application/json") {
   };
 }
 
+// ── EXIF Metadata Stripping ──────────────────────────────────
+// Strips EXIF, ICC profiles, and other APP markers from JPEG
+// images before uploading to LinkedIn. Prevents leaking GPS
+// coordinates, device info, timestamps, and software versions
+// from the original photographer.
+//
+// JPEG structure: a sequence of markers (FF XX). Metadata lives
+// in APP1 (EXIF), APP2 (ICC), and APP3-APP15. We remove all
+// APPn markers except APP0 (JFIF) which is required.
+//
+// Non-JPEG formats (PNG, GIF, WebP) pass through unchanged —
+// their metadata risk is lower and stripping requires format-
+// specific parsers. Flagged for future enhancement.
+
+function stripExifFromJpeg(buffer) {
+  // Verify JPEG SOI marker
+  if (buffer[0] !== 0xFF || buffer[1] !== 0xD8) return buffer;
+
+  const out = [Buffer.from([0xFF, 0xD8])]; // SOI
+  let pos = 2;
+
+  while (pos < buffer.length - 1) {
+    // Find next marker
+    if (buffer[pos] !== 0xFF) {
+      // Not a marker — we've hit compressed data, copy rest
+      out.push(buffer.subarray(pos));
+      break;
+    }
+
+    const marker = buffer[pos + 1];
+
+    // SOS (FF DA) — start of scan. Everything after is
+    // compressed image data until EOI. Copy the rest verbatim.
+    if (marker === 0xDA) {
+      out.push(buffer.subarray(pos));
+      break;
+    }
+
+    // Markers without length (RST0-RST7, SOI, EOI, TEM)
+    if ((marker >= 0xD0 && marker <= 0xD9) || marker === 0x01) {
+      out.push(buffer.subarray(pos, pos + 2));
+      pos += 2;
+      continue;
+    }
+
+    // Read segment length (big-endian, includes the 2 length bytes)
+    const segLen = buffer.readUInt16BE(pos + 2);
+    const segEnd = pos + 2 + segLen;
+
+    // APP1-APP15 (FF E1-FF EF): metadata — SKIP
+    if (marker >= 0xE1 && marker <= 0xEF) {
+      pos = segEnd;
+      continue;
+    }
+
+    // APP0 (FF E0 — JFIF) and everything else: KEEP
+    out.push(buffer.subarray(pos, segEnd));
+    pos = segEnd;
+  }
+
+  return Buffer.concat(out);
+}
+
+function stripMetadata(buffer, contentType) {
+  if (contentType === "image/jpeg") {
+    const stripped = stripExifFromJpeg(buffer);
+    const removed = buffer.length - stripped.length;
+    if (removed > 0) {
+      platformLog("info", "exif_stripped", {
+        originalBytes: buffer.length,
+        strippedBytes: stripped.length,
+        removedBytes: removed
+      });
+    }
+    return stripped;
+  }
+
+  // PNG, GIF, WebP: pass through (metadata stripping not yet implemented)
+  // Risk is lower — PNG tEXt chunks rarely contain GPS/device data.
+  return buffer;
+}
+
 // ── Image Download ───────────────────────────────────────────
 // Downloads an image from a URL with SSRF protection, size cap,
 // and Content-Type validation. Returns { buffer, contentType }
@@ -311,13 +393,17 @@ async function restPublish(content, hashtags, imageUrl) {
 
     const { buffer, contentType } = await downloadImage(imageUrl);
 
+    // Strip EXIF/metadata before uploading to LinkedIn.
+    // Prevents leaking GPS, device info from article images.
+    const cleanBuffer = stripMetadata(buffer, contentType);
+
     platformLog("info", "linkedin_image_downloaded", {
-      bytes: buffer.length,
+      bytes: cleanBuffer.length,
       contentType
     });
 
     const imageUrn = await uploadImageToLinkedIn(
-      token, authorUrn, buffer, contentType
+      token, authorUrn, cleanBuffer, contentType
     );
 
     payload.content = {

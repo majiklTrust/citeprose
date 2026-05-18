@@ -43,7 +43,7 @@ import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
-import { isSafeUrl } from "../services/security.js";
+import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { getAnthropicModel } from "../config/ai.js";
 
 const router = Router();
@@ -236,8 +236,8 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
     if (image_url !== undefined) {
       // null clears the image; string must pass SSRF check
       if (image_url !== null && typeof image_url === "string" && image_url.length > 0) {
-        if (!isSafeUrl(image_url)) {
-          return res.status(400).json({ error: "Image URL blocked by security policy" });
+        if (!isImageUrl(image_url)) {
+          return res.status(400).json({ error: "URL must be a valid HTTPS image (JPEG, PNG, GIF, or WebP)" });
         }
         fields.image_url = image_url;
       } else {

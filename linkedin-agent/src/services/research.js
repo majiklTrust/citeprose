@@ -513,6 +513,17 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   await logActivity("info", "research_material_gathered", researchGatheredDetails);
   platformLog("info", "research_material_gathered", researchGatheredDetails);
 
+  // Collect article images for the post image picker.
+  // Only articles with validated image URLs are included.
+  const articleImages = rssArticles
+    .filter(a => a.image_url)
+    .map(a => ({
+      imageUrl: a.image_url,
+      title: a.title,
+      feedName: a.feed_name,
+      link: a.link
+    }));
+
   const allSources = assembleAllSources(webClaims, rssArticles);
 
   let brief;
@@ -544,6 +555,9 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
 
   await logActivity("info", "research_complete", researchCompleteDetails);
   platformLog("info", "research_complete", researchCompleteDetails);
+
+  // Attach article images to the brief for the content generator
+  brief.articleImages = articleImages;
 
   return brief;
 }

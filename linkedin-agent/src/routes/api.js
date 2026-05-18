@@ -367,10 +367,19 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
 
 router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
-    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
+    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
 
     if (!topicId || !title || !content) {
       return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
+    }
+
+    // Validate image URL if provided
+    let validatedImageUrl = null;
+    if (imageUrl && typeof imageUrl === "string" && imageUrl.length > 0) {
+      if (!isImageUrl(imageUrl)) {
+        return res.status(400).json({ error: "Image URL must be a valid HTTPS image" });
+      }
+      validatedImageUrl = imageUrl;
     }
 
     const storedContext = {
@@ -378,7 +387,8 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
       sourcesUsed: sourcesUsed || [],
       researchSummary: researchSummary || null,
       qualityScores: quality?.scores,
-      factualFlags: quality?.factual_flags
+      factualFlags: quality?.factual_flags,
+      articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
     };
 
     const postId = await withTenant(req.tenant.id, async () => {
@@ -388,7 +398,8 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         content,
         hashtags: hashtags || [],
         newsContext: storedContext,
-        scheduledFor: null
+        scheduledFor: null,
+        imageUrl: validatedImageUrl
       });
       await updatePostStatus(id, "pending_approval");
       await logActivity("info", "preview_saved_to_queue", { postId: id, title }, req.user?.sub || null);

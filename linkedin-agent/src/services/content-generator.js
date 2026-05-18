@@ -298,6 +298,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       hashtags: allHashtags,
       angle,
       sourcesUsed: parsed.sources_used || [],
+      articleImages: researchBrief.articleImages || [],
       researchSummary: {
         verifiedClaims: researchBrief.verifiedClaimCount,
         independentSources: researchBrief.independentSourceCount,

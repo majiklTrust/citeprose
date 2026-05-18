@@ -586,17 +586,14 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  v1.0.112
-║                                                           ║
-║   Topics: AI Benefits · AI Guardrails                     ║
-║           Cyber Incidents · Cyber Advances                ║
-║                                                           ║
-║     Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
-║     Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
-║ Database:  ${(process.env.PGDATABASE)}
-║  DB User:  ${(process.env.PGUSER)}
-║      App:  ${addr.origin}
-║      Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
+║           LinkedIn AI Content Agent  1.0.155
+║
+║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
+║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
+║       Database:  ${(process.env.PGDATABASE)}
+║        DB User:  ${(process.env.PGUSER)}
+║            App:  ${addr.origin}
+║            Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
 ╚═══════════════════════════════════════════════════════════╝
 `);
     console.log(`🖥  Homepage at      ${addr.origin}/`);

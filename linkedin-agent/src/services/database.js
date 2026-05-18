@@ -235,6 +235,11 @@ export async function updatePost(id, fields) {
     sets.push(`hashtags = $${i++}::jsonb`);
     params.push(JSON.stringify(fields.hashtags));
   }
+  if (fields.image_url !== undefined) {
+    // null clears the image (text-only post), string sets it
+    sets.push(`image_url = $${i++}`);
+    params.push(fields.image_url || null);
+  }
 
   if (sets.length === 0) {
     const err = new Error("No editable fields supplied");
@@ -245,7 +250,7 @@ export async function updatePost(id, fields) {
   params.push(id);
   const r = await c.query(
     `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i}
-     RETURNING id, title, content, hashtags, status`,
+     RETURNING id, title, content, hashtags, status, image_url`,
     params
   );
 

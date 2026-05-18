@@ -85,6 +85,7 @@
       const [selectedTopic, setSelectedTopic] = useState('');
       const [topics, setTopics] = useState([]);
       const [editingPost, setEditingPost] = useState(null);
+      const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
 
       const authFetch = useCallback(async (url, opts) => {
@@ -188,6 +189,43 @@
         setLoading(l => ({ ...l, [`approve-${id}`]: true }));
         try {
           await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          fetchAll();
+        } catch (err) {
+          alert('Failed to approve: ' + err.message);
+        }
+        setLoading(l => ({ ...l, [`approve-${id}`]: false }));
+      }
+
+      async function handleApproveWithImage(id, e) {
+        e.stopPropagation();
+        setLoading(l => ({ ...l, [`approve-${id}`]: true }));
+        try {
+          // Resolve the image URL based on user's choice
+          let finalImageUrl = null;
+          if (imageChoice.mode === 'auto' && imageChoice.url) {
+            finalImageUrl = imageChoice.url;
+          } else if (imageChoice.mode === 'custom' && imageChoice.url) {
+            finalImageUrl = imageChoice.url.trim();
+          }
+
+          // Determine if image_url changed from the post's current value
+          const currentUrl = selectedPost?.image_url || null;
+          if (finalImageUrl !== currentUrl) {
+            const patchRes = await fetch(`${API}/api/posts/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: finalImageUrl })
+            });
+            if (!patchRes.ok) {
+              const patchErr = await patchRes.json().catch(() => ({}));
+              throw new Error(patchErr.error || 'Failed to update image');
+            }
+          }
+
+          // Now approve
+          await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          setSelectedPost(null);
+          setImageChoice({ mode: 'none', url: null });
           fetchAll();
         } catch (err) {
           alert('Failed to approve: ' + err.message);
@@ -536,7 +574,10 @@
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
                       return (
-                      <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
+                      <div key={post.id} className="post-card" onClick={() => {
+                        setSelectedPost(post);
+                        setImageChoice(post.image_url ? { mode: 'auto', url: post.image_url } : { mode: 'none', url: null });
+                      }}
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
                         <div className="post-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -876,16 +917,63 @@
                   </div>
                 )}
                 {selectedPost.status === 'pending_approval' && (
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
-                      Approve & Publish
-                    </button>
-                    <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
-                      Reject
-                    </button>
-                    <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); setSelectedPost(null); }}>
-                      Edit
-                    </button>
+                  <div>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                        Post Image
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="image-choice" value="none"
+                            defaultChecked={!selectedPost.image_url}
+                            onChange={() => setImageChoice({ mode: 'none' })} />
+                          No image (text-only)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="image-choice" value="auto"
+                            defaultChecked={!!selectedPost.image_url}
+                            onChange={() => setImageChoice({ mode: 'auto', url: selectedPost.image_url })} />
+                          <div>
+                            Auto-sourced from article
+                            {selectedPost.image_url ? (
+                              <div style={{ marginTop: '0.35rem' }}>
+                                <img src={selectedPost.image_url} alt="Article image"
+                                  style={{ maxWidth: '200px', maxHeight: '120px', borderRadius: '4px', border: '1px solid var(--border)' }}
+                                  onError={(e) => { e.target.style.display = 'none'; }} />
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all', marginTop: '0.2rem' }}>
+                                  {selectedPost.image_url}
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}> — no article image available</span>
+                            )}
+                          </div>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="image-choice" value="custom"
+                            onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
+                          <div style={{ flex: 1 }}>
+                            Custom image URL
+                            <input type="text" placeholder="https://example.com/image.jpg"
+                              style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                       border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-secondary)' }}
+                              onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
+                              onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                      <button className="btn btn-approve" onClick={(e) => { handleApproveWithImage(selectedPost.id, e); }}>
+                        Approve & Publish
+                      </button>
+                      <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
+                        Reject
+                      </button>
+                      <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); setSelectedPost(null); }}>
+                        Edit
+                      </button>
+                    </div>
                   </div>
                 )}
                 {selectedPost.isPreview && (

@@ -43,6 +43,7 @@ import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { isSafeUrl } from "../services/security.js";
 import { getAnthropicModel } from "../config/ai.js";
 
 const router = Router();
@@ -216,8 +217,9 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
 // ── Edit Pending Post ────────────────────────────────────────
 // Patches editable fields (title, content, hashtags) on a post.
 // Restricted to pending_approval posts — see updatePost guard in
-// database.js. Body shape: { title?, content?, hashtags? }. Any
-// supplied field is updated; omitted fields are left unchanged.
+// database.js. Body shape: { title?, content?, hashtags?, image_url? }.
+// Any supplied field is updated; omitted fields are left unchanged.
+// image_url accepts a string URL or null (clears image for text-only).
 //
 // Status mapping for known database errors:
 //   NOT_FOUND     → 404
@@ -226,11 +228,22 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
 //   anything else → 500
 router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) => {
   try {
-    const { title, content, hashtags } = req.body || {};
+    const { title, content, hashtags, image_url } = req.body || {};
     const fields = {};
     if (title !== undefined)   fields.title = title;
     if (content !== undefined) fields.content = content;
     if (hashtags !== undefined) fields.hashtags = hashtags;
+    if (image_url !== undefined) {
+      // null clears the image; string must pass SSRF check
+      if (image_url !== null && typeof image_url === "string" && image_url.length > 0) {
+        if (!isSafeUrl(image_url)) {
+          return res.status(400).json({ error: "Image URL blocked by security policy" });
+        }
+        fields.image_url = image_url;
+      } else {
+        fields.image_url = null;
+      }
+    }
 
     const updated = await withTenant(req.tenant.id, async () => {
       const row = await updatePost(parseInt(req.params.id), fields);

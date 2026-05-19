@@ -120,15 +120,16 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     const expires = new Date(invite.expires_at)
     const emailBody = [
-      `Hello,`,
+      `Welcome to ${brandName} is ready for setup. `,
       ``,
-      `Your workspace on ${brandName} is ready for setup. This platform helps you create researched, professional LinkedIn content powered by AI.`,
-      ``,
-      `To get started, click the link below and follow the registration steps:`,
+      `This platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels. Your administrator has already provisioned your AI model connection and API key, so you can focus on what matters: getting your workspace configured and publishing great content.`,
+      `To get started, click the link below:`,
       `${registerUrl}`,
       ``,
-      `What you'll need:`,
+      `What to expect when you click the link:`,
+      `You will be guided through a short setup process to name and configure your workspace. During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.`,
       whatYouNeed,
+      `That's it — your administrator has taken care of the rest.`,
       ``,
       `This link can only be used once and expires at: ${
   expires.toLocaleString("en-US", {

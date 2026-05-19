@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.0.171
+// v1.4.1
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -586,7 +586,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  1.0.171
+║           LinkedIn AI Content Agent  1.4.1
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
@@ -594,6 +594,7 @@ export async function start() {
 ║        DB User:  ${(process.env.PGUSER)}
 ║            App:  ${addr.origin}
 ║            Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
+║           ${process.env.DEV_BYPASS_ORIGINS}
 ╚═══════════════════════════════════════════════════════════╝
 `);
     console.log(`🖥  Homepage at      ${addr.origin}/`);

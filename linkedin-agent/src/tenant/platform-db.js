@@ -108,6 +108,7 @@ export async function findPendingInviteByEmail(email) {
      WHERE lower(i.email) = $1
        AND i.status = 'pending'::invite_status
        AND t.status = 'active'::tenant_status
+     ORDER BY i.created_at DESC
      LIMIT 1`,
     [email.trim().toLowerCase()]
   );

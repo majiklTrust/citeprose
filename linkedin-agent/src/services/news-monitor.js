@@ -243,24 +243,31 @@ async function fetchFeed(feedRow) {
 
     return { newArticles, linked };
   } catch (err) {
-    // Record error on the feed row
+    // Log to console FIRST — database may be in an aborted
+    // transaction state, so platformLog (console) must run
+    // before any SQL attempts.
+    platformLog("warn", "feed_fetch_failed", {
+      feed: feedRow.name, status: httpStatus,
+      error: err.message.substring(0, 300)
+    });
+
+    // Best-effort: record error on the feed row
     const c = client();
     try {
       await c.query(
         `UPDATE feeds_v2 SET last_error = $1 WHERE id = $2`,
         [err.message.substring(0, 500), feedRow.id]
       );
-    } catch { /* best-effort */ }
+    } catch { /* transaction may be aborted — expected */ }
 
-    await logActivity("warn", "feed_fetch_failed", {
-      feed: feedRow.name,
-      status: httpStatus,
-      error: err.message.substring(0, 300)
-    });
-    platformLog("warn", "feed_fetch_failed", {
-      feed: feedRow.name, status: httpStatus,
-      error: err.message.substring(0, 300)
-    });
+    // Best-effort: log to activity log
+    try {
+      await logActivity("warn", "feed_fetch_failed", {
+        feed: feedRow.name,
+        status: httpStatus,
+        error: err.message.substring(0, 300)
+      });
+    } catch { /* transaction may be aborted — expected */ }
     return { newArticles: 0, linked: 0 };
   }
 }

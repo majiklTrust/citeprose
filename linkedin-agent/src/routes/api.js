@@ -116,14 +116,41 @@ router.get("/api/status", optionalAuth, async (req, res) => {
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
-      // caller is authenticated but has no tenant, simply leave
-      // the tenant-scoped fields null — do not error.
+      // caller is authenticated but has no tenant, check for a
+      // pending invite before giving up.
       try {
-        const { findTenantByAuthIdentity } = await import("../tenant/platform-db.js");
+        const { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite } = await import("../tenant/platform-db.js");
         const provider = req.user.authMethod === "bearer"
           ? (req.authProvider || "auth0")
           : "auth0";
-        const tenant = await findTenantByAuthIdentity(provider, req.user.sub);
+        let tenant = await findTenantByAuthIdentity(provider, req.user.sub);
+
+        // ── Invite claim (mirrors resolveTenant Path 2) ──────
+        // If no membership exists but the user's email matches a
+        // pending invite, claim it now. This is the first API call
+        // after login — if we don't claim here, the dashboard shows
+        // "No Membership" and the resolver never gets a chance.
+        if (!tenant && req.user.email) {
+          try {
+            const invite = await findPendingInviteByEmail(req.user.email);
+            if (invite) {
+              tenant = await claimInvite(invite.id, provider, req.user.sub);
+              if (tenant) {
+                platformLog("info", "invite_claimed_via_status", {
+                  email: req.user.email,
+                  tenantId: tenant.id,
+                  tenantSlug: tenant.slug
+                });
+              }
+            }
+          } catch (claimErr) {
+            platformLog("warn", "invite_claim_failed_in_status", {
+              email: req.user.email,
+              error: claimErr.message
+            });
+          }
+        }
+
         if (tenant) {
           tenantRole = tenant.role || null;
           await withTenant(tenant.id, async () => {

@@ -160,12 +160,13 @@
             // is truthy — a 403 sets it to null) AND the user's role can
             // actually manage topics. Without both checks, viewers loop:
             //   dashboard (empty topics) → /app/topics/ (403) → dashboard
-            const role = statusRes.user?.role;
-            if (topicsRes && topicsList.length === 0 &&
-                (role === 'owner' || role === 'editor')) {
-              window.location.href = '/app/topics/';
-              return;
-            }
+            // TEMPORARILY DISABLED — zero-topic redirect to Topics manager
+            // const role = statusRes.user?.role;
+            // if (topicsRes && topicsList.length === 0 &&
+            //     (role === 'owner' || role === 'editor')) {
+            //   window.location.href = '/app/topics/';
+            //   return;
+            // }
           } catch { setTopics([]); }
           setError(null);
         } catch (err) {
@@ -471,7 +472,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.0.170</div>
+                <div className="header-subtitle">v1.0.171</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -511,7 +512,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.0.170 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.0.171 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (

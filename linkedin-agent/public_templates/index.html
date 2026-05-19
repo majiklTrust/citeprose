@@ -160,12 +160,13 @@
             // is truthy — a 403 sets it to null) AND the user's role can
             // actually manage topics. Without both checks, viewers loop:
             //   dashboard (empty topics) → /app/topics/ (403) → dashboard
-            const role = statusRes.user?.role;
-            if (topicsRes && topicsList.length === 0 &&
-                (role === 'owner' || role === 'editor')) {
-              window.location.href = '/app/topics/';
-              return;
-            }
+            // TEMPORARILY DISABLED — zero-topic redirect to Topics manager
+            // const role = statusRes.user?.role;
+            // if (topicsRes && topicsList.length === 0 &&
+            //     (role === 'owner' || role === 'editor')) {
+            //   window.location.href = '/app/topics/';
+            //   return;
+            // }
           } catch { setTopics([]); }
           setError(null);
         } catch (err) {

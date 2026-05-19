@@ -115,8 +115,8 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     // Adjust email body based on whether key was provided
     const whatYouNeed = validatedKey
-      ? `  • A name for your workspace\n\n  Your API key has been configured by your administrator — no additional setup needed.`
-      : `  • An Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
+      ? `  • a name for your workspace\n  • your API key has been configured by your administrator — no additional setup needed.`
+      : `  • an Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
 
     const expires = new Date(invite.expires_at)
     const emailBody = [
@@ -128,8 +128,9 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       ``,
       `What to expect when you click the link:`,
       `You will be guided through a short setup process to name and configure your workspace. During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.`,
+      ``,
+      `What you'll need:`,
       whatYouNeed,
-      `That's it — your administrator has taken care of the rest.`,
       ``,
       `This link can only be used once and expires at: ${
   expires.toLocaleString("en-US", {

@@ -126,6 +126,7 @@
   .post-preview {
     font-size: 0.8rem;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   /* Post footer: stack actions below date */

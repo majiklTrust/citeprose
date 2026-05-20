@@ -1,5 +1,5 @@
 
-@import url('./app-mobile.css');
+@import url('/app/styles/app-mobile.css');
 
 :root {
   --bg-primary: #0a0e17;

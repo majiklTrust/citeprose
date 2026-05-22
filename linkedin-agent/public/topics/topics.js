@@ -71,6 +71,19 @@
     html += ' · <a href="/app/feeds/?topic=' + encodeURIComponent(t.slug) + '" style="color:#0073b1;">Manage Feeds →</a>';
     html += '</div>';
 
+    // Domain tags — always visible on card (v2 only)
+    if (_fmVersion === 2) {
+      var domains = t.domains || [];
+      html += '<div style="margin-top:0.35rem;">';
+      html += '<strong style="font-size:0.78rem; color:#666;">Domain Tags:</strong> ';
+      if (domains.length > 0) {
+        domains.forEach(function (d) { html += '<span class="domain-tag">' + esc(d) + '</span> '; });
+      } else {
+        html += '<span style="font-size:0.78rem; color:#999; font-style:italic;">none</span>';
+      }
+      html += '</div>';
+    }
+
     html += '<div class="topic-details" id="details-' + t.id + '">';
     if (t.description) {
       html += '<p style="margin-bottom:0.5rem; font-size:0.88rem; color:#555;">' + esc(t.description) + '</p>';
@@ -84,13 +97,6 @@
     if (hashtags.length > 0) {
       html += '<div style="margin-bottom:0.5rem;">';
       hashtags.forEach(function (h) { html += '<span class="tag">' + esc(h) + '</span> '; });
-      html += '</div>';
-    }
-    var domains = t.domains || [];
-    if (_fmVersion === 2 && domains.length > 0) {
-      html += '<div style="margin-bottom:0.5rem;">';
-      html += '<strong style="font-size:0.85rem;">Domains:</strong> ';
-      domains.forEach(function (d) { html += '<span class="domain-tag">' + esc(d) + '</span> '; });
       html += '</div>';
     }
     if (canModify) {
@@ -117,6 +123,9 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         _fmVersion = data.feedsManagerVersion || 1;
+        // Update page header with styled version indicator
+        var titleEl = document.getElementById('page-title');
+        if (titleEl) titleEl.innerHTML = 'Topics Manager <span class="version-badge">(v' + _fmVersion + ')</span><p class="subtitle">research topics for content generation</p>';
         // Show/hide the domain tags form field based on version
         var domainRow = document.getElementById('domain-tags-row');
         if (domainRow) domainRow.style.display = _fmVersion === 2 ? '' : 'none';
@@ -219,6 +228,7 @@
     $('topic-hashtags').value = '';
     $('topic-weight').value = '1';
     $('topic-scope').value = 'global';
+    if ($('topic-domains')) $('topic-domains').value = '';
     $('generate-result').style.display = 'none';
     generatedSystemContext = '';
   }

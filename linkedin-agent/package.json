@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.4.5",
+  "version": "1.5.15",
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",
   "type": "module",
@@ -8,6 +8,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "900": "",
     "timesync": "sudo ntpdate -u pool.ntp.org",
     "build": "npm run build_html && npm run build_js && echo installed version $npm_package_name-$npm_package_version",
     "build_html": "VERSION=$(node -p \"require('./package.json').version\") && sed \"s/{{VERSION}}/$VERSION/\" public_templates/index.html >public/index.html",
@@ -48,7 +49,7 @@
     "zipit": "zip -9 -r -y /datavol/$npm_package_name/drop/source/zipfile.zip",
     "zipsrc": "npm run zipsrc-claude && zip -9 -r -y /datavol/$npm_package_name/drop/source/source-$npm_package_name-$npm_package_version.zip . -x \"**/LinkedIn_Agent_Testing/*\" -x \"**/deploy/*\" -x \"**/testing/*\" -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\" -x \"bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"*.md\" -x \".git/*\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/drop/source/source-$npm_package_name-$npm_package_version.zip",
     "zipsrc-claude": "zip -9 -r -y /datavol/$npm_package_name/drop/source/source-$npm_package_name-$npm_package_version-claudeupload.zip ../linkedin-agent/  -x \"linkedin-agent/public/index.html\"-x \"linkedin-agent/src/index.js\" -x \"**/LinkedIn_Agent_Testing/*\" -x \"**/deploy/*\" -x \"**/testing/*\" -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\" -x \"bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"*.md\" -x \".git/*\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo /datavol/$npm_package_name/drop/source/source-$npm_package_name-$npm_package_version-claudeupload.zip && echo",
-    "zipsql": "zip -9 -r -y /datavol/$npm_package_name/drop/source/source-sql-$npm_package_name-$npm_package_version.zip ../data/pgsql -x \"**/*.sh\" -x \"**/*.conf\" -x \"**/deploy/*\" -x \"**/bootstrap/*\" -x \"**/configs/*\" -x \"**/*.yaml\" -x \"**/seed-topics.sql\" -x \"**/verify_database_state.sql\" -x \"**/pgsql.sql\" -x \"**/*.code*\" -x \"**/pgsql/data\" -x \"**/pgsql/pgsql\" -x \"**/pgsql/seed-feeds.sql\" -x \"**/production-sql/*\" -x \"**/backup/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/drop/source/source-sql-$npm_package_name-$npm_package_version.zip",
+    "zipsql": "zip -9 -r -y /datavol/$npm_package_name/drop/source/source-sql-$npm_package_name-$npm_package_version.zip ../data/pgsql -x \"**/*.sh\" -x \"**/*.conf\" -x \"**/deploy/*\" -x \"**/bootstrap/*\" -x \"**/configs/*\" -x \"**/*.yaml\" -x \"**/seed-topics.sql\" -x \"**/verify_database_state.sql\" -x \"**/pgsql.sql\" -x \"**/*.code*\" -x \"**/pgsql/data\" -x \"**/pgsql/pgsql\" -x \"**/pgsql/seed-feeds.sql\" -x \"**/pgsql/CREATE_ROLE_CREATE_DATABASE.sql\" -x \"**/production-sql/*\" -x \"**/backup/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/drop/source/source-sql-$npm_package_name-$npm_package_version.zip",
     "zipdeploy": "zip -9 -r /datavol/$npm_package_name/drop/source/source-deploy-$npm_package_name-$npm_package_version.zip ../linkedin-agent/package.json ../linkedin-agent/deploy/active/alpha.***REMOVED***/linkedin-agent/deploy/*.sh -x \"**/*standalone*.sh\" -x \"**/*resize*.sh\" -x \"**/*delete*.sh\" -x \"**/*audit*.sh\"",
     "ziptests": "zip -9 -r /datavol/$npm_package_name/drop/source/testing-$npm_package_name-$npm_package_version.zip ../linkedin-agent/scripts/testing/  -x \"**/.DS_Store\" -x \"**/.git/*\" -x \"**/node_modules/*\"",
     "zipall": "npm run zipsrc && npm run zipdeploy && zip /datavol/$npm_package_name/drop/source/source-all-$npm_package_name-$npm_package_version.zip /datavol/$npm_package_name/drop/source/*-$npm_package_name-$npm_package_version.zip",
@@ -67,9 +68,7 @@
     "insert_test_memnership": "psql -c \"INSERT INTO memberships (auth_provider, auth_sub, tenant_id, role) VALUES ('auth0', 'auth0|test_user_001', '53f2e104-4192-439b-abdc-70954bfa9583', 'owner') ON CONFLICT DO NOTHING;\"",
     "delete_test_memnership": "psql -c \"DELETE FROM memberships WHERE auth_sub = 'auth0|test_user_001';\"",
     "invalidate_linkedin": "psql -c \"DELETE FROM credentials WHERE tenant_id = '53f2e104-4192-439b-abdc-70954bfa9583' AND key IN ('linkedin_access_token', 'linkedin_person_urn');\" && npm run build",
-    "900_": "",
-    "encrypt-key": "node ../build/encrypt-key.js",
-    "decrypt-key": "node ../build/decrypt-key.js",
+    "encrypt-key": "node scripts/encrypt-key.js",
     "dashboard": "node src/dashboard-server.js",
     "setup": "node scripts/setup.js",
     "test-post": "node scripts/test-post.js",

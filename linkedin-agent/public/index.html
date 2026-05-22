@@ -9,7 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css?v=1.4.5">
+  <link rel="stylesheet" href="/app/styles/app.css?v=1.5.15">
 </head>
 <body>
   <div id="root"></div>
@@ -472,7 +472,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.4.5</div>
+                <div className="header-subtitle">v1.5.15</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -512,7 +512,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.4.5 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.5.15 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (
@@ -1087,7 +1087,10 @@
                       <button className="btn btn-approve" onClick={handleSavePreview}>
                         {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
+                      <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); }}>
+                        Edit
+                      </button>
+                      <button className="btn btn-reject" onClick={() => setSelectedPost(null)}>
                         Discard
                       </button>
                     </div>

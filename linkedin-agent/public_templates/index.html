@@ -1087,7 +1087,10 @@
                       <button className="btn btn-approve" onClick={handleSavePreview}>
                         {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
+                      <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); }}>
+                        Edit
+                      </button>
+                      <button className="btn btn-reject" onClick={() => setSelectedPost(null)}>
                         Discard
                       </button>
                     </div>

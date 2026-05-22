@@ -444,7 +444,11 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
     `SELECT domains FROM topics WHERE slug = $1`,
     [topicSlug]
   );
-  const topicDomains = topicResult.rows[0]?.domains || [];
+  const rawDomains = topicResult.rows[0]?.domains || [];
+  // Defensive: pg driver may return JSONB as string or array
+  const topicDomains = Array.isArray(rawDomains)
+    ? rawDomains
+    : (() => { try { const p = JSON.parse(rawDomains); return Array.isArray(p) ? p : []; } catch { return []; } })();
 
   const r = await c.query(
     `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
@@ -463,6 +467,14 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
     [topicSlug, String(ageDays)]
   );
 
+  platformLog("info", "v2_match_candidates", {
+    topicSlug, topicDomains, threshold,
+    totalCandidates: r.rows.length,
+    feedBreakdown: Object.entries(
+      r.rows.reduce((acc, a) => { acc[a.feed_name] = (acc[a.feed_name] || 0) + 1; return acc; }, {})
+    ).map(([name, count]) => `${name}:${count}`).join(", ")
+  });
+
   const scored = [];
   for (const a of r.rows) {
     let priority;
@@ -476,6 +488,12 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
       } else if (a.is_catchall) {
         priority = 2;
       } else {
+        // Log why this article was dropped
+        platformLog("debug", "v2_match_dropped", {
+          feed: a.feed_name, is_catchall: a.is_catchall,
+          feed_domains: a.feed_domains, score,
+          typeof_feed_domains: typeof a.feed_domains
+        });
         continue;
       }
     }
@@ -486,6 +504,13 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
       feed_tier: a.feed_tier, _priority: priority
     });
   }
+
+  // Log priority distribution
+  const dist = { p0: 0, p1: 0, p2: 0 };
+  scored.forEach(s => { dist[`p${s._priority}`]++; });
+  platformLog("info", "v2_match_result", {
+    topicSlug, scored: scored.length, limit: articleLimit, ...dist
+  });
 
   scored.sort((a, b) =>
     (a._priority || 0) - (b._priority || 0) ||

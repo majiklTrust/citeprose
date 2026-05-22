@@ -28,14 +28,14 @@ function generateSlug(name) {
 
 const CLIENT_COLUMNS = `
   id, tenant_id, slug, name, description, user_sub,
-  content_angles, hashtags, search_templates,
+  content_angles, hashtags, search_templates, domains,
   weight, max_age_days, sort_order, enabled,
   created_at, updated_at
 `;
 
 const FULL_COLUMNS = `
   id, tenant_id, slug, name, description, user_sub,
-  system_context, content_angles, hashtags, search_templates,
+  system_context, content_angles, hashtags, search_templates, domains,
   weight, max_age_days, sort_order, enabled,
   created_at, updated_at
 `;

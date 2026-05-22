@@ -100,10 +100,13 @@
     if (_fmVersion === 2) {
       var domains = f.domains || [];
       html += '<div class="feed-domains" data-feed-id="' + f.id + '">';
+      html += '<strong style="font-size:0.78rem; color:#666;">Domain Tags:</strong> ';
       if (domains.length > 0) {
         domains.forEach(function (d) {
           html += '<span class="domain-tag">' + esc(d) + '</span>';
         });
+      } else {
+        html += '<span style="font-size:0.78rem; color:#999; font-style:italic;">none</span>';
       }
       html += ' <a href="#" class="edit-domains-link" data-feed-id="' + f.id + '" data-domains="' + esc(domains.join(', ')) + '" style="font-size:0.72rem;color:#0073b1;">edit tags</a>';
       html += '</div>';
@@ -125,6 +128,8 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         _fmVersion = data.feedsManagerVersion || 1;
+        var titleEl = document.getElementById('page-title');
+        if (titleEl) titleEl.innerHTML = 'Feeds Manager <span class="version-badge">(v' + _fmVersion + ')</span><p class="subtitle">RSS feeds for research material</p>';
         var feeds = data.feeds || [];
         var catchall = feeds.filter(function (f) { return f.is_catchall; });
         var topicSpecific = feeds.filter(function (f) { return !f.is_catchall; });

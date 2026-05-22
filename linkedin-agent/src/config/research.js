@@ -107,11 +107,24 @@ export function getDomainMatchThreshold() {
  * @param {string[]} topicDomains — domain tags on the topic
  * @returns {number} overlap score
  */
+// Ensure a JSONB domains value is a JS array.
+// The pg driver may return JSONB as a parsed array or as a
+// string depending on version and pool config. This handles both.
+function ensureArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try { const parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : []; }
+    catch { return []; }
+  }
+  return [];
+}
+
 export function domainMatchScore(feedDomains, topicDomains) {
-  if (!Array.isArray(feedDomains) || !feedDomains.length) return 0;
-  if (!Array.isArray(topicDomains) || !topicDomains.length) return 0;
-  const feedSet = new Set(feedDomains.map(d => String(d).toLowerCase()));
-  const topicSet = new Set(topicDomains.map(d => String(d).toLowerCase()));
+  const fd = ensureArray(feedDomains);
+  const td = ensureArray(topicDomains);
+  if (!fd.length || !td.length) return 0;
+  const feedSet = new Set(fd.map(d => String(d).toLowerCase()));
+  const topicSet = new Set(td.map(d => String(d).toLowerCase()));
   const overlap = [...topicSet].filter(d => feedSet.has(d)).length;
   return overlap / Math.min(feedSet.size, topicSet.size);
 }

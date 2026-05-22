@@ -3,3 +3,4 @@
 data
 pgsql
 *dump*
+CREATE_ROLE_CREATE_DATABASE.sql

@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite } from "./platform-db.js";
+import { platformLog } from "../services/platform-log.js";
 
 export function createTenantResolver() {
   return async function tenantResolver(req, res, next) {
@@ -47,21 +48,55 @@ export function createTenantResolver() {
     // req.user.email comes from Auth0's userinfo endpoint via
     // the session cookie. It may be null for some social logins.
     const email = req.user.email;
+
+    platformLog("info", "tenant_resolve_attempt", {
+      sub: req.user.sub,
+      email: email || "(null)",
+      provider,
+      path1_found: false
+    });
+
     if (email) {
       try {
         const invite = await findPendingInviteByEmail(email);
+
+        platformLog("info", "tenant_resolve_invite_lookup", {
+          email,
+          inviteFound: !!invite,
+          inviteId: invite?.id || null,
+          inviteTenant: invite?.tenant_id || null
+        });
+
         if (invite) {
           const claimed = await claimInvite(invite.id, provider, req.user.sub);
+
+          platformLog("info", "tenant_resolve_claim_result", {
+            inviteId: invite.id,
+            claimed: !!claimed,
+            tenantId: claimed?.id || null
+          });
+
           if (claimed) {
             req.tenant = claimed;
             req.inviteClaimed = true;
             return next();
           }
         }
-      } catch {
+      } catch (claimErr) {
         // Claim failed — fall through to 403.
-        // Do not expose the error to the client.
+        // Do not expose the error to the client, but log it
+        // so silent failures are diagnosable.
+        platformLog("warn", "invite_claim_failed", {
+          email,
+          error: claimErr.message
+        });
       }
+    } else {
+      platformLog("warn", "tenant_resolve_no_email", {
+        sub: req.user.sub,
+        provider,
+        reason: "req.user.email is null — invite claim path skipped"
+      });
     }
 
     res.status(403).json({ error: "No tenant membership for this identity" });

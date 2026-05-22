@@ -99,3 +99,50 @@ export function sanitizeString(str, maxLength = 500) {
   if (typeof str !== "string") return "";
   return str.slice(0, maxLength);
 }
+
+// ── URL Safety ───────────────────────────────────────────────
+// SSRF protection: validates that a URL is safe to fetch from
+// the server. Blocks non-HTTPS, localhost, private IP ranges,
+// link-local, and internal hostnames. Used by feed discovery,
+// image harvesting, and image upload pipelines.
+
+const PRIVATE_RANGES = [
+  /^10\./,
+  /^192\.168\./,
+  /^127\./,
+  /^0\./,
+  /^169\.254\./
+];
+
+export function isSafeUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "::1") return false;
+    if (host.endsWith(".internal") || host.endsWith(".local")) return false;
+    for (const re of PRIVATE_RANGES) {
+      if (re.test(host)) return false;
+    }
+    if (host.startsWith("172.")) {
+      const octet = parseInt(host.split(".")[1], 10);
+      if (octet >= 16 && octet <= 31) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+
+// Validates that a URL looks like an image resource.
+// Checks HTTPS safety + common image extensions/content hints.
+// Does NOT fetch the URL — purely syntactic.
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i;
+const IMAGE_CONTENT_TYPES = new Set([
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "image/bmp", "image/svg+xml"
+]);
+
+export function isImageUrl(urlStr, contentType) {
+  if (!isSafeUrl(urlStr)) return false;
+  if (contentType && IMAGE_CONTENT_TYPES.has(contentType.toLowerCase())) return true;
+  return IMAGE_EXTENSIONS.test(urlStr);
+}

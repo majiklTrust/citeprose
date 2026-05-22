@@ -23,13 +23,20 @@ import cron from "node-cron";
 import { logActivity } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } from "./sanitize-content.js";
+import { isImageUrl } from "./security.js";
 import { currentClient } from "../db/with-tenant.js";
 import { withTenant } from "../db/with-tenant.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
 const parser = new Parser({
   timeout: 15000,
-  headers: { "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)" }
+  headers: { "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)" },
+  customFields: {
+    item: [
+      ["media:content", "media:content", { keepArray: false }],
+      ["media:thumbnail", "media:thumbnail", { keepArray: false }]
+    ]
+  }
 });
 
 let monitorJob = null;
@@ -52,6 +59,51 @@ function client() {
 }
 
 // ── Feed Fetching ────────────────────────────────────────────
+
+// Extract the best available image URL from an RSS item.
+// Checks multiple fields in priority order:
+//   1. enclosure (standard RSS 2.0 — most reliable)
+//   2. media:content (Media RSS namespace)
+//   3. media:thumbnail (Media RSS namespace)
+// Each candidate is validated: must be HTTPS, safe host, and
+// look like an image URL (extension or content-type check).
+// Returns null if no valid image found.
+
+function extractArticleImage(item) {
+  const candidates = [];
+
+  // RSS 2.0 enclosure — { url, type, length }
+  if (item.enclosure?.url) {
+    candidates.push({
+      url: item.enclosure.url,
+      type: item.enclosure.type || null
+    });
+  }
+
+  // Media RSS — media:content.$.url
+  const mediaContent = item["media:content"];
+  if (mediaContent?.$?.url) {
+    candidates.push({
+      url: mediaContent.$.url,
+      type: mediaContent.$.medium === "image" ? "image/unknown" : (mediaContent.$.type || null)
+    });
+  }
+
+  // Media RSS — media:thumbnail.$.url
+  const mediaThumbnail = item["media:thumbnail"];
+  if (mediaThumbnail?.$?.url) {
+    candidates.push({
+      url: mediaThumbnail.$.url,
+      type: "image/unknown"
+    });
+  }
+
+  for (const c of candidates) {
+    if (isImageUrl(c.url, c.type)) return c.url;
+  }
+
+  return null;
+}
 // Must be called inside withTenant.
 // feedRow: a row from feeds_v2 (id, url, name, tier, etc.)
 
@@ -136,31 +188,22 @@ async function fetchFeed(feedRow) {
 
       const published = item.isoDate || item.pubDate || null;
       const hash = simpleHash(link + cleanTitle);
+      const imageUrl = extractArticleImage(item);
 
       // Step 1: Insert into global articles_v2.
-      // No tenant_id, no RLS. ON CONFLICT returns nothing if
-      // the article already exists (another feed already fetched it).
+      // No tenant_id, no RLS. ON CONFLICT updates image_url
+      // if the article exists but had no image previously.
       const articleResult = await c.query(
-        `INSERT INTO articles_v2 (title, link, summary, published_at, content_hash)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (link) DO NOTHING
-         RETURNING id`,
-        [cleanTitle, link, cleanSummary, published, hash]
+        `INSERT INTO articles_v2 (title, link, summary, published_at, content_hash, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (link) DO UPDATE
+           SET image_url = COALESCE(articles_v2.image_url, EXCLUDED.image_url)
+         RETURNING id, (xmax = 0) AS is_new`,
+        [cleanTitle, link, cleanSummary, published, hash, imageUrl]
       );
 
-      let articleId;
-      if (articleResult.rowCount > 0) {
-        articleId = articleResult.rows[0].id;
-        newArticles++;
-      } else {
-        // Article already exists — look up its id
-        const existing = await c.query(
-          `SELECT id FROM articles_v2 WHERE link = $1`,
-          [link]
-        );
-        if (existing.rows.length === 0) continue;
-        articleId = existing.rows[0].id;
-      }
+      const articleId = articleResult.rows[0].id;
+      if (articleResult.rows[0].is_new) newArticles++;
 
       // Step 2: Link article to this tenant's feed.
       // ON CONFLICT means this feed already fetched this article.
@@ -203,24 +246,31 @@ async function fetchFeed(feedRow) {
 
     return { newArticles, linked };
   } catch (err) {
-    // Record error on the feed row
+    // Log to console FIRST — database may be in an aborted
+    // transaction state, so platformLog (console) must run
+    // before any SQL attempts.
+    platformLog("warn", "feed_fetch_failed", {
+      feed: feedRow.name, status: httpStatus,
+      error: err.message.substring(0, 300)
+    });
+
+    // Best-effort: record error on the feed row
     const c = client();
     try {
       await c.query(
         `UPDATE feeds_v2 SET last_error = $1 WHERE id = $2`,
         [err.message.substring(0, 500), feedRow.id]
       );
-    } catch { /* best-effort */ }
+    } catch { /* transaction may be aborted — expected */ }
 
-    await logActivity("warn", "feed_fetch_failed", {
-      feed: feedRow.name,
-      status: httpStatus,
-      error: err.message.substring(0, 300)
-    });
-    platformLog("warn", "feed_fetch_failed", {
-      feed: feedRow.name, status: httpStatus,
-      error: err.message.substring(0, 300)
-    });
+    // Best-effort: log to activity log
+    try {
+      await logActivity("warn", "feed_fetch_failed", {
+        feed: feedRow.name,
+        status: httpStatus,
+        error: err.message.substring(0, 300)
+      });
+    } catch { /* transaction may be aborted — expected */ }
     return { newArticles: 0, linked: 0 };
   }
 }
@@ -361,7 +411,7 @@ async function _getArticlesForTopicV1(topicSlug, ageDays, articleLimit) {
   const c = client();
   const r = await c.query(
     `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
-            f.name AS feed_name, f.tier::text AS feed_tier
+            a.image_url, f.name AS feed_name, f.tier::text AS feed_tier
      FROM articles_v2 a
      JOIN feed_articles fa ON fa.article_id = a.id
      JOIN feeds_v2 f ON f.id = fa.feed_id
@@ -476,7 +526,7 @@ export async function searchArticles(keywords, topicSlug = null, maxAgeDays = nu
 
   const sql = `
     SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
-           f.name AS feed_name, f.tier::text AS feed_tier
+           a.image_url, f.name AS feed_name, f.tier::text AS feed_tier
     FROM articles_v2 a
     JOIN feed_articles fa ON fa.article_id = a.id
     JOIN feeds_v2 f ON f.id = fa.feed_id

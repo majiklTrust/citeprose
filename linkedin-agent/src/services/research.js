@@ -19,6 +19,7 @@ import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getCooldownMs } from "../config/research.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -27,7 +28,7 @@ async function newAnthropicClient() {
   return new Anthropic({ apiKey });
 }
 
-const COOLDOWN_MS = 65000;
+// Cooldown between API calls — read from getCooldownMs() at call time
 
 // ═══════════════════════════════════════════════════════════════
 // Step 1: Gather material from RSS (no API call)
@@ -513,6 +514,17 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   await logActivity("info", "research_material_gathered", researchGatheredDetails);
   platformLog("info", "research_material_gathered", researchGatheredDetails);
 
+  // Collect article images for the post image picker.
+  // Only articles with validated image URLs are included.
+  const articleImages = rssArticles
+    .filter(a => a.image_url)
+    .map(a => ({
+      imageUrl: a.image_url,
+      title: a.title,
+      feedName: a.feed_name,
+      link: a.link
+    }));
+
   const allSources = assembleAllSources(webClaims, rssArticles);
 
   let brief;
@@ -523,8 +535,8 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
-    await logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before corroboration call" });
-    await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
+    await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${getCooldownMs() / 1000}s before corroboration call` });
+    await new Promise(resolve => setTimeout(resolve, getCooldownMs()));
 
     const corrobStart = Date.now();
     const corroboration = await corroborateClaims(allSources, cycleId);
@@ -544,6 +556,9 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
 
   await logActivity("info", "research_complete", researchCompleteDetails);
   platformLog("info", "research_complete", researchCompleteDetails);
+
+  // Attach article images to the brief for the content generator
+  brief.articleImages = articleImages;
 
   return brief;
 }

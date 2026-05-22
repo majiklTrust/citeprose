@@ -115,21 +115,48 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     // Adjust email body based on whether key was provided
     const whatYouNeed = validatedKey
-      ? `  • A name for your workspace\n\n  Your API key has been configured by your administrator — no additional setup needed.`
-      : `  • An Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
+      ? `  • a name for your workspace\n  • your API key has been configured by your administrator — no additional setup needed.`
+      : `  • an Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
 
+    const expires = new Date(invite.expires_at)
     const emailBody = [
-      `Hello,`,
+      `Welcome to ${brandName} is ready for setup.`,
       ``,
-      `Your workspace on ${brandName} is ready for setup. This platform helps you create researched, professional LinkedIn content powered by AI.`,
-      ``,
-      `To get started, click the link below and follow the registration steps:`,
+      `This platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels. Your administrator has already provisioned your AI model connection and API key, so you can focus on what matters: getting your workspace configured and publishing great content.`,
+      `To get started, click the link below:`,
       `${registerUrl}`,
+      ``,
+      `What to expect when you click the link:`,
+      `You will be guided through a short setup process to name and configure your workspace. During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.`,
       ``,
       `What you'll need:`,
       whatYouNeed,
       ``,
-      `This link expires on ${new Date(invite.expires_at).toLocaleString("en-US", { timeZoneName: "short" })} and can only be used once.`,
+      `This link can only be used once and expires at: ${
+  expires.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    timeZoneName: "short"
+  })
+} on ${
+  expires.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric"
+  })
+} (${
+  expires.toLocaleString("en-US", {
+    timeZone: "UTC",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  })
+} UTC).`,
       ``,
       `If you have any questions or did not expect this invitation, please contact your account administrator.`,
       ``,

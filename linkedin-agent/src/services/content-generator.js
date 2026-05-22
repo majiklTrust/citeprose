@@ -9,6 +9,7 @@ import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 
 // Anthropic client is constructed per-call using the tenant's
@@ -176,8 +177,9 @@ export async function generatePost(topic = null, userSub = null) {
   }
 
   // ── Rate limit cooldown before generation ──────────────────
-  await logActivity("info", "rate_limit_cooldown", { cycleId, message: "Waiting 65s before content generation" });
-  await new Promise(resolve => setTimeout(resolve, 65000));
+  const cooldown = getCooldownMs();
+  await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldown / 1000}s before content generation` });
+  await new Promise(resolve => setTimeout(resolve, cooldown));
 
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
@@ -298,6 +300,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       hashtags: allHashtags,
       angle,
       sourcesUsed: parsed.sources_used || [],
+      articleImages: researchBrief.articleImages || [],
       researchSummary: {
         verifiedClaims: researchBrief.verifiedClaimCount,
         independentSources: researchBrief.independentSourceCount,

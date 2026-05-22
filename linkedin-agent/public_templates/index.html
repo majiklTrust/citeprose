@@ -9,7 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css">
+  <link rel="stylesheet" href="/app/styles/app.css?v={{VERSION}}">
 </head>
 <body>
   <div id="root"></div>
@@ -59,6 +59,13 @@
       catch { return null; }
     }
 
+    function getArticleImages(post) {
+      if (post.articleImages && post.articleImages.length > 0) return post.articleImages;
+      const ctx = parseNewsContext(post);
+      if (ctx && ctx.articleImages && ctx.articleImages.length > 0) return ctx.articleImages;
+      return [];
+    }
+
     function getCorroborationLevel(ctx) {
       if (!ctx || !ctx.researchSummary) return 'none';
       if (ctx.researchSummary.corroborationSkipped) return 'skipped';
@@ -85,6 +92,7 @@
       const [selectedTopic, setSelectedTopic] = useState('');
       const [topics, setTopics] = useState([]);
       const [editingPost, setEditingPost] = useState(null);
+      const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
 
       const authFetch = useCallback(async (url, opts) => {
@@ -101,23 +109,38 @@
           // Status is public (uses optionalAuth) — always fetch with regular fetch
           const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
 
-          // Safe defaults for new tenants with no agent_state rows.
-          // Without this, status.mode.toUpperCase() crashes when
-          // the tenant exists but has never set a mode.
-          if (statusRes.user && !statusRes.mode) statusRes.mode = 'manual';
-          if (statusRes.user && !statusRes.stats) statusRes.stats = {
-            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
-          };
-
-          setStatus(statusRes);
-
           // If auth is required and no user, don't fetch protected routes
           if (statusRes.authRequired && !statusRes.user) {
+            setStatus(statusRes);
             setPosts([]);
             setLogs([]);
             setError(null);
             return;
           }
+
+          // Authenticated but no tenant — user.role is null when
+          // findTenantByAuthIdentity returns no membership. Set status
+          // with the RAW response (stats stays null) so the no-tenant
+          // panel renders. Do NOT apply safe defaults or fetch protected
+          // routes — every one of them will 403 without a tenant.
+          if (statusRes.user && !statusRes.user.role) {
+            setStatus(statusRes);
+            setPosts([]);
+            setLogs([]);
+            setError(null);
+            return;
+          }
+
+          // Safe defaults for new tenants with no agent_state rows.
+          // Without this, status.mode.toUpperCase() crashes when
+          // the tenant exists but has never set a mode.
+          // These ONLY run when a tenant exists (role is non-null above).
+          if (!statusRes.mode) statusRes.mode = 'manual';
+          if (!statusRes.stats) statusRes.stats = {
+            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
+          };
+
+          setStatus(statusRes);
 
           const [postsRes, logsRes] = await Promise.all([
             authFetch(`${API}/api/posts?limit=30`).then(r => r.json()),
@@ -132,11 +155,18 @@
             const topicsList = (topicsRes && topicsRes.topics) || [];
             setTopics(topicsList);
 
-            // New tenant with zero topics → steer to Topics manager
-            if (statusRes.user && topicsList.length === 0) {
-              window.location.href = '/app/topics/';
-              return;
-            }
+            // New tenant with zero topics → steer to Topics manager,
+            // but ONLY if the topics API responded successfully (topicsRes
+            // is truthy — a 403 sets it to null) AND the user's role can
+            // actually manage topics. Without both checks, viewers loop:
+            //   dashboard (empty topics) → /app/topics/ (403) → dashboard
+            // TEMPORARILY DISABLED — zero-topic redirect to Topics manager
+            // const role = statusRes.user?.role;
+            // if (topicsRes && topicsList.length === 0 &&
+            //     (role === 'owner' || role === 'editor')) {
+            //   window.location.href = '/app/topics/';
+            //   return;
+            // }
           } catch { setTopics([]); }
           setError(null);
         } catch (err) {
@@ -167,6 +197,43 @@
         setLoading(l => ({ ...l, [`approve-${id}`]: true }));
         try {
           await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          fetchAll();
+        } catch (err) {
+          alert('Failed to approve: ' + err.message);
+        }
+        setLoading(l => ({ ...l, [`approve-${id}`]: false }));
+      }
+
+      async function handleApproveWithImage(id, e) {
+        e.stopPropagation();
+        setLoading(l => ({ ...l, [`approve-${id}`]: true }));
+        try {
+          // Resolve the image URL based on user's choice
+          let finalImageUrl = null;
+          if (imageChoice.mode === 'auto' && imageChoice.url) {
+            finalImageUrl = imageChoice.url;
+          } else if (imageChoice.mode === 'custom' && imageChoice.url) {
+            finalImageUrl = imageChoice.url.trim();
+          }
+
+          // Determine if image_url changed from the post's current value
+          const currentUrl = selectedPost?.image_url || null;
+          if (finalImageUrl !== currentUrl) {
+            const patchRes = await fetch(`${API}/api/posts/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: finalImageUrl })
+            });
+            if (!patchRes.ok) {
+              const patchErr = await patchRes.json().catch(() => ({}));
+              throw new Error(patchErr.error || 'Failed to update image');
+            }
+          }
+
+          // Now approve
+          await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          setSelectedPost(null);
+          setImageChoice({ mode: 'none', url: null });
           fetchAll();
         } catch (err) {
           alert('Failed to approve: ' + err.message);
@@ -259,13 +326,16 @@
             content: data.post.content,
             hashtags: data.post.hashtags,
             topic_id: data.post.topicId,
+            articleImages: data.post.articleImages || [],
             news_context: JSON.stringify({
               sourcesUsed: data.post.sourcesUsed || [],
               researchSummary: data.post.researchSummary || null,
               qualityScores: data.quality?.scores,
-              factualFlags: data.quality?.factual_flags
+              factualFlags: data.quality?.factual_flags,
+              articleImages: data.post.articleImages || []
             })
           });
+          setImageChoice({ mode: 'none', url: null });
         } catch (err) {
           alert('Preview generation failed: ' + err.message);
         }
@@ -304,6 +374,14 @@
         if (!selectedPost || !selectedPost.isPreview) return;
         setLoading(l => ({ ...l, savePreview: true }));
         try {
+          // Resolve image URL from user's choice
+          let selectedImageUrl = null;
+          if (imageChoice.mode === 'auto' && imageChoice.url) {
+            selectedImageUrl = imageChoice.url;
+          } else if (imageChoice.mode === 'custom' && imageChoice.url) {
+            selectedImageUrl = imageChoice.url.trim();
+          }
+
           const res = await fetch(`${API}/api/save-preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -315,7 +393,9 @@
               angle: selectedPost.angle,
               sourcesUsed: selectedPost.sourcesUsed,
               researchSummary: selectedPost.researchSummary,
-              quality: selectedPost.quality
+              quality: selectedPost.quality,
+              imageUrl: selectedImageUrl,
+              articleImages: selectedPost.articleImages || []
             })
           });
           const data = await res.json();
@@ -515,7 +595,10 @@
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
                       return (
-                      <div key={post.id} className="post-card" onClick={() => setSelectedPost(post)}
+                      <div key={post.id} className="post-card" onClick={() => {
+                        setSelectedPost(post);
+                        setImageChoice(post.image_url ? { mode: 'auto', url: post.image_url } : { mode: 'none', url: null });
+                      }}
                         style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
                         <div className="post-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -854,29 +937,162 @@
                     </div>
                   </div>
                 )}
-                {selectedPost.status === 'pending_approval' && (
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={(e) => { handleApprove(selectedPost.id, e); setSelectedPost(null); }}>
-                      Approve & Publish
-                    </button>
-                    <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
-                      Reject
-                    </button>
-                    <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); setSelectedPost(null); }}>
-                      Edit
-                    </button>
+                {selectedPost.status === 'pending_approval' && (() => {
+                  const availableImages = getArticleImages(selectedPost);
+                  return (
+                  <div>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                        Post Image
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="image-choice" value="none"
+                            defaultChecked={!selectedPost.image_url && imageChoice.mode === 'none'}
+                            onChange={() => setImageChoice({ mode: 'none', url: null })} />
+                          No image (text-only)
+                        </label>
+                        {availableImages.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 500, marginBottom: '0.35rem', marginTop: '0.25rem' }}>
+                              Article images ({availableImages.length})
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              {availableImages.map((img, idx) => (
+                                <div key={idx} onClick={() => {
+                                  setImageChoice({ mode: 'auto', url: img.imageUrl });
+                                  document.querySelectorAll('input[name="image-choice"]').forEach(r => r.checked = false);
+                                }}
+                                  style={{
+                                    border: imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl
+                                      ? '2px solid var(--accent-green)' : '1px solid var(--border)',
+                                    borderRadius: '6px', padding: '0.25rem', cursor: 'pointer', maxWidth: '140px',
+                                    background: imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl
+                                      ? 'rgba(46,125,50,0.08)' : 'transparent'
+                                  }}>
+                                  <img src={img.imageUrl} alt={img.title || 'Article image'}
+                                    style={{ width: '130px', height: '80px', objectFit: 'cover', borderRadius: '4px', display: 'block' }}
+                                    onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
+                                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem', overflow: 'hidden',
+                                    textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {img.feedName || 'Article'}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {availableImages.length === 0 && selectedPost.image_url && (
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input type="radio" name="image-choice" value="auto"
+                              defaultChecked={!!selectedPost.image_url}
+                              onChange={() => setImageChoice({ mode: 'auto', url: selectedPost.image_url })} />
+                            <div>
+                              Current image
+                              <div style={{ marginTop: '0.25rem' }}>
+                                <img src={selectedPost.image_url} alt="Post image"
+                                  style={{ maxWidth: '160px', maxHeight: '100px', borderRadius: '4px', border: '1px solid var(--border)' }}
+                                  onError={(e) => { e.target.style.display = 'none'; }} />
+                              </div>
+                            </div>
+                          </label>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="image-choice" value="custom"
+                            onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
+                          <div style={{ flex: 1 }}>
+                            Custom image URL
+                            <input type="text" placeholder="https://example.com/image.jpg"
+                              style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                       border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                              onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
+                              onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                      <button className="btn btn-approve" onClick={(e) => { handleApproveWithImage(selectedPost.id, e); }}>
+                        Approve & Publish
+                      </button>
+                      <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
+                        Reject
+                      </button>
+                      <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); setSelectedPost(null); }}>
+                        Edit
+                      </button>
+                    </div>
                   </div>
-                )}
-                {selectedPost.isPreview && (
-                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                    <button className="btn btn-approve" onClick={handleSavePreview}>
-                      {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
-                    </button>
-                    <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
-                      Discard
-                    </button>
+                  );})()}
+                {selectedPost.isPreview && (() => {
+                  const availableImages = getArticleImages(selectedPost);
+                  return (
+                  <div>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                        Attach Image (optional)
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="preview-image-choice" value="none"
+                            defaultChecked={imageChoice.mode === 'none'}
+                            onChange={() => setImageChoice({ mode: 'none', url: null })} />
+                          No image (text-only)
+                        </label>
+                        {availableImages.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 500, marginBottom: '0.35rem' }}>
+                            Article images ({availableImages.length})
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {availableImages.map((img, idx) => (
+                              <div key={idx} onClick={() => {
+                                setImageChoice({ mode: 'auto', url: img.imageUrl });
+                                document.querySelectorAll('input[name="preview-image-choice"]').forEach(r => r.checked = false);
+                              }}
+                                style={{
+                                  border: imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl
+                                    ? '2px solid var(--accent-green)' : '1px solid var(--border)',
+                                  borderRadius: '6px', padding: '0.25rem', cursor: 'pointer', maxWidth: '140px',
+                                  background: imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl
+                                    ? 'rgba(46,125,50,0.08)' : 'transparent'
+                                }}>
+                                <img src={img.imageUrl} alt={img.title || 'Article image'}
+                                  style={{ width: '130px', height: '80px', objectFit: 'cover', borderRadius: '4px', display: 'block' }}
+                                  onError={(e) => { e.target.parentElement.style.display = 'none'; }} />
+                                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem', overflow: 'hidden',
+                                  textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {img.feedName || 'Article'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input type="radio" name="preview-image-choice" value="custom"
+                            onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
+                          <div style={{ flex: 1 }}>
+                            Custom image URL
+                            <input type="text" placeholder="https://example.com/image.jpg"
+                              style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                       border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                              onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
+                              onClick={() => { document.querySelector('input[name="preview-image-choice"][value="custom"]').checked = true; }} />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                      <button className="btn btn-approve" onClick={handleSavePreview}>
+                        {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setSelectedPost(null)}>
+                        Discard
+                      </button>
+                    </div>
                   </div>
-                )}
+                  );})()}
               </div>
             </div>
             );

@@ -16,6 +16,7 @@ const DEFAULT_MAX_AGE_DAYS = 20;
 const DEFAULT_MAX_AGE_DAYS_PRUNE = 60;
 const DEFAULT_MAX_RESEARCH_ARTICLES = 30;
 const DEFAULT_DASHBOARD_FEED_LIMIT = 8;
+const DEFAULT_API_COOLDOWN_MS = 10000;
 
 /**
  * Research window — articles older than this are excluded
@@ -113,4 +114,18 @@ export function domainMatchScore(feedDomains, topicDomains) {
   const topicSet = new Set(topicDomains.map(d => String(d).toLowerCase()));
   const overlap = [...topicSet].filter(d => feedSet.has(d)).length;
   return overlap / Math.min(feedSet.size, topicSet.size);
+}
+
+/**
+ * API rate-limit cooldown — pause between consecutive Anthropic
+ * calls to avoid hitting per-minute rate limits.
+ * Env: API_COOLDOWN_MS. Default: 10000 (10s).
+ *
+ * The previous hardcoded value of 65000 (65s) was sized for free-
+ * tier keys. BYOK paid keys have higher limits; 10s provides
+ * sufficient spacing. Adjust via .env if rate limit errors appear.
+ */
+export function getCooldownMs() {
+  const val = parseInt(process.env.API_COOLDOWN_MS, 10);
+  return val > 0 ? val : DEFAULT_API_COOLDOWN_MS;
 }

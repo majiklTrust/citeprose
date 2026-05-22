@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy | majiklTrust Market Intelligence, LLC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink:       #0f0f0f;
+      --paper:     #f7f5f0;
+      --rule:      #d6d0c4;
+      --accent:    #1a3a5c;
+      --accent-lt: #e8edf2;
+      --muted:     #6b6659;
+      --gap:       2.5rem;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      font-size: 1rem;
+      line-height: 1.75;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--rule);
+      padding: 3rem 0 2rem;
+      background: #fff;
+    }
+
+    .header-inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    .wordmark {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 2.5rem;
+      display: block;
+    }
+
+    .wordmark span {
+      font-weight: 600;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 600;
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 1rem;
+    }
+
+    .meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Layout ── */
+    .wrapper {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 4rem 2rem 6rem;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 4rem;
+      align-items: start;
+    }
+
+    /* ── TOC Sidebar ── */
+    nav.toc {
+      position: sticky;
+      top: 2rem;
+    }
+
+    nav.toc p {
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    nav.toc ol {
+      list-style: none;
+      counter-reset: toc;
+    }
+
+    nav.toc li {
+      counter-increment: toc;
+      margin-bottom: 0.6rem;
+    }
+
+    nav.toc a {
+      font-size: 0.8rem;
+      font-weight: 400;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+    }
+
+    nav.toc a::before {
+      content: counter(toc, decimal-leading-zero);
+      font-size: 0.65rem;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+
+    nav.toc a:hover { color: var(--accent); }
+
+    /* ── Article ── */
+    article { min-width: 0; }
+
+    .intro-block {
+      background: var(--accent-lt);
+      border-left: 3px solid var(--accent);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: var(--gap);
+      font-size: 0.95rem;
+      color: var(--accent);
+      font-weight: 400;
+    }
+
+    section {
+      margin-bottom: var(--gap);
+      padding-bottom: var(--gap);
+      border-bottom: 1px solid var(--rule);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 1rem;
+      scroll-margin-top: 2rem;
+    }
+
+    h3 {
+      font-size: 0.9rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    p { margin-bottom: 1rem; }
+    p:last-child { margin-bottom: 0; }
+
+    ul, ol {
+      padding-left: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    li { margin-bottom: 0.35rem; }
+
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .contact-card {
+      background: #fff;
+      border: 1px solid var(--rule);
+      padding: 1.5rem;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .contact-card strong {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--rule);
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      background: #fff;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 680px) {
+      .wrapper {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+        padding: 2rem 1.25rem 4rem;
+      }
+      nav.toc { position: static; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <span class="wordmark">majikl<span>Trust</span> Market Intelligence, LLC</span>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective Date: May 17, 2026 &nbsp;&bull;&nbsp; Last Updated: May 17, 2026</p>
+  </div>
+</header>
+
+<div class="wrapper">
+
+  <nav class="toc" aria-label="Table of contents">
+    <p>Contents</p>
+    <a href="#top">top</a>
+  </nav>
+
+
+    <section id="top">
+    <div class="intro-block">
+This Privacy Policy explains how majiklTrust Market Intelligence, LLC ("Company," "we," "us," or "our") collects, uses, stores, and shares information when you use our AI-powered content research and social media publishing platform ("Service"). By accessing or using our Service, you agree to the practices described below.
+    </div>
+<p>
+
+1. Who We Are
+
+majiklTrust Market Intelligence, LLC is a limited liability company organized under the laws of the State of Illinois. We operate a business-to-business Software-as-a-Service (SaaS) platform that assists organizations in generating and publishing professional content to LinkedIn and other social media platforms.
+
+Our principal place of business is in Illinois. Questions about this policy may be directed to accountsupport@***REMOVED***.
+
+2. Information We Collect
+
+2a. Information You Provide
+
+Account registration: Business or organization name, business email address, and workspace name during tenant provisioning.
+
+Platform configuration: Content topics, RSS feed subscriptions, publishing preferences, and API credentials you supply (such as your Anthropic API key). When you register a new workspace, the platform automatically provisions a set of broad-coverage RSS feeds to support content research across common business and technology topics. You may modify, disable, or remove these feeds at any time.
+
+Administrator-provisioned credentials: If your workspace was created by a platform administrator, the administrator may have supplied an Anthropic API key on your behalf during the registration process. This key is encrypted at rest and stored temporarily (typically no more than 15 minutes) until your workspace provisioning is complete, at which point the temporary copy is deleted.
+
+Communications: Any messages you send to us via email or support channels.
+
+2b. Information Collected Automatically
+
+Usage data: Pages visited, features accessed, actions taken within the platform, timestamps, and session duration.
+
+Device and log data: IP address, browser type, operating system, referral URL, and server log data.
+
+Cookies: See Section 9 for details.
+
+2c. Information from Third Parties
+
+LinkedIn: When you connect your LinkedIn account, we receive OAuth tokens and, subject to the permissions you grant, basic profile information (name and public profile details) and the ability to publish content on your behalf. See Section 4 for details.
+
+Identity providers: If you authenticate via Auth0, WorkOS, or a similar identity provider, we receive authentication tokens and the profile attributes those services share (such as name, email address, and a unique user identifier).
+
+RSS and web content feeds: We collect publicly available content from third-party news and media sources configured for your workspace, including both feeds you configure and feeds provisioned by the platform at registration.
+
+3. How We Use Your Information
+
+We use the information we collect to:
+
+Provision, operate, and improve the Service;
+Authenticate users and manage tenant accounts;
+Generate AI-assisted research summaries and draft social media content on your behalf;
+Publish content to LinkedIn or other platforms at your direction and with your authorization;
+Respond to support requests and communicate service updates;
+Monitor system performance, detect errors, and ensure platform security;
+Comply with applicable legal obligations; and
+Enforce our Terms of Service.
+
+We do not use your data to train external AI models, sell your data to advertisers, or engage in behavioral advertising.
+
+4. LinkedIn Integration and Data Use
+
+Our Service integrates with the LinkedIn API. This section describes specifically how we handle LinkedIn data in compliance with LinkedIn's API Terms of Service.
+
+4a. Data We Access from LinkedIn
+
+When you connect your LinkedIn account to our Service, we access, consistent with the permissions you grant:
+
+Basic profile information for the authenticated user (name and public profile details) as returned by LinkedIn's userinfo endpoint;
+
+OAuth access tokens required to perform actions on your behalf; and
+
+The ability to publish content to LinkedIn on your behalf using the authorized posting scope.
+
+We do not access organization page data, follower analytics, or engagement metrics (such as comments, reactions, or impression counts) unless those capabilities are explicitly added in a future version of the Service. Any such additions will be reflected in an updated version of this policy.
+
+4b. How We Use LinkedIn Data
+
+To publish content to LinkedIn at your explicit direction;
+
+To display your basic profile information within your dashboard for account identification; and
+
+To maintain authentication tokens necessary to sustain your connected session.
+
+4c. Restrictions on LinkedIn Data
+
+We do not sell LinkedIn member data to third parties;
+We do not use LinkedIn member data for advertising or retargeting;
+We do not combine LinkedIn member data with data from other sources to build profiles of individual members;
+We do not store LinkedIn member personal data beyond the period required to render the Service features you have requested; and
+We comply with LinkedIn's data storage and deletion requirements.
+
+4d. Revoking LinkedIn Access
+
+You may revoke LinkedIn access directly through your LinkedIn account settings at linkedin.com/psettings/permitted-services. Upon revocation, we will delete stored LinkedIn OAuth tokens within 30 days. Future versions of the Service will provide an in-app disconnection option.
+
+5. Sharing and Disclosure
+
+We do not sell, rent, or trade your personal information. We may share information in the following limited circumstances:
+
+5a. Service Providers
+
+We engage vetted third-party service providers who process data on our behalf, including cloud hosting providers (AWS), authentication services (Auth0, WorkOS), and email delivery services. These providers are contractually restricted from using your data for any purpose other than performing services for us.
+
+5b. AI Processing
+
+The Service uses the Anthropic API to generate research summaries and content drafts. Research content (articles and topic data from RSS feeds) is transmitted to Anthropic for processing. Your Anthropic API key is transmitted to Anthropic solely for the purpose of authenticating API requests on your behalf. We do not transmit your authentication passwords, session tokens, or LinkedIn data to Anthropic. Anthropic's use of data is governed by their privacy policy and API terms.
+
+5c. Legal Requirements
+
+We may disclose information if required by law, subpoena, court order, or governmental authority, or when we believe in good faith that disclosure is necessary to protect the rights, property, or safety of the Company, our users, or the public.
+
+5d. Business Transfers
+
+In the event of a merger, acquisition, sale of assets, or similar transaction, your information may be transferred as part of that transaction. We will provide notice before your information is transferred and becomes subject to a different privacy policy.
+
+6. Data Retention
+
+We retain account and usage data for as long as your account is active or as needed to provide the Service, plus a reasonable period thereafter to comply with legal obligations, resolve disputes, and enforce agreements.
+
+LinkedIn OAuth tokens are retained for as long as your LinkedIn account remains connected to the Service. Upon account cancellation or LinkedIn disconnection, LinkedIn OAuth tokens and cached profile data are deleted within 30 days.
+
+Temporary registration data (including any administrator-provisioned API keys stored during the registration process) is automatically purged after the registration window expires, typically within 15 minutes.
+
+If billing or payment capabilities are added to the Service in the future, billing records will be retained in accordance with applicable Illinois law and standard accounting practices, and this policy will be updated accordingly.
+
+7. Your Privacy Rights
+
+Depending on your location, you may have the following rights with respect to your personal information:
+
+Access: Request a copy of the personal information we hold about you.
+Correction: Request correction of inaccurate or incomplete information.
+Deletion: Request deletion of your personal information, subject to legal retention requirements.
+Portability: Request a machine-readable export of data you have provided to us.
+Objection / Restriction: Object to or request restriction of certain processing activities.
+Withdrawal of consent: Where processing is based on consent, withdraw that consent at any time without affecting the lawfulness of prior processing.
+
+Illinois residents may have additional rights under the Illinois Personal Information Protection Act (PIPA) and, where applicable, the Illinois Biometric Information Privacy Act (BIPA). We do not collect biometric data.
+
+To exercise any of these rights, contact us at accountsupport@***REMOVED***. We will respond within 30 days. We may need to verify your identity before processing your request.
+
+8. Security
+
+We implement technical and organizational measures to protect your information, including:
+
+Encryption of credentials and secrets at rest using AES-256-GCM with per-tenant key derivation;
+Encrypted transmission of data in transit via TLS;
+Tenant-level data isolation enforced at the database layer;
+Role-based access controls and least-privilege principles;
+Secure, httpOnly session cookies; and
+Security testing during development and prior to production deployments.
+
+A limited number of designated platform administrators have elevated access to perform account provisioning operations such as creating registration invites. Platform administrator status is controlled through server-side configuration and is not accessible through the user interface.
+
+No method of transmission or storage is 100% secure. While we strive to protect your information, we cannot guarantee absolute security. You are responsible for maintaining the confidentiality of your account credentials.
+
+9. Cookies
+
+We use the following cookies:
+
+Essential cookies: A single encrypted, httpOnly session cookie is used for authentication and session management. This cookie is required for core platform functionality and cannot be disabled without impairing the Service. We do not use third-party advertising trackers, analytics cookies, or any cookies beyond those required for authentication and session management.
+
+You can manage cookie preferences through your browser settings. Disabling the session cookie will prevent you from logging in to the Service.
+
+10. Children's Privacy
+
+Our Service is designed for business use and is not directed to individuals under the age of 18. We do not knowingly collect personal information from minors. If you believe a minor has provided us with personal information, please contact us at accountsupport@***REMOVED*** and we will promptly delete it.
+
+11. Changes to This Policy
+
+We may update this Privacy Policy from time to time. When we make material changes, we will update the "Last Updated" date at the top of this page and, where appropriate, notify active account holders by email.
+
+Your continued use of the Service after the effective date of a revised policy constitutes your acceptance of the changes. We encourage you to review this page periodically.
+
+12. Contact Us
+
+If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us:
+
+</p>
+    
+<footer>
+  &copy; 2026 majiklTrust Market Intelligence, LLC &nbsp;&bull;&nbsp; All rights reserved &nbsp;&bull;&nbsp;
+  <a href="mailto:accountsupport@***REMOVED***">accountsupport@***REMOVED***</a>
+</footer>
+
+</section>
+</body>
+</html>

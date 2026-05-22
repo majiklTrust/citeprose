@@ -43,6 +43,7 @@ import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { getAnthropicModel } from "../config/ai.js";
 
 const router = Router();
@@ -115,14 +116,41 @@ router.get("/api/status", optionalAuth, async (req, res) => {
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
-      // caller is authenticated but has no tenant, simply leave
-      // the tenant-scoped fields null — do not error.
+      // caller is authenticated but has no tenant, check for a
+      // pending invite before giving up.
       try {
-        const { findTenantByAuthIdentity } = await import("../tenant/platform-db.js");
+        const { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite } = await import("../tenant/platform-db.js");
         const provider = req.user.authMethod === "bearer"
           ? (req.authProvider || "auth0")
           : "auth0";
-        const tenant = await findTenantByAuthIdentity(provider, req.user.sub);
+        let tenant = await findTenantByAuthIdentity(provider, req.user.sub);
+
+        // ── Invite claim (mirrors resolveTenant Path 2) ──────
+        // If no membership exists but the user's email matches a
+        // pending invite, claim it now. This is the first API call
+        // after login — if we don't claim here, the dashboard shows
+        // "No Membership" and the resolver never gets a chance.
+        if (!tenant && req.user.email) {
+          try {
+            const invite = await findPendingInviteByEmail(req.user.email);
+            if (invite) {
+              tenant = await claimInvite(invite.id, provider, req.user.sub);
+              if (tenant) {
+                platformLog("info", "invite_claimed_via_status", {
+                  email: req.user.email,
+                  tenantId: tenant.id,
+                  tenantSlug: tenant.slug
+                });
+              }
+            }
+          } catch (claimErr) {
+            platformLog("warn", "invite_claim_failed_in_status", {
+              email: req.user.email,
+              error: claimErr.message
+            });
+          }
+        }
+
         if (tenant) {
           tenantRole = tenant.role || null;
           await withTenant(tenant.id, async () => {
@@ -216,8 +244,9 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
 // ── Edit Pending Post ────────────────────────────────────────
 // Patches editable fields (title, content, hashtags) on a post.
 // Restricted to pending_approval posts — see updatePost guard in
-// database.js. Body shape: { title?, content?, hashtags? }. Any
-// supplied field is updated; omitted fields are left unchanged.
+// database.js. Body shape: { title?, content?, hashtags?, image_url? }.
+// Any supplied field is updated; omitted fields are left unchanged.
+// image_url accepts a string URL or null (clears image for text-only).
 //
 // Status mapping for known database errors:
 //   NOT_FOUND     → 404
@@ -226,11 +255,22 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
 //   anything else → 500
 router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) => {
   try {
-    const { title, content, hashtags } = req.body || {};
+    const { title, content, hashtags, image_url } = req.body || {};
     const fields = {};
     if (title !== undefined)   fields.title = title;
     if (content !== undefined) fields.content = content;
     if (hashtags !== undefined) fields.hashtags = hashtags;
+    if (image_url !== undefined) {
+      // null clears the image; string must pass SSRF check
+      if (image_url !== null && typeof image_url === "string" && image_url.length > 0) {
+        if (!isImageUrl(image_url)) {
+          return res.status(400).json({ error: "URL must be a valid HTTPS image (JPEG, PNG, GIF, or WebP)" });
+        }
+        fields.image_url = image_url;
+      } else {
+        fields.image_url = null;
+      }
+    }
 
     const updated = await withTenant(req.tenant.id, async () => {
       const row = await updatePost(parseInt(req.params.id), fields);
@@ -354,10 +394,19 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
 
 router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
-    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality } = req.body;
+    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
 
     if (!topicId || !title || !content) {
       return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
+    }
+
+    // Validate image URL if provided
+    let validatedImageUrl = null;
+    if (imageUrl && typeof imageUrl === "string" && imageUrl.length > 0) {
+      if (!isImageUrl(imageUrl)) {
+        return res.status(400).json({ error: "Image URL must be a valid HTTPS image" });
+      }
+      validatedImageUrl = imageUrl;
     }
 
     const storedContext = {
@@ -365,7 +414,8 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
       sourcesUsed: sourcesUsed || [],
       researchSummary: researchSummary || null,
       qualityScores: quality?.scores,
-      factualFlags: quality?.factual_flags
+      factualFlags: quality?.factual_flags,
+      articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
     };
 
     const postId = await withTenant(req.tenant.id, async () => {
@@ -375,7 +425,8 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         content,
         hashtags: hashtags || [],
         newsContext: storedContext,
-        scheduledFor: null
+        scheduledFor: null,
+        imageUrl: validatedImageUrl
       });
       await updatePostStatus(id, "pending_approval");
       await logActivity("info", "preview_saved_to_queue", { postId: id, title }, req.user?.sub || null);

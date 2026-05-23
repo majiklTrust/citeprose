@@ -1,17 +1,25 @@
 // ═══════════════════════════════════════════════════════════════
 // src/routes/feeds-api.js — Feed management API
 // ═══════════════════════════════════════════════════════════════
-// Read-only listing of feeds with topic mappings and article
-// counts. Mounted at /api/feeds by the app.
+// Feed listing, domain tagging, and AI-powered discovery.
+// Mounted at /api/feeds by the app.
 //
 // Router-level middleware: requireAuth → resolveTenant →
 //   requirePermission("manage_own_topics")
 // Same permission as topics — if you can manage topics, you
-// can view the feeds that serve them.
+// can view and configure the feeds that serve them.
+//
+// Endpoints:
+//   GET  /             — list feeds with topic mappings + article counts
+//   PATCH /:id/domains — update domain tags (v2 only)
+//   POST /discover     — AI-powered feed suggestion + RSS validation (v2 only)
+//   POST /add          — create feeds from discovery results (v2 only)
 //
 // Zero Trust:
 //   • All queries run inside withTenant — RLS enforced
-//   • No mutation endpoints in this version (read-only)
+//   • v2 mutation endpoints gated by FEEDS_MANAGER_VERSION
+//   • SSRF guard on discover URL validation (isSafeUrl from security.js)
+//   • Domain input sanitized: lowercase, trimmed, capped at 50 chars / 20 tags
 //   • Error responses use generic messages
 //   • No feed URLs or content leaked outside tenant scope
 // ═══════════════════════════════════════════════════════════════
@@ -27,32 +35,9 @@ import { platformLog } from "../services/platform-log.js";
 import { getMaxAgeDays, getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { isSafeUrl } from "../services/security.js";
 
 const rssParser = new Parser({ timeout: 10000 });
-
-// ── SSRF protection ──────────────────────────────────────────
-// Validates that a URL is safe to fetch from the server.
-// Blocks: non-HTTPS, localhost, private IP ranges, link-local,
-// internal hostnames. Prevents AI-suggested URLs from probing
-// internal infrastructure.
-
-function isSafeUrl(urlStr) {
-  try {
-    const u = new URL(urlStr);
-    if (u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return false;
-    if (host.startsWith("10.")) return false;
-    if (host.startsWith("192.168.")) return false;
-    if (host.startsWith("172.")) {
-      const octet = parseInt(host.split(".")[1], 10);
-      if (octet >= 16 && octet <= 31) return false;
-    }
-    if (host === "169.254.169.254") return false;
-    if (host.endsWith(".internal") || host.endsWith(".local")) return false;
-    return true;
-  } catch { return false; }
-}
 
 const router = Router();
 

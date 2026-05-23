@@ -204,7 +204,9 @@ router.patch("/:id/domains", async (req, res) => {
 
     const result = await withTenant(req.tenant.id, async (client) => {
       const r = await client.query(
-        `UPDATE feeds_v2 SET domains = $1::jsonb WHERE id = $2 RETURNING id, name, domains`,
+        `UPDATE feeds_v2 SET domains = $1::jsonb
+         WHERE id = $2 AND tenant_id = current_tenant_id()
+         RETURNING id, name, domains`,
         [JSON.stringify(cleanDomains), feedId]
       );
       return r.rows[0] || null;

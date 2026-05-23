@@ -488,12 +488,6 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
       } else if (a.is_catchall) {
         priority = 2;
       } else {
-        // Log why this article was dropped
-        platformLog("debug", "v2_match_dropped", {
-          feed: a.feed_name, is_catchall: a.is_catchall,
-          feed_domains: a.feed_domains, score,
-          typeof_feed_domains: typeof a.feed_domains
-        });
         continue;
       }
     }

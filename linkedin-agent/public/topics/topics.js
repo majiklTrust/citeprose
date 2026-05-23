@@ -122,7 +122,7 @@
       })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        _fmVersion = data.feedsManagerVersion || 1;
+        _fmVersion = parseInt(data.feedsManagerVersion, 10) || 1;
         // Update page header with styled version indicator
         var titleEl = document.getElementById('page-title');
         if (titleEl) titleEl.innerHTML = 'Topics Manager <span class="version-badge">(v' + _fmVersion + ')</span><p class="subtitle">research topics for content generation</p>';

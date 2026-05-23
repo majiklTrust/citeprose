@@ -127,7 +127,7 @@
     fetch(url, { credentials: 'include' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        _fmVersion = data.feedsManagerVersion || 1;
+        _fmVersion = parseInt(data.feedsManagerVersion, 10) || 1;
         var titleEl = document.getElementById('page-title');
         if (titleEl) titleEl.innerHTML = 'Feeds Manager <span class="version-badge">(v' + _fmVersion + ')</span><p class="subtitle">RSS feeds for research material</p>';
         var feeds = data.feeds || [];

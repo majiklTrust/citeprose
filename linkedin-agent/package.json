@@ -61,6 +61,7 @@
     "testall": "npm run batch-test -- all",
     "750_": "",
     "log": "curl -s http://localhost:3001/api/logs?limit=1|jq",
+    "getmodels": "if [ -z \"$APIKEY\" ];then echo export APIKEY;fi && curl https://api.anthropic.com/v1/models   -H \"x-api-key: $APIKEY\" -H \"anthropic-version: 2023-06-01\"|jq",
     "authrequired": "curl -s http://localhost:3001/api/status | node -e \"process.stdin.on('data',d=>console.log(JSON.parse(d).authRequired))\"",
     "callbackfailtest": "curl -X POST http://localhost:3001/auth/callback   -H \"Content-Type: application/json\"   -d '{\"code\":\"fake\",\"state\":\"bad\"}'",
     "valid-server": "curl -sS -i http://localhost:3001/api/status;curl -sS -i http://localhost:3001/api/__nonexistent__;curl -sS -i http://localhost:3001/api/posts; curl -sS -i http://localhost:3001/auth/status;",

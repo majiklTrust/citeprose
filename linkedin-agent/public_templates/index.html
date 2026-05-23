@@ -952,23 +952,25 @@
                           <input type="radio" name="image-choice" value="none"
                             defaultChecked={!selectedPost.image_url && imageChoice.mode === 'none'}
                             onChange={() => setImageChoice({ mode: 'none', url: null })} />
-                          No image (text-only)
+                          No image
                         </label>
                         {availableImages.map((img, idx) => (
                           <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
                             <input type="radio" name="image-choice" value={`article-${idx}`}
                               defaultChecked={selectedPost.image_url === img.imageUrl}
                               onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
-                            <div>
+                            <div style={{ flex: 1 }}>
                               <div style={{ fontSize: '0.82rem' }}>{img.feedName || 'Article image'}</div>
-                              <img src={img.imageUrl} alt={img.title || 'Article image'}
+                              <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
+                                alt={img.title || 'Article image'}
                                 style={{ maxWidth: '130px', maxHeight: '80px', objectFit: 'cover', borderRadius: '4px',
                                          marginTop: '0.25rem', border: '1px solid var(--border)' }}
                                 onError={(e) => { e.target.style.display = 'none'; }} />
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem',
-                                           wordBreak: 'break-all', maxWidth: '300px' }}>
-                                {img.imageUrl}
-                              </div>
+                              <input type="text" readOnly value={img.imageUrl}
+                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                         border: '1px solid var(--border)', borderRadius: '4px',
+                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         ))}
@@ -977,16 +979,18 @@
                             <input type="radio" name="image-choice" value="auto"
                               defaultChecked={!!selectedPost.image_url}
                               onChange={() => setImageChoice({ mode: 'auto', url: selectedPost.image_url })} />
-                            <div>
+                            <div style={{ flex: 1 }}>
                               <div style={{ fontSize: '0.82rem' }}>Current image</div>
-                              <img src={selectedPost.image_url} alt="Post image"
+                              <img src={`/api/image-proxy?url=${encodeURIComponent(selectedPost.image_url)}`}
+                                alt="Post image"
                                 style={{ maxWidth: '160px', maxHeight: '100px', borderRadius: '4px',
                                          marginTop: '0.25rem', border: '1px solid var(--border)' }}
                                 onError={(e) => { e.target.style.display = 'none'; }} />
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem',
-                                           wordBreak: 'break-all', maxWidth: '300px' }}>
-                                {selectedPost.image_url}
-                              </div>
+                              <input type="text" readOnly value={selectedPost.image_url}
+                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                         border: '1px solid var(--border)', borderRadius: '4px',
+                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         )}
@@ -1032,22 +1036,24 @@
                           <input type="radio" name="preview-image-choice" value="none"
                             defaultChecked={imageChoice.mode === 'none'}
                             onChange={() => setImageChoice({ mode: 'none', url: null })} />
-                          No image (text-only)
+                          No image
                         </label>
                         {availableImages.map((img, idx) => (
                           <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
                             <input type="radio" name="preview-image-choice" value={`article-${idx}`}
                               onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
-                            <div>
+                            <div style={{ flex: 1 }}>
                               <div style={{ fontSize: '0.82rem' }}>{img.feedName || 'Article image'}</div>
-                              <img src={img.imageUrl} alt={img.title || 'Article image'}
+                              <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
+                                alt={img.title || 'Article image'}
                                 style={{ maxWidth: '130px', maxHeight: '80px', objectFit: 'cover', borderRadius: '4px',
                                          marginTop: '0.25rem', border: '1px solid var(--border)' }}
                                 onError={(e) => { e.target.style.display = 'none'; }} />
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem',
-                                           wordBreak: 'break-all', maxWidth: '300px' }}>
-                                {img.imageUrl}
-                              </div>
+                              <input type="text" readOnly value={img.imageUrl}
+                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
+                                         border: '1px solid var(--border)', borderRadius: '4px',
+                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         ))}

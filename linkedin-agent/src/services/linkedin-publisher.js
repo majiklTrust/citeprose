@@ -41,6 +41,7 @@ import {
   getLinkedInOrgUrn
 } from "../tenant/credential-store.js";
 import { isSafeUrl } from "./security.js";
+import { currentTenantId } from "../db/with-tenant.js";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -487,6 +488,18 @@ async function restPublish(content, hashtags, imageUrl) {
 
 export async function publishPost(content, hashtags = [], imageUrl = null) {
   const mode = getPublishMode();
+  const target = getPublishTarget();
+  const tenant = currentTenantId() || "unknown";
+
+  platformLog("info", "publish", {
+    tenant,
+    mode,
+    target,
+    hasImage: !!imageUrl,
+    imageOutcome: !imageUrl ? "none"
+      : mode === "text-posting" ? "ignored"
+      : "attached"
+  });
 
   if (mode === "text-posting") {
     if (imageUrl) {

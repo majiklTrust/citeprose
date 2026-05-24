@@ -45,6 +45,8 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { getAnthropicModel } from "../config/ai.js";
+import { getPublishMode } from "../services/linkedin-publisher.js";
+import { handleImageProxy } from "./image-proxy.js";
 
 const router = Router();
 
@@ -195,7 +197,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       feedLimit: parseInt(process.env.DASHBOARD_FEED_LIMIT) || 8,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
-      anthropicModel
+      anthropicModel,
+      publishMode: getPublishMode()
     });
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
@@ -508,6 +511,13 @@ router.post("/api/research/single", requirePermission("refresh_feeds"), async (r
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
+
+// ── Image Proxy ─────────────────────────────────────────────
+// Server-side proxy for article image thumbnails. Handler in
+// src/routes/image-proxy.js — validates URL, fetches with SSRF
+// guard, confirms magic bytes, returns binary with cache headers.
+
+router.get("/api/image-proxy", requirePermission("view_dashboard"), handleImageProxy);
 
 // ── Activity Log ─────────────────────────────────────────────
 

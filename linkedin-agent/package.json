@@ -33,7 +33,7 @@
     "feeds": "curl -s http://localhost:3001/api/feeds  | jq '.feeds'",
     "endpoints": "grep -E \"router\\.(get|post|put|patch|delete)\" src/routes/api.js",
     "400_": "",
-    "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && npm version $v && npm run build --no-save",
+    "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && (npm version $v || npm version patch) && npm run build",
     "extract-l": "unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"     || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\"",
     "extract": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\" -d ..",
     "420_": "",
@@ -65,12 +65,17 @@
     "testall": "npm run batch-test -- all",
     "750_": "",
     "log": "curl -s http://localhost:3001/api/logs?limit=1|jq",
+    "getmodels": "if [ -z \"$APIKEY\" ];then echo export APIKEY;fi && curl https://api.anthropic.com/v1/models   -H \"x-api-key: $APIKEY\" -H \"anthropic-version: 2023-06-01\"|jq",
     "authrequired": "curl -s http://localhost:3001/api/status | node -e \"process.stdin.on('data',d=>console.log(JSON.parse(d).authRequired))\"",
     "callbackfailtest": "curl -X POST http://localhost:3001/auth/callback   -H \"Content-Type: application/json\"   -d '{\"code\":\"fake\",\"state\":\"bad\"}'",
     "valid-server": "curl -sS -i http://localhost:3001/api/status;curl -sS -i http://localhost:3001/api/__nonexistent__;curl -sS -i http://localhost:3001/api/posts; curl -sS -i http://localhost:3001/auth/status;",
-    "insert_test_memnership": "psql -c \"INSERT INTO memberships (auth_provider, auth_sub, tenant_id, role) VALUES ('auth0', 'auth0|test_user_001', '53f2e104-4192-439b-abdc-70954bfa9583', 'owner') ON CONFLICT DO NOTHING;\"",
-    "delete_test_memnership": "psql -c \"DELETE FROM memberships WHERE auth_sub = 'auth0|test_user_001';\"",
-    "invalidate_linkedin": "psql -c \"DELETE FROM credentials WHERE tenant_id = '53f2e104-4192-439b-abdc-70954bfa9583' AND key IN ('linkedin_access_token', 'linkedin_person_urn');\" && npm run build",
+    "800_linkedin": "",
+    "insert_test_memnership": ". ../build/.env.pgsql-marketing_ai_instance.local && psql -c \"INSERT INTO memberships (auth_provider, auth_sub, tenant_id, role) VALUES ('auth0', '$TEST_AUTH', '$TENANT_ID', 'owner') ON CONFLICT DO NOTHING;\"",
+    "delete_test_memnership": ". ../build/.env.pgsql-marketing_ai_instance.local && psql -c \"DELETE FROM memberships WHERE auth_sub = '$TEST_AUTH';\"",
+    "linkedin-getaccesstoken": ". ../build/get-access-token.sh",
+    "linkedin-verify": ". ../build/.env.linkedin-mdp.export.local && node ../build/verify-linkedin-access.mjs",
+    "linkedin-signout": ". ../build/.env.pgsql-marketing_ai_instance.local && psql -c \"DELETE FROM credentials WHERE tenant_id = '$TENANT_ID' AND key IN ('linkedin_access_token', 'linkedin_person_urn');\" && npm run build",
+    "linkedin-signouturl": ". ../build/.env.linkedin-mdp.local && echo \"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${LINKEDIN_REDIRECT_URI}&scope=openid%20profile%20w_member_social%20w_organization_social%20r_organization_social%20r_ads&state=$(openssl rand -hex 12)\"",
     "900_": "",
     "encrypt-key": "node ../build/encrypt-key.js",
     "decrypt-key": "node ../build/decrypt-key.js",
@@ -94,6 +99,7 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "json-stringify-safe": "^5.0.1",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2"
   }

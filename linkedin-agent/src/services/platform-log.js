@@ -17,9 +17,10 @@
 // circular dependencies.
 
 export function platformLog(level, action, details) {
+  const ts = new Date().toISOString();
   const upper = String(level || "info").toUpperCase();
   const payload = details === null || details === undefined ? "" : (
     typeof details === "string" ? details : JSON.stringify(details)
   );
-  console.log(`[PLATFORM:${upper}] ${action}${payload ? " " + payload : ""}`);
+  console.log(`${ts} [PLATFORM:${upper}] ${action}${payload ? " " + payload : ""}`);
 }

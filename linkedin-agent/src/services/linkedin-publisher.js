@@ -9,8 +9,8 @@
 // publishing through the same endpoints.
 //
 // Mode selection via .env:
-//   LINKEDIN_PUBLISH_MODE=rest    — /rest/posts (default, supports images)
-//   LINKEDIN_PUBLISH_MODE=legacy  — /v2/ugcPosts (text-only, current behavior)
+//   LINKEDIN_PUBLISH_MODE=image-posting  — /rest/posts (supports images)
+//   LINKEDIN_PUBLISH_MODE=text-posting   — /v2/ugcPosts (text-only, default)
 //
 // Image upload flow:
 //   1. Download image from URL (with SSRF guard + size cap)
@@ -41,6 +41,7 @@ import {
   getLinkedInOrgUrn
 } from "../tenant/credential-store.js";
 import { isSafeUrl } from "./security.js";
+import { currentTenantId } from "../db/with-tenant.js";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -50,8 +51,10 @@ const LINKEDIN_REST = "https://api.linkedin.com/rest";
 // All env-driven with safe defaults. Validated at read time.
 
 function getPublishMode() {
-  const mode = (process.env.LINKEDIN_PUBLISH_MODE || "legacy").toLowerCase();
-  return mode === "rest" ? "rest" : "legacy";
+  const mode = (process.env.LINKEDIN_PUBLISH_MODE || "text-posting").toLowerCase();
+  // Backward compat: "rest" → "image-posting", "legacy" → "text-posting"
+  if (mode === "image-posting" || mode === "rest") return "image-posting";
+  return "text-posting";
 }
 
 function getPublishTarget() {
@@ -481,16 +484,28 @@ async function restPublish(content, hashtags, imageUrl) {
 //   hashtags: string[] — appended to content
 //   imageUrl: string|null — URL to download and attach (rest mode only)
 //
-// In legacy mode, imageUrl is ignored with a warning.
+// In text-posting mode, imageUrl is ignored with a warning.
 
 export async function publishPost(content, hashtags = [], imageUrl = null) {
   const mode = getPublishMode();
+  const target = getPublishTarget();
+  const tenant = currentTenantId() || "unknown";
 
-  if (mode === "legacy") {
+  platformLog("info", "publish", {
+    tenant,
+    mode,
+    target,
+    hasImage: !!imageUrl,
+    imageOutcome: !imageUrl ? "none"
+      : mode === "text-posting" ? "ignored"
+      : "attached"
+  });
+
+  if (mode === "text-posting") {
     if (imageUrl) {
-      platformLog("warn", "linkedin_image_ignored_legacy_mode", {
+      platformLog("warn", "linkedin_image_ignored_text_posting_mode", {
         imageUrl,
-        reason: "LINKEDIN_PUBLISH_MODE=legacy does not support images"
+        reason: "LINKEDIN_PUBLISH_MODE=text-posting does not support images"
       });
     }
     return legacyPublishPost(content, hashtags);

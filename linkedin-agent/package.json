@@ -25,7 +25,7 @@
     "300_": "",
     "kill3001": "lsof -ti:3001 | xargs kill -9",
     "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
-    "refresh": "npm audit fix && npm ci",
+    "refresh": "npm audit fix ; npm ci --omit=dev 2>&1",
     "350_": "",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",

@@ -9,6 +9,7 @@ import {
   getLinkedInPersonUrn
 } from "../tenant/credential-store.js";
 import { currentTenantId } from "../db/with-tenant.js";
+import { platformLog } from "./platform-log.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
@@ -17,6 +18,7 @@ const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
 
 export function getAuthorizationUrl(state) {
   const scopes = ["openid", "profile", "w_member_social"];
+  // const scopes = ["openid", "profile", "w_organization_social"];
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.LINKEDIN_CLIENT_ID,
@@ -24,6 +26,11 @@ export function getAuthorizationUrl(state) {
     scope: scopes.join(" "),
     state: state || generateState()
   });
+
+platformLog("info", "get_authorization_url", {
+  scope: scopes.join(" ")
+});
+
   return `${LINKEDIN_AUTH}/authorization?${params}`;
 }
 

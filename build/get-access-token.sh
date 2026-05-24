@@ -1,8 +1,8 @@
 #!/bin/bash
 
 set -a
-. .env.linkedin-mdp.local
 . .env.pgsql-marketing_ai_instance.local
+. .env.linkedin-mdp.local
 set +a
 
 # node -e "

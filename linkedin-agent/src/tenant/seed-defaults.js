@@ -22,6 +22,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { currentClient } from "../db/with-tenant.js";
+import { platformLog } from "../services/platform-log.js";
 
 // ── Catchall Feeds ───────────────────────────────────────────
 // Broad-coverage feeds chosen for:
@@ -142,6 +143,48 @@ export async function seedTenantDefaults() {
       [f.url, f.name, f.tier, f.refresh]
     );
     if (result.rowCount > 0) inserted++;
+  }
+
+  // Post-seed validation — validate each feed and record results.
+  // Non-blocking: feeds are kept regardless of validation outcome.
+  // The validation_action setting in agent_state controls behavior.
+  if (inserted > 0) {
+    try {
+      const { validateFeed, formatValidationMessage } = await import("../services/feed-validator.js");
+      const feedsResult = await c.query(
+        `SELECT id, url, name FROM feeds_v2
+         WHERE is_catchall = true AND last_validated_at IS NULL`
+      );
+
+      const grades = { A: 0, B: 0, C: 0, F: 0 };
+      for (const row of feedsResult.rows) {
+        const v = await validateFeed(row.url);
+        grades[v.grade]++;
+
+        try {
+          await c.query(
+            `UPDATE feeds_v2
+             SET last_validation_grade = $1,
+                 last_validated_at = now(),
+                 consecutive_failures = CASE WHEN $1 = 'F' THEN 1 ELSE 0 END
+             WHERE id = $2`,
+            [v.grade, row.id]
+          );
+        } catch { /* best-effort */ }
+
+        platformLog("info", "seed_feed_validated", {
+          feed: row.name, message: formatValidationMessage(v)
+        });
+      }
+
+      platformLog("info", "seed_validation_summary", {
+        total: feedsResult.rows.length, ...grades
+      });
+    } catch (valErr) {
+      platformLog("warn", "seed_validation_skipped", {
+        error: valErr.message.substring(0, 200)
+      });
+    }
   }
 
   return { feeds: inserted };

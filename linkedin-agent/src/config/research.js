@@ -10,6 +10,9 @@
 // malicious .env values fall back to safe defaults.
 // ═══════════════════════════════════════════════════════════════
 
+import { getAgentState } from "../services/database.js";
+import { platformLog } from "../services/platform-log.js";
+
 // ── Article age & limits ─────────────────────────────────────
 
 const DEFAULT_MAX_AGE_DAYS = 20;
@@ -75,9 +78,30 @@ const DEFAULT_DOMAIN_MATCH_THRESHOLD = 0.4;
  * Env: FEEDS_MANAGER_VERSION. Default: 1.
  * Valid values: 1 or 2.
  */
-export function getFeedsManagerVersion() {
-  const val = parseInt(process.env.FEEDS_MANAGER_VERSION, 10);
-  return (val === 1 || val === 2) ? val : DEFAULT_FEEDS_MANAGER_VERSION;
+// Feeds Manager version — controls v2 features (domain matching,
+// discovery, domain tags). Per-tenant via agent_state, falls back
+// to .env, then default 1.
+//
+// Must be called inside withTenant() — reads from tenant-scoped
+// agent_state table. Returns 1 or 2.
+export async function getFeedsManagerVersion() {
+  try {
+    const dbVal = await getAgentState("feeds_manager_version");
+    platformLog("debug", "fm_version_lookup", {
+      dbVal, dbValType: typeof dbVal, source: dbVal ? "database" : "fallthrough"
+    });
+    if (dbVal) {
+      const parsed = parseInt(dbVal, 10);
+      if (parsed === 1 || parsed === 2) return parsed;
+    }
+  } catch (err) {
+    platformLog("warn", "fm_version_lookup_failed", {
+      error: err.message, source: "falling through to .env"
+    });
+  }
+  const envVal = parseInt(process.env.FEEDS_MANAGER_VERSION, 10);
+  platformLog("debug", "fm_version_env_fallback", { envVal });
+  return (envVal === 1 || envVal === 2) ? envVal : DEFAULT_FEEDS_MANAGER_VERSION;
 }
 
 /**

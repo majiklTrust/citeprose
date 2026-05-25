@@ -594,7 +594,7 @@ export async function start() {
 ║        DB User:  ${(process.env.PGUSER)}
 ║            App:  ${addr.origin}
 ║            Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
-║           ${process.env.DEV_BYPASS_ORIGINS}
+║   ${process.env.DEV_BYPASS_ORIGINS || "happy wife"}
 ╚═══════════════════════════════════════════════════════════╝
 `);
     console.log(`🖥  Homepage at      ${addr.origin}/`);

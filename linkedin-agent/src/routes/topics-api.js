@@ -64,10 +64,13 @@ async function canModifyTopic(topic, userSub, role) {
 router.get("/", async (req, res) => {
   try {
     const isOwner = await canManageAll(req.tenant.role);
-    const topics = await withTenant(req.tenant.id, async () => {
-      return listTopicsForUser(req.user.sub, isOwner);
+    const { topics, fmVersion } = await withTenant(req.tenant.id, async () => {
+      return {
+        topics: await listTopicsForUser(req.user.sub, isOwner),
+        fmVersion: await getFeedsManagerVersion()
+      };
     });
-    res.json({ topics, feedsManagerVersion: getFeedsManagerVersion() });
+    res.json({ topics, feedsManagerVersion: fmVersion });
   } catch (err) {
     platformLog("error", "topics_list_failed", { error: err.message });
     res.status(500).json({ error: "Failed to list topics" });
@@ -89,7 +92,8 @@ router.post("/", async (req, res) => {
     // Validate domains: must be array of unique lowercase strings.
     // Security guard: domains are silently stripped in v1 mode
     // to prevent pre-population via scripted bypass.
-    const cleanDomains = (getFeedsManagerVersion() === 2 && Array.isArray(domains))
+    const fmVersion = await withTenant(req.tenant.id, () => getFeedsManagerVersion());
+    const cleanDomains = (fmVersion === 2 && Array.isArray(domains))
       ? [...new Set(domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
       : [];
 
@@ -149,7 +153,7 @@ router.patch("/:id", async (req, res) => {
     // Security guard: domains are silently stripped in v1 mode.
     const body = { ...req.body };
     if (body.domains !== undefined) {
-      if (getFeedsManagerVersion() !== 2) {
+      if (await withTenant(req.tenant.id, () => getFeedsManagerVersion()) !== 2) {
         delete body.domains;
       } else {
         body.domains = Array.isArray(body.domains)

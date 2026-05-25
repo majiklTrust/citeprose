@@ -217,19 +217,22 @@ async function fetchFeed(feedRow) {
       if (linkResult.rowCount > 0) linked++;
     }
 
-    // Update feed poll status + metadata from RSS channel
+    // Update feed poll status, validation tracking, + metadata
     const categories = [...itemCategorySet];
     await c.query(
       `UPDATE feeds_v2
        SET last_polled_at = now(),
            last_error = NULL,
-           feed_description = COALESCE(NULLIF($2, ''), feed_description),
+           consecutive_failures = 0,
+           last_validation_grade = $2,
+           last_validated_at = now(),
+           feed_description = COALESCE(NULLIF($3, ''), feed_description),
            feed_categories = CASE
-             WHEN $3::jsonb != '[]'::jsonb THEN $3::jsonb
+             WHEN $4::jsonb != '[]'::jsonb THEN $4::jsonb
              ELSE feed_categories
            END
        WHERE id = $1`,
-      [feedRow.id, channelDescription, JSON.stringify(categories)]
+      [feedRow.id, newArticles > 0 ? "A" : "B", channelDescription, JSON.stringify(categories)]
     );
 
     await logActivity("info", "feed_fetched", {
@@ -254,11 +257,16 @@ async function fetchFeed(feedRow) {
       error: err.message.substring(0, 300)
     });
 
-    // Best-effort: record error on the feed row
+    // Best-effort: record error + increment failure count
     const c = client();
     try {
       await c.query(
-        `UPDATE feeds_v2 SET last_error = $1 WHERE id = $2`,
+        `UPDATE feeds_v2
+         SET last_error = $1,
+             consecutive_failures = consecutive_failures + 1,
+             last_validation_grade = 'F',
+             last_validated_at = now()
+         WHERE id = $2`,
         [err.message.substring(0, 500), feedRow.id]
       );
     } catch { /* transaction may be aborted — expected */ }
@@ -396,7 +404,7 @@ export async function pollSingleFeed(feedId) {
 export async function getArticlesForTopic(topicSlug, maxAgeDays = null, limit = null) {
   const ageDays = maxAgeDays || getMaxAgeDays();
   const articleLimit = limit || getMaxResearchArticles();
-  const version = getFeedsManagerVersion();
+  const version = await getFeedsManagerVersion();
 
   if (version === 2) {
     return _getArticlesForTopicV2(topicSlug, ageDays, articleLimit);

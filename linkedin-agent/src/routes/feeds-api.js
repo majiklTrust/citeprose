@@ -36,6 +36,7 @@ import { getMaxAgeDays, getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { isSafeUrl } from "../services/security.js";
+import { validateFeed, formatValidationMessage } from "../services/feed-validator.js";
 
 const rssParser = new Parser({ timeout: 10000 });
 
@@ -103,10 +104,10 @@ router.get("/", async (req, res) => {
         );
       }
 
-      return feeds;
+      return { feeds, fmVersion: await getFeedsManagerVersion() };
     });
 
-    res.json({ feeds: result, maxAgeDays: getMaxAgeDays(), feedsManagerVersion: getFeedsManagerVersion() });
+    res.json({ feeds: result.feeds, maxAgeDays: getMaxAgeDays(), feedsManagerVersion: result.fmVersion });
   } catch (err) {
     platformLog("error", "feeds_list_failed", { error: err.message });
     res.status(500).json({ error: "Failed to list feeds" });
@@ -166,10 +167,8 @@ router.get("/summary", async (req, res) => {
 
 router.patch("/:id/domains", async (req, res) => {
   try {
-    // Security guard: domain tagging is a v2 feature.
-    // Reject requests when FEEDS_MANAGER_VERSION=1 to prevent
-    // manual trigger or scripted bypass of the version gate.
-    if (getFeedsManagerVersion() !== 2) {
+    const fmVersion = await withTenant(req.tenant.id, () => getFeedsManagerVersion());
+    if (fmVersion !== 2) {
       return res.status(403).json({ error: "Domain tagging requires FEEDS_MANAGER_VERSION=2" });
     }
 
@@ -227,7 +226,8 @@ router.patch("/:id/domains", async (req, res) => {
 
 router.post("/discover", async (req, res) => {
   try {
-    if (getFeedsManagerVersion() !== 2) {
+    const fmVersion = await withTenant(req.tenant.id, () => getFeedsManagerVersion());
+    if (fmVersion !== 2) {
       return res.status(403).json({ error: "Feed discovery requires FEEDS_MANAGER_VERSION=2" });
     }
 
@@ -254,22 +254,34 @@ router.post("/discover", async (req, res) => {
         `Description: ${topic.description || "Not specified"}`,
         `Content angles: ${JSON.stringify(angles)}`,
         ``,
-        `Suggest 8-10 RSS or Atom feeds that would provide high-quality`,
-        `research material for generating professional LinkedIn posts`,
-        `about this topic.`,
+        `Suggest 10-12 RSS or Atom feed URLs that would provide high-quality,`,
+        `freely accessible research material for generating professional`,
+        `LinkedIn posts about this topic.`,
         ``,
         `For each feed, provide:`,
         `- name: The publication or organization name`,
-        `- url: The exact RSS or Atom feed URL`,
+        `- url: The exact RSS or Atom feed URL (must end in /rss, /feed, .xml, .atom, or similar — NOT a web page URL)`,
         `- tier: authoritative | primary | secondary`,
         `- relevance: Why this feed is valuable for this topic (1 sentence)`,
+        `- domains: 2-4 keyword tags describing the feed's coverage area (e.g. ["security", "cloud", "enterprise"])`,
+        ``,
+        `REQUIREMENTS — every feed MUST:`,
+        `- Be completely free and open — no login, subscription, paywall, or account required`,
+        `- Provide a direct RSS 2.0 or Atom 1.0 feed URL that returns XML (not HTML)`,
+        `- Include article summaries in feed items (not just titles)`,
+        `- Publish regularly (at least twice per month)`,
+        ``,
+        `DO NOT suggest feeds from:`,
+        `- Paywalled publications (Wall Street Journal, Financial Times, Bloomberg, The Information, The Athletic)`,
+        `- Sources requiring free account registration to read articles`,
+        `- Aggregator or scraper sites that repackage others' content`,
+        `- Defunct or unmaintained feeds`,
         ``,
         `Prioritize:`,
         `- Government agencies and standards bodies (authoritative tier)`,
         `- Established industry publications with editorial oversight (primary)`,
-        `- Respected blogs and analysis sites (primary or secondary)`,
+        `- Respected blogs and independent analysis sites (primary or secondary)`,
         `- Mix of technical depth and business/leadership perspective`,
-        `- Sources that publish regularly (at least weekly)`,
         ``,
         `Return ONLY a JSON array, no other text or markdown.`
       ].join("\n");
@@ -308,66 +320,132 @@ router.post("/discover", async (req, res) => {
       );
       const existingUrls = new Set(existingResult.rows.map(r => r.url));
 
+      // ── Phase 1: Validate initial suggestions ─────────────
+      const MIN_VALID_TARGET = 5;
+      const candidates = suggestions
+        .slice(0, 12)
+        .filter(s => s.url && typeof s.url === "string" && !existingUrls.has(s.url));
+
       const validated = [];
-      for (const s of suggestions.slice(0, 12)) {
-        if (!s.url || typeof s.url !== "string") continue;
-        if (existingUrls.has(s.url)) continue;
+      const failed = [];
 
-        // SSRF guard: reject non-HTTPS and private network URLs
-        if (!isSafeUrl(s.url)) {
-          platformLog("warn", "feed_discover_url_blocked", {
-            url: s.url, reason: "SSRF protection"
-          });
-          continue;
-        }
+      for (const s of candidates) {
+        const v = await validateFeed(s.url);
+        platformLog("info", "feed_discover_validate", {
+          url: s.url, grade: v.grade, valid: v.valid,
+          items: v.itemCount, responseMs: v.responseMs,
+          error: v.error
+        });
 
-        let httpStatus = null;
-        try {
-          // Fetch manually to capture HTTP status — same pattern
-          // as news-monitor.js::fetchFeed for consistency.
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 15000);
-
-          let response;
-          try {
-            response = await fetch(s.url, {
-              headers: {
-                "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)",
-                "Accept": "application/rss+xml, application/xml, text/xml"
-              },
-              signal: controller.signal
-            });
-          } finally {
-            clearTimeout(timeout);
-          }
-
-          httpStatus = response.status;
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status} ${response.statusText}`);
-          }
-
-          const xml = await response.text();
-          const feed = await rssParser.parseString(xml);
-          const items = feed.items || [];
+        if (v.valid) {
+          // Merge AI-suggested domains with auto-extracted categories
+          const aiDomains = Array.isArray(s.domains) ? s.domains : [];
+          const combinedDomains = [...new Set([
+            ...aiDomains.map(d => String(d).toLowerCase().trim()),
+            ...v.suggestedDomains
+          ])].slice(0, 10);
 
           validated.push({
-            name: feed.title || s.name || "Unknown",
+            name: v.feedTitle || s.name || "Unknown",
             url: s.url,
             suggestedTier: ["authoritative", "primary", "secondary"].includes(s.tier) ? s.tier : "secondary",
             relevance: s.relevance || "",
-            description: (feed.description || "").substring(0, 500),
-            recentHeadlines: items.slice(0, 4).map(i => i.title || "Untitled"),
-            itemCount: items.length
+            grade: v.grade,
+            domains: combinedDomains,
+            description: "",
+            itemCount: v.itemCount,
+            latestItemDate: v.latestItemDate,
+            responseMs: v.responseMs,
+            avgSummaryLength: v.avgSummaryLength,
+            qualityIssues: v.qualityIssues
+          });
+          existingUrls.add(s.url); // prevent duplicates in retry
+        } else {
+          failed.push({ name: s.name, url: s.url, error: v.error });
+        }
+      }
+
+      // ── Phase 2: Smart retry — ask AI for replacements ────
+      // If we have fewer than MIN_VALID_TARGET valid feeds, ask
+      // the AI to suggest alternatives for the ones that failed.
+      if (validated.length < MIN_VALID_TARGET && failed.length > 0) {
+        const needed = MIN_VALID_TARGET - validated.length + 2; // over-request
+        const retryPrompt = [
+          `These RSS feed URLs failed validation for the topic "${topic.name}":`,
+          ...failed.map(f => `- ${f.name}: ${f.url} (${f.error})`),
+          ``,
+          `Suggest ${needed} alternative RSS/Atom feed URLs for this topic.`,
+          ``,
+          `REQUIREMENTS:`,
+          `- Must be completely free — no login, subscription, or paywall`,
+          `- Must be a direct RSS/Atom feed URL returning XML`,
+          `- Must include article summaries (not just titles)`,
+          `- Do NOT suggest paywalled sources (WSJ, FT, Bloomberg, The Information)`,
+          ``,
+          `Avoid these URLs:`,
+          ...failed.map(f => `- ${f.url}`),
+          ...validated.map(v => `- ${v.url}`),
+          ``,
+          `For each feed provide: name, url, tier, relevance, domains (2-4 keyword tags).`,
+          `Return ONLY a JSON array.`
+        ].join("\n");
+
+        try {
+          const retryResponse = await callAnthropic(anthropic, {
+            model, max_tokens: 1500,
+            messages: [{ role: "user", content: retryPrompt }]
           });
 
-          platformLog("info", "feed_discover_validated", {
-            url: s.url, status: httpStatus, items: items.length
+          const retryText = retryResponse.content
+            .filter(b => b.type === "text")
+            .map(b => b.text)
+            .join("")
+            .replace(/```json|```/g, "")
+            .trim();
+
+          let retrySuggestions = [];
+          try { retrySuggestions = JSON.parse(retryText); } catch { /* skip */ }
+
+          if (Array.isArray(retrySuggestions)) {
+            for (const s of retrySuggestions.slice(0, needed)) {
+              if (!s.url || existingUrls.has(s.url)) continue;
+              const v = await validateFeed(s.url);
+              platformLog("info", "feed_discover_retry_validate", {
+                url: s.url, grade: v.grade, valid: v.valid, items: v.itemCount
+              });
+              if (v.valid) {
+                const aiDomains = Array.isArray(s.domains) ? s.domains : [];
+                const combinedDomains = [...new Set([
+                  ...aiDomains.map(d => String(d).toLowerCase().trim()),
+                  ...v.suggestedDomains
+                ])].slice(0, 10);
+
+                validated.push({
+                  name: v.feedTitle || s.name || "Unknown",
+                  url: s.url,
+                  suggestedTier: ["authoritative", "primary", "secondary"].includes(s.tier) ? s.tier : "secondary",
+                  relevance: s.relevance || "",
+                  grade: v.grade,
+                  domains: combinedDomains,
+                  description: "",
+                  itemCount: v.itemCount,
+                  latestItemDate: v.latestItemDate,
+                  responseMs: v.responseMs,
+                  avgSummaryLength: v.avgSummaryLength,
+                  qualityIssues: v.qualityIssues
+                });
+                existingUrls.add(s.url);
+              }
+            }
+          }
+
+          platformLog("info", "feed_discover_retry_complete", {
+            needed, retried: retrySuggestions.length,
+            totalValid: validated.length
           });
-        } catch (err) {
-          platformLog("warn", "feed_discover_validation_failed", {
-            url: s.url, status: httpStatus,
-            error: err.message.substring(0, 200)
+        } catch (retryErr) {
+          platformLog("warn", "feed_discover_retry_failed", {
+            error: retryErr.message.substring(0, 200)
           });
         }
       }
@@ -375,7 +453,8 @@ router.post("/discover", async (req, res) => {
       platformLog("info", "feed_discover_complete", {
         topicId: topic.id, topicSlug: topic.slug,
         aiSuggested: suggestions.length, validated: validated.length,
-        skippedExisting: suggestions.filter(s => existingUrls.has(s.url)).length
+        failed: failed.length,
+        retried: validated.length < MIN_VALID_TARGET
       });
 
       return { suggestions: validated };
@@ -402,7 +481,8 @@ router.post("/discover", async (req, res) => {
 
 router.post("/add", async (req, res) => {
   try {
-    if (getFeedsManagerVersion() !== 2) {
+    const fmVersion = await withTenant(req.tenant.id, () => getFeedsManagerVersion());
+    if (fmVersion !== 2) {
       return res.status(403).json({ error: "Feed add requires FEEDS_MANAGER_VERSION=2" });
     }
 
@@ -426,13 +506,16 @@ router.post("/add", async (req, res) => {
       for (const f of feeds.slice(0, 15)) {
         if (!f.url || !f.name) continue;
         const tier = ["authoritative", "primary", "secondary"].includes(f.tier) ? f.tier : "secondary";
+        const domains = Array.isArray(f.domains)
+          ? f.domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).slice(0, 20)
+          : [];
 
         const feedResult = await client.query(
-          `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes)
-           VALUES (current_tenant_id(), $1, $2, $3::feed_tier, 240)
+          `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, domains)
+           VALUES (current_tenant_id(), $1, $2, $3::feed_tier, 240, $4::jsonb)
            ON CONFLICT (tenant_id, url) DO NOTHING
            RETURNING id`,
-          [f.url, f.name.substring(0, 200), tier]
+          [f.url, f.name.substring(0, 200), tier, JSON.stringify(domains)]
         );
 
         let feedId;

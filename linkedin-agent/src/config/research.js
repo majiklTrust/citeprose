@@ -11,7 +11,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getAgentState } from "../services/database.js";
-import { platformLog } from "../services/platform-log.js";
 
 // ── Article age & limits ─────────────────────────────────────
 
@@ -87,20 +86,14 @@ const DEFAULT_DOMAIN_MATCH_THRESHOLD = 0.4;
 export async function getFeedsManagerVersion() {
   try {
     const dbVal = await getAgentState("feeds_manager_version");
-    platformLog("debug", "fm_version_lookup", {
-      dbVal, dbValType: typeof dbVal, source: dbVal ? "database" : "fallthrough"
-    });
     if (dbVal) {
       const parsed = parseInt(dbVal, 10);
       if (parsed === 1 || parsed === 2) return parsed;
     }
-  } catch (err) {
-    platformLog("warn", "fm_version_lookup_failed", {
-      error: err.message, source: "falling through to .env"
-    });
+  } catch {
+    // Outside withTenant or DB error — fall through to .env
   }
   const envVal = parseInt(process.env.FEEDS_MANAGER_VERSION, 10);
-  platformLog("debug", "fm_version_env_fallback", { envVal });
   return (envVal === 1 || envVal === 2) ? envVal : DEFAULT_FEEDS_MANAGER_VERSION;
 }
 

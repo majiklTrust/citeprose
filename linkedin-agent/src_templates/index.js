@@ -187,7 +187,25 @@ export function createApp(ctx) {
         expiresIn: tokens.expiresIn,
         user
       });
-      platformLog("info", "user_logged_in", { sub: user.sub, provider: provider.name });
+
+      // Log with tenant context — lookup membership for operational visibility.
+      // Security: log email domain only (not full address), no tokens.
+      let tenantInfo = { slug: null, role: null };
+      try {
+        const tenant = await findTenantByAuthIdentity(provider.name, user.sub);
+        if (tenant) {
+          tenantInfo = { slug: tenant.slug, role: tenant.role };
+        }
+      } catch { /* best-effort — don't block login on log enrichment */ }
+
+      platformLog("info", "user_logged_in", {
+        sub: user.sub,
+        provider: provider.name,
+        emailDomain: user.email ? user.email.split("@")[1] : null,
+        tenant: tenantInfo.slug,
+        role: tenantInfo.role,
+        newUser: !tenantInfo.slug
+      });
       return res.redirect("/app");
     } catch (err) {
       platformLog("error", "auth_callback_failed", {
@@ -594,7 +612,7 @@ export async function start() {
 ║        DB User:  ${(process.env.PGUSER)}
 ║            App:  ${addr.origin}
 ║            Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
-║   ${process.env.DEV_BYPASS_ORIGINS || "happy wife"}
+║           ${process.env.DEV_BYPASS_ORIGINS}
 ╚═══════════════════════════════════════════════════════════╝
 `);
     console.log(`🖥  Homepage at      ${addr.origin}/`);

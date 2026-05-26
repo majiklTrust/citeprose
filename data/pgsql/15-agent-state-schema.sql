@@ -127,7 +127,7 @@ CREATE TRIGGER trg_validate_agent_state
   EXECUTE FUNCTION validate_agent_state();
 
 -- ── Feed validation grade constraint ─────────────────────────
-
+GRANT SELECT ON agent_state_schema TO linkedin_agent_app;
 DO $$
 BEGIN
   IF NOT EXISTS (

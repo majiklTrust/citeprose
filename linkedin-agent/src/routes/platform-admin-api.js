@@ -46,16 +46,23 @@ const router = Router();
 // to read/write tenant tables and bypass RLS. The app role needs:
 //   GRANT ***REMOVED*** TO linkedin_agent_app;
 // so SET LOCAL ROLE succeeds.
-const ADMIN_DB_ROLE = (() => {
+// Resolved lazily on first call to createPlatformAdminRoutes()
+// so that dotenv.config() has already run.
+let ADMIN_DB_ROLE = null;
+
+function resolveAdminRole() {
+  if (ADMIN_DB_ROLE) return ADMIN_DB_ROLE;
   const role = process.env.PLATFORM_ADMIN_DB_ROLE;
-  // Validate: must be a simple identifier (defense in depth —
-  // the value comes from .env, not from the client, but SET
-  // LOCAL ROLE interpolates it into SQL).
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(role)) {
-    throw new Error(`Invalid PLATFORM_ADMIN_DB_ROLE: must be a valid PostgreSQL identifier`);
+  if (!role || typeof role !== "string" || role.trim().length === 0) {
+    throw new Error("PLATFORM_ADMIN_DB_ROLE is not set — platform admin queries are disabled");
   }
-  return role;
-})();
+  const trimmed = role.trim();
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+    throw new Error("Invalid PLATFORM_ADMIN_DB_ROLE: must be a valid PostgreSQL identifier");
+  }
+  ADMIN_DB_ROLE = trimmed;
+  return ADMIN_DB_ROLE;
+}
 
 // ── Query Registry ───────────────────────────────────────────
 // Each entry: key → { label, description, sql, params, destructive, readOnly }
@@ -261,7 +268,7 @@ const QUERY_REGISTRY = {
   "tenant-credentials-status": {
     label: "Tenant Credentials Status",
     description: "Shows which credentials exist for a tenant (names only — values are encrypted and never exposed).",
-    sql: `SELECT key, length(value) > 0 AS has_value, created_at, updated_at
+    sql: `SELECT key, length(value_enc) > 0 AS has_value, updated_at
           FROM credentials
           WHERE tenant_id = $1
           ORDER BY key`,
@@ -350,7 +357,7 @@ export default function createPlatformAdminRoutes() {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query(`SET LOCAL ROLE ${ADMIN_DB_ROLE}`);
+      await client.query(`SET LOCAL ROLE ${resolveAdminRole()}`);
 
       const result = await client.query(queryDef.sql, paramValues);
 

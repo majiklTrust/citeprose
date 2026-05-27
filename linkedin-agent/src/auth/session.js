@@ -14,14 +14,32 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:crypto';
+import { platformLog } from '../services/platform-log.js';
 
 // ── Constants ────────────────────────────────────────────────
 
 export const SESSION_COOKIE_NAME = '__la_session';
 
+const MS_PER_SECOND = 1000;
+const SECONDS_PER_MINUTE = 60;
+export const MS_PER_MINUTE = MS_PER_SECOND * SECONDS_PER_MINUTE;
+
 // export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 86400000; // 24h
 // export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 3600000; // 1h
 export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 300000; // 5m
+
+// Sliding window refresh ratio. The session cookie is re-issued
+// when (elapsed time / SESSION_MAX_AGE_MS) exceeds this ratio.
+// At 0.75 with a 4-hour TTL, refresh triggers after 3 hours of
+// the session's life, guaranteeing 1 hour of idle time after the
+// last interaction.
+//
+// Env: SESSION_MAX_AGE_REFRESH_RATIO (0.0–1.0). Default: 0.75.
+const SESSION_MAX_AGE_REFRESH_RATIO = (() => {
+  const val = parseFloat(process.env.SESSION_MAX_AGE_REFRESH_RATIO);
+  if (isNaN(val) || val < 0 || val > 1) return 0.75;
+  return val;
+})();
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;          // 96 bits — NIST SP 800-38D recommended for GCM
@@ -135,6 +153,7 @@ export function createSession(res, tokens) {
   const payload = {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken || null,
+    issuedAt: Date.now(),
     expiresAt: Date.now() + (tokens.expiresIn ?? 3600) * 1000,
     user: {
       sub: tokens.user.sub,
@@ -151,6 +170,11 @@ export function createSession(res, tokens) {
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_MAX_AGE_MS,
+  });
+
+  platformLog("debug", "session_created", {
+    sub: tokens.user.sub,
+    ttlMinutes: Math.round(SESSION_MAX_AGE_MS / MS_PER_MINUTE)
   });
 }
 
@@ -201,6 +225,82 @@ export function clearSession(res) {
     path: '/',
     maxAge: 0,
   });
+}
+
+// ── Sliding Window Refresh ──────────────────────────────────
+
+/**
+ * Check if a session should be refreshed based on elapsed time.
+ * Returns true when the session has consumed more than
+ * SESSION_MAX_AGE_REFRESH_RATIO of its TTL.
+ *
+ * @param {object} session — decrypted session from readSession()
+ * @returns {boolean}
+ */
+export function shouldRefreshSession(session) {
+  if (!session || typeof session.issuedAt !== 'number') return false;
+  const elapsed = Date.now() - session.issuedAt;
+  const threshold = SESSION_MAX_AGE_MS * SESSION_MAX_AGE_REFRESH_RATIO;
+  return elapsed > threshold;
+}
+
+/**
+ * Re-issue the session cookie with a fresh expiresAt.
+ * Called at response time (not request time) so long-running
+ * requests don't consume the session window.
+ *
+ * The session payload is re-encrypted with the same key.
+ * The cookie attributes (httpOnly, secure, sameSite) are
+ * identical to createSession.
+ *
+ * @param {object} res     — Express response object
+ * @param {object} session — decrypted session from readSession()
+ */
+export function refreshSession(res, session) {
+  if (!session || !session.user?.sub) return;
+
+  try {
+    const key = deriveKey(getSecret());
+
+    const now = Date.now();
+    const oldRemainingMs = (session.issuedAt + SESSION_MAX_AGE_MS) - now;
+
+    const payload = {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken || null,
+      issuedAt: now,
+      expiresAt: session.expiresAt,
+      user: {
+        sub: session.user.sub,
+        email: session.user.email || null,
+        name: session.user.name || null,
+      }
+    };
+
+    const encrypted = encrypt(JSON.stringify(payload), key);
+
+    res.cookie(SESSION_COOKIE_NAME, encrypted, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE_MS,
+    });
+
+    platformLog("debug", "session_refreshed", {
+      sub: session.user.sub,
+      oldRemainingMinutes: Math.round(oldRemainingMs / MS_PER_MINUTE),
+      newTtlMinutes: Math.round(SESSION_MAX_AGE_MS / MS_PER_MINUTE)
+    });
+  } catch (err) {
+    platformLog("debug", "session_refresh_failed", {
+      sub: session.user?.sub,
+      error: err.message
+    });
+    // Refresh failed — the original cookie continues with its
+    // existing expiresAt. No new attack surface; the session
+    // simply won't be extended this cycle.
+  }
 }
 
 /**

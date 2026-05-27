@@ -118,10 +118,11 @@
         return res;
       }, []);
 
-      const fetchAll = useCallback(async () => {
+      const fetchAll = useCallback(async (opts) => {
+        const bgHeaders = opts?.background ? { 'X-Background-Poll': '1' } : {};
         try {
           // Status is public (uses optionalAuth) — always fetch with regular fetch
-          const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
+          const statusRes = await fetch(`${API}/api/status`, { headers: bgHeaders }).then(r => r.json());
 
           // If auth is required and no user, don't fetch protected routes
           if (statusRes.authRequired && !statusRes.user) {
@@ -157,15 +158,15 @@
           setStatus(statusRes);
 
           const [postsRes, logsRes] = await Promise.all([
-            authFetch(`${API}/api/posts?limit=30`).then(r => r.json()),
-            authFetch(`${API}/api/logs?limit=40`).then(r => r.json()),
+            authFetch(`${API}/api/posts?limit=30`, { headers: bgHeaders }).then(r => r.json()),
+            authFetch(`${API}/api/logs?limit=40`, { headers: bgHeaders }).then(r => r.json()),
           ]);
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
 
           // Fetch topics for the selector — 403 is expected for viewers
           try {
-            const topicsRes = await fetch(`${API}/api/topics`).then(r => r.ok ? r.json() : null);
+            const topicsRes = await fetch(`${API}/api/topics`, { headers: bgHeaders }).then(r => r.ok ? r.json() : null);
             const topicsList = (topicsRes && topicsRes.topics) || [];
             setTopics(topicsList);
 
@@ -192,7 +193,7 @@
 
       useEffect(() => {
         fetchAll();
-        const interval = setInterval(fetchAll, 15000);
+        const interval = setInterval(() => fetchAll({ background: true }), 15000);
         return () => clearInterval(interval);
       }, [fetchAll]);
 

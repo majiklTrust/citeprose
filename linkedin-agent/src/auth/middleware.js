@@ -20,7 +20,8 @@
 
 import { isAuthEnabled, getProviders, getJwksMap, getIssuers, getSnapshotByIssuer } from "./index.js";
 import { verifyToken } from "./jwt-verifier.js";
-import { readSession } from "./session.js";
+import { readSession, shouldRefreshSession, refreshSession, SESSION_COOKIE_NAME, MS_PER_MINUTE, SESSION_MAX_AGE_MS } from "./session.js";
+import { platformLog } from "../services/platform-log.js";
 
 // ── Error Responses ──────────────────────────────────────────
 // Generic messages — never leak token details or internal state.
@@ -203,14 +204,38 @@ export function createAuthMiddleware(logFn) {
     try {
       const session = readSession(req);
       if (session && session.user && session.user.sub) {
-        req.user = {
-          sub: session.user.sub,
-          email: session.user.email || null,
-          name: session.user.name || null,
-          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
-          authMethod: 'session',
-        };
-        return next();
+        // Check server-side expiry using issuedAt + SESSION_MAX_AGE_MS
+        const sessionDeadline = (session.issuedAt || 0) + SESSION_MAX_AGE_MS;
+        if (typeof session.issuedAt === 'number' && Date.now() > sessionDeadline) {
+          platformLog("debug", "session_expired", {
+            sub: session.user.sub,
+            expiredAgoMinutes: Math.round((Date.now() - sessionDeadline) / MS_PER_MINUTE)
+          });
+          // Fall through to Bearer check — session is dead
+        } else {
+          req.user = {
+            sub: session.user.sub,
+            email: session.user.email || null,
+            name: session.user.name || null,
+            expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+            authMethod: 'session',
+          };
+
+          // Sliding window: refresh the cookie at response time
+          // if the session has consumed enough of its TTL.
+          // Background polls (X-Background-Poll header) do NOT
+          // extend the session — only user-initiated actions do.
+          const isBackgroundPoll = req.headers['x-background-poll'] === '1';
+          if (!isBackgroundPoll && shouldRefreshSession(session)) {
+            const _json = res.json.bind(res);
+            res.json = function (body) {
+              refreshSession(res, session);
+              return _json(body);
+            };
+          }
+
+          return next();
+        }
       }
     } catch {
       // Session read failed — fall through to Bearer check.
@@ -322,14 +347,36 @@ export function createAuthMiddleware(logFn) {
     try {
       const session = readSession(req);
       if (session && session.user && session.user.sub) {
-        req.user = {
-          sub: session.user.sub,
-          email: session.user.email || null,
-          name: session.user.name || null,
-          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
-          authMethod: 'session',
-        };
-        return next();
+        // Check server-side expiry using issuedAt + SESSION_MAX_AGE_MS
+        const sessionDeadline = (session.issuedAt || 0) + SESSION_MAX_AGE_MS;
+        if (typeof session.issuedAt === 'number' && Date.now() > sessionDeadline) {
+          platformLog("debug", "session_expired", {
+            sub: session.user.sub,
+            expiredAgoMinutes: Math.round((Date.now() - sessionDeadline) / MS_PER_MINUTE)
+          });
+          // Fall through — treat as unauthenticated
+        } else {
+          req.user = {
+            sub: session.user.sub,
+            email: session.user.email || null,
+            name: session.user.name || null,
+            expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+            authMethod: 'session',
+          };
+
+          // Sliding window: refresh the cookie at response time
+          // Background polls do NOT extend the session.
+          const isBackgroundPoll = req.headers['x-background-poll'] === '1';
+          if (!isBackgroundPoll && shouldRefreshSession(session)) {
+            const _json = res.json.bind(res);
+            res.json = function (body) {
+              refreshSession(res, session);
+              return _json(body);
+            };
+          }
+
+          return next();
+        }
       }
     } catch {
       // Fall through to Bearer check

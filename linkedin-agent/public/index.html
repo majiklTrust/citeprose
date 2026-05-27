@@ -9,7 +9,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css?v=1.5.33">
+  <link rel="stylesheet" href="/app/styles/app.css?v=1.5.38">
 </head>
 <body>
   <div id="root"></div>
@@ -118,10 +118,11 @@
         return res;
       }, []);
 
-      const fetchAll = useCallback(async () => {
+      const fetchAll = useCallback(async (opts) => {
+        const bgHeaders = opts?.background ? { 'X-Background-Poll': '1' } : {};
         try {
           // Status is public (uses optionalAuth) — always fetch with regular fetch
-          const statusRes = await fetch(`${API}/api/status`).then(r => r.json());
+          const statusRes = await fetch(`${API}/api/status`, { headers: bgHeaders }).then(r => r.json());
 
           // If auth is required and no user, don't fetch protected routes
           if (statusRes.authRequired && !statusRes.user) {
@@ -157,15 +158,15 @@
           setStatus(statusRes);
 
           const [postsRes, logsRes] = await Promise.all([
-            authFetch(`${API}/api/posts?limit=30`).then(r => r.json()),
-            authFetch(`${API}/api/logs?limit=40`).then(r => r.json()),
+            authFetch(`${API}/api/posts?limit=30`, { headers: bgHeaders }).then(r => r.json()),
+            authFetch(`${API}/api/logs?limit=40`, { headers: bgHeaders }).then(r => r.json()),
           ]);
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
 
           // Fetch topics for the selector — 403 is expected for viewers
           try {
-            const topicsRes = await fetch(`${API}/api/topics`).then(r => r.ok ? r.json() : null);
+            const topicsRes = await fetch(`${API}/api/topics`, { headers: bgHeaders }).then(r => r.ok ? r.json() : null);
             const topicsList = (topicsRes && topicsRes.topics) || [];
             setTopics(topicsList);
 
@@ -192,7 +193,7 @@
 
       useEffect(() => {
         fetchAll();
-        const interval = setInterval(fetchAll, 15000);
+        const interval = setInterval(() => fetchAll({ background: true }), 15000);
         return () => clearInterval(interval);
       }, [fetchAll]);
 
@@ -493,7 +494,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.5.33</div>
+                <div className="header-subtitle">v1.5.38</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
@@ -533,7 +534,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.5.33 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.5.38 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               {status?.user && (

@@ -4,3 +4,5 @@ data
 pgsql
 *dump*
 CREATE_ROLE_CREATE_DATABASE.sql
+!restore.sh
+!do_backup.sh

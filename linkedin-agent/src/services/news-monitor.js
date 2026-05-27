@@ -460,7 +460,7 @@ async function _getArticlesForTopicV2(topicSlug, ageDays, articleLimit) {
 
   const r = await c.query(
     `SELECT DISTINCT a.id, a.title, a.link, a.summary, a.published_at,
-            f.name AS feed_name, f.tier::text AS feed_tier,
+            a.image_url, f.name AS feed_name, f.tier::text AS feed_tier,
             f.is_catchall, f.domains AS feed_domains,
             (t.id IS NOT NULL) AS is_topic_specific
      FROM articles_v2 a

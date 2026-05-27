@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.5.40
+// v1.6.4
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -22,6 +22,7 @@ import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
 import express from "express";
 import cors from "cors";
+import createPlatformAdminRoutes from "./routes/platform-admin-api.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -126,6 +127,9 @@ export function createApp(ctx) {
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback.
   instance.use("/app/admin", express.static(path.join(__dirname, "../public/admin"), { index: "index.html" }));
+
+  // Platform admin — super admin only, server-side query execution
+  instance.use("/app/platform-admin", express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html" }));
 
   instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
   instance.use(express.static(alphaDir, { index: false }));
@@ -427,6 +431,9 @@ export function createApp(ctx) {
   // unknown /api/* paths.
   instance.use("/api/admin", adminRoutes);
 
+  // Platform admin API — super admin only, cross-tenant operations
+  instance.use("/api/platform-admin", createPlatformAdminRoutes());
+
   // Topics API routes — mounted at /api/topics. Blanket middleware
   // requires manage_own_topics (blocks viewers). Per-handler checks
   // enforce manage_topics for global operations.
@@ -604,7 +611,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  1.5.40
+║           LinkedIn AI Content Agent  1.6.4
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

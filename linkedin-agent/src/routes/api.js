@@ -425,6 +425,11 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
   try {
     const { postId, topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
 
+    // Validate postId if provided — must be integer to prevent DB type errors
+    if (postId !== undefined && postId !== null && (!Number.isInteger(postId) || postId < 1)) {
+      return res.status(400).json({ error: "Invalid postId" });
+    }
+
     // Validate image URL if provided
     let validatedImageUrl = null;
     if (imageUrl && typeof imageUrl === "string" && imageUrl.length > 0) {

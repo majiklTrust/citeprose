@@ -24,6 +24,11 @@ const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 export const MS_PER_MINUTE = MS_PER_SECOND * SECONDS_PER_MINUTE;
 
+// Default OAuth token lifetime when the provider does not specify
+// expiresIn. Auth0 typically returns 86400 (24h); this fallback
+// covers providers that omit the field entirely.
+const DEFAULT_TOKEN_EXPIRY_SECONDS = 3600;
+
 // export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 86400000; // 24h
 // export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 3600000; // 1h
 export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) || 300000; // 5m
@@ -154,7 +159,7 @@ export function createSession(res, tokens) {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken || null,
     issuedAt: Date.now(),
-    expiresAt: Date.now() + (tokens.expiresIn ?? 3600) * 1000,
+    expiresAt: Date.now() + (tokens.expiresIn ?? DEFAULT_TOKEN_EXPIRY_SECONDS) * MS_PER_SECOND,
     user: {
       sub: tokens.user.sub,
       email: tokens.user.email || null,
@@ -310,7 +315,11 @@ export function refreshSession(res, session) {
  * @param {number} [thresholdMs=300000] — milliseconds before expiry to consider "expiring" (default 5 min)
  * @returns {boolean} — true if session is null, missing expiresAt, or within threshold
  */
-export function isSessionExpiring(session, thresholdMs = 300000) {
+// Default threshold: 25% of the session TTL. With a 4-hour TTL
+// this is 1 hour; with 10 minutes it's 2.5 minutes.
+const SESSION_EXPIRING_THRESHOLD_MS = Math.round(SESSION_MAX_AGE_MS / 4);
+
+export function isSessionExpiring(session, thresholdMs = SESSION_EXPIRING_THRESHOLD_MS) {
   if (!session) return true;
   if (typeof session.expiresAt !== 'number') return true;
   return session.expiresAt - Date.now() <= thresholdMs;

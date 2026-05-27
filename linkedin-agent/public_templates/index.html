@@ -31,6 +31,7 @@
     const { useState, useEffect, useCallback } = React;
 
     const API = '';  // same-origin
+    const DASHBOARD_POLL_INTERVAL_MS = 15000;
 
     // ── Dynamic topic colors — deterministic hash from slug ──
     const TOPIC_PALETTE = [
@@ -193,7 +194,7 @@
 
       useEffect(() => {
         fetchAll();
-        const interval = setInterval(() => fetchAll({ background: true }), 15000);
+        const interval = setInterval(() => fetchAll({ background: true }), DASHBOARD_POLL_INTERVAL_MS);
         return () => clearInterval(interval);
       }, [fetchAll]);
 
@@ -331,7 +332,7 @@
           }
 
           if (data.blocked) {
-            alert(`Post blocked — insufficient sources.\n\nTopic: ${getTopicStyle(data.topicId).label}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
+            alert(`A post could not be generated at this time.\nReason: ${data.reason}\n\nTopic: ${getTopicStyle(data.topicId).label}\nAngle: ${data.angle}\n\nThe agent will try a different topic and angle next cycle.`);
             setLoading(l => ({ ...l, preview: false }));
             if (overlay) overlay.style.display = 'none';
             return;

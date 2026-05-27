@@ -41,7 +41,7 @@ import { getServerAddress } from "../services/server-address.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
-import { withTenant } from "../db/with-tenant.js";
+import { withTenant, currentClient as client } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { getAnthropicModel } from "../config/ai.js";
@@ -375,20 +375,46 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
 router.post("/api/generate-preview", requirePermission("preview_post"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
-    const { generated, quality } = await withTenant(req.tenant.id, async () => {
+    const result = await withTenant(req.tenant.id, async () => {
       const g = await generatePost(topicId);
-      if (g.blocked) return { generated: g, quality: null };
+      if (g.blocked) return { generated: g, quality: null, postId: null };
       const q = await qualityCheck(g.content, g.researchSummary);
-      return { generated: g, quality: q };
+
+      // Auto-save as draft — content persists even if the session
+      // expires before the user clicks "Queue for Approval."
+      const storedContext = {
+        angle: g.angle || "",
+        sourcesUsed: g.sourcesUsed || [],
+        researchSummary: g.researchSummary || null,
+        qualityScores: q?.scores,
+        factualFlags: q?.factual_flags,
+        articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
+      };
+
+      const postId = await createPost({
+        topicId: g.topicId,
+        title: g.title,
+        content: g.content,
+        hashtags: g.hashtags || [],
+        newsContext: storedContext,
+        scheduledFor: null,
+        imageUrl: null
+      });
+
+      await logActivity("info", "preview_auto_saved", {
+        postId, title: g.title, topicId: g.topicId
+      }, req.user?.sub || null);
+
+      return { generated: g, quality: q, postId };
     });
 
-    if (generated.blocked) {
+    if (result.generated.blocked) {
       return res.json({
-        blocked: true, reason: generated.reason,
-        topicId: generated.topicId, angle: generated.angle
+        blocked: true, reason: result.generated.reason,
+        topicId: result.generated.topicId, angle: result.generated.angle
       });
     }
-    res.json({ post: generated, quality });
+    res.json({ post: result.generated, quality: result.quality, postId: result.postId });
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
@@ -397,11 +423,7 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
 
 router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
-    const { topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
-
-    if (!topicId || !title || !content) {
-      return res.status(400).json({ error: "Missing required fields: topicId, title, content" });
-    }
+    const { postId, topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
 
     // Validate image URL if provided
     let validatedImageUrl = null;
@@ -412,16 +434,41 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
       validatedImageUrl = imageUrl;
     }
 
-    const storedContext = {
-      angle: angle || "",
-      sourcesUsed: sourcesUsed || [],
-      researchSummary: researchSummary || null,
-      qualityScores: quality?.scores,
-      factualFlags: quality?.factual_flags,
-      articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
-    };
+    const savedId = await withTenant(req.tenant.id, async () => {
+      // If postId provided, promote the existing draft
+      if (postId) {
+        // Update editable fields in case user modified them
+        if (title || content || hashtags) {
+          const c = client();
+          await c.query(
+            `UPDATE posts SET
+               title = COALESCE($1, title),
+               content = COALESCE($2, content),
+               hashtags = COALESCE($3::jsonb, hashtags),
+               image_url = $4
+             WHERE id = $5 AND tenant_id = current_tenant_id() AND status = 'draft'`,
+            [title || null, content || null, hashtags ? JSON.stringify(hashtags) : null, validatedImageUrl, postId]
+          );
+        }
+        await updatePostStatus(postId, "pending_approval");
+        await logActivity("info", "draft_promoted_to_queue", { postId, title }, req.user?.sub || null);
+        return postId;
+      }
 
-    const postId = await withTenant(req.tenant.id, async () => {
+      // Fallback: create new post if no postId (legacy flow)
+      if (!topicId || !title || !content) {
+        throw new Error("Missing required fields: topicId, title, content");
+      }
+
+      const storedContext = {
+        angle: angle || "",
+        sourcesUsed: sourcesUsed || [],
+        researchSummary: researchSummary || null,
+        qualityScores: quality?.scores,
+        factualFlags: quality?.factual_flags,
+        articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
+      };
+
       const id = await createPost({
         topicId,
         title,
@@ -436,7 +483,7 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
       return id;
     });
 
-    res.json({ success: true, postId });
+    res.json({ success: true, postId: savedId });
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });

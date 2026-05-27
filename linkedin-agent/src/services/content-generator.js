@@ -265,7 +265,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
     const response = await callAnthropic(client, {
       model,
       max_tokens: 1500,
-      system: topic.system_context,
+      system: topic.system_context || undefined,
       messages: [{ role: "user", content: userPrompt }]
     });
 
@@ -314,7 +314,9 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       cycleId, topicId: topic.slug, error: err.message
     });
     platformLog("error", "content_generation_failed", {
-      cycleId, topicId: topic.slug, error: err.message
+      cycleId, topicId: topic.slug, error: err.message,
+      code: err.code, status: err.status, type: err.constructor?.name,
+      stack: (err.stack || "").split("\n").slice(0, 3).join(" | ")
     });
     throw err;
   }

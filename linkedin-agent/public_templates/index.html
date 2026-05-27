@@ -13,6 +13,20 @@
 </head>
 <body>
   <div id="root"></div>
+
+  <!-- Blocking overlay for content generation -->
+  <div id="generate-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:8px; padding:2rem 3rem; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.3); max-width:400px;">
+      <div style="margin-bottom:1rem;">
+        <div style="width:40px; height:40px; border:3px solid #e0e0e0; border-top-color:#0073b1; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+      </div>
+      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating Content</div>
+      <div style="font-size:0.85rem; color:#888;">Researching sources and composing your post. This may take a moment.</div>
+      <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;">Your draft is saved automatically.</div>
+    </div>
+  </div>
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
   <script type="text/babel">
     const { useState, useEffect, useCallback } = React;
 
@@ -300,6 +314,9 @@
 
       async function handlePreview() {
         setLoading(l => ({ ...l, preview: true }));
+        // Show blocking overlay
+        const overlay = document.getElementById('generate-overlay');
+        if (overlay) overlay.style.display = 'flex';
         try {
           const res = await fetch(`${API}/api/generate-preview`, {
             method: 'POST',
@@ -315,6 +332,7 @@
           if (data.blocked) {
             alert(`Post blocked — insufficient sources.\n\nTopic: ${getTopicStyle(data.topicId).label}\nAngle: ${data.angle}\nReason: ${data.reason}\n\nThe agent will try a different topic/angle next cycle.`);
             setLoading(l => ({ ...l, preview: false }));
+            if (overlay) overlay.style.display = 'none';
             return;
           }
 
@@ -322,6 +340,7 @@
             ...data.post,
             quality: data.quality,
             isPreview: true,
+            draftPostId: data.postId,
             title: data.post.title,
             content: data.post.content,
             hashtags: data.post.hashtags,
@@ -340,6 +359,7 @@
           alert('Preview generation failed: ' + err.message);
         }
         setLoading(l => ({ ...l, preview: false }));
+        if (overlay) overlay.style.display = 'none';
       }
 
       async function handleRefreshFeeds() {
@@ -371,7 +391,7 @@
       }
 
       async function handleSavePreview() {
-        if (!selectedPost || !selectedPost.isPreview) return;
+        if (!selectedPost || (!selectedPost.isPreview && selectedPost.status !== 'draft')) return;
         setLoading(l => ({ ...l, savePreview: true }));
         try {
           // Resolve image URL from user's choice
@@ -386,6 +406,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              postId: selectedPost.draftPostId || selectedPost.id || null,
               topicId: selectedPost.topic_id,
               title: selectedPost.title,
               content: selectedPost.content,
@@ -411,8 +432,8 @@
         setLoading(l => ({ ...l, savePreview: false }));
       }
 
-      const pendingPosts = posts.filter(p => p.status === 'pending_approval');
-      const recentPosts = posts.filter(p => p.status !== 'pending_approval');
+      const pendingPosts = posts.filter(p => p.status === 'pending_approval' || p.status === 'draft');
+      const recentPosts = posts.filter(p => p.status !== 'pending_approval' && p.status !== 'draft');
 
       // ── Login Wall: shown when auth is required but no user ──
       if (status && status.authRequired && !status.user) {
@@ -587,7 +608,12 @@
                 <div style={{ marginBottom: '2rem' }}>
                   <div className="section-title">
                     Awaiting Approval
-                    <span className="badge">{pendingPosts.length}</span>
+                    <span className="badge">{pendingPosts.filter(p => p.status === 'pending_approval').length}</span>
+                    {pendingPosts.some(p => p.status === 'draft') && (
+                      <span className="badge" style={{ background: '#fff3e0', color: '#e65100', marginLeft: '0.3rem' }}>
+                        {pendingPosts.filter(p => p.status === 'draft').length} draft{pendingPosts.filter(p => p.status === 'draft').length !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="post-list">
                     {pendingPosts.map(post => {
@@ -609,13 +635,23 @@
                               {pLevel === 'strong' ? '◉' : pLevel === 'weak' ? '◎' : '○'} {pLabel.text}
                             </span>
                           </div>
-                          <span className="post-status status-pending_approval">PENDING</span>
+                          <span className={post.status === 'draft'
+                            ? 'post-status'
+                            : 'post-status status-pending_approval'}
+                            style={post.status === 'draft' ? { background: '#fff3e0', color: '#e65100' } : {}}>
+                            {post.status === 'draft' ? 'DRAFT' : 'PENDING'}
+                          </span>
                         </div>
                         <div className="post-title-text">{post.title}</div>
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
                           <span className="post-date">{formatDate(post.created_at)}</span>
                           <div className="post-actions">
+                            {post.status === 'draft' ? (
+                              <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
+                                Review Draft
+                              </button>
+                            ) : (<>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
                             </button>
@@ -626,6 +662,7 @@
                               style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
                               Edit
                             </button>
+                            </>)}
                           </div>
                         </div>
                       </div>
@@ -853,6 +890,9 @@
                   {selectedPost.isPreview && (
                     <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)' }}>PREVIEW</span>
                   )}
+                  {!selectedPost.isPreview && selectedPost.status === 'draft' && (
+                    <span className="post-status" style={{ background: '#fff3e0', color: '#e65100' }}>DRAFT</span>
+                  )}
                   <span className={`corroboration-badge ${corrobLabel.cls}`}>
                     {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
                   </span>
@@ -1021,7 +1061,7 @@
                     </div>
                   </div>
                   );})()}
-                {selectedPost.isPreview && (() => {
+                {(selectedPost.isPreview || selectedPost.status === 'draft') && (() => {
                   const availableImages = getArticleImages(selectedPost);
                   return (
                   <div>

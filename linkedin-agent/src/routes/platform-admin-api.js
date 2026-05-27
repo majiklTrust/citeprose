@@ -16,6 +16,14 @@
 //   GET  /api/platform-admin/queries  — list available queries
 //   POST /api/platform-admin/execute  — run a named query
 //
+// RLS bypass:
+//   All queries execute inside a transaction with SET LOCAL ROLE
+//   to the platform admin database role (env: PLATFORM_ADMIN_DB_ROLE,
+//   default: ***REMOVED***). This role bypasses RLS so the super
+//   user sees all tenant data without per-tenant context switching.
+//   SET LOCAL is transaction-scoped — the pooled connection reverts
+//   to the app role on COMMIT/ROLLBACK. No leaked privileges.
+//
 // Zero Trust:
 //   • isPlatformAdmin gate — .env PLATFORM_ADMIN_SUBS
 //   • Query keys validated against registry — unknown keys rejected
@@ -23,15 +31,31 @@
 //   • Parameterized queries — no string interpolation
 //   • Destructive queries require explicit confirmation flag
 //   • All executions logged via platformLog
+//   • Elevated DB role is transaction-scoped, never persists
 // ═══════════════════════════════════════════════════════════════
 
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
-import { query } from "../db/pool.js";
+import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 
 const router = Router();
+
+// Database role for platform admin queries. Must have privileges
+// to read/write tenant tables and bypass RLS. The app role needs:
+//   GRANT ***REMOVED*** TO linkedin_agent_app;
+// so SET LOCAL ROLE succeeds.
+const ADMIN_DB_ROLE = (() => {
+  const role = process.env.PLATFORM_ADMIN_DB_ROLE;
+  // Validate: must be a simple identifier (defense in depth —
+  // the value comes from .env, not from the client, but SET
+  // LOCAL ROLE interpolates it into SQL).
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(role)) {
+    throw new Error(`Invalid PLATFORM_ADMIN_DB_ROLE: must be a valid PostgreSQL identifier`);
+  }
+  return role;
+})();
 
 // ── Query Registry ───────────────────────────────────────────
 // Each entry: key → { label, description, sql, params, destructive, readOnly }
@@ -280,6 +304,11 @@ export default function createPlatformAdminRoutes() {
 
   // ── POST /execute — run a named query ────────────────────
   // Body: { key: string, params: { name: value, ... }, confirmed?: boolean }
+  //
+  // Every query runs inside a transaction with SET LOCAL ROLE
+  // to the platform admin DB role. This bypasses RLS so the
+  // super user sees all tenant data. The role elevation is
+  // transaction-scoped — it reverts on COMMIT/ROLLBACK.
 
   router.post("/execute", async (req, res) => {
     const { key, params: clientParams, confirmed } = req.body || {};
@@ -318,8 +347,14 @@ export default function createPlatformAdminRoutes() {
       destructive: queryDef.destructive
     });
 
+    const client = await pool.connect();
     try {
-      const result = await query(queryDef.sql, paramValues);
+      await client.query("BEGIN");
+      await client.query(`SET LOCAL ROLE ${ADMIN_DB_ROLE}`);
+
+      const result = await client.query(queryDef.sql, paramValues);
+
+      await client.query("COMMIT");
 
       platformLog("info", "platform_admin_query_result", {
         query: key,
@@ -335,10 +370,13 @@ export default function createPlatformAdminRoutes() {
         fields: queryDef.readOnly ? result.fields?.map(f => f.name) : undefined
       });
     } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
       platformLog("error", "platform_admin_query_failed", {
         query: key, error: err.message
       });
       res.status(500).json({ error: "An internal error occurred" });
+    } finally {
+      client.release();
     }
   });
 

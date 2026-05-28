@@ -265,6 +265,29 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "database-enum-fields": {
+    label: "Database Wide enum Type Fields",
+    description: "Shows all scoped fields.",
+    sql: `SELECT t.typname AS enum_type,
+                c.relname AS table_name,
+                a.attname AS column_name,
+                ARRAY(SELECT e.enumlabel::text 
+                      FROM pg_enum e 
+                      WHERE e.enumtypid = t.oid 
+                      ORDER BY e.enumsortorder) AS possible_values
+          FROM pg_type t
+          JOIN pg_enum e2 ON e2.enumtypid = t.oid
+          JOIN pg_attribute a ON a.atttypid = t.oid
+          JOIN pg_class c ON c.oid = a.attrelid
+          WHERE c.relkind = 'r'
+            AND NOT a.attisdropped
+          GROUP BY t.typname, t.oid, c.relname, a.attname
+          ORDER BY t.typname, c.relname`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
   "tenant-credentials-status": {
     label: "Tenant Credentials Status",
     description: "Shows which credentials exist for a tenant (names only — values are encrypted and never exposed).",

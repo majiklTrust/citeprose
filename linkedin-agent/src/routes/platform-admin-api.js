@@ -157,7 +157,7 @@ const QUERY_REGISTRY = {
   },
 
   "clear-tenant-posts": {
-    label: "Clear All Tenant Posts",
+    label: "Clear Tenant Posts",
     description: "Removes all posts for a tenant.",
     sql: `DELETE FROM posts WHERE tenant_id = $1`,
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
@@ -166,7 +166,7 @@ const QUERY_REGISTRY = {
   },
 
   "clear-tenant-topics": {
-    label: "Clear All Tenant Topics",
+    label: "Clear Tenant Topics",
     description: "Removes all topics and their feed mappings for a tenant.",
     sql: `WITH deleted_mappings AS (
             DELETE FROM feed_topics WHERE tenant_id = $1
@@ -177,18 +177,29 @@ const QUERY_REGISTRY = {
     readOnly: false
   },
 
-  "clear-all-tenant-data": {
-    label: "Clear ALL Tenant Data",
-    description: "Nuclear option — removes feeds, topics, posts, activity log, and agent_state for a tenant. The tenant shell remains.",
-    sql: `WITH d1 AS (DELETE FROM feed_topics WHERE tenant_id = $1),
-              d2 AS (DELETE FROM feed_articles WHERE feed_id IN (SELECT id FROM feeds_v2 WHERE tenant_id = $1)),
-              d3 AS (DELETE FROM feeds_v2 WHERE tenant_id = $1),
-              d4 AS (DELETE FROM posts WHERE tenant_id = $1),
-              d5 AS (DELETE FROM topics WHERE tenant_id = $1),
-              d6 AS (DELETE FROM activity_log WHERE tenant_id = $1),
-              d7 AS (DELETE FROM agent_state WHERE tenant_id = $1)
-          SELECT 'done' AS result`,
+  "clear-tenant-invites": {
+    label: "Clear Tenant Member Invites (all users)",
+    description: "",
+    sql: `DELETE FROM invites WHERE tenant_id = $1`,
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    destructive: true,
+    readOnly: false
+  },
+
+  "clear-tenant-memberships": {
+    label: "Clear Tenant Membership",
+    description: "",
+    sql: `DELETE FROM memberships WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    destructive: true,
+    readOnly: false
+  },
+
+  "clear-tenant-main": {
+    label: "Clear Tenant",
+    description: "",
+    sql: `DELETE FROM tenants WHERE id = $1`,
+    params: [{ name: "id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },

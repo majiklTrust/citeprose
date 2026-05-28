@@ -110,7 +110,8 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
     const brandName = process.env.BRAND_NAME || "Content Agent";
     const registerUrl = `${origin}/app/register#token=${invite.token}`;
-
+// Your administrator has already provisioned your AI model connection and API key, so you can focus on what matters: getting your workspace configured and publishing great content.
+// During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.
     const emailSubject = `Your ${brandName} workspace is ready to set up`;
 
     // Adjust email body based on whether key was provided
@@ -120,17 +121,17 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
 
     const expires = new Date(invite.expires_at)
     const emailBody = [
-      `Welcome to ${brandName} is ready for setup.`,
+      `Welcome to ${brandName} your workspace is ready to for you.`,
       ``,
-      `This platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels. Your administrator has already provisioned your AI model connection and API key, so you can focus on what matters: getting your workspace configured and publishing great content.`,
+      `This platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels.`,
       `To get started, click the link below:`,
       `${registerUrl}`,
       ``,
-      `What to expect when you click the link:`,
-      `You will be guided through a short setup process to name and configure your workspace. During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.`,
-      ``,
       `What you'll need:`,
       whatYouNeed,
+      ``,
+      `What to expect when you click the link:`,
+      `You will be guided through a short setup process to name and configure your workspace.`,
       ``,
       `This link can only be used once and expires at: ${
   expires.toLocaleString("en-US", {

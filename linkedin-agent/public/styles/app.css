@@ -497,6 +497,25 @@ body::after {
   cursor: pointer;
 }
 
+.modal-close-bottom {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.6rem;
+  text-align: center;
+  background: transparent;
+  border: 2px solid var(--border-active);
+  border-radius: var(--radius-sm);
+  color: var(--border-active);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-close-bottom:hover {
+  color: white;
+  background: var(--border-active);
+}
+
 .modal-body {
   white-space: pre-wrap;
   line-height: 1.7;

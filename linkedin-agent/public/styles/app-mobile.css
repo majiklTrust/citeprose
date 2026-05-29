@@ -125,6 +125,12 @@
     min-height: 40px;
   }
 
+  /* Nav links: exempt from touch target height, single line */
+  .btn-nav {
+    min-height: auto;
+    white-space: nowrap;
+  }
+
   .sidebar-panel .btn {
     min-height: 44px;
   }

@@ -514,6 +514,7 @@ body::after {
 .modal-close-bottom:hover {
   color: white;
   background: var(--border-active);
+  border-color: var(--border-active);
 }
 
 .modal-body {

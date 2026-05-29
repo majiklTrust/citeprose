@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.4.26",
+  "version": "1.4.28",
   "config": {
-    "cssversion": "22.0"
+    "cssversion": "24.0"
   },
   "description": "Autonomous AI agent for LinkedIn content creation and posting",
   "main": "src/index.js",

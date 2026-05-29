@@ -9,7 +9,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app-mobile.css?v={{CSSVERSION}}">
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}">
 </head>
 <body>
@@ -460,12 +459,12 @@
                 <div className="header-subtitle">Command Center</div>
               </div>
             </div>
-            <div className="sidebar-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚡</div>
-              <div style={{ color: 'var(--accent-amber)', marginBottom: '0.5rem', fontWeight: 600 }}>
+            <div className="sidebar-panel state-panel">
+              <div className="state-icon">⚡</div>
+              <div className="state-warning">
                 Service Unavailable
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{error}</div>
+              <div className="text-muted-sm">{error}</div>
             </div>
           </div>
         );
@@ -473,8 +472,8 @@
 
       if (!status) {
         return (
-          <div className="app-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-            <div className="loading-spinner" style={{ width: 32, height: 32 }}></div>
+          <div className="app-container loading-center">
+            <div className="loading-spinner loading-spinner-lg"></div>
           </div>
         );
       }
@@ -498,20 +497,20 @@
                 <div className="header-title">LinkedIn AI Agent</div>
                 <div className="header-subtitle">v{{VERSION}}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
+              <div className="header-controls-wide">
+                <a href="/" className="btn btn-ghost btn-nav">Home</a>
                 <div className="user-info">
                   <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
                   <a href="/auth/logout" className="logout-btn">Logout</a>
                 </div>
               </div>
             </div>
-            <div className="sidebar-panel" style={{ textAlign: 'center', padding: '3rem', marginTop: '2rem' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🔐</div>
-              <div style={{ color: 'var(--accent-amber)', marginBottom: '0.5rem', fontWeight: 600 }}>
+            <div className="sidebar-panel state-panel-mt">
+              <div className="state-icon">🔐</div>
+              <div className="state-warning">
                 No Membership - Workspace Unassigned
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '32rem', margin: '0 auto' }}>
+              <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0 auto' }}>
                 Your account is authenticated but isn't yet assigned to a workspace.
                 Contact your administrator to be added to one, then log out and back in.
               </div>
@@ -528,7 +527,7 @@
               <span className="dev-banner-icon">⚠</span>
               <div>
                 <div>Authentication Disabled</div>
-                <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>NODE_ENV=dev{status.serverAddress ? '  APP_SERVER=' + status.serverAddress : ''}</div>
+                <div className="dev-banner-detail">NODE_ENV=dev{status.serverAddress ? '  APP_SERVER=' + status.serverAddress : ''}</div>
               </div>
             </div>
           )}
@@ -538,19 +537,19 @@
               <div className="header-title">LinkedIn AI Agent</div>
               <div className="header-subtitle">v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="header-controls">
               {status?.user && (
                 <div className="user-info">
                   <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
                   <a href="/auth/logout" className="logout-btn">Logout</a>
                 </div>
               )}
-              <a href="/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Home</a>
+              <a href="/" className="btn btn-ghost btn-nav">Home</a>
               {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && (
-                <a href="/app/topics/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Topics</a>
+                <a href="/app/topics/" className="btn btn-ghost btn-nav">Topics</a>
               )}
               {status?.user?.role === 'owner' && !status.devBypass && (
-                <a href="/app/admin/" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>Manage Users</a>
+                <a href="/app/admin/" className="btn btn-ghost btn-nav">Manage Users</a>
               )}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
@@ -589,14 +588,13 @@
             </div>
             <div className="stat-card">
               <div className="stat-label">LinkedIn</div>
-              <div className="stat-value" style={{ fontSize: '1rem', marginTop: '0.75rem' }}>
-                <span className={`conn-dot ${status.linkedinConnected ? 'connected' : 'disconnected'}`}
-                  style={{ display: 'inline-block', marginRight: '0.5rem', verticalAlign: 'middle' }}></span>
+              <div className="stat-value stat-value-sm">
+                <span className={`conn-dot conn-dot-inline ${status.linkedinConnected ? 'connected' : 'disconnected'}`}></span>
                 {status.linkedinConnected ? 'Connected' : 'Not Connected'}
               </div>
               {!status.linkedinConnected && (
                 <div className="stat-meta">
-                  <a href="/auth/linkedin" style={{ color: 'var(--accent-blue)' }}>Connect now →</a>
+                  <a href="/auth/linkedin" className="text-link-blue">Connect now →</a>
                 </div>
               )}
             </div>
@@ -608,12 +606,12 @@
             <div>
               {/* Pending approval section */}
               {pendingPosts.length > 0 && (
-                <div style={{ marginBottom: '2rem' }}>
+                <div className="mb-2">
                   <div className="section-title">
                     Awaiting Approval
                     <span className="badge">{pendingPosts.filter(p => p.status === 'pending_approval').length}</span>
                     {pendingPosts.some(p => p.status === 'draft') && (
-                      <span className="badge" style={{ background: '#fff3e0', color: '#e65100', marginLeft: '0.3rem' }}>
+                      <span className="badge badge-draft-ml">
                         {pendingPosts.filter(p => p.status === 'draft').length} draft{pendingPosts.filter(p => p.status === 'draft').length !== 1 ? 's' : ''}
                       </span>
                     )}
@@ -624,13 +622,12 @@
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
                       return (
-                      <div key={post.id} className="post-card" onClick={() => {
+                      <div key={post.id} className="post-card pending-card" onClick={() => {
                         setSelectedPost(post);
                         setImageChoice(post.image_url ? { mode: 'auto', url: post.image_url } : { mode: 'none', url: null });
-                      }}
-                        style={{ borderColor: 'var(--accent-amber)', borderWidth: '1px' }}>
+                      }}>
                         <div className="post-card-header">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <div className="post-badges-row">
                             <span className="post-topic-badge" style={{ background: getTopicStyle(post.topic_id).bg, color: getTopicStyle(post.topic_id).color }}>
                               {getTopicStyle(post.topic_id).label}
                             </span>
@@ -639,9 +636,8 @@
                             </span>
                           </div>
                           <span className={post.status === 'draft'
-                            ? 'post-status'
-                            : 'post-status status-pending_approval'}
-                            style={post.status === 'draft' ? { background: '#fff3e0', color: '#e65100' } : {}}>
+                            ? 'post-status badge-draft'
+                            : 'post-status status-pending_approval'}>
                             {post.status === 'draft' ? 'DRAFT' : 'PENDING'}
                           </span>
                         </div>
@@ -662,7 +658,7 @@
                               Reject
                             </button>
                             <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
-                              style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
+                              >
                               Edit
                             </button>
                             </>)}
@@ -679,7 +675,7 @@
               <div className="section-title">Recent Posts</div>
               <div className="post-list">
                 {recentPosts.length === 0 ? (
-                  <div className="sidebar-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <div className="sidebar-panel empty-state">
                     No posts yet. Generate your first one below.
                   </div>
                 ) : recentPosts.slice(0, 15).map(post => (
@@ -697,8 +693,7 @@
                     <div className="post-footer">
                       <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
                       {(post.status === 'draft' || post.status === 'pending_approval') && (
-                        <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
-                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
+                        <button className="btn btn-edit btn-action-sm" onClick={(e) => openEditModal(post, e)}>
                           Edit
                         </button>
                       )}
@@ -713,10 +708,10 @@
             <div>
               {/* AI Model */}
               {status.anthropicModel && (
-                <div className="sidebar-panel" style={{ marginBottom: '1rem', padding: '0.75rem 1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>AI Model</span>
-                    <span style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono, monospace)', color: 'var(--accent-cyan)' }}>
+                <div className="sidebar-panel ai-model-card">
+                  <div className="ai-model-row">
+                    <span className="ai-model-label">AI Model</span>
+                    <span className="ai-model-value">
                       {status.anthropicModel}
                     </span>
                   </div>
@@ -725,7 +720,7 @@
               {/* Quick Actions */}
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className="vstack-sm">
                   <select className="topic-selector" value={selectedTopic}
                     onChange={e => setSelectedTopic(e.target.value)}>
                     <option value="">Auto-select topic</option>
@@ -745,7 +740,7 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
-                  <button className="btn btn-primary" style={{ width: '100%' }} onClick={handlePreview}>
+                  <button className="btn btn-primary btn-full" onClick={handlePreview}>
                     {loading.preview ? <span className="loading-spinner"></span> : '✦ Preview New Post'}
                   </button>
                   <button
@@ -765,37 +760,34 @@
 
               {/* Research Monitor */}
               <div className="sidebar-panel">
-                <div className="section-title" style={{ marginBottom: 0, display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>Research Monitor <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-secondary)' }}>(<span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{status.researchStats?.byFeed?.length || 0}</span> feeds)</span></div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.15rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'baseline' }}>
-                  using <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, margin: '0 0.2rem' }}>{status.researchStats?.recentArticles || 0}</span> articles · last <span style={{ color: 'var(--accent-cyan)', fontWeight: 600, margin: '0 0.2rem' }}>{status.researchStats?.maxAgeDays || 20}</span> days
+                <div className="section-title section-title-flush">Research Monitor <span className="section-title-meta">(<span className="highlight-cyan">{status.researchStats?.byFeed?.length || 0}</span> feeds)</span></div>
+                <div className="research-meta">
+                  using <span className="highlight-cyan">{status.researchStats?.recentArticles || 0}</span> articles · last <span className="highlight-cyan">{status.researchStats?.maxAgeDays || 20}</span> days
                 </div>
                 {status.researchStats ? (
                   <div>
-                    <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                    <div className="feed-list-scroll">
                       {(status.researchStats.byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
-                        <div key={i} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '0.2rem 0', fontSize: '0.75rem'
-                        }}>
-                          <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontSize: '0.75rem' }}>
+                        <div key={i} className="feed-row">
+                          <span className="feed-name">
                             {f.feed_name}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
-                            <span className={`source-tier tier-${f.feed_tier}`} style={{ fontSize: '0.55rem', padding: '0.05rem 0.3rem' }}>{{ authoritative: 'auth', primary: 'prim', secondary: 'sec' }[f.feed_tier] || f.feed_tier}</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                          <div className="feed-meta">
+                            <span className={`source-tier tier-${f.feed_tier} feed-tier-sm`}>{{ authoritative: 'auth', primary: 'prim', secondary: 'sec' }[f.feed_tier] || f.feed_tier}</span>
+                            <span className="feed-count">
                               {f.count}
                             </span>
                           </div>
                         </div>
                       ))}
                     </div>
-                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem' }}
+                    <button className="btn btn-primary btn-refresh-full"
                       onClick={handleRefreshFeeds}>
                       {loading.feeds ? <span className="loading-spinner"></span> : '↻ Refresh Feeds Now'}
                     </button>
                   </div>
                 ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Monitor starting...</div>
+                  <div className="text-muted-sm">Monitor starting...</div>
                 )}
               </div>
 
@@ -803,19 +795,19 @@
               <div className="sidebar-panel">
                 <div className="section-title">Topic Coverage</div>
                 {(status.stats.byTopic || []).map(t => (
-                  <div key={t.topic_id} style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                      <span className="post-topic-badge" style={{ fontSize: '0.65rem', background: getTopicStyle(t.topic_id).bg, color: getTopicStyle(t.topic_id).color }}>
+                  <div key={t.topic_id} className="mb-075">
+                    <div className="topic-row">
+                      <span className="post-topic-badge topic-badge-sm" style={{ background: getTopicStyle(t.topic_id).bg, color: getTopicStyle(t.topic_id).color }}>
                         {getTopicStyle(t.topic_id).label}
                       </span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <span className="mono-muted-sm">
                         {t.count} posts
                       </span>
                     </div>
                   </div>
                 ))}
                 {(!status.stats.byTopic || status.stats.byTopic.length === 0) && (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No posts yet</div>
+                  <div className="text-muted-sm">No posts yet</div>
                 )}
               </div>
             </div>
@@ -824,7 +816,7 @@
             <div>
               <div className="sidebar-panel">
                 <div className="section-title">Activity Log</div>
-                <div style={{ maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                <div className="log-scroll">
                   {logs.slice(0, 30).map(log => {
                     let cycleId = null;
                     let detail = '';
@@ -857,7 +849,7 @@
                       <div>
                         <div className="log-text">
                           {log.action.replace(/_/g, ' ')}
-                          {detail && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}> — {detail}</span>}
+                          {detail && <span className="log-detail"> — {detail}</span>}
                         </div>
                         <div className="log-meta">
                           <span className="log-id">#{log.id}</span>
@@ -869,7 +861,7 @@
                     );
                   })}
                   {logs.length === 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No activity yet</div>
+                    <div className="text-muted-sm">No activity yet</div>
                   )}
                 </div>
               </div>
@@ -886,22 +878,22 @@
             <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <button className="modal-close" onClick={() => setSelectedPost(null)}>✕</button>
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                <div className="post-badges-wrap">
                   <span className="post-topic-badge" style={{ background: getTopicStyle(selectedPost.topic_id).bg, color: getTopicStyle(selectedPost.topic_id).color }}>
                     {getTopicStyle(selectedPost.topic_id).label}
                   </span>
                   {selectedPost.isPreview && (
-                    <span className="post-status" style={{ background: 'var(--glow-blue)', color: 'var(--accent-blue)' }}>PREVIEW</span>
+                    <span className="post-status status-preview">PREVIEW</span>
                   )}
                   {!selectedPost.isPreview && selectedPost.status === 'draft' && (
-                    <span className="post-status" style={{ background: '#fff3e0', color: '#e65100' }}>DRAFT</span>
+                    <span className="post-status badge-draft">DRAFT</span>
                   )}
                   <span className={`corroboration-badge ${corrobLabel.cls}`}>
                     {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
                   </span>
                 </div>
 
-                <h3 style={{ margin: '1rem 0 0.5rem', fontSize: '1.1rem' }}>{selectedPost.title}</h3>
+                <h3 className="modal-heading">{selectedPost.title}</h3>
 
                 {ctx?.researchSummary && (
                   <div className="research-summary">
@@ -921,7 +913,7 @@
 
                 {ctx?.researchSummary?.sourceList && ctx.researchSummary.sourceList.length > 0 && (
                   <div className="source-list">
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-cyan)' }}>
+                    <div className="section-heading-cyan">
                       Sources ({ctx.researchSummary.sourceList.length})
                     </div>
                     {ctx.researchSummary.sourceList.map((src, i) => (
@@ -938,7 +930,7 @@
 
                 {!ctx?.researchSummary?.sourceList && ctx?.sourcesUsed && ctx.sourcesUsed.length > 0 && (
                   <div className="source-list">
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-cyan)' }}>Sources Referenced</div>
+                    <div className="section-heading-cyan">Sources Referenced</div>
                     {ctx.sourcesUsed.map((name, i) => (
                       <div key={i} className="source-item"><span className="source-name">{name}</span></div>
                     ))}
@@ -947,7 +939,7 @@
 
                 {ctx?.factualFlags && ctx.factualFlags.length > 0 && ctx.factualFlags[0] !== '' && (
                   <div className="factual-flags">
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--accent-red)' }}>
+                    <div className="section-heading-red">
                       Factual Flags — Review Before Approving
                     </div>
                     {ctx.factualFlags.map((flag, i) => (
@@ -957,23 +949,23 @@
                 )}
 
                 {selectedPost.quality && (
-                  <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>Quality Assessment</div>
+                  <div className="quality-panel">
+                    <div className="section-heading-plain">Quality Assessment</div>
                     {Object.entries(selectedPost.quality.scores || {}).map(([key, val]) => (
-                      <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', width: '140px', fontFamily: 'var(--font-mono)' }}>
+                      <div key={key} className="quality-row">
+                        <span className="quality-label">
                           {key.replace(/_/g, ' ')}
                         </span>
-                        <div style={{ flex: 1, height: '6px', background: 'var(--bg-primary)', borderRadius: '3px' }}>
+                        <div className="quality-bar">
                           <div style={{
                             width: `${val * 10}%`, height: '100%', borderRadius: '3px',
                             background: val >= 7 ? 'var(--accent-green)' : val >= 5 ? 'var(--accent-amber)' : 'var(--accent-red)'
                           }}></div>
                         </div>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{val}</span>
+                        <span className="quality-score">{val}</span>
                       </div>
                     ))}
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    <div className="quality-overall">
                       Overall: <strong style={{ color: selectedPost.quality.pass ? 'var(--accent-green)' : 'var(--accent-amber)' }}>
                         {selectedPost.quality.overall}/10 {selectedPost.quality.pass ? '✓ Pass' : '⚠ Needs work'}
                       </strong>
@@ -984,74 +976,67 @@
                   const availableImages = getArticleImages(selectedPost);
                   return (
                   <div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                    <div className="section-divider">
+                      <div className="section-heading">
                         Post Image{status?.publishMode !== 'image-posting' && (
-                          <span style={{ fontWeight: 400 }}> - text posting only</span>
+                          <span className="fw-normal"> - text posting only</span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <div className="detail-stack">
+                        <label className="image-choice-inline">
                           <input type="radio" name="image-choice" value="none"
                             defaultChecked={!selectedPost.image_url && imageChoice.mode === 'none'}
                             onChange={() => setImageChoice({ mode: 'none', url: null })} />
                           No image
                         </label>
                         {availableImages.map((img, idx) => (
-                          <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <label key={idx} className="image-choice">
                             <input type="radio" name="image-choice" value={`article-${idx}`}
                               defaultChecked={selectedPost.image_url === img.imageUrl}
                               onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '0.82rem' }}>{img.feedName || 'Article image'}</div>
+                            <div className="flex-1">
+                              <div className="text-edit-sm">{img.feedName || 'Article image'}</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
                                 alt={img.title || 'Article image'}
-                                style={{ maxWidth: '130px', maxHeight: '80px', objectFit: 'cover', borderRadius: '4px',
-                                         marginTop: '0.25rem', border: '1px solid var(--border)' }}
+                                className="image-thumb"
                                 onError={(e) => { e.target.style.display = 'none'; }} />
                               <input type="text" readOnly value={img.imageUrl}
-                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
-                                         border: '1px solid var(--border)', borderRadius: '4px',
-                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                className="image-url-field"
                                 onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         ))}
                         {availableImages.length === 0 && selectedPost.image_url && (
-                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <label className="image-choice">
                             <input type="radio" name="image-choice" value="auto"
                               defaultChecked={!!selectedPost.image_url}
                               onChange={() => setImageChoice({ mode: 'auto', url: selectedPost.image_url })} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '0.82rem' }}>Current image</div>
+                            <div className="flex-1">
+                              <div className="text-edit-sm">Current image</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(selectedPost.image_url)}`}
                                 alt="Post image"
-                                style={{ maxWidth: '160px', maxHeight: '100px', borderRadius: '4px',
-                                         marginTop: '0.25rem', border: '1px solid var(--border)' }}
+                                className="image-thumb-lg"
                                 onError={(e) => { e.target.style.display = 'none'; }} />
                               <input type="text" readOnly value={selectedPost.image_url}
-                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
-                                         border: '1px solid var(--border)', borderRadius: '4px',
-                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                className="image-url-field"
                                 onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         )}
-                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                        <label className="image-choice">
                           <input type="radio" name="image-choice" value="custom"
                             onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
-                          <div style={{ flex: 1 }}>
+                          <div className="flex-1">
                             Custom image URL
                             <input type="text" placeholder="https://example.com/image.jpg"
-                              style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
-                                       border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                              className="image-url-field"
                               onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
                               onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                    <div className="modal-actions">
                       <button className="btn btn-approve" onClick={(e) => { handleApproveWithImage(selectedPost.id, e); }}>
                         Approve & Publish
                       </button>
@@ -1068,53 +1053,49 @@
                   const availableImages = getArticleImages(selectedPost);
                   return (
                   <div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                    <div className="section-divider">
+                      <div className="section-heading">
                         Attach Image (optional){status?.publishMode !== 'image-posting' && (
-                          <span style={{ fontWeight: 400 }}> - text posting only</span>
+                          <span className="fw-normal"> - text posting only</span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <div className="detail-stack">
+                        <label className="image-choice-inline">
                           <input type="radio" name="preview-image-choice" value="none"
                             defaultChecked={imageChoice.mode === 'none'}
                             onChange={() => setImageChoice({ mode: 'none', url: null })} />
                           No image
                         </label>
                         {availableImages.map((img, idx) => (
-                          <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                          <label key={idx} className="image-choice">
                             <input type="radio" name="preview-image-choice" value={`article-${idx}`}
                               onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '0.82rem' }}>{img.feedName || 'Article image'}</div>
+                            <div className="flex-1">
+                              <div className="text-edit-sm">{img.feedName || 'Article image'}</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
                                 alt={img.title || 'Article image'}
-                                style={{ maxWidth: '130px', maxHeight: '80px', objectFit: 'cover', borderRadius: '4px',
-                                         marginTop: '0.25rem', border: '1px solid var(--border)' }}
+                                className="image-thumb"
                                 onError={(e) => { e.target.style.display = 'none'; }} />
                               <input type="text" readOnly value={img.imageUrl}
-                                style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
-                                         border: '1px solid var(--border)', borderRadius: '4px',
-                                         background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                className="image-url-field"
                                 onClick={(e) => e.target.select()} />
                             </div>
                           </label>
                         ))}
-                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+                        <label className="image-choice">
                           <input type="radio" name="preview-image-choice" value="custom"
                             onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
-                          <div style={{ flex: 1 }}>
+                          <div className="flex-1">
                             Custom image URL
                             <input type="text" placeholder="https://example.com/image.jpg"
-                              style={{ display: 'block', width: '100%', marginTop: '0.35rem', padding: '0.4rem', fontSize: '0.82rem',
-                                       border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                              className="image-url-field"
                               onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
                               onClick={() => { document.querySelector('input[name="preview-image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                    <div className="modal-actions">
                       <button className="btn btn-approve" onClick={handleSavePreview}>
                         {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
                       </button>
@@ -1137,27 +1118,27 @@
             <div className="modal-overlay" onClick={() => setEditingPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                 <button className="modal-close" onClick={() => setEditingPost(null)}>✕</button>
-                <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>Edit Post</h3>
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Title</label>
+                <h3 className="modal-heading-top">Edit Post</h3>
+                <div className="mb-075">
+                  <label className="form-label">Title</label>
                   <input type="text" value={editFields.title}
                     onChange={e => setEditFields(f => ({ ...f, title: e.target.value }))}
-                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.9rem' }} />
+                    className="form-input" />
                 </div>
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Content</label>
+                <div className="mb-075">
+                  <label className="form-label">Content</label>
                   <textarea value={editFields.content}
                     onChange={e => setEditFields(f => ({ ...f, content: e.target.value }))}
                     rows={10}
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                    className="form-textarea" />
                 </div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Hashtags (comma-separated)</label>
+                <div className="mb-1">
+                  <label className="form-label">Hashtags (comma-separated)</label>
                   <input type="text" value={editFields.hashtags}
                     onChange={e => setEditFields(f => ({ ...f, hashtags: e.target.value }))}
-                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.9rem' }} />
+                    className="form-input" />
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <div className="modal-actions-end">
                   <button className="btn btn-ghost" onClick={() => setEditingPost(null)}>Cancel</button>
                   <button className="btn btn-approve" onClick={handleSaveEdit} disabled={loading.editSave}>
                     {loading.editSave ? <span className="loading-spinner"></span> : 'Save Changes'}

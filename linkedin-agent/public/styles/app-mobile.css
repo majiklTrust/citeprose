@@ -137,13 +137,13 @@
 
   /* ── Modal: slide-up sheet ── */
   .modal-overlay {
-    padding: 0.5rem;
+    padding: 3rem 0.5rem 0;
     align-items: flex-end;
   }
 
   .modal-content {
     padding: 1.25rem;
-    max-height: 90vh;
+    max-height: calc(100vh - 3rem);
     border-radius: var(--radius) var(--radius) 0 0;
     max-width: 100%;
   }
@@ -165,12 +165,12 @@
 
   /* ── Modal: edge-to-edge sheet ── */
   .modal-overlay {
-    padding: 0;
+    padding: 3rem 0 0;
   }
 
   .modal-content {
     padding: 1rem;
-    max-height: 92vh;
+    max-height: calc(100vh - 3rem);
   }
 
   /* Inputs: 16px prevents iOS Safari auto-zoom on focus */

@@ -98,6 +98,12 @@
   .main-grid > div:nth-child(2) { order: 0; }
   .main-grid > div:nth-child(3) { order: 2; }
 
+  /* ── Post status badges: prevent text wrapping ── */
+  .post-status {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   /* ── Post footer: stack actions below date ── */
   .post-footer {
     flex-direction: column;

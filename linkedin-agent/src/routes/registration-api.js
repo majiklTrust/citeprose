@@ -109,31 +109,31 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
     // Build the registration URL and email template
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
     const brandName = process.env.BRAND_NAME || "Content Agent";
+    const appName = process.env.APP_NAME || "Content Agent";
     const registerUrl = `${origin}/app/register#token=${invite.token}`;
 // Your administrator has already provisioned your AI model connection and API key, so you can focus on what matters: getting your workspace configured and publishing great content.
 // During registration, you will be prompted to create a secure login using your email address and a password of your choosing. Please use the email address at which you received this invitation.
-    const emailSubject = `Your ${brandName} workspace is ready to set up`;
+    const emailSubject = `Your ${appName} Workspace`;
 
     // Adjust email body based on whether key was provided
     const whatYouNeed = validatedKey
-      ? `  • a name for your workspace\n  • your API key has been configured by your administrator — no additional setup needed.`
+      ? `  • a name for your workspace\n  • your Anthropic AI credentials have been configured by your administrator — no additional setup needed.`
       : `  • an Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
 
     const expires = new Date(invite.expires_at)
     const emailBody = [
-      `Welcome to ${brandName} your workspace is ready to for you.`,
+      `Welcome to ${appName} - your workspace is ready to for you.`,
       ``,
-      `This platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels.`,
-      `To get started, click the link below:`,
-      `${registerUrl}`,
+      `The ${appName} platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels.`,
+      `To get started, click the link below.`,
       ``,
       `What you'll need:`,
       whatYouNeed,
       ``,
       `What to expect when you click the link:`,
-      `You will be guided through a short setup process to name and configure your workspace.`,
+      `  • You will be guided through a short setup process to name and configure your workspace.`,
       ``,
-      `This link can only be used once and expires at: ${
+      `This link can only be used once and expires at ${
   expires.toLocaleString("en-US", {
     timeZone: "America/New_York",
     hour: "numeric",
@@ -157,7 +157,8 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
     second: "2-digit",
     hour12: true
   })
-} UTC).`,
+} UTC): ${registerUrl}.`,
+      ``,
       ``,
       `If you have any questions or did not expect this invitation, please contact your account administrator.`,
       ``,

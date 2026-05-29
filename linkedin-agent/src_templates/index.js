@@ -22,8 +22,6 @@ import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
 import express from "express";
 import cors from "cors";
-import createPlatformAdminRoutes from "./routes/platform-admin-api.js";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The app instance created during start(). Exposed for tests
@@ -62,7 +60,8 @@ export function createApp(ctx) {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
-    invalidateTokenCache
+    invalidateTokenCache,
+    createPlatformAdminRoutes
   } = ctx;
 
   const instance = express();
@@ -504,6 +503,7 @@ export async function buildAppForTests() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -518,7 +518,8 @@ export async function buildAppForTests() {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
-    invalidateTokenCache
+    invalidateTokenCache,
+    createPlatformAdminRoutes
   });
 }
 
@@ -576,6 +577,7 @@ export async function start() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -601,7 +603,8 @@ export async function start() {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
-    invalidateTokenCache
+    invalidateTokenCache,
+    createPlatformAdminRoutes
   });
 
   // STEP 7: Listen

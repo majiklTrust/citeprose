@@ -11,6 +11,9 @@
    different styling than the dashboard defaults.
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Utilities ──────────────────────────────────────────────── */
+.text-center { text-align: center; }
+
 /* ── Skip link ──────────────────────────────────────────────── */
 
 .skip-link {

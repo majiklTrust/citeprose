@@ -1,0 +1,175 @@
+/* ═══════════════════════════════════════════════════════════════
+   app-mobile.css — Mobile-responsive overrides for the dashboard
+   ═══════════════════════════════════════════════════════════════
+   Loaded via <link> tag AFTER app.css. All rules are inside
+   @media queries — zero impact at desktop/tablet widths.
+
+   Breakpoints:
+     ≤640px  — small tablets and large phones
+     ≤480px  — phones (tighter refinements)
+
+   app.css already handles:
+     ≤1100px — main-grid collapses 3-col → 2-col
+     ≤900px  — stats-grid 4-col → 2×2, main-grid → 1-col
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Small tablets / large phones (≤ 640px) ─────────────────── */
+@media (max-width: 640px) {
+
+  /* Container: reclaim horizontal space, prevent overflow */
+  .app-container {
+    padding: 1rem;
+    overflow-x: hidden;
+  }
+
+  /* Prevent long monospace text from causing horizontal scroll */
+  .ai-model-value,
+  .feed-name,
+  .log-text,
+  .user-name,
+  .stat-meta,
+  .mono-muted-sm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  /* Cards: ensure they stay within container */
+  .sidebar-panel,
+  .stat-card,
+  .post-card {
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  /* Grid children: allow shrinking below content width.
+     Default min-width:auto prevents grid items from being
+     narrower than their content, pushing tracks wider than
+     the viewport on small screens. min-width:0 fixes this. */
+  .main-grid > div,
+  .stats-grid > div {
+    min-width: 0;
+  }
+
+  /* ── Header: stack title above controls ────────────
+     Base sets display:flex + align-items:flex-start.
+     Adding flex-direction:column stacks children.
+     align-items:stretch overrides flex-start so both
+     the title div and controls div span full width.  */
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  /* Controls: allow items to wrap onto separate lines */
+  .header-controls {
+    flex-wrap: wrap;
+  }
+
+  /* No-tenant header uses wider gap variant */
+  .header-controls-wide {
+    flex-wrap: wrap;
+  }
+
+  /* User info: full-width row with separator, pulled to top */
+  .user-info {
+    order: -1;
+    width: 100%;
+    justify-content: space-between;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.25rem;
+  }
+
+  /* Mode toggle: full-width card treatment */
+  .mode-switch {
+    width: 100%;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* ── Main grid: promote Quick Actions above Posts ── */
+  .main-grid > div:nth-child(1) { order: 1; }
+  .main-grid > div:nth-child(2) { order: 0; }
+  .main-grid > div:nth-child(3) { order: 2; }
+
+  /* ── Post footer: stack actions below date ── */
+  .post-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .post-actions {
+    width: 100%;
+  }
+
+  .post-actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  /* ── Touch targets: minimum 40–44px ── */
+  .btn {
+    min-height: 40px;
+  }
+
+  .sidebar-panel .btn {
+    min-height: 44px;
+  }
+
+  /* ── Modal: slide-up sheet ── */
+  .modal-overlay {
+    padding: 0.5rem;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    padding: 1.25rem;
+    max-height: 90vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+    max-width: 100%;
+  }
+
+  /* ── Dev banner: compact ── */
+  .dev-banner {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+}
+
+/* ── Phones (≤ 480px) ─────────────────────────────────────── */
+@media (max-width: 480px) {
+
+  .app-container {
+    padding: 0.75rem;
+  }
+
+  /* ── Modal: edge-to-edge sheet ── */
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-content {
+    padding: 1rem;
+    max-height: 92vh;
+  }
+
+  /* Inputs: 16px prevents iOS Safari auto-zoom on focus */
+  .modal-content input[type="text"],
+  .modal-content textarea {
+    font-size: 16px;
+  }
+
+  /* Nav buttons: tighter on small screens */
+  .btn-nav {
+    font-size: 0.68rem;
+    padding: 0.25rem 0.5rem;
+  }
+}

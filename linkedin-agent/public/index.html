@@ -497,6 +497,7 @@
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
                 <div className="header-subtitle">v1.4.25</div>
+                <div className="header-subtitle">v1.4.25</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -536,6 +537,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
+              <div className="header-subtitle">v1.4.25 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
               <div className="header-subtitle">v1.4.25 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
@@ -1109,6 +1111,7 @@
                     </div>
                   </div>
                   );})()}
+                <button className="btn btn-ghost modal-close-bottom" onClick={() => setSelectedPost(null)}>✕ Close</button>
                 <button className="btn btn-ghost modal-close-bottom" onClick={() => setSelectedPost(null)}>✕ Close</button>
               </div>
             </div>

@@ -26,7 +26,7 @@ done
 }
 
 # Backup
-read -p "backup origin database ($PGDATABASE): " ORIGIN
+read -p "set origin database ($PGDATABASE): " ORIGIN
 echo
 if [ -z "$ORIGIN" ];then ORIGIN=$PGDATABASE;fi
 pg_dump -U $PGUSER -d $ORIGIN -Fc -f ./backup/local_${ORIGIN}_$(date +%Y%m%d_T_%H%M).dump\

@@ -37,6 +37,7 @@ import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { isSafeUrl } from "../services/security.js";
 import { validateFeed, formatValidationMessage } from "../services/feed-validator.js";
+import { getPrompt, renderPrompt } from "../services/prompt-vault.js";
 
 const rssParser = new Parser({ timeout: 10000 });
 
@@ -248,43 +249,17 @@ router.post("/discover", async (req, res) => {
       }
 
       const angles = topic.content_angles || [];
-      const prompt = [
-        `Given this LinkedIn content topic:`,
-        `Name: ${topic.name}`,
-        `Description: ${topic.description || "Not specified"}`,
-        `Content angles: ${JSON.stringify(angles)}`,
-        ``,
-        `Suggest 10-12 RSS or Atom feed URLs that would provide high-quality,`,
-        `freely accessible research material for generating professional`,
-        `LinkedIn posts about this topic.`,
-        ``,
-        `For each feed, provide:`,
-        `- name: The publication or organization name`,
-        `- url: The exact RSS or Atom feed URL (must end in /rss, /feed, .xml, .atom, or similar — NOT a web page URL)`,
-        `- tier: authoritative | primary | secondary`,
-        `- relevance: Why this feed is valuable for this topic (1 sentence)`,
-        `- domains: 2-4 keyword tags describing the feed's coverage area (e.g. ["security", "cloud", "enterprise"])`,
-        ``,
-        `REQUIREMENTS — every feed MUST:`,
-        `- Be completely free and open — no login, subscription, paywall, or account required`,
-        `- Provide a direct RSS 2.0 or Atom 1.0 feed URL that returns XML (not HTML)`,
-        `- Include article summaries in feed items (not just titles)`,
-        `- Publish regularly (at least twice per month)`,
-        ``,
-        `DO NOT suggest feeds from:`,
-        `- Paywalled publications (Wall Street Journal, Financial Times, Bloomberg, The Information, The Athletic)`,
-        `- Sources requiring free account registration to read articles`,
-        `- Aggregator or scraper sites that repackage others' content`,
-        `- Defunct or unmaintained feeds`,
-        ``,
-        `Prioritize:`,
-        `- Government agencies and standards bodies (authoritative tier)`,
-        `- Established industry publications with editorial oversight (primary)`,
-        `- Respected blogs and independent analysis sites (primary or secondary)`,
-        `- Mix of technical depth and business/leadership perspective`,
-        ``,
-        `Return ONLY a JSON array, no other text or markdown.`
-      ].join("\n");
+
+      const template = await getPrompt("feed_discovery");
+      if (!template) {
+        platformLog("error", "prompt_vault_miss", { key: "feed_discovery" });
+        return { error: "Feed discovery prompt not configured", status: 500 };
+      }
+      const prompt = renderPrompt(template, {
+        TOPIC_NAME: topic.name,
+        TOPIC_DESCRIPTION: topic.description || "Not specified",
+        CONTENT_ANGLES: JSON.stringify(angles)
+      });
 
       const apiKey = await getAnthropicApiKey();
       const anthropic = new Anthropic({ apiKey });

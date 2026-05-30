@@ -20,6 +20,7 @@ import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
+import { getPrompt, renderPrompt } from "./prompt-vault.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -66,40 +67,23 @@ async function gatherWebSearchMaterial(topic, angle, cycleId) {
   try {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
+
+    const template = await getPrompt("research_assistant");
+    if (!template) {
+      platformLog("error", "prompt_vault_miss", { key: "research_assistant" });
+      return [];
+    }
+    const assembledPrompt = renderPrompt(template, {
+      TOPIC_NAME: topicName,
+      ANGLE: angle,
+      SEARCH_QUERIES: searchQueries.map((q, i) => `${i + 1}. "${q}"`).join("\n")
+    });
+
     const response = await callAnthropic(client, {
       model,
       max_tokens: 2000,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [{
-        role: "user",
-        content: `You are a research assistant. Find current, factual information about this topic.
-
-TOPIC AREA: ${topicName}
-SPECIFIC ANGLE: ${angle}
-
-Search for recent, reliable information using these queries:
-${searchQueries.map((q, i) => `${i + 1}. "${q}"`).join("\n")}
-
-For each piece of information you find, return it in this exact JSON format.
-Return ONLY a JSON array, no other text:
-
-[
-  {
-    "claim": "A specific factual claim or finding",
-    "source_name": "Name of the publication or organization",
-    "source_url": "URL of the source",
-    "source_date": "Publication date if available, or 'unknown'",
-    "confidence": "high|medium|low"
-  }
-]
-
-Rules:
-- Only include claims that are directly stated in the sources, not inferences.
-- Each claim should be a single, specific, verifiable statement.
-- Include 5-15 claims from across different sources.
-- Prefer recent sources (last 30 days).
-- Return ONLY valid JSON. No markdown fencing.`
-      }]
+      messages: [{ role: "user", content: assembledPrompt }]
     });
 
     const textBlocks = response.content.filter(b => b.type === "text");
@@ -266,42 +250,20 @@ async function corroborateClaims(allSources, cycleId) {
   try {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
+
+    const template = await getPrompt("corroboration_analyst");
+    if (!template) {
+      platformLog("error", "prompt_vault_miss", { key: "corroboration_analyst" });
+      return { verified: [], belowThreshold: [], uncorroborated: [] };
+    }
+    const assembledPrompt = renderPrompt(template, {
+      SOURCE_MATERIALS: allSources.map((s, i) => `[${i + 1}] ${s.name} (${s.tier}, ${s.date}): ${s.text}`).join("\n\n")
+    });
+
     const response = await callAnthropic(client, {
       model,
       max_tokens: 2000,
-      messages: [{
-        role: "user",
-        content: `You are a fact-checking analyst. Analyze these source materials and identify claims that are corroborated by multiple independent sources.
-
-SOURCE MATERIALS:
-${allSources.map((s, i) => `[${i + 1}] ${s.name} (${s.tier}, ${s.date}): ${s.text}`).join("\n\n")}
-
-TASK:
-1. Group related claims that describe the same event, finding, or fact.
-2. For each group, determine if the claim is corroborated (appears in 2+ INDEPENDENT sources — same parent organization doesn't count).
-3. Assess factual confidence.
-4. REJECT any claim that contains a specific statistic or percentage unless that exact number appears in at least 2 independent sources.
-
-Return ONLY valid JSON:
-{
-  "corroborated_claims": [
-    {
-      "claim": "The specific corroborated fact",
-      "source_indices": [1, 4, 7],
-      "source_count": 3,
-      "confidence": "high|medium",
-      "category": "event|statistic|announcement|analysis"
-    }
-  ],
-  "uncorroborated_claims": [
-    {
-      "claim": "A claim from only one source",
-      "source_index": 2,
-      "reason": "single source only"
-    }
-  ]
-}`
-      }]
+      messages: [{ role: "user", content: assembledPrompt }]
     });
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();

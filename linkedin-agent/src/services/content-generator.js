@@ -9,6 +9,7 @@ import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getPrompt, renderPrompt } from "./prompt-vault.js";
 import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 
@@ -331,48 +332,22 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
 
   const client = await newAnthropicClient();
   const model = await getAnthropicModel();
+
+  // Retrieve prompt template from encrypted vault
+  const template = await getPrompt("quality_reviewer");
+  if (!template) {
+    platformLog("error", "prompt_vault_miss", { key: "quality_reviewer" });
+    return null;
+  }
+  const assembledPrompt = renderPrompt(template, {
+    CONTENT: content,
+    SOURCE_CONTEXT: sourceContext
+  });
+
   const response = await callAnthropic(client, {
     model,
     max_tokens: 800,
-    messages: [{
-      role: "user",
-      content: `You are a LinkedIn content quality and accuracy reviewer. Evaluate this post and respond with ONLY valid JSON.
-
-POST:
-"""
-${content}
-"""
-${sourceContext}
-
-Evaluate on these criteria (1-10 each):
-- hook_strength: Will the first 2 lines make someone click "see more"?
-- authenticity: Does it sound like a real practitioner, not a bot?
-- actionability: Does the reader walk away with something useful?
-- engagement_potential: Will people comment or share?
-- professionalism: Appropriate for a cybersecurity/AI professional audience?
-- source_grounding: Are claims attributed to named sources? Does the post include a Sources line? (Score 1 if no sources and post makes specific claims)
-- factual_caution: Does the post avoid stating unverified claims as fact? (Score 1 if it presents speculation as established fact)
-
-{
-  "scores": {
-    "hook_strength": 0,
-    "authenticity": 0,
-    "actionability": 0,
-    "engagement_potential": 0,
-    "professionalism": 0,
-    "source_grounding": 0,
-    "factual_caution": 0
-  },
-  "overall": 0,
-  "pass": true,
-  "factual_flags": ["List any specific claims that appear unverified or unsupported"],
-  "feedback": "Brief constructive note if score < 7"
-}
-
-IMPORTANT: Set "pass" to false if source_grounding < 5 OR factual_caution < 5, regardless of other scores.
-
-Return ONLY valid JSON.`
-    }]
+    messages: [{ role: "user", content: assembledPrompt }]
   });
 
   const raw = response.content[0].text.trim();

@@ -4,3 +4,5 @@ node_modules/
 *.log
 deploy
 scripts/LinkedIn_Agent_Testing/
+!cssversion.js
+

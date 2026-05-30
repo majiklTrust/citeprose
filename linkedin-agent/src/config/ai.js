@@ -97,7 +97,13 @@ export async function callAnthropic(client, params) {
       );
     }
 
-    // Non-model errors pass through unchanged
+    // Strip request body from SDK errors — the Anthropic SDK may
+    // attach the full request (including prompt content) to the
+    // error object. Removing it prevents prompt leakage via error
+    // handlers or logging further up the call stack.
+    if (err.request) err.request = undefined;
+    if (err.body) err.body = undefined;
+
     throw err;
   }
 }

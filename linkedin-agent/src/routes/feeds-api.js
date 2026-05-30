@@ -250,16 +250,17 @@ router.post("/discover", async (req, res) => {
 
       const angles = topic.content_angles || [];
 
-      const template = await getPrompt("feed_discovery");
+      let template = await getPrompt("feed_discovery");
       if (!template) {
         platformLog("error", "prompt_vault_miss", { key: "feed_discovery" });
         return { error: "Feed discovery prompt not configured", status: 500 };
       }
-      const prompt = renderPrompt(template, {
+      let prompt = renderPrompt(template, {
         TOPIC_NAME: topic.name,
         TOPIC_DESCRIPTION: topic.description || "Not specified",
         CONTENT_ANGLES: JSON.stringify(angles)
       });
+      template = null;
 
       const apiKey = await getAnthropicApiKey();
       const anthropic = new Anthropic({ apiKey });
@@ -270,6 +271,7 @@ router.post("/discover", async (req, res) => {
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }]
       });
+      prompt = null;
 
       const rawText = aiResponse.content
         .filter(b => b.type === "text")

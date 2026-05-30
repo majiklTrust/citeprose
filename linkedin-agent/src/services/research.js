@@ -68,16 +68,17 @@ async function gatherWebSearchMaterial(topic, angle, cycleId) {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
 
-    const template = await getPrompt("research_assistant");
+    let template = await getPrompt("research_assistant");
     if (!template) {
       platformLog("error", "prompt_vault_miss", { key: "research_assistant" });
       return [];
     }
-    const assembledPrompt = renderPrompt(template, {
+    let assembledPrompt = renderPrompt(template, {
       TOPIC_NAME: topicName,
       ANGLE: angle,
       SEARCH_QUERIES: searchQueries.map((q, i) => `${i + 1}. "${q}"`).join("\n")
     });
+    template = null;
 
     const response = await callAnthropic(client, {
       model,
@@ -85,6 +86,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId) {
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{ role: "user", content: assembledPrompt }]
     });
+    assembledPrompt = null;
 
     const textBlocks = response.content.filter(b => b.type === "text");
     const rawText = textBlocks.map(b => b.text).join("\n").trim();
@@ -251,20 +253,22 @@ async function corroborateClaims(allSources, cycleId) {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
 
-    const template = await getPrompt("corroboration_analyst");
+    let template = await getPrompt("corroboration_analyst");
     if (!template) {
       platformLog("error", "prompt_vault_miss", { key: "corroboration_analyst" });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
-    const assembledPrompt = renderPrompt(template, {
+    let assembledPrompt = renderPrompt(template, {
       SOURCE_MATERIALS: allSources.map((s, i) => `[${i + 1}] ${s.name} (${s.tier}, ${s.date}): ${s.text}`).join("\n\n")
     });
+    template = null;
 
     const response = await callAnthropic(client, {
       model,
       max_tokens: 2000,
       messages: [{ role: "user", content: assembledPrompt }]
     });
+    assembledPrompt = null;
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
     const cleaned = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();

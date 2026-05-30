@@ -187,73 +187,49 @@ export async function generatePost(topic = null, userSub = null) {
     `- [${p.topic_id}] "${p.title}"`
   ).join("\n");
 
-  // ── Prompt: different rules based on corroboration toggle ──
+  // ── Research context: rules differ based on corroboration toggle ──
   let researchBlock;
+  const framedContext = await frameUntrustedContent(researchBrief.context);
 
   if (!skipCorroboration) {
-    researchBlock = `
-RESEARCH BRIEF (use ONLY these verified facts as the basis for your post):
-${frameUntrustedContent(researchBrief.context)}
-
-CRITICAL SOURCE RULES:
-- You may ONLY state facts that appear in the "VERIFIED FACTS" section above.
-- For claims marked "UNCORROBORATED", DO NOT include them. Omit entirely.
-- Do NOT invent, embellish, or extrapolate beyond what the sources state.
-- Do NOT use any specific statistic, percentage, or number that is not in the verified facts.
-- Reference source names naturally in the post body (e.g., "according to Krebs on Security" or "as reported by CISA").
-- At the end of the post body, include a "Sources:" line listing key references by name.
-- After the Sources line, include this exact attestation on its own line:
-  "Sources verified through multi-source corroboration. Full source list available upon request."
-`;
+    let rbTemplate = await getPrompt("research_brief_corroborated");
+    if (!rbTemplate) {
+      platformLog("error", "prompt_vault_miss", { key: "research_brief_corroborated" });
+      throw new Error("Research brief prompt (corroborated) not configured");
+    }
+    researchBlock = renderPrompt(rbTemplate, {
+      RESEARCH_CONTEXT: framedContext
+    });
+    rbTemplate = null;
   } else {
-    researchBlock = `
-SOURCE MATERIAL (${researchBrief.independentSourceCount} independent sources — corroboration step was skipped):
-${frameUntrustedContent(researchBrief.context)}
-
-ATTRIBUTION RULES:
-- Base ALL factual claims on the source material above. Do not invent or embellish.
-- Reference source names naturally in the post body (e.g., "according to Krebs on Security" or "as reported by CISA").
-- If a claim comes from a single source, use hedging: "one report suggests" or "according to [source]".
-- Claims appearing in multiple sources can be stated more directly, with attribution.
-- Do NOT use any specific statistic, percentage, or number unless it appears in the source material.
-- At the end of the post body, include a "Sources:" line listing the key references by name.
-`;
+    let rbTemplate = await getPrompt("research_brief_uncorroborated");
+    if (!rbTemplate) {
+      platformLog("error", "prompt_vault_miss", { key: "research_brief_uncorroborated" });
+      throw new Error("Research brief prompt (uncorroborated) not configured");
+    }
+    researchBlock = renderPrompt(rbTemplate, {
+      RESEARCH_CONTEXT: framedContext,
+      SOURCE_COUNT: String(researchBrief.independentSourceCount)
+    });
+    rbTemplate = null;
   }
 
   const topicHashtags = topic.hashtags || [];
 
-  const userPrompt = `Write a LinkedIn post about the following topic area and angle.
-
-TOPIC AREA: ${topic.name}
-SPECIFIC ANGLE: ${angle}
-${researchBlock}
-RECENT POSTS (avoid repeating these themes):
-${recentSummaries || "(no recent posts)"}
-
-REQUIREMENTS:
-1. Length: 150–280 words. LinkedIn truncates at ~210 characters with a "see more" — 
-   make the first 1–2 sentences count as a compelling hook.
-2. Write in first person. Sound like a thoughtful practitioner, not a thought-leadership bot.
-3. Include ONE concrete example, analogy, or mini-case-study grounded in the research provided.
-4. End with a question or call-to-reflection (not a hard CTA).
-5. Do NOT use emoji. Do NOT use bullet points in excess — 
-   at most 3–4 short bullets if listing is genuinely the clearest format.
-6. Do NOT use en dashes (–) or em dashes (—) anywhere in the post.  The only exception is inside a direct quotation from a cited source — if you quote a passage verbatim that contains an en dash or an em dash, you may preserve it.  In all other non-exception cases, when you would otherwise add en dashes or em dashes yourself (for emphasis, asides, or pacing) the phrase or combination of phrases must be replaced with commas, parentheses, sentence breaks, or otherwise intelligently.  This is a hard rule.
-7. Avoid clichés: "game-changer", "in today's rapidly evolving landscape", 
-   "it's not a matter of if but when", "the future is here".
-8. Do NOT include hashtags in the body — they will be appended separately.
-9. Include natural source attribution within the post and a "Sources:" line at the end.${!skipCorroboration ? '\n10. Include the attestation line after the Sources line.' : ''}
-
-Respond in this exact JSON format:
-{
-  "title": "A short internal title for this post (not published, just for tracking)",
-  "hook": "The opening 1-2 sentences designed to appear before the fold",
-  "body": "The full post content including the hook and Sources: line${!skipCorroboration ? ' and attestation line' : ''}",
-  "hashtags": ["#Tag1", "#Tag2", "#Tag3"],
-  "sources_used": ["Source Name 1", "Source Name 2"]
-}
-
-Return ONLY valid JSON. No markdown fencing, no preamble.`;
+  let cgTemplate = await getPrompt("content_generator");
+  if (!cgTemplate) {
+    platformLog("error", "prompt_vault_miss", { key: "content_generator" });
+    throw new Error("Content generation prompt not configured");
+  }
+  let userPrompt = renderPrompt(cgTemplate, {
+    TOPIC_NAME: topic.name,
+    ANGLE: angle,
+    RESEARCH_BLOCK: researchBlock,
+    RECENT_SUMMARIES: recentSummaries || "(no recent posts)",
+    ATTESTATION_RULE: !skipCorroboration ? "\n10. Include the attestation line after the Sources line." : "",
+    ATTESTATION_BODY: !skipCorroboration ? " and attestation line" : ""
+  });
+  cgTemplate = null;
 
   await logActivity("info", "content_generation_started", { cycleId, topicId: topic.slug, angle });
   platformLog("info", "content_generation_started", { cycleId, topicId: topic.slug, angle });
@@ -269,6 +245,7 @@ Return ONLY valid JSON. No markdown fencing, no preamble.`;
       system: topic.system_context || undefined,
       messages: [{ role: "user", content: userPrompt }]
     });
+    userPrompt = null;
 
     const raw = response.content[0].text.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
@@ -334,21 +311,23 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   const model = await getAnthropicModel();
 
   // Retrieve prompt template from encrypted vault
-  const template = await getPrompt("quality_reviewer");
+  let template = await getPrompt("quality_reviewer");
   if (!template) {
     platformLog("error", "prompt_vault_miss", { key: "quality_reviewer" });
     return null;
   }
-  const assembledPrompt = renderPrompt(template, {
+  let assembledPrompt = renderPrompt(template, {
     CONTENT: content,
     SOURCE_CONTEXT: sourceContext
   });
+  template = null;
 
   const response = await callAnthropic(client, {
     model,
     max_tokens: 800,
     messages: [{ role: "user", content: assembledPrompt }]
   });
+  assembledPrompt = null;
 
   const raw = response.content[0].text.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();

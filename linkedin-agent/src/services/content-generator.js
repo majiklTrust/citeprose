@@ -9,7 +9,7 @@ import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
-import { getPrompt, renderPrompt } from "./prompt-vault.js";
+import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 
@@ -117,7 +117,7 @@ export async function getAvailableTopics(userSub = null) {
   return topics.map(t => ({ id: t.slug, name: t.name }));
 }
 
-export async function generatePost(topic = null, userSub = null) {
+export async function generatePost(topic = null, userSub = null, actionToken = null) {
   if (typeof topic === "string") {
     topic = await getTopicBySlug(topic);
   }
@@ -128,6 +128,12 @@ export async function generatePost(topic = null, userSub = null) {
   // Read corroboration toggle from agent state
   const skipCorroboration = (await getAgentState("corroboration")) === "disabled";
 
+  // Vault access: use signed token when triggered by a user request,
+  // fall back to internal access for automated/scheduled operations.
+  const vaultGet = actionToken
+    ? (key) => getAuthorizedPrompt(key, actionToken)
+    : (key) => getPrompt(key);
+
   const recentPosts = await getRecentPosts(14);
   const angle = selectContentAngle(topic, recentPosts);
 
@@ -135,7 +141,7 @@ export async function generatePost(topic = null, userSub = null) {
   let researchBrief = null;
   try {
     const { conductResearch } = await import("./research.js");
-    researchBrief = await conductResearch(topic.slug, angle, cycleId, skipCorroboration);
+    researchBrief = await conductResearch(topic.slug, angle, cycleId, skipCorroboration, actionToken);
 
     await logActivity("info", "research_integrated", {
       cycleId,
@@ -189,10 +195,10 @@ export async function generatePost(topic = null, userSub = null) {
 
   // ── Research context: rules differ based on corroboration toggle ──
   let researchBlock;
-  const framedContext = await frameUntrustedContent(researchBrief.context);
+  const framedContext = await frameUntrustedContent(researchBrief.context, actionToken);
 
   if (!skipCorroboration) {
-    let rbTemplate = await getPrompt("research_brief_corroborated");
+    let rbTemplate = await vaultGet("research_brief_corroborated");
     if (!rbTemplate) {
       platformLog("error", "prompt_vault_miss", { key: "research_brief_corroborated" });
       throw new Error("Research brief prompt (corroborated) not configured");
@@ -202,7 +208,7 @@ export async function generatePost(topic = null, userSub = null) {
     });
     rbTemplate = null;
   } else {
-    let rbTemplate = await getPrompt("research_brief_uncorroborated");
+    let rbTemplate = await vaultGet("research_brief_uncorroborated");
     if (!rbTemplate) {
       platformLog("error", "prompt_vault_miss", { key: "research_brief_uncorroborated" });
       throw new Error("Research brief prompt (uncorroborated) not configured");
@@ -216,7 +222,7 @@ export async function generatePost(topic = null, userSub = null) {
 
   const topicHashtags = topic.hashtags || [];
 
-  let cgTemplate = await getPrompt("content_generator");
+  let cgTemplate = await vaultGet("content_generator");
   if (!cgTemplate) {
     platformLog("error", "prompt_vault_miss", { key: "content_generator" });
     throw new Error("Content generation prompt not configured");
@@ -302,7 +308,7 @@ export async function generatePost(topic = null, userSub = null) {
 
 // ── Content Quality Check ────────────────────────────────────
 
-export async function qualityCheck(content, researchSummary = null, cycleId = null) {
+export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null) {
   const sourceContext = researchSummary
     ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nVerified claims (corroborated by 2+ sources): ${researchSummary.verifiedClaims || 0}\nIndependent sources consulted: ${researchSummary.independentSources || 0}\nCorroboration step: ${researchSummary.corroborationSkipped ? 'SKIPPED' : 'COMPLETED'}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";
@@ -310,8 +316,12 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   const client = await newAnthropicClient();
   const model = await getAnthropicModel();
 
+  const qVaultGet = actionToken
+    ? (key) => getAuthorizedPrompt(key, actionToken)
+    : (key) => getPrompt(key);
+
   // Retrieve prompt template from encrypted vault
-  let template = await getPrompt("quality_reviewer");
+  let template = await qVaultGet("quality_reviewer");
   if (!template) {
     platformLog("error", "prompt_vault_miss", { key: "quality_reviewer" });
     return null;

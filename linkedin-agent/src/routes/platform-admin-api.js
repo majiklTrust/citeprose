@@ -238,30 +238,6 @@ const QUERY_REGISTRY = {
     readOnly: false
   },
 
-  "schema-validation": {
-    label: "Schema Migration Check",
-    description: "Verifies which DDL migrations have been applied.",
-    sql: `SELECT
-            'feeds_v2.domains' AS check_item,
-            EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='feeds_v2' AND column_name='domains') AS applied
-          UNION ALL SELECT 'topics.domains',
-            EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='topics' AND column_name='domains')
-          UNION ALL SELECT 'articles_v2.image_url',
-            EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='articles_v2' AND column_name='image_url')
-          UNION ALL SELECT 'feeds_v2.consecutive_failures',
-            EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='feeds_v2' AND column_name='consecutive_failures')
-          UNION ALL SELECT 'agent_state_schema table',
-            EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='agent_state_schema')
-          UNION ALL SELECT 'agent_state trigger',
-            EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='trg_validate_agent_state')
-          UNION ALL SELECT 'validation_grade CHECK',
-            EXISTS(SELECT 1 FROM pg_constraint WHERE conname='chk_validation_grade')
-          ORDER BY check_item`,
-    params: [],
-    destructive: false,
-    readOnly: true
-  },
-
   "all-tenant-states": {
     label: "All Tenant Config States",
     description: "Shows agent_state configuration across all tenants with schema metadata.",
@@ -387,6 +363,26 @@ export default function createPlatformAdminRoutes() {
       params: clientParams,
       destructive: queryDef.destructive
     });
+
+    // ── Restricted table protection ──────────────────────────
+    // Prevent admin queries from reading encrypted prompt content.
+    // Metadata queries (key, description, updated_at) are allowed.
+    var RESTRICTED_COLUMNS = [
+      { table: "prompt_vault", columns: ["value_enc"] }
+    ];
+
+    var sqlLower = queryDef.sql.toLowerCase();
+    for (var restriction of RESTRICTED_COLUMNS) {
+      if (!sqlLower.includes(restriction.table)) continue;
+      for (var col of restriction.columns) {
+        if (sqlLower.includes(col)) {
+          platformLog("warn", "platform_admin_restricted_column", {
+            admin: req.user.sub, query: key, table: restriction.table, column: col
+          });
+          return res.status(403).json({ error: "Query references a restricted column" });
+        }
+      }
+    }
 
     const client = await pool.connect();
     try {

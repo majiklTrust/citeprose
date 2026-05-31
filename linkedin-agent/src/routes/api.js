@@ -33,6 +33,7 @@ import {
   forceCycle
 } from "../services/scheduler.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
+import { createActionToken } from "../services/prompt-actions.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds, pollSingleFeed } from "../services/news-monitor.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
@@ -375,10 +376,11 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
 router.post("/api/generate-preview", requirePermission("preview_post"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
+    const actionToken = createActionToken("generate-content", req.user.sub);
     const result = await withTenant(req.tenant.id, async () => {
-      const g = await generatePost(topicId);
+      const g = await generatePost(topicId, null, actionToken);
       if (g.blocked) return { generated: g, quality: null, postId: null };
-      const q = await qualityCheck(g.content, g.researchSummary);
+      const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
 
       // Auto-save as draft — content persists even if the session
       // expires before the user clicks "Queue for Approval."

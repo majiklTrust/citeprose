@@ -20,7 +20,7 @@ import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
-import { getPrompt, renderPrompt } from "./prompt-vault.js";
+import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -57,7 +57,7 @@ async function gatherRSSMaterial(topic, angle) {
 // Step 2: Gather material from web search (API call #1)
 // ═══════════════════════════════════════════════════════════════
 
-async function gatherWebSearchMaterial(topic, angle, cycleId) {
+async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const topicId = topic.slug;
   const topicName = topic.name || topicId;
   const searchQueries = buildSearchQueries(topicId, angle);
@@ -68,7 +68,11 @@ async function gatherWebSearchMaterial(topic, angle, cycleId) {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
 
-    let template = await getPrompt("research_assistant");
+    var vaultGet = actionToken
+      ? (key) => getAuthorizedPrompt(key, actionToken)
+      : (key) => getPrompt(key);
+
+    let template = await vaultGet("research_assistant");
     if (!template) {
       platformLog("error", "prompt_vault_miss", { key: "research_assistant" });
       return [];
@@ -241,7 +245,7 @@ function assembleAllSources(webClaims, rssArticles) {
 // Path A: Corroboration (API call #2)
 // ═══════════════════════════════════════════════════════════════
 
-async function corroborateClaims(allSources, cycleId) {
+async function corroborateClaims(allSources, cycleId, actionToken) {
   if (allSources.length === 0) {
     await logActivity("warn", "corroboration_no_sources", { cycleId });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
@@ -253,7 +257,11 @@ async function corroborateClaims(allSources, cycleId) {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
 
-    let template = await getPrompt("corroboration_analyst");
+    var vaultGet = actionToken
+      ? (key) => getAuthorizedPrompt(key, actionToken)
+      : (key) => getPrompt(key);
+
+    let template = await vaultGet("corroboration_analyst");
     if (!template) {
       platformLog("error", "prompt_vault_miss", { key: "corroboration_analyst" });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
@@ -427,7 +435,7 @@ function buildDirectBrief(allSources) {
 // Main entry point
 // ═══════════════════════════════════════════════════════════════
 
-export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false) {
+export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false, actionToken = null) {
   await logActivity("info", "research_started", { cycleId, topicId, angle, corroboration: !skipCorroboration });
 
   // Resolve topic from DB once — both gather functions use it
@@ -447,7 +455,7 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   const rssArticles = await gatherRSSMaterial(topic, angle);
 
   // Step 2: Web search (API call #1)
-  const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId);
+  const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId, actionToken);
 
   // ── Stage 1 logging: research material breakdown ────────────
   // Shows which feeds contributed, topic-specific vs catchall split,
@@ -505,7 +513,7 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     await new Promise(resolve => setTimeout(resolve, getCooldownMs()));
 
     const corrobStart = Date.now();
-    const corroboration = await corroborateClaims(allSources, cycleId);
+    const corroboration = await corroborateClaims(allSources, cycleId, actionToken);
     brief = buildVerifiedBrief(corroboration, allSources);
     brief._corrobDurationMs = Date.now() - corrobStart;
   }

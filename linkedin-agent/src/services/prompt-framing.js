@@ -11,7 +11,7 @@
 // Called by content-generator.js when building the user prompt.
 // ═══════════════════════════════════════════════════════════════
 
-import { getPrompt } from "./prompt-vault.js";
+import { getPrompt, getAuthorizedPrompt } from "./prompt-vault.js";
 import { platformLog } from "./platform-log.js";
 
 /**
@@ -19,11 +19,16 @@ import { platformLog } from "./platform-log.js";
  * retrieved from the encrypted prompt vault.
  *
  * @param {string} content — Raw external content (RSS article text, research brief)
+ * @param {string} [actionToken] — Signed action token for authorized access
  * @returns {Promise<string>} Content wrapped with untrusted boundary markers
  */
-export async function frameUntrustedContent(content) {
-  let prefix = await getPrompt("untrusted_content_prefix");
-  let suffix = await getPrompt("untrusted_content_suffix");
+export async function frameUntrustedContent(content, actionToken) {
+  var vaultGet = actionToken
+    ? (key) => getAuthorizedPrompt(key, actionToken)
+    : (key) => getPrompt(key);
+
+  let prefix = await vaultGet("untrusted_content_prefix");
+  let suffix = await vaultGet("untrusted_content_suffix");
 
   if (!prefix || !suffix) {
     platformLog("error", "prompt_vault_miss", { key: "untrusted_content_prefix/suffix" });

@@ -37,7 +37,8 @@ import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { isSafeUrl } from "../services/security.js";
 import { validateFeed, formatValidationMessage } from "../services/feed-validator.js";
-import { getPrompt, renderPrompt } from "../services/prompt-vault.js";
+import { getPrompt, getAuthorizedPrompt, renderPrompt } from "../services/prompt-vault.js";
+import { createActionToken } from "../services/prompt-actions.js";
 
 const rssParser = new Parser({ timeout: 10000 });
 
@@ -250,7 +251,9 @@ router.post("/discover", async (req, res) => {
 
       const angles = topic.content_angles || [];
 
-      let template = await getPrompt("feed_discovery");
+      const actionToken = createActionToken("discover-feeds", req.user.sub);
+
+      let template = await getAuthorizedPrompt("feed_discovery", actionToken);
       if (!template) {
         platformLog("error", "prompt_vault_miss", { key: "feed_discovery" });
         return { error: "Feed discovery prompt not configured", status: 500 };

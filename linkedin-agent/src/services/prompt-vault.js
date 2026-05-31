@@ -85,14 +85,57 @@ function decrypt(blob) {
 // ── Public API ───────────────────────────────────────────────
 
 /**
- * Retrieve and decrypt a prompt template by key.
- * Returns null if the key doesn't exist.
+ * Retrieve and decrypt a prompt template by key, authorized
+ * by a signed action token. This is the primary access path.
  *
- * @param {string} key — prompt identifier (e.g., "quality_reviewer")
+ * @param {string} key — prompt identifier
+ * @param {string} actionToken — signed token from createActionToken
+ * @returns {Promise<string|null>}
+ */
+export async function getAuthorizedPrompt(key, actionToken) {
+  // Lazy import to avoid circular dependency at module load
+  var { validateActionToken } = await import("./prompt-actions.js");
+
+  var validation = validateActionToken(actionToken, key);
+  if (!validation.valid) {
+    platformLog("warn", "prompt_access_denied", {
+      key, action: validation.action, sub: validation.sub,
+      reason: validation.reason
+    });
+    throw new Error("Prompt access denied: " + validation.reason);
+  }
+
+  platformLog("debug", "prompt_access_granted", {
+    key, action: validation.action, sub: validation.sub
+  });
+
+  return _decryptFromVault(key);
+}
+
+/**
+ * Retrieve and decrypt a prompt template by key WITHOUT token
+ * validation. Reserved for internal framework operations that
+ * run outside a user request context (e.g., prompt-framing
+ * boundary markers during pipeline assembly).
+ *
+ * SECURITY: Callers must never expose this to client-reachable
+ * code paths. Use getAuthorizedPrompt for all user-triggered
+ * operations.
+ *
+ * @param {string} key — prompt identifier
  * @returns {Promise<string|null>}
  */
 export async function getPrompt(key) {
-  const result = await query(
+  platformLog("debug", "prompt_access_internal", { key });
+  return _decryptFromVault(key);
+}
+
+/**
+ * Internal: fetch and decrypt from the vault table.
+ * @private
+ */
+async function _decryptFromVault(key) {
+  var result = await query(
     "SELECT value_enc FROM prompt_vault WHERE key = $1",
     [key]
   );
@@ -117,6 +160,7 @@ export async function storePrompt(key, plaintext, description) {
        SET value_enc = $2, description = $3, updated_at = now()`,
     [key, encrypted, description || null]
   );
+  platformLog("info", "prompt_stored", { key, descriptionLength: (description || "").length });
 }
 
 /**

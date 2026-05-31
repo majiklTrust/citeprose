@@ -10,9 +10,45 @@ import {
 } from "../tenant/credential-store.js";
 import { currentTenantId } from "../db/with-tenant.js";
 import { platformLog } from "./platform-log.js";
+import { decryptPlatformSecret } from "./platform-secret.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
+
+// ── Encrypted client credentials ─────────────────────────────
+// LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET are stored ENCRYPTED
+// at rest (AES-256-GCM under HKDF(ENCRYPTION_SECRET), via
+// platform-secret.js). Each is decrypted once and cached, keyed on
+// the ciphertext so a runtime env change invalidates the cache.
+// A missing or undecryptable value throws — the OAuth flow fails
+// closed rather than proceeding with a bad credential.
+
+let _clientIdPlain = null, _clientIdCipher = null;
+let _clientSecretPlain = null, _clientSecretCipher = null;
+
+function getClientId() {
+  const cipher = process.env.LINKEDIN_CLIENT_ID;
+  if (!cipher || cipher.trim().length === 0) {
+    throw new Error("LINKEDIN_CLIENT_ID is not set");
+  }
+  if (cipher === _clientIdCipher) return _clientIdPlain;
+  const plain = decryptPlatformSecret(cipher.trim());
+  _clientIdCipher = cipher;
+  _clientIdPlain = plain;
+  return plain;
+}
+
+function getClientSecret() {
+  const cipher = process.env.LINKEDIN_CLIENT_SECRET;
+  if (!cipher || cipher.trim().length === 0) {
+    throw new Error("LINKEDIN_CLIENT_SECRET is not set");
+  }
+  if (cipher === _clientSecretCipher) return _clientSecretPlain;
+  const plain = decryptPlatformSecret(cipher.trim());
+  _clientSecretCipher = cipher;
+  _clientSecretPlain = plain;
+  return plain;
+}
 
 // ── OAuth 2.0 Flow ───────────────────────────────────────────
 
@@ -21,7 +57,7 @@ export function getAuthorizationUrl(state) {
   // const scopes = ["openid", "profile", "w_organization_social"];
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: process.env.LINKEDIN_CLIENT_ID,
+    client_id: getClientId(),
     redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
     scope: scopes.join(" "),
     state: state || generateState()
@@ -42,8 +78,8 @@ export async function exchangeCodeForToken(code) {
         grant_type: "authorization_code",
         code,
         redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
-        client_id: process.env.LINKEDIN_CLIENT_ID,
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET
+        client_id: getClientId(),
+        client_secret: getClientSecret()
       }),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );

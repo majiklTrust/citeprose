@@ -12,6 +12,7 @@
 
 import { query } from "../db/pool.js";
 import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from "node:crypto";
+import { decryptPlatformSecret } from "../services/platform-secret.js";
 
 // Looks up a tenant by the authenticated user's identity.
 // Returns { id, slug, name, status, role, created_at } or null.
@@ -155,11 +156,34 @@ export async function claimInvite(inviteId, provider, sub) {
  * Check if a user sub is a platform admin.
  * Reads PLATFORM_ADMIN_SUBS from environment (comma-separated).
  */
+// PLATFORM_ADMIN_SUBS is stored ENCRYPTED at rest (AES-256-GCM under
+// HKDF(ENCRYPTION_SECRET), via platform-secret.js). It is decrypted
+// once and cached, keyed on the ciphertext so a runtime env change
+// would invalidate the cache. Fails closed: a missing var or a failed
+// decrypt yields no admins.
+let cachedAdminSubs = null;
+let cachedAdminSubsCipher = null;
+
+function getAdminSubs() {
+  const cipher = process.env.PLATFORM_ADMIN_SUBS;
+  if (!cipher || cipher.trim().length === 0) return null;
+  if (cipher === cachedAdminSubsCipher) return cachedAdminSubs;
+  let plaintext;
+  try {
+    plaintext = decryptPlatformSecret(cipher.trim());
+  } catch {
+    return null; // fail closed on undecryptable value
+  }
+  const list = plaintext.split(",").map((s) => s.trim()).filter(Boolean);
+  cachedAdminSubsCipher = cipher;
+  cachedAdminSubs = list;
+  return list;
+}
+
 export function isPlatformAdmin(sub) {
   if (!sub || typeof sub !== "string") return false;
-  const adminSubs = process.env.PLATFORM_ADMIN_SUBS;
-  if (!adminSubs) return false;
-  const list = adminSubs.split(",").map(s => s.trim()).filter(Boolean);
+  const list = getAdminSubs();
+  if (!list || list.length === 0) return false;
   return list.includes(sub);
 }
 

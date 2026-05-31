@@ -39,6 +39,7 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
+import { decryptPlatformSecret } from "../services/platform-secret.js";
 
 const router = Router();
 
@@ -52,11 +53,19 @@ let ADMIN_DB_ROLE = null;
 
 function resolveAdminRole() {
   if (ADMIN_DB_ROLE) return ADMIN_DB_ROLE;
-  const role = process.env.PLATFORM_ADMIN_DB_ROLE;
-  if (!role || typeof role !== "string" || role.trim().length === 0) {
+  const cipher = process.env.PLATFORM_ADMIN_DB_ROLE;
+  if (!cipher || typeof cipher !== "string" || cipher.trim().length === 0) {
     throw new Error("PLATFORM_ADMIN_DB_ROLE is not set — platform admin queries are disabled");
   }
+  let role;
+  try {
+    role = decryptPlatformSecret(cipher.trim());
+  } catch {
+    throw new Error("PLATFORM_ADMIN_DB_ROLE could not be decrypted — platform admin queries are disabled");
+  }
   const trimmed = role.trim();
+  // Validate AFTER decrypt — the role is interpolated into SET LOCAL ROLE,
+  // so it must be a safe PostgreSQL identifier regardless of source.
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
     throw new Error("Invalid PLATFORM_ADMIN_DB_ROLE: must be a valid PostgreSQL identifier");
   }
@@ -626,17 +635,30 @@ export default function createPlatformAdminRoutes() {
   // Opus (in that order).
   //
   // Zero Trust:
-  //   • Uses a dedicated platform key (env PLATFORM_ANTHROPIC_API_KEY),
-  //     never a tenant's BYOK key — a global lookup must not decrypt
-  //     tenant secrets.
-  //   • Key is read at call time, never logged, never sent to the client.
-  //   • Fails closed if the key is unset (503).
+  //   • Uses a dedicated platform key, never a tenant's BYOK key —
+  //     a global lookup must not decrypt tenant secrets.
+  //   • Key is stored ENCRYPTED at rest (env PLATFORM_ANTHROPIC_API_KEY,
+  //     AES-256-GCM under HKDF(ENCRYPTION_SECRET)); decrypted at call
+  //     time, held only for the request, then nulled.
+  //   • Key is never logged and never sent to the client.
+  //   • Fails closed if the encrypted key is unset or undecryptable (503).
   //   • Only model IDs are returned — no capabilities, pricing, or keys.
   //   • Behind the isPlatformAdmin gate (router-level).
 
   router.get("/models", async (req, res) => {
-    const apiKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
-    if (!apiKey || apiKey.trim().length === 0) {
+    const encKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
+    if (!encKey || encKey.trim().length === 0) {
+      return res.status(503).json({ error: "Model listing is not configured" });
+    }
+
+    let apiKey;
+    try {
+      apiKey = decryptPlatformSecret(encKey.trim());
+    } catch (err) {
+      platformLog("error", "platform_key_decrypt_failed", { admin: req.user.sub });
+      return res.status(503).json({ error: "Model listing is not configured" });
+    }
+    if (!apiKey || apiKey.length === 0) {
       return res.status(503).json({ error: "Model listing is not configured" });
     }
 
@@ -648,7 +670,7 @@ export default function createPlatformAdminRoutes() {
     try {
       const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
         headers: {
-          "x-api-key": apiKey.trim(),
+          "x-api-key": apiKey,
           "anthropic-version": "2023-06-01"
         }
       });
@@ -663,6 +685,8 @@ export default function createPlatformAdminRoutes() {
     } catch (err) {
       platformLog("error", "model_list_error", { admin: req.user.sub, error: err.message });
       res.status(502).json({ error: "Could not retrieve models" });
+    } finally {
+      apiKey = null;
     }
   });
 

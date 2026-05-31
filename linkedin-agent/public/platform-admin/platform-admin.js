@@ -57,8 +57,19 @@
       var badgeText = q.destructive ? "destructive" : q.readOnly ? "read-only" : "write";
 
       var html = '<div class="query-header">';
+      html += '<div class="query-header-main">';
       html += '<span class="query-label">' + esc(q.label) + '</span>';
       html += '<span class="query-badge ' + badgeClass + '">' + badgeText + '</span>';
+      html += '</div>';
+
+      // Capability — sits inline in the header row on desktop,
+      // wraps to its own line on narrow viewports.
+      if (q.capability) {
+        html += '<div class="query-capability">';
+        html += '<span class="capability-tag">Capability</span>';
+        html += '<span class="capability-text">' + esc(q.capability) + '</span>';
+        html += '</div>';
+      }
       html += '</div>';
       html += '<div class="query-desc">' + esc(q.description) + '</div>';
 
@@ -67,7 +78,23 @@
         q.params.forEach(function (p) {
           html += '<div class="param-row">';
           html += '<label>' + esc(p.label) + '</label>';
-          html += '<input type="text" data-param="' + esc(p.name) + '" placeholder="' + esc(p.type) + '">';
+          if (p.type === "select" && p.source === "models") {
+            html += '<select data-param="' + esc(p.name) + '" data-source="models" disabled>';
+            html += '<option value="">Loading models…</option>';
+            html += '</select>';
+          } else if (p.type === "select" && p.optgroups) {
+            html += '<select data-param="' + esc(p.name) + '">';
+            p.optgroups.forEach(function (g) {
+              html += '<optgroup label="' + esc(g.group) + '">';
+              g.options.forEach(function (opt) {
+                html += '<option value="' + esc(opt) + '">' + esc(opt) + '</option>';
+              });
+              html += '</optgroup>';
+            });
+            html += '</select>';
+          } else {
+            html += '<input type="text" data-param="' + esc(p.name) + '" placeholder="' + esc(p.type) + '">';
+          }
           html += '</div>';
         });
       }
@@ -93,6 +120,46 @@
       e.preventDefault();
       executeQuery(btn);
     });
+
+    // Populate any dynamic model dropdowns from the live catalog
+    populateModelSelects();
+  }
+
+  // ── Populate model dropdowns from the live Anthropic catalog ──
+
+  function populateModelSelects() {
+    var selects = document.querySelectorAll('select[data-source="models"]');
+    if (selects.length === 0) return;
+
+    fetch(API + "/api/platform-admin/models", { credentials: "include" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("status " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var optgroups = data.optgroups || [];
+        selects.forEach(function (sel) {
+          if (optgroups.length === 0) {
+            sel.innerHTML = '<option value="">No models available</option>';
+            return;
+          }
+          var html = "";
+          optgroups.forEach(function (g) {
+            html += '<optgroup label="' + esc(g.group) + '">';
+            g.options.forEach(function (opt) {
+              html += '<option value="' + esc(opt) + '">' + esc(opt) + '</option>';
+            });
+            html += '</optgroup>';
+          });
+          sel.innerHTML = html;
+          sel.disabled = false;
+        });
+      })
+      .catch(function () {
+        selects.forEach(function (sel) {
+          sel.innerHTML = '<option value="">Unable to load models</option>';
+        });
+      });
   }
 
   // ── Execute a query ──────────────────────────────────────
@@ -103,9 +170,9 @@
     var card = btn.closest(".query-card");
     var resultArea = document.getElementById("result-" + key);
 
-    // Collect parameters
+    // Collect parameters (text inputs and dropdown selects)
     var params = {};
-    var inputs = card.querySelectorAll("input[data-param]");
+    var inputs = card.querySelectorAll("[data-param]");
     inputs.forEach(function (input) {
       params[input.getAttribute("data-param")] = input.value.trim();
     });

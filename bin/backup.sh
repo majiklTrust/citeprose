@@ -121,6 +121,62 @@ case $i in
 -d)
   shift
   zip_deploy $@
+
+    cd /datavol && mkdir -p pgbackup && cd pgbackup
+    # if ! command -v /usr/local/bin/aws;then
+    #   curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /datavol/awscliv2.zip
+    #   unzip -q -d /datavol/ /datavol/awscliv2.zip
+    #   sudo /datavol/aws/install
+    # fi
+    # if [ ! -d ~/.aws ];then tar zxf operations-dotaws.tar.gz -C ~;fi
+### AFTER ALL RUNS THEN DEFINE AND EXECUTE REMOTE DATABASE BACK & S3 PUT
+    function SSHCMD { ssh -i $SSH_KEY_PATH $INSTANCE_USER@$SSH_PUBLIC_IP $* ; }
+    function SCPCMD { scp -i $SSH_KEY_PATH $INSTANCE_USER@$SSH_PUBLIC_IP:$1 $2 ; }
+    function do_pgbackup {
+    (
+      SSHCMD "export PGDATABASE=$PGDATABASE && export PGPORT=$PGPORT && export PGHOST=$PGHOST\
+        && export PGUSER=$PGUSER && export PGPASSWORD=`echo P@ssw0rd\!`\
+        && cd /home/ubuntu/marketing-ai/ && . ./do-backup.sh"
+    )
+    }
+    function s3_put_pg_backup {
+    local _5_MINUTES=`expr 60 \* 5`
+    local _2_MINUTES=`expr 60 \* 2`
+    local _30_SECONDS=30
+    local _15_SECONDS=15
+      export PGHOST=localhost
+      export PGPORT=5432
+      export PGUSER=***REMOVED***
+      export PGDATABASE=***REMOVED***
+    BAK=$(do_pgbackup)
+    SCPCMD "/home/ubuntu/marketing-ai/db-backup-store/$BAK" "."
+    pip install boto3
+    url=$(python3 <<EOF
+import boto3
+s3 = boto3.client("s3")
+url = s3.generate_presigned_url(
+    ClientMethod="put_object",
+    Params={"Bucket": "***REMOVED***", "Key": "pgsql/$BAK"},
+    ExpiresIn=$_15_SECONDS
+)
+print(url)
+EOF
+    )
+    echo $url
+    curl -X PUT -T ./$BAK "$url"
+    }
+
+    # RUN THE BACKUP FROM
+    backup_agent=developer
+    deploy=/home/${backup_agent}/appdev/active/alpha.***REMOVED***/linkedin-agent/deploy
+    INSTANCE_USER=ubuntu
+    INSTANCE_ID=$(grep INSTANCE_ID ${deploy}/.deploy-state | tail -1 | cut -d= -f2)
+    SSH_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $(grep INSTANCE_ID ${deploy}/.deploy-state | tail -1 | cut -d= -f2) --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
+    KP=$(grep KEY_PATH ${deploy}/.deploy-state | tail -1 | cut -d= -f2)
+    SSH_KEY_PATH=${deploy}/keys/$(basename $KP)
+    s3_put_pg_backup
+
+
   exit 0
   ;;
 esac
@@ -133,4 +189,5 @@ done
 
 echo "Script full path: $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 zip_all $@
+
 )

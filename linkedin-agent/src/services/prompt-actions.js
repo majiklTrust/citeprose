@@ -6,8 +6,9 @@
 // calling API endpoints. The server resolves actions to keys.
 //
 // Signed action tokens authorize specific vault key access.
-// Tokens are short-lived (30s), single-use (nonce tracking),
-// and tied to the requesting user's identity.
+// Tokens are scoped to one request, tied to the requesting user's
+// identity, and live long enough to span the full generation pipeline
+// (see TOKEN_TTL_MS below).
 //
 // Usage (in route handler):
 //   const token = createActionToken("generate-content", req.user.sub);
@@ -51,7 +52,14 @@ var ACTION_REGISTRY = {
 // Derived from ENCRYPTION_SECRET with a different HKDF context
 // so the signing key is distinct from the vault encryption key.
 
-var TOKEN_TTL_MS = 30000;
+// The token is minted once at the start of a generate-content request
+// and threaded through the ENTIRE pipeline (research -> web search ->
+// corroboration -> untrusted-content framing -> generation -> quality
+// review), which legitimately runs for minutes across several API/LLM
+// round-trips. Its lifetime must therefore span the whole operation.
+// The token is server-internal (never leaves the process), so this
+// limit is an operational ceiling, not a network-replay defense.
+var TOKEN_TTL_MS = 300000; // 5 minutes
 var HKDF_SALT = "prompt-action-token";
 var HKDF_INFO = "action-token-v1";
 var signingKey = null;

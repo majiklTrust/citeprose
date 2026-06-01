@@ -122,10 +122,24 @@ export const TRUST_TIERS = {
   secondary:     { weight: 1, label: "Aggregator / Commentary" }
 };
 
+// Minimum number of distinct, independent source names required before
+// there is "enough material" to generate. Configurable at deploy time via
+// MIN_INDEPENDENT_SOURCES (integer >= 1, capped at 10). Falls back to 2 if
+// the env var is unset, non-numeric, or out of range — so a bad value can
+// never disable the gate or starve generation silently.
+function readMinIndependentSources() {
+  const raw = process.env.MIN_INDEPENDENT_SOURCES;
+  if (raw === undefined || raw === null || String(raw).trim() === "") return 2;
+  const n = parseInt(String(raw).trim(), 10);
+  if (!Number.isInteger(n) || n < 1) return 2;
+  return Math.min(n, 10);
+}
+
 // Minimum source requirements — posts are blocked if not met
 export const SOURCE_RULES = {
-  // Minimum number of distinct, independent source names required
-  minIndependentSources: 2,
+  // Distinct independent source names required (env: MIN_INDEPENDENT_SOURCES,
+  // default 2). Read once at module load; change requires a restart.
+  minIndependentSources: readMinIndependentSources(),
 
   // Minimum cumulative trust weight for corroboration to pass
   // e.g., 3 = two primary sources, or one authoritative + one secondary

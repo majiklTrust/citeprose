@@ -550,6 +550,7 @@ export async function start() {
   delete process.env.ANTHROPIC_API_KEY_ENCRYPTED;
 
   // STEP 4: Dynamic-import services
+  const { connectionInfo }               = await import("./db/pool.js");
   const { logActivity }                  = await import("./services/database.js");
   const { startScheduler }               = await import("./services/scheduler.js");
   const { startMonitor }                 = await import("./services/news-monitor.js");
@@ -618,8 +619,8 @@ export async function start() {
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
-║       Database:  ${(process.env.PGDATABASE)}
-║        DB User:  ${(process.env.PGUSER)}
+║       Database:  ${connectionInfo.database}
+║        DB User:  ${connectionInfo.user}
 ║            App:  ${addr.origin}
 ║            Env:  ${(process.env.NODE_ENV || "NODE_ENV not set").padEnd(0)}
 ║           ${process.env.DEV_BYPASS_ORIGINS}

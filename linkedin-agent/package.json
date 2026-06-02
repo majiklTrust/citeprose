@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.6.72",
+  "version": "1.6.73",
   "config": {
     "cssversion": "24.0"
   },
@@ -22,11 +22,11 @@
     "start": "npm run timesync && node src/index.js",
     "nodemon": "nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "getvars": "echo \"\\nPGHOST:$PGHOST\\nPGPORT:$PGPORT\\nPGUSER:$PGUSER\\nPGDATABASE:$PGDATABASE\"",
-    "production": "export PGDATABASE=***REMOVED*** && export PGUSER=***REMOVED*** && npm run getvars && NODE_ENV=production npm run start",
-    "nonproddb": "export PGDATABASE=***REMOVED*** npm run nonprod",
-    "nonprod": "export PGUSER=***REMOVED*** && npm run getvars && NODE_ENV=nonprod npm run nodemon",
-    "devdb": "export PGDATABASE=linkedin_dev && npm run nonprod",
-    "dev": "export PGDATABASE=linkedin_dev && export PGUSER=***REMOVED*** && npm run getvars && NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001,http://172.16.11.101:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
+    "production": "npm run getvars && NODE_ENV=production npm run start",
+    "nonproddb": "npm run nonprod",
+    "nonprod": "npm run getvars && NODE_ENV=nonprod npm run nodemon",
+    "devdb": "npm run nonprod",
+    "dev": "npm run getvars && NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001,http://172.16.11.101:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
     "300_": "",
     "kill3001": "lsof -ti:3001 | xargs kill -9",
     "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",

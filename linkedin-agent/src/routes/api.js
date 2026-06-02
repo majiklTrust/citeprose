@@ -218,6 +218,15 @@ router.use(resolveTenant);
 
 // ── Posts ─────────────────────────────────────────────────────
 
+// Parse a :id path param as a positive-integer post id. Returns null for
+// anything non-numeric (e.g. the literal "undefined" a client can send when
+// an id is missing) so the route can reply 400 instead of letting NaN reach
+// the bigint column and surface as a 500.
+function parsePostId(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
 router.get("/api/posts", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || "50");
@@ -234,8 +243,10 @@ router.get("/api/posts", requirePermission("view_dashboard"), async (req, res) =
 
 router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, res) => {
   try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
     const post = await withTenant(req.tenant.id, async () => {
-      return getPost(parseInt(req.params.id));
+      return getPost(id);
     });
     if (!post) return res.status(404).json({ error: "Post not found" });
     res.json({ post });
@@ -259,6 +270,8 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
 //   anything else → 500
 router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) => {
   try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
     const { title, content, hashtags, image_url } = req.body || {};
     const fields = {};
     if (title !== undefined)   fields.title = title;
@@ -277,7 +290,7 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
     }
 
     const updated = await withTenant(req.tenant.id, async () => {
-      const row = await updatePost(parseInt(req.params.id), fields);
+      const row = await updatePost(id, fields);
       await logActivity("info", "post_edited", {
         postId: row.id,
         fieldsChanged: Object.keys(fields)
@@ -303,8 +316,10 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
 
 router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), async (req, res) => {
   try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
     const result = await withTenant(req.tenant.id, async () => {
-      return approvePost(parseInt(req.params.id), req.user?.sub || null);
+      return approvePost(id, req.user?.sub || null);
     });
     res.json({ success: true, result });
   } catch (err) {
@@ -315,8 +330,10 @@ router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), 
 
 router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), async (req, res) => {
   try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
     await withTenant(req.tenant.id, async () => {
-      return rejectPost(parseInt(req.params.id), req.body.reason || "", req.user?.sub || null);
+      return rejectPost(id, req.body.reason || "", req.user?.sub || null);
     });
     res.json({ success: true });
   } catch (err) {

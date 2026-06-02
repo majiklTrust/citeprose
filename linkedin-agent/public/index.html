@@ -280,9 +280,26 @@
 
       async function handleSaveEdit() {
         if (!editingPost) return;
+        const hashtags = editFields.hashtags.split(',').map(h => h.trim()).filter(Boolean);
+
+        // A fresh preview is a 'draft' (not pending_approval) whose db id lives
+        // in draftPostId, so it cannot be edited via PATCH. Apply the edits to
+        // the in-memory preview; "Queue for Approval" then persists them via
+        // save-preview, which updates the draft and promotes it.
+        if (editingPost.isPreview) {
+          setSelectedPost(sp => sp ? {
+            ...sp,
+            title: editFields.title,
+            content: editFields.content,
+            hashtags
+          } : sp);
+          setEditingPost(null);
+          return;
+        }
+
+        // Queued (pending_approval) post: persist immediately via PATCH.
         setLoading(l => ({ ...l, editSave: true }));
         try {
-          const hashtags = editFields.hashtags.split(',').map(h => h.trim()).filter(Boolean);
           const res = await fetch(`${API}/api/posts/${editingPost.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -496,7 +513,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.6.71</div>
+                <div className="header-subtitle">v1.6.72</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -536,7 +553,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.6.71 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.6.72 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

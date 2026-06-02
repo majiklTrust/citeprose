@@ -14,6 +14,7 @@
 //   node scripts/dbshell.mjs psql
 //   node scripts/dbshell.mjs pg_dump -Fc -f backup.dump
 //   node scripts/dbshell.mjs verify        # preflight: decrypt + connect, no shell
+//   node scripts/dbshell.mjs verify <file>  # same, against a candidate .env (deploy staging)
 //
 // Seamless (optional) — alias the tools in your shell rc so the secure
 // path is the default path:
@@ -43,9 +44,19 @@ function die(code, msg) {
   process.exit(code);
 }
 
-// 1) Load .env (ciphertext for the four + ENCRYPTION_SECRET + plaintext PGDATABASE).
-const envPath = path.join(APP_ROOT, ".env");
-if (!fs.existsSync(envPath)) die(2, `.env not found at ${envPath}`);
+// 0) Parse the command first, so `verify <envfile>` can target a CANDIDATE
+//    .env. The deploy pipeline uses this to validate a staged file before
+//    promoting it live, so the live .env is never overwritten with values
+//    that can't decrypt or connect. Every other mode (and `verify` with no
+//    argument) uses the app's real .env.
+const [cmd, ...args] = process.argv.slice(2);
+
+// 1) Load the chosen env file (ciphertext for the four encrypted vars +
+//    ENCRYPTION_SECRET + plaintext PGDATABASE).
+const envPath = (cmd === "verify" && args[0])
+  ? path.resolve(args[0])
+  : path.join(APP_ROOT, ".env");
+if (!fs.existsSync(envPath)) die(2, `env file not found at ${envPath}`);
 dotenv.config({ path: envPath, override: true });
 
 // 2) Decrypt with the app's exact crypto — single source of truth, no re-impl.
@@ -69,8 +80,6 @@ for (const v of ENCRYPTED) {
 const PGDATABASE = (process.env.PGDATABASE || "").trim();   // plaintext by design
 if (!PGDATABASE) die(3, "PGDATABASE missing from .env");
 
-const [cmd, ...args] = process.argv.slice(2);
-
 // 3) verify — preflight connect with no interactive shell. Safe to run as a
 //    deploy-time gate BEFORE restarting the app: confirms the encrypted .env
 //    decrypts and the credentials actually connect.
@@ -88,7 +97,7 @@ if (!cmd || cmd === "verify") {
     await client.connect();
     const r = await client.query("select current_user, current_database()");
     await client.end();
-    console.log(`[dbshell] verify OK — connected as ${r.rows[0].current_user} to ${r.rows[0].current_database}`);
+    console.log(`[dbshell] verify OK [${envPath}] — connected as ${r.rows[0].current_user} to ${r.rows[0].current_database}`);
     process.exit(0);
   } catch (e) {
     try { await client.end(); } catch { /* ignore */ }

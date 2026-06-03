@@ -33,6 +33,7 @@
 
     const API = '';  // same-origin
     const DASHBOARD_POLL_INTERVAL_MS = 15000;
+    const TIER_ORDER = { authoritative: 0, primary: 1, secondary: 2 };
 
     // ── Dynamic topic colors — deterministic hash from slug ──
     const TOPIC_PALETTE = [
@@ -513,7 +514,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.6.54</div>
+                <div className="header-subtitle">v1.6.75</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -553,7 +554,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.6.54 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.6.75 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -934,7 +935,9 @@
                     <div className="section-heading-cyan">
                       Sources ({ctx.researchSummary.sourceList.length})
                     </div>
-                    {ctx.researchSummary.sourceList.map((src, i) => (
+                    {[...ctx.researchSummary.sourceList]
+                      .sort((a, b) => (TIER_ORDER[a.tier] ?? 99) - (TIER_ORDER[b.tier] ?? 99))
+                      .map((src, i) => (
                       <div key={i} className="source-item">
                         <div>
                           <span className="source-name">{src.name}</span>

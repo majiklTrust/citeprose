@@ -6,13 +6,21 @@
 //
 // Required env vars:
 //   AUTH0_DOMAIN          — e.g. your-tenant.auth0.com
-//   AUTH0_CLIENT_ID       — from Auth0 application settings
-//   AUTH0_CLIENT_SECRET   — from Auth0 application settings
+//   AUTH0_CLIENT_ID       — from Auth0 settings, ENCRYPTED at rest
+//   AUTH0_CLIENT_SECRET   — from Auth0 settings, ENCRYPTED at rest
+//
+//   CLIENT_ID/SECRET must be stored as ciphertext produced by
+//   scripts/encrypt-platform-key.js. A plaintext or undecryptable
+//   value resolves to empty and leaves Auth0 disabled (fail closed).
 //
 // Optional env vars:
+//   AUTH0_PUBLIC_ORIGIN    — public HTTPS origin (e.g. https://app.example.com).
+//                            REQUIRED in production; dev defaults to
+//                            http://localhost:{DASHBOARD_PORT}. redirectUri and
+//                            logoutUri are derived from it unless set explicitly.
+//   AUTH0_REDIRECT_URI     — explicit callback URL (overrides origin-derived)
+//   AUTH0_LOGOUT_URI       — explicit post-logout URL (overrides origin-derived)
 //   AUTH0_AUDIENCE         — API audience (default: https://linkedin-agent-api)
-//   AUTH0_REDIRECT_URI     — callback URL (default: http://localhost:{DASHBOARD_PORT}/auth/callback)
-//   AUTH0_LOGOUT_URI       — post-logout URL (default: http://localhost:{DASHBOARD_PORT}/)
 //   AUTH0_SCOPES           — space-separated scopes (default: openid profile email)
 //
 // Auth0 dashboard configuration required:
@@ -27,6 +35,8 @@
 
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+import { decryptPlatformSecret } from "../../services/platform-secret.js";
+import { platformLog } from "../../services/platform-log.js";
 const require = createRequire(import.meta.url);
 
 // ── Configuration ────────────────────────────────────────────
@@ -64,21 +74,66 @@ function isDomainBlocked(domain) {
 // are rejected. This prevents code interception even if an
 // attacker gains write access to environment variables.
 function isRedirectUriSafe(uri) {
-  if (!uri) return true; // default is safe (localhost)
+  if (!uri) return true; // presence is enforced separately; this judges safety only
   if (uri.startsWith("http://localhost")) return true;
   if (uri.startsWith("http://127.0.0.1")) return true;
   if (uri.startsWith("https://")) return true;
   return false;
 }
 
+// Open-redirect guard for the logout returnTo. A caller-supplied returnTo is
+// only honored when it shares an origin with the configured logout URI; any
+// other value (including a different https host) falls back to the configured
+// logout URI. Auth0's Allowed Logout URLs list is a second gate, but Zero
+// Trust means we don't rely on the upstream allow-list alone.
+function isSameOrigin(candidate, base) {
+  if (typeof candidate !== "string" || typeof base !== "string" || !base) return false;
+  try {
+    return new URL(candidate).origin === new URL(base).origin;
+  } catch {
+    return false;
+  }
+}
+
+// AUTH0_CLIENT_ID and AUTH0_CLIENT_SECRET are stored ENCRYPTED at rest
+// (AES-256-GCM under HKDF(ENCRYPTION_SECRET), via platform-secret.js).
+// decEnv decrypts once and caches on the ciphertext. A missing or
+// undecryptable value resolves to "" — the existing clientId/clientSecret
+// presence checks (init() and isConfigured) then fail closed, leaving
+// Auth0 disabled rather than half-configured.
+const _decCache = new Map();
+function decEnv(name) {
+  const cipher = (process.env[name] || "").trim();
+  if (!cipher) return "";
+  if (_decCache.has(cipher)) return _decCache.get(cipher);
+  let plain = "";
+  try {
+    plain = decryptPlatformSecret(cipher);
+  } catch {
+    plain = "";
+  }
+  _decCache.set(cipher, plain);
+  return plain;
+}
+
 function getConfig() {
+  const isProd = process.env.NODE_ENV === "production";
   const domain = (process.env.AUTH0_DOMAIN || "").trim();
-  const clientId = (process.env.AUTH0_CLIENT_ID || "").trim();
-  const clientSecret = (process.env.AUTH0_CLIENT_SECRET || "").trim();
+  const clientId = decEnv("AUTH0_CLIENT_ID");
+  const clientSecret = decEnv("AUTH0_CLIENT_SECRET");
   const audience = (process.env.AUTH0_AUDIENCE || "https://linkedin-agent-api").trim();
   const port = process.env.DASHBOARD_PORT || "3001";
-  const redirectUri = (process.env.AUTH0_REDIRECT_URI || `http://localhost:${port}/auth/callback`).trim();
-  const logoutUri = (process.env.AUTH0_LOGOUT_URI || `http://localhost:${port}/`).trim();
+
+  // Public origin: required in production; localhost is a dev-only default.
+  // When unset in production, origin (and the URIs below) resolve to "" so
+  // init() can report them missing and fail loud rather than crash.
+  const origin = (process.env.AUTH0_PUBLIC_ORIGIN
+    || (isProd ? "" : `http://localhost:${port}`)).trim();
+
+  // Explicit AUTH0_REDIRECT_URI / AUTH0_LOGOUT_URI override the origin-derived
+  // values when set; otherwise they are built from the origin.
+  const redirectUri = (process.env.AUTH0_REDIRECT_URI || (origin ? `${origin}/auth/callback` : "")).trim();
+  const logoutUri   = (process.env.AUTH0_LOGOUT_URI   || (origin ? `${origin}/` : "")).trim();
   const scopes = (process.env.AUTH0_SCOPES || "openid profile email").trim();
 
   // Normalize domain — strip protocol if accidentally included
@@ -102,7 +157,6 @@ function getConfig() {
     openidConfigUrl: `https://${cleanDomain}/.well-known/openid-configuration`
   };
 }
-
 // ── State Management ─────────────────────────────────────────
 // Self-contained CSRF state for the Auth0 OAuth flow.
 // Separate from the LinkedIn OAuth state in security.js —
@@ -189,8 +243,14 @@ const auth0Provider = {
   // ── isConfigured ───────────────────────────────────────────
 
   isConfigured() {
-    const { domain, clientId, clientSecret, redirectUri } = getConfig();
+    const { domain, clientId, clientSecret, redirectUri, logoutUri } = getConfig();
     if (!(domain && clientId && clientSecret)) return false;
+
+    // Redirect/logout URIs must be present. Empty (e.g. production with no
+    // AUTH0_PUBLIC_ORIGIN) means the OAuth round-trip can't be constructed,
+    // so the provider reports itself unconfigured rather than activating with
+    // an empty redirect_uri that Auth0 would reject at runtime.
+    if (!redirectUri || !logoutUri) return false;
 
     // ── FIX 3.2.1.1-A through 3.2.1.12-A | HIGH ──────────────
     // Threat closed: SSRF check now runs at discovery time, not
@@ -219,11 +279,23 @@ const auth0Provider = {
   async init() {
     const config = getConfig();
 
+    // Startup visibility — log the RESOLVED public OAuth URLs so a bad origin
+    // is obvious at boot. Zero Trust: only non-secret values are emitted; the
+    // client ID/secret are never logged, only a presence boolean.
+    platformLog("info", "auth0_config_resolved", {
+      domain: config.domain || "(empty)",
+      redirectUri: config.redirectUri || "(empty)",
+      logoutUri: config.logoutUri || "(empty)",
+      credentialsConfigured: Boolean(config.clientId && config.clientSecret)
+    });
+
     // Validate required fields
     const missing = [];
     if (!config.domain)       missing.push("AUTH0_DOMAIN");
     if (!config.clientId)     missing.push("AUTH0_CLIENT_ID");
     if (!config.clientSecret) missing.push("AUTH0_CLIENT_SECRET");
+    if (!config.redirectUri)  missing.push("AUTH0_REDIRECT_URI (or AUTH0_PUBLIC_ORIGIN)");
+    if (!config.logoutUri)    missing.push("AUTH0_LOGOUT_URI (or AUTH0_PUBLIC_ORIGIN)");
 
     if (missing.length > 0) {
       throw new Error(`Auth0 provider missing required env vars: ${missing.join(", ")}`);
@@ -257,7 +329,6 @@ const auth0Provider = {
   getRoutes() {
     const { Router } = require("express");
     const router = Router();
-    const config = getConfig();
 
     // Login — redirect to Auth0
     router.get("/auth/login", (req, res) => {
@@ -316,6 +387,9 @@ const auth0Provider = {
           }
         });
       } catch (err) {
+        // Log server-side so "Check server logs" is actually true. The
+        // client still gets only a generic message — no internal detail.
+        platformLog("error", "auth0_callback_failed", { message: err.message });
         res.status(500).json({
           error: "Token exchange failed. Check server logs."
         });
@@ -324,7 +398,13 @@ const auth0Provider = {
 
     // Logout — redirect to Auth0 logout endpoint
     router.get("/auth/logout", (req, res) => {
-      const returnTo = req.query.returnTo || config.logoutUri;
+      const cfg = getConfig();
+      const requested = req.query.returnTo;
+      // Only honor a caller-supplied returnTo if it's same-origin with the
+      // configured logout URI; otherwise fall back. Prevents
+      // /auth/logout?returnTo=https://evil.example from bouncing the user
+      // off-site after logout.
+      const returnTo = isSameOrigin(requested, cfg.logoutUri) ? requested : cfg.logoutUri;
       const url = auth0Provider.getLogoutUrl(returnTo);
       res.redirect(url);
     });

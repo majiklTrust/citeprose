@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.6.74",
+  "version": "1.6.54",
   "config": {
     "cssversion": "24.0"
   },
@@ -32,6 +32,7 @@
     "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     "refresh": "npm audit fix ; npm ci --omit=dev 2>&1",
     "350_": "",
+    "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
     "logout": "curl -I http://localhost:3001/auth/logout",

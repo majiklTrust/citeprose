@@ -58,6 +58,29 @@ function client() {
   return c;
 }
 
+// ── String Coercion ──────────────────────────────────────────
+// xml2js / rss-parser sometimes returns objects instead of strings
+// for feed fields (e.g. { _: "text", $: { type: "html" } }).
+// This helper safely extracts the text content without throwing
+// "Cannot convert object to primitive value."
+
+function coerceString(val) {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (typeof val === "object") {
+    // xml2js text content convention: { _: "text", $: { attrs } }
+    if (val._ !== undefined) return String(val._);
+    // Atom link convention: { $: { href: "url" } }
+    if (val.$ && val.$.href) return String(val.$.href);
+    // Array — take first element
+    if (Array.isArray(val) && val.length > 0) return coerceString(val[0]);
+    // Last resort — JSON representation is more useful than "[object Object]"
+    try { return JSON.stringify(val); } catch { return ""; }
+  }
+  return "";
+}
+
 // ── Feed Fetching ────────────────────────────────────────────
 
 // Extract the best available image URL from an RSS item.
@@ -139,15 +162,7 @@ async function fetchFeed(feedRow) {
     // Fix malformed XML: replace bare & with &amp; while preserving
     // valid entities (&amp; &lt; &gt; &quot; &apos; &#123; &#xAB;).
     // Common in feeds that embed unescaped URLs like ?a=1&b=2.
-    var entityFixed = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/gi, '&amp;');
-
-    // Wrap <description> and <content:encoded> in CDATA if not already
-    // wrapped. Raw HTML in these fields (e.g. </div>, <br>) causes
-    // "Unexpected close tag" errors in the strict XML parser.
-    var sanitizedXml = entityFixed.replace(
-      /<(description|content:encoded)>(?!\s*<!\[CDATA\[)([\s\S]*?)<\/\1>/gi,
-      (match, tag, content) => `<${tag}><![CDATA[${content}]]></${tag}>`
-    );
+    var sanitizedXml = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/gi, '&amp;');
 
     const feed = await parser.parseString(sanitizedXml);
     let newArticles = 0;
@@ -155,9 +170,9 @@ async function fetchFeed(feedRow) {
     const c = client();
 
     // Capture channel-level metadata from RSS XML
-    const channelDescription = (feed.description || "").substring(0, 1000).trim();
+    const channelDescription = coerceString(feed.description).substring(0, 1000).trim();
     const channelCategories = Array.isArray(feed.categories)
-      ? feed.categories.map(c => String(c).trim()).filter(Boolean)
+      ? feed.categories.map(c => coerceString(c).trim()).filter(Boolean)
       : [];
 
     // Collect item-level categories across all articles in this poll
@@ -167,19 +182,19 @@ async function fetchFeed(feedRow) {
       // Aggregate item categories for feed-level classification
       if (Array.isArray(item.categories)) {
         for (const cat of item.categories) {
-          const trimmed = String(cat).trim();
+          const trimmed = coerceString(cat).trim();
           if (trimmed && itemCategorySet.size < 50) {
             itemCategorySet.add(trimmed);
           }
         }
       }
 
-      const link = sanitizeLink(item.link || item.guid);
+      const link = sanitizeLink(coerceString(item.link) || coerceString(item.guid));
       if (!link) continue;
 
-      const rawSummary = item.contentSnippet || item.content || item.summary || "";
+      const rawSummary = coerceString(item.contentSnippet) || coerceString(item.content) || coerceString(item.summary) || "";
       const cleanSummary = sanitizeSummary(rawSummary);
-      const cleanTitle = sanitizeTitle(item.title || "Untitled");
+      const cleanTitle = sanitizeTitle(coerceString(item.title) || "Untitled");
 
       // Prompt-injection screening — reject poisoned content at ingest
       const titleInjection = detectPromptInjection(cleanTitle);
@@ -200,7 +215,7 @@ async function fetchFeed(feedRow) {
         continue;
       }
 
-      const published = item.isoDate || item.pubDate || null;
+      const published = coerceString(item.isoDate) || coerceString(item.pubDate) || null;
       const hash = simpleHash(link + cleanTitle);
       const imageUrl = extractArticleImage(item);
 

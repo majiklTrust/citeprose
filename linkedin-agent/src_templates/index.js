@@ -92,15 +92,24 @@ export function createApp(ctx) {
     next();
   });
 
-  // CORS
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || getServerAddress().origin)
-    .split(",").map(o => o.trim());
+  // CORS — explicit, default-deny allowlist. The public origin users load the
+  // app from is the source of truth, so seed the list from AUTH0_PUBLIC_ORIGIN
+  // and ALLOWED_ORIGINS; this stops CORS drifting away from the login/logout
+  // origin. Trailing slashes are stripped because the browser Origin header
+  // carries no path while *_ORIGIN env values sometimes do.
+  const normalizeOrigin = (s) => (s || "").trim().replace(/\/+$/, "");
+  const allowedOrigins = [...new Set([
+    ...(process.env.ALLOWED_ORIGINS || "").split(",").map(normalizeOrigin),
+    normalizeOrigin(process.env.AUTH0_PUBLIC_ORIGIN),
+    normalizeOrigin(getServerAddress().origin),
+  ].filter(Boolean))];
 
   instance.use(cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
         callback(null, true);
       } else {
+        platformLog("warn", "cors_origin_rejected", { origin });
         callback(new Error("CORS: origin not allowed"));
       }
     },
@@ -227,10 +236,13 @@ export function createApp(ctx) {
     clearSession(res);
 
     const provider = getDefaultProvider();
-    const returnTo = process.env.AUTH0_LOGOUT_URI || getServerAddress().origin;
 
     if (provider && typeof provider.getLogoutUrl === "function") {
-      const logoutUrl = provider.getLogoutUrl(returnTo);
+      // Resolve the post-logout destination from the provider's own config
+      // (AUTH0_LOGOUT_URI, else AUTH0_PUBLIC_ORIGIN-derived). Passing a
+      // getServerAddress()-based returnTo here injected the local bind origin
+      // (localhost) behind a proxy and bypassed the public origin.
+      const logoutUrl = provider.getLogoutUrl();
       return res.redirect(logoutUrl);
     }
 

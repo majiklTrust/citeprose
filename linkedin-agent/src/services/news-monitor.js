@@ -135,7 +135,21 @@ async function fetchFeed(feedRow) {
     }
 
     const xml = await response.text();
-    const feed = await parser.parseString(xml);
+
+    // Fix malformed XML: replace bare & with &amp; while preserving
+    // valid entities (&amp; &lt; &gt; &quot; &apos; &#123; &#xAB;).
+    // Common in feeds that embed unescaped URLs like ?a=1&b=2.
+    var entityFixed = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/gi, '&amp;');
+
+    // Wrap <description> and <content:encoded> in CDATA if not already
+    // wrapped. Raw HTML in these fields (e.g. </div>, <br>) causes
+    // "Unexpected close tag" errors in the strict XML parser.
+    var sanitizedXml = entityFixed.replace(
+      /<(description|content:encoded)>(?!\s*<!\[CDATA\[)([\s\S]*?)<\/\1>/gi,
+      (match, tag, content) => `<${tag}><![CDATA[${content}]]></${tag}>`
+    );
+
+    const feed = await parser.parseString(sanitizedXml);
     let newArticles = 0;
     let linked = 0;
     const c = client();
@@ -253,8 +267,8 @@ async function fetchFeed(feedRow) {
     // transaction state, so platformLog (console) must run
     // before any SQL attempts.
     platformLog("warn", "feed_fetch_failed", {
-      feed: feedRow.name, status: httpStatus,
-      error: err.message.substring(0, 300)
+      status: httpStatus, error: err.message.substring(0, 300),
+      feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
     });
 
     // Best-effort: record error + increment failure count
@@ -274,9 +288,8 @@ async function fetchFeed(feedRow) {
     // Best-effort: log to activity log
     try {
       await logActivity("warn", "feed_fetch_failed", {
-        feed: feedRow.name,
-        status: httpStatus,
-        error: err.message.substring(0, 300)
+        status: httpStatus, error: err.message.substring(0, 300),
+        feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
       });
     } catch { /* transaction may be aborted — expected */ }
     return { newArticles: 0, linked: 0 };

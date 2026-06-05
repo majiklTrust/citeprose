@@ -66,8 +66,26 @@
 
     function formatDate(dateStr) {
       if (!dateStr) return '—';
-      const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      try {
+        const raw = String(dateStr);
+        const d = new Date(raw.endsWith('Z') ? raw : raw + 'Z');
+        if (isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return '—';
+      }
+    }
+
+    // Perform a mutating request and throw on a non-OK response so callers
+    // surface the failure instead of silently treating it as success.
+    async function mutate(url, opts) {
+      const res = await fetch(url, opts);
+      if (!res.ok) {
+        let detail = res.status;
+        try { const body = await res.json(); if (body && body.error) detail = body.error; } catch (e) {}
+        throw new Error('Request failed (' + detail + ')');
+      }
+      return res;
     }
 
     function parseNewsContext(post) {
@@ -202,19 +220,23 @@
 
       async function toggleMode() {
         const newMode = status.mode === 'auto' ? 'manual' : 'auto';
-        await fetch(`${API}/api/mode`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: newMode })
-        });
-        fetchAll();
+        try {
+          await mutate(`${API}/api/mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: newMode })
+          });
+          fetchAll();
+        } catch (err) {
+          alert('Failed to change mode: ' + err.message);
+        }
       }
 
       async function handleApprove(id, e) {
         e.stopPropagation();
         setLoading(l => ({ ...l, [`approve-${id}`]: true }));
         try {
-          await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          await mutate(`${API}/api/posts/${id}/approve`, { method: 'POST' });
           fetchAll();
         } catch (err) {
           alert('Failed to approve: ' + err.message);
@@ -249,7 +271,7 @@
           }
 
           // Now approve
-          await fetch(`${API}/api/posts/${id}/approve`, { method: 'POST' });
+          await mutate(`${API}/api/posts/${id}/approve`, { method: 'POST' });
           setSelectedPost(null);
           setImageChoice({ mode: 'none', url: null });
           fetchAll();
@@ -261,12 +283,16 @@
 
       async function handleReject(id, e) {
         e.stopPropagation();
-        await fetch(`${API}/api/posts/${id}/reject`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: 'Manually rejected from dashboard' })
-        });
-        fetchAll();
+        try {
+          await mutate(`${API}/api/posts/${id}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'Manually rejected from dashboard' })
+          });
+          fetchAll();
+        } catch (err) {
+          alert('Failed to reject: ' + err.message);
+        }
       }
 
       function openEditModal(post, e) {
@@ -324,13 +350,18 @@
 
       async function handleForceCycle() {
         setLoading(l => ({ ...l, forceCycle: true }));
-        await fetch(`${API}/api/force-cycle`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topicId: selectedTopic || undefined })
-        });
-        setTimeout(fetchAll, 2000);
-        setLoading(l => ({ ...l, forceCycle: false }));
+        try {
+          await mutate(`${API}/api/force-cycle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topicId: selectedTopic || undefined })
+          });
+          setTimeout(fetchAll, 2000);
+        } catch (err) {
+          alert('Failed to start cycle: ' + err.message);
+        } finally {
+          setLoading(l => ({ ...l, forceCycle: false }));
+        }
       }
 
       async function handlePreview() {
@@ -386,7 +417,7 @@
       async function handleRefreshFeeds() {
         setLoading(l => ({ ...l, feeds: true }));
         try {
-          await fetch(`${API}/api/research/poll`, { method: 'POST' });
+          await mutate(`${API}/api/research/poll`, { method: 'POST' });
           fetchAll();
         } catch (err) {
           alert('Feed refresh failed: ' + err.message);
@@ -514,7 +545,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.4.34</div>
+                <div className="header-subtitle">v1.6.77</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -554,7 +585,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.4.34 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.6.77 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1173,7 +1204,37 @@
       );
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+      }
+      static getDerivedStateFromError() {
+        return { hasError: true };
+      }
+      componentDidCatch(error, info) {
+        console.error('Dashboard render error:', error, info);
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div style={{ padding: '2rem', textAlign: 'center' }}>
+              <h2>Something went wrong.</h2>
+              <p>The dashboard hit an unexpected error and could not render this view.</p>
+              <button className="btn btn-approve" onClick={() => window.location.reload()}>Reload dashboard</button>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    ReactDOM.render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+      document.getElementById('root')
+    );
   </script>
 </body>
 </html>

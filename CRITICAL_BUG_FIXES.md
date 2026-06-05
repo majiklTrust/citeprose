@@ -297,3 +297,57 @@ Origin header spoofability mitigated by NODE_ENV gate but documented
 ### 29 Instagram POC — six-phase plan produced, not started.
 ### 30 Serverless migration — ECS Fargate or Lambda/API Gateway. Current EC2 is interim.
 ### 31 AI deferred phases — AI-2, AI-4, AI-5, AI-6 pipeline hardening queued.
+---
+June 5, 2026
+---
+
+## Auth0 (built or designed, not yet deployed)
+- **1.6.53** — encrypt `AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` (built, not deployed)
+- **1.6.54** — `auth0.js` hardening: startup config-resolved log, fail-loud redirect/logout URI checks, `isSameOrigin` open-redirect guard on logout `returnTo`, callback-failure logging (built, not deployed)
+- Production URI hardening — set explicit `AUTH0_REDIRECT_URI` / `AUTH0_LOGOUT_URI` as public HTTPS URLs with a production fail-loud guard instead of the localhost default
+- Re-enable the AUTH0 secrets in the validator's `ENCRYPTED_SECRETS` once the above is live
+
+## Secrets / encryption at rest
+- AWS KMS / Secrets Manager (Option C) — move the `ENCRYPTION_SECRET` root and all `.env`-encrypted secrets to Secrets Manager / SSM, fetched at boot via the EC2 IAM role
+
+## Prompt vault
+- Platform-admin prompt-editor feature (HELD — you weren't ready to decide): view/decrypt-to-edit/save-new-version, `prompt_vault_history` table + `version` column, dedicated endpoints, diff/placeholder/render previews, rollback, audit. Interim path: edit `seed-prompt-vault.js` in git and re-run.
+- Prompt Vault Phases 2–5 — ephemeral assembly, RBAC, response hardening, segmentation/synthesis
+
+## Corroboration / research config
+- Per-tenant corroboration match count via `agent_state` + tenant settings UI + impact preview (the env-var `MIN_INDEPENDENT_SOURCES` shipped in 1.6.71; the per-tenant version is the future step)
+- `minTrustWeight` parameterization + syncing the hardcoded `"2+"` label at `research.js:340` to it
+
+## Generation performance
+- Async job pattern for `generate-preview` (return a job ID, poll) — the real fix for the CloudFront 60s origin-timeout conflict; the 1.6.70 TTL bump doesn't resolve that ceiling
+
+## Multi-tenant
+- Multi-tenant Day 1 — schema + tenant resolver, no data movement yet
+- Per-user content isolation — each user connects their own LinkedIn account; `user_sub` in the credentials table, posts-table and publishing-pipeline changes, dashboard filtered by logged-in user
+- Post-multi-tenant user security hardening (3 fixes) — `syntheticDevUser()` refuses when `NODE_ENV=production`; `dotenv` `override:false` so runtime `NODE_ENV` wins; `platformLog` when the synthetic user activates
+
+## Branding
+- Brand-configurable templates — Phase 1 single brand from `.env` (`BRAND_NAME` / `BRAND_TAGLINE`), Phase 2 multi-tenant from the DB via `resolveTenant`, then CSS theming via custom properties
+
+## LinkedIn / integrations
+- LinkedIn MDP API verification — Advertising API, Community Management API, Live Events API access verification (Community Management API application in progress)
+- LinkedIn Disconnect endpoint — `POST /api/linkedin/disconnect`, deletes token/URNs and clears the validation cache
+- Instagram integration — six-phase POC (auth/token → publishing → AI pipeline → DM automation)
+
+## Monitoring
+- Persist `platformLog` events to a DB table; add read-only platform-admin queries for prompt-access audit trails and usage metrics
+
+## Infrastructure
+- Move toward serverless (ECS Fargate or Lambda/API Gateway); current EC2 is interim
+
+## Testing / pre-deploy gating
+- Rerun Phase 1 Step 8 security-header tests (`test-step8.sh`), including the HSTS test with `NODE_ENV=production`, before any production AWS deploy
+
+## UI / session (minor)
+- Session fix 3 — expiry countdown banner (pending)
+- UX — space out / reorder the `Queue · Edit · Discard` buttons (flagged during 1.6.72, not bundled; the misclick is now harmless but the layout still invites it)
+
+## SQL-in-source (Phase 4) — assessed, not deferred but *decided against*
+- Recommended against wholesale SQL externalization as a security measure (queries are parameterized, none is web-visible, isolation is RLS-enforced). The one proportionate open to-do from that assessment: **verify an RLS policy exists on every tenant-scoped table** (read-only check). Centralizing SQL for maintainability remains an optional future choice, not a security item.
+
+A few of these are decision-gated rather than effort-gated — the Auth0 drops in particular are built and just waiting on your call to deploy. Want me to flag which ones block a production deploy versus which are safe to keep deferred?

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.6.77",
+  "version": "1.8.1",
   "config": {
     "cssversion": "24.0"
   },
@@ -46,7 +46,7 @@
     "getlog": "/datavol/LinkedIn_Agent_drop/bin/getlog.sh",
     "touch": "/datavol/LinkedIn_Agent_drop/bin/touch-agent-zip.sh",
     "410_": "",
-    "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && npm version $v && npm run build; unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"|$(which grep) 'scripts/testing' >/dev/null && echo && echo found scripts/testing --\\> extracting to git \\\"Testing\\\" project && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d deploy/active/LinkedIn_Agent_Testing/linkedin-agent/",
+    "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && npm version $v && npm run build",
     "extract-l": "unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"     || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\"",
     "extract": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1).zip\" -d .. || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\" -d ..",
     "linkdir": "bash /datavol/LinkedIn_Agent_drop/bin/linkdir.sh",

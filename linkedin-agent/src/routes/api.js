@@ -45,6 +45,7 @@ import { requirePermission } from "../tenant/permissions.js";
 import { withTenant, currentClient as client } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
+import { selectPrimarySource, sanitizePrimarySource } from "../services/source-provenance.js";
 import { getAnthropicModel } from "../config/ai.js";
 import { getPublishMode } from "../services/linkedin-publisher.js";
 import { handleImageProxy } from "./image-proxy.js";
@@ -393,10 +394,29 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
 router.post("/api/generate-preview", requirePermission("preview_post"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
+    // Feature 2: an explicitly chosen EXISTING angle may accompany the
+    // request. Validation happens inside generatePost via resolveAngle
+    // (membership in topic.content_angles; fail-closed otherwise).
+    const angle = typeof req.body.angle === "string" ? req.body.angle : null;
     const actionToken = createActionToken("generate-content", req.user.sub);
     const result = await withTenant(req.tenant.id, async () => {
-      const g = await generatePost(topicId, null, actionToken);
+      const g = await generatePost(topicId, null, actionToken, angle);
       if (g.blocked) return { generated: g, quality: null, postId: null };
+
+      // Resolve the primary source for attribution. Prefer the lead
+      // article image's source so the cited link agrees with the
+      // image. Fail closed: an otherwise-successful generation with
+      // no attributable source is blocked rather than queued.
+      const preferUrl = (Array.isArray(g.articleImages) && g.articleImages[0] && g.articleImages[0].link) || null;
+      const primarySource = selectPrimarySource((g.researchSummary && g.researchSummary.sourceList) || [], { preferUrl });
+      if (!primarySource) {
+        await logActivity("info", "post_blocked_no_primary_source", { cycleId: g.cycleId, topicId: g.topicId }, req.user?.sub || null);
+        return {
+          generated: { blocked: true, reason: "No attributable primary source could be resolved", topicId: g.topicId, angle: g.angle },
+          quality: null, postId: null
+        };
+      }
+
       const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
 
       // Auto-save as draft — content persists even if the session
@@ -407,6 +427,7 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
         researchSummary: g.researchSummary || null,
         qualityScores: q?.scores,
         factualFlags: q?.factual_flags,
+        primarySource,
         articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
       };
 
@@ -442,7 +463,7 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
 
 router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
-    let { postId, topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages } = req.body;
+    let { postId, topicId, title, content, hashtags, angle, sourcesUsed, researchSummary, quality, imageUrl, articleImages, primarySource } = req.body;
 
     // Coerce and validate postId if provided
     if (postId !== undefined && postId !== null) {
@@ -493,6 +514,10 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         researchSummary: researchSummary || null,
         qualityScores: quality?.scores,
         factualFlags: quality?.factual_flags,
+        // Zero Trust: primarySource arrives in req.body — revalidate it
+        // (canonical url, re-derived domain) before persisting. A value
+        // that fails validation is stored as null, never raw.
+        primarySource: sanitizePrimarySource(primarySource),
         articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
       };
 

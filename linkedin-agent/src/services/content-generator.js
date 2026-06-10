@@ -12,6 +12,7 @@ import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
+import { resolveAngle } from "./angle-select.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store. Module-level
@@ -76,35 +77,7 @@ export async function selectNextTopic(userSub = null) {
 
 // ── Content Angle Selection ──────────────────────────────────
 
-function selectContentAngle(topic, recentPosts) {
-  const angles = topic.content_angles || [];
-  if (angles.length === 0) return "General discussion";
-
-  const recentSameTopic = recentPosts
-    .filter(p => p.topic_id === topic.slug)
-    .slice(0, 5);
-
-  const usedAngles = new Set();
-  for (const post of recentSameTopic) {
-    for (let i = 0; i < angles.length; i++) {
-      const angleWords = angles[i].toLowerCase().split(/\s+/);
-      const postWords = post.content.toLowerCase();
-      const matchCount = angleWords.filter(w => w.length > 4 && postWords.includes(w)).length;
-      if (matchCount >= 3) usedAngles.add(i);
-    }
-  }
-
-  const availableIndices = angles
-    .map((_, i) => i)
-    .filter(i => !usedAngles.has(i));
-
-  const pool = availableIndices.length > 0
-    ? availableIndices
-    : angles.map((_, i) => i);
-
-  const idx = pool[Math.floor(Math.random() * pool.length)];
-  return angles[idx];
-}
+// selectContentAngle moved to ./angle-select.js (delivery 1.8.7)
 
 // ── Post Generation ──────────────────────────────────────────
 
@@ -117,7 +90,7 @@ export async function getAvailableTopics(userSub = null) {
   return topics.map(t => ({ id: t.slug, name: t.name }));
 }
 
-export async function generatePost(topic = null, userSub = null, actionToken = null) {
+export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null) {
   if (typeof topic === "string") {
     topic = await getTopicBySlug(topic);
   }
@@ -135,7 +108,18 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     : (key) => getPrompt(key);
 
   const recentPosts = await getRecentPosts(14);
-  const angle = selectContentAngle(topic, recentPosts);
+
+  // Angle decision (Feature 2): an explicitly requested angle must be
+  // an EXISTING member of topic.content_angles; otherwise fail closed.
+  // No request -> the pre-existing auto-rotation, unchanged.
+  const angleResult = resolveAngle(topic, requestedAngle, recentPosts);
+  if (!angleResult.ok) {
+    const reason = angleResult.reason;
+    await logActivity("info", "post_blocked_invalid_angle", { cycleId, topicId: topic.slug, reason });
+    platformLog("warn", "post_blocked_invalid_angle", { cycleId, topicId: topic.slug, reason });
+    return { blocked: true, reason, topicId: topic.slug, angle: null, cycleId };
+  }
+  const angle = angleResult.angle;
 
   // ── Research phase ─────────────────────────────────────────
   let researchBrief = null;

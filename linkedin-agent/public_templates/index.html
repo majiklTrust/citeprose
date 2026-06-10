@@ -94,6 +94,14 @@
       catch { return null; }
     }
 
+    function getPrimarySource(post) {
+      const ctx = parseNewsContext(post);
+      const ps = ctx && ctx.primarySource;
+      // Defense in depth behind server-side validation: render only http(s).
+      if (!ps || typeof ps.url !== 'string' || !/^https?:\/\//.test(ps.url)) return null;
+      return ps;
+    }
+
     function getArticleImages(post) {
       if (post.articleImages && post.articleImages.length > 0) return post.articleImages;
       const ctx = parseNewsContext(post);
@@ -125,6 +133,7 @@
       const [loading, setLoading] = useState({});
       const [error, setError] = useState(null);
       const [selectedTopic, setSelectedTopic] = useState('');
+      const [selectedAngle, setSelectedAngle] = useState('');
       const [topics, setTopics] = useState([]);
       const [editingPost, setEditingPost] = useState(null);
       const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
@@ -373,7 +382,7 @@
           const res = await fetch(`${API}/api/generate-preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topicId: selectedTopic || undefined })
+            body: JSON.stringify({ topicId: selectedTopic || undefined, angle: selectedAngle || undefined })
           });
           const data = await res.json();
 
@@ -671,6 +680,7 @@
                       const pCtx = parseNewsContext(post);
                       const pLevel = getCorroborationLevel(pCtx);
                       const pLabel = CORROB_LABELS[pLevel];
+                      const pSource = getPrimarySource(post);
                       return (
                       <div key={post.id} className="post-card pending-card" onClick={() => {
                         setSelectedPost(post);
@@ -695,6 +705,7 @@
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
                           <span className="post-date">{formatDate(post.created_at)}</span>
+                          {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
                           <div className="post-actions">
                             {post.status === 'draft' ? (
                               <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
@@ -772,12 +783,26 @@
                 <div className="section-title">Quick Actions</div>
                 <div className="vstack-sm">
                   <select className="topic-selector" value={selectedTopic}
-                    onChange={e => setSelectedTopic(e.target.value)}>
+                    onChange={e => { setSelectedTopic(e.target.value); setSelectedAngle(''); }}>
                     <option value="">Auto-select topic</option>
                     {topics.filter(t => t.enabled !== false).map(t => (
                       <option key={t.id} value={t.slug}>{t.name}</option>
                     ))}
                   </select>
+                  {(() => {
+                    const t = topics.find(t => t.slug === selectedTopic);
+                    const angles = (t && Array.isArray(t.content_angles)) ? t.content_angles.filter(a => typeof a === 'string' && a.trim()) : [];
+                    if (!selectedTopic || angles.length === 0) return null;
+                    return (
+                      <select className="topic-selector" value={selectedAngle}
+                        onChange={e => setSelectedAngle(e.target.value)}>
+                        <option value="">Auto-select angle</option>
+                        {angles.map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                   <div className="toggle-row">
                     <span className={`toggle-label ${loading.corroboration ? 'toggle-label-inactive' : (status.corroboration || 'enabled') === 'enabled' ? 'toggle-label-active' : 'toggle-label-inactive'}`}>
                       {loading.corroboration ? 'Working...' : `Corroboration ${(status.corroboration || 'enabled') === 'enabled' ? 'ON' : 'OFF'}`}
@@ -954,6 +979,12 @@
                   </div>
                 )}
 
+                {ctx?.primarySource && ctx.primarySource.url && (
+                  <div className="primary-source">
+                    <span className="primary-source-label">Primary source:</span>{' '}
+                    <a href={ctx.primarySource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url">{ctx.primarySource.name} — via {ctx.primarySource.domain}</a>
+                  </div>
+                )}
                 <div className="modal-body">{selectedPost.content}</div>
                 <div className="modal-hashtags">
                   {(selectedPost.hashtags || []).map((tag, i) => (

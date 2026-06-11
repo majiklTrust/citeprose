@@ -242,7 +242,9 @@ body::after {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  /* Compacted (1.8.19): padding reduced from 1.25rem. Preview clamp
+     is unchanged — content is not hidden to gain the space. */
+  padding: 0.8rem 1rem;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -307,9 +309,17 @@ body::after {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--border);
+}
+
+/* Date stacked ABOVE the primary-source link (1.8.19). */
+.post-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
 .post-date {
@@ -319,6 +329,7 @@ body::after {
 }
 
 .post-actions { display: flex; gap: 0.5rem; }
+.post-actions .btn { white-space: nowrap; padding: 0.3rem 0.6rem; }
 
 /* Buttons */
 .btn {
@@ -568,6 +579,8 @@ body::after {
 .header-controls-wide { display: flex; align-items: center; gap: 1.5rem; }
 .vstack-sm { display: flex; flex-direction: column; gap: 0.5rem; }
 .modal-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+.modal-actions .btn { padding: 0.3rem 0.6rem; }
+.modal-actions-end .btn { padding: 0.3rem 0.6rem; }
 .modal-actions-end { display: flex; gap: 0.75rem; justify-content: flex-end; }
 .section-divider { border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
 

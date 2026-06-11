@@ -26,6 +26,9 @@
 
   // ── Access check ───────────────────────────────────────────
 
+  // Search query templates editor (public/topics/topic-templates.js)
+  window.TopicTemplates.configure({ API: API, esc: esc, showMessage: showMessage, reload: function () { loadTopics(); } });
+
   function checkAccess() {
     return fetch(API + '/api/status', { credentials: 'include', headers: { 'Accept': 'application/json' } })
       .then(function (res) { return res.json(); })
@@ -102,6 +105,16 @@
       hashtags.forEach(function (h) { html += '<span class="tag">' + esc(h) + '</span> '; });
       html += '</div>';
     }
+    var tpls = Array.isArray(t.search_templates) ? t.search_templates.filter(function (s) { return typeof s === 'string'; }) : [];
+    if (canModify) {
+      window.TopicTemplates.register(t, angles);
+      html += '<div style="margin-bottom:0.5rem;"><strong style="font-size:0.85rem;">Research Instructions</strong>';
+      html += '<div class="tpl-editor" data-id="' + t.id + '"></div></div>';
+    } else if (tpls.length > 0) {
+      html += '<div style="margin-bottom:0.5rem;"><strong style="font-size:0.85rem;">Research Instructions</strong><ol class="angle-list">';
+      tpls.forEach(function (s) { html += '<li>' + esc(s) + '</li>'; });
+      html += '</ol></div>';
+    }
     if (canModify) {
       html += '<div style="margin-top:0.75rem; display:flex; gap:0.4rem;">';
       html += '<button class="btn btn-sm btn-secondary btn-toggle-enabled" data-id="' + t.id + '" data-enabled="' + t.enabled + '">';
@@ -170,6 +183,7 @@
   }
 
   function bindCardEvents() {
+    window.TopicTemplates.bindAll();
     // Toggle details
     document.querySelectorAll('.toggle-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {

@@ -21,6 +21,8 @@ import { platformLog } from "../services/platform-log.js";
 import { getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { validateSearchTemplates, parseSuggestedTemplates } from "../services/search-queries.js";
+import { frameUntrustedContent } from "../services/prompt-framing.js";
 import {
   listTopicsForUser,
   getTopicById,
@@ -135,6 +137,81 @@ router.post("/", async (req, res) => {
 // Update topic
 // ══════════════════════════════════════════════════════════════
 
+// ── Suggest research instructions (LLM-assisted) ──────────────
+// The model PROPOSES templates; the user reviews and adds; Save
+// commits — nothing is auto-saved. Zero Trust on both sides of the
+// call: tenant-authored topic text is framed before entering the
+// prompt, and the model's reply passes parseSuggestedTemplates (the
+// same gate as human and API input) before leaving this route.
+router.post("/:id/suggest-templates", async (req, res) => {
+  try {
+    const topic = await withTenant(req.tenant.id, async () => {
+      return getTopicById(req.params.id);
+    });
+    if (!topic) {
+      return res.status(404).json({ error: "Topic not found" });
+    }
+    const allowed = await canModifyTopic(topic, req.user.sub, req.tenant.role);
+    if (!allowed) {
+      return res.status(403).json({ error: "Permission denied" });
+    }
+
+    const apiKey = await withTenant(req.tenant.id, async () => {
+      return getAnthropicApiKey();
+    });
+    if (!apiKey) {
+      return res.status(503).json({ error: "Anthropic API key not configured" });
+    }
+    const client = new Anthropic({ apiKey });
+    const model = await withTenant(req.tenant.id, async () => {
+      return getAnthropicModel();
+    });
+
+    const angles = Array.isArray(topic.content_angles)
+      ? topic.content_angles.filter(a => typeof a === "string" && a.trim()).slice(0, 10)
+      : [];
+    const topicText =
+      "TOPIC NAME: " + (topic.name || "") + "\n" +
+      "DESCRIPTION: " + (topic.description || "") + "\n" +
+      "CONTENT ANGLES:\n" + angles.map(a => "- " + a).join("\n");
+    const framed = await withTenant(req.tenant.id, async () => {
+      return frameUntrustedContent(topicText);
+    });
+
+    const response = await callAnthropic(client, {
+      model,
+      max_tokens: 600,
+      messages: [{
+        role: "user",
+        content: `You are a research librarian configuring web searches for an AI news researcher. Based on the topic below, write 3 to 5 search query templates that would surface concrete, citable material (incident reports, regulatory actions, case studies, surveys with numbers) rather than generic explainers.
+
+${framed}
+
+Rules for each template:
+- a single line, under 200 characters
+- may use ONLY these placeholders: {{ANGLE}} {{KEYWORDS}} {{YEAR_RANGE}} {{TOPIC_NAME}}
+- fixed words should name a content TYPE (e.g. "incident report", "enforcement action", "case study results")
+
+Respond with ONLY a JSON array of template strings (no markdown, no preamble).`
+      }]
+    });
+
+    const text = response.content?.[0]?.text || "";
+    const suggestions = parseSuggestedTemplates(text);
+    if (suggestions.length === 0) {
+      platformLog("warn", "template_suggest_empty", { topicId: topic.id });
+      return res.status(502).json({ error: "Could not generate suggestions — please try again" });
+    }
+    platformLog("info", "template_suggestions_served", {
+      topicId: topic.id, slug: topic.slug, count: suggestions.length, suggestions
+    });
+    res.json({ suggestions });
+  } catch (err) {
+    platformLog("error", "template_suggest_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to generate suggestions" });
+  }
+});
+
 router.patch("/:id", async (req, res) => {
   try {
     const topic = await withTenant(req.tenant.id, async () => {
@@ -160,6 +237,21 @@ router.patch("/:id", async (req, res) => {
           ? [...new Set(body.domains.map(d => String(d).toLowerCase().trim().substring(0, 50)).filter(Boolean))].slice(0, 20)
           : [];
       }
+    }
+
+    // Zero Trust: search_templates is tenant-authored text that is
+    // rendered into the research prompt. Validate structure, caps,
+    // control characters, and the placeholder whitelist before it
+    // is allowed to persist; reject with the exact reason.
+    if (body.search_templates !== undefined) {
+      const v = validateSearchTemplates(body.search_templates);
+      if (!v.ok) {
+        return res.status(400).json({ error: v.reason });
+      }
+      body.search_templates = v.templates;
+      platformLog("info", "search_templates_saved", {
+        topicId: req.params.id, count: v.templates.length, templates: v.templates
+      });
     }
 
     const updated = await withTenant(req.tenant.id, async () => {

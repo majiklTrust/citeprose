@@ -704,16 +704,18 @@
                         <div className="post-title-text">{post.title}</div>
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
-                          <span className="post-date">{formatDate(post.created_at)}</span>
-                          {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
+                          <div className="post-meta">
+                            <span className="post-date">{formatDate(post.created_at)}</span>
+                            {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
+                          </div>
                           <div className="post-actions">
                             {post.status === 'draft' ? (
                               <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
-                                Review Draft
+                                Review
                               </button>
                             ) : (<>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
-                              {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Approve & Post'}
+                              {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Publish'}
                             </button>
                             <button className="btn btn-reject" onClick={(e) => handleReject(post.id, e)}>
                               Reject
@@ -1121,7 +1123,7 @@
                     </div>
                     <div className="modal-actions">
                       <button className="btn btn-approve" onClick={(e) => { handleApproveWithImage(selectedPost.id, e); }}>
-                        Approve & Publish
+                        Publish
                       </button>
                       <button className="btn btn-reject" onClick={(e) => { handleReject(selectedPost.id, e); setSelectedPost(null); }}>
                         Reject

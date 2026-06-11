@@ -21,6 +21,7 @@ import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
+import { buildQueriesForTopicDetailed } from "./search-queries.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -60,7 +61,18 @@ async function gatherRSSMaterial(topic, angle) {
 async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const topicId = topic.slug;
   const topicName = topic.name || topicId;
-  const searchQueries = buildSearchQueries(topicId, angle);
+  const queryPlan = buildQueriesForTopicDetailed(topic, angle);
+  const searchQueries = queryPlan.queries;
+
+  // Console: the actual queries this cycle will run, which path
+  // produced them, and the values that filled the placeholders —
+  // these queries determine which facts the writer can cite.
+  platformLog("info", "search_queries_resolved", {
+    cycleId, topicId, queries: searchQueries,
+    source: queryPlan.source === "templates" ? "author-tuned templates" : "derived (name/description)",
+    angle: queryPlan.context.ANGLE || "(none)",
+    keywords: queryPlan.context.KEYWORDS
+  });
 
   await logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
 
@@ -104,6 +116,13 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
 
     const claims = JSON.parse(jsonMatch[0]);
 
+    // Console mirror: the direct effect of the queries above —
+    // how much citable material this cycle's retrieval produced.
+    platformLog("info", "web_search_complete", {
+      cycleId, topicId,
+      claimsFound: claims.length,
+      distinctSources: [...new Set(claims.map(c => c.source_name))].length
+    });
     await logActivity("info", "web_search_complete", {
       cycleId,
       claimsFound: claims.length,
@@ -117,90 +136,11 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   }
 }
 
-/*
-The function feeds into `gatherWebSearchMaterial()`. Here's the chain:
+// Search queries are built per-topic by services/search-queries.js
+// (topic.search_templates first, derived fallback otherwise). The
+// legacy buildSearchQueries/_buildSearchQueries/extractKeywords were
+// removed in 1.8.9.
 
-1. `conductResearch()` calls `gatherWebSearchMaterial(topic, angle, cycleId)`
-2. `gatherWebSearchMaterial()` calls `buildSearchQueries(topicId, angle)` to get 3 query strings
-3. Those queries are sent to Anthropic with the `web_search` tool enabled
-4. Anthropic searches the web using those queries and returns claims
-5. The claims are scored, corroborated, and fed to the content generator as research material
-
-For an original topic like `cybersecurity-incidents`, the queries are crafted to find
- relevant content — "recent cybersecurity breach ransomware", "ransomware incident report".
- These produce targeted results that the corroboration engine can work with.
- Better queries → better sources → higher verified claim count → post passes the quality gate.
-
-For a new topic, it's not skipped — it still runs. But the two generic queries produce unfocused results.
- The web search returns broad, shallow content instead of domain-specific material.
- Fewer claims corroborate across sources, so the `hasEnoughMaterial` check is more likely to fail,
- and the post gets blocked with "insufficient sources."
-
-The chain:
-
-1 content-generator.js::selectNextTopic(userSub) — picks a topic from DB via topic-store.js::getTopicsForGeneration(userSub)
-2 content-generator.js::selectContentAngle(topic, recentPosts) — reads topic.content_angles (the JSONB array from the database), picks one angle string
-3 That angle string is passed to conductResearch(topic.slug, angle, cycleId, ...)
-4 research.js::buildSearchQueries(topicId, angle) — extracts keywords from that angle via extractKeywords(angle)
-
-**/
-function _buildSearchQueries(topicId, angle) {
-  const kw = extractKeywords(angle);
-  const queries = {
-    "cybersecurity-incidents": [
-      `${angle} 2025 2026`, `recent cybersecurity breach ${kw}`, `${kw} incident report`
-    ],
-    "cybersecurity-advances": [
-      `${angle} new technology 2025 2026`, `${kw} cybersecurity advancement`, `${kw} security tool release`
-    ],
-    "ai-practical-benefit": [
-      `${angle} real world results`, `${kw} AI implementation case study`, `${kw} enterprise AI 2025 2026`
-    ],
-    "ai-guardrails": [
-      `${angle} AI safety framework`, `${kw} AI governance policy`, `${kw} responsible AI implementation`
-    ]
-  };
-  return queries[topicId] || [`${angle}`, `${kw} latest news`];
-}
-function buildSearchQueries(topicId, angle) {
-  const kw = extractKeywords(angle);
-  const year = new Date().getFullYear();
-  const yearRange = `${year - 1} ${year}`;
-  const queries = {
-    "cybersecurity-incidents": [
-      `${angle} ${yearRange}`, `recent cybersecurity breach ${kw}`, `${kw} incident report`
-    ],
-    "cybersecurity-advances": [
-      `${angle} new technology ${yearRange}`, `${kw} cybersecurity advancement`, `${kw} security tool release`
-    ],
-    "ai-practical-benefit": [
-      `${angle} real world results`, `${kw} AI implementation case study`, `${kw} enterprise AI ${yearRange}`
-    ],
-    "ai-guardrails": [
-      `${angle} AI safety framework`, `${kw} AI governance policy`, `${kw} responsible AI implementation`
-    ]
-  };
-  if (queries[topicId]) return queries[topicId];
-
-  // Generic catchall for any topic not in the map above
-  const topicName = topicId.replace(/-/g, ' ');
-  return [
-    `${topicName} ${kw} ${yearRange}`,
-    `${kw} ${topicName} case study analysis`,
-    `${topicName} ${kw} expert report`
-  ];
-}
-
-function extractKeywords(text) {
-  const stopWords = new Set([
-    "the", "and", "for", "with", "that", "this", "from", "are", "was",
-    "has", "have", "been", "being", "will", "would", "could", "should",
-    "their", "about", "into", "through", "during", "before", "after"
-  ]);
-  return text.toLowerCase().split(/\s+/)
-    .filter(w => w.length > 3 && !stopWords.has(w))
-    .slice(0, 5).join(" ");
-}
 
 function classifySourceTier(sourceName) {
   const name = sourceName.toLowerCase();

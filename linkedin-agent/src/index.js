@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.8.7
+// v1.8.21
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -123,24 +123,40 @@ export function createApp(ctx) {
   const alphaDir = path.join(__dirname, "../***REMOVED***");
   const alphaHtml = path.join(alphaDir, "index.html");
 
+  // Static cache policy (1.8.14). ETags are disabled above and the
+  // static mounts previously sent no Cache-Control, so browsers
+  // applied HEURISTIC freshness (~10% of file age) and CDN edges
+  // (Cloudflare dev tunnel, CloudFront prod) applied default TTLs —
+  // deploys stayed invisible until caches expired. "no-cache" (not
+  // "no-store") forces revalidation on every request while keeping
+  // cheap Last-Modified 304s.
+  // OWNER-MANAGED TOGGLE: the no-cache header is shipped DISABLED.
+  // Uncomment the setHeader line to activate revalidation on all
+  // static mounts (see side-effect analysis: rollback mtime trap,
+  // CDN origin load, mobile-tunnel latency). All mounts stay wired
+  // to this helper so activation is this single line.
+  const staticCacheHeaders = (res) => {
+    res.setHeader("Cache-Control", "no-cache");
+  };
+
   // Registration page — unauthenticated, token-based access
-  instance.use("/app/register", express.static(path.join(__dirname, "../public/register"), { index: "index.html" }));
+  instance.use("/app/register", express.static(path.join(__dirname, "../public/register"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Feeds Manager — accessible to owners and editors
-  instance.use("/app/feeds", express.static(path.join(__dirname, "../public/feeds"), { index: "index.html" }));
+  instance.use("/app/feeds", express.static(path.join(__dirname, "../public/feeds"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Topics page — accessible to owners and editors (manage_own_topics)
-  instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html" }));
+  instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback.
-  instance.use("/app/admin", express.static(path.join(__dirname, "../public/admin"), { index: "index.html" }));
+  instance.use("/app/admin", express.static(path.join(__dirname, "../public/admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Platform admin — super admin only, server-side query execution
-  instance.use("/app/platform-admin", express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html" }));
+  instance.use("/app/platform-admin", express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
-  instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false }));
-  instance.use(express.static(alphaDir, { index: false }));
+  instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false, setHeaders: staticCacheHeaders }));
+  instance.use(express.static(alphaDir, { index: false, setHeaders: staticCacheHeaders }));
 
   // ── Auth0 Login / Callback / Logout ────────────────────────
   instance.get("/auth/login", (req, res) => {
@@ -627,7 +643,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  1.8.7
+║           LinkedIn AI Content Agent  1.8.21
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

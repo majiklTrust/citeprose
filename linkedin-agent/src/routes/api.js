@@ -417,6 +417,14 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
         };
       }
 
+      // Console: the attribution this post will carry — the "via
+      // {domain}" credibility link shown in the queue and modal.
+      platformLog("info", "primary_source_selected", {
+        cycleId: g.cycleId, topicId: g.topicId,
+        domain: primarySource.domain, name: primarySource.name, url: primarySource.url,
+        imageArticlePreferred: !!preferUrl
+      });
+
       const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
 
       // Auto-save as draft — content persists even if the session

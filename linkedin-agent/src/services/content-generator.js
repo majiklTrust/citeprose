@@ -120,6 +120,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     return { blocked: true, reason, topicId: topic.slug, angle: null, cycleId };
   }
   const angle = angleResult.angle;
+  // Console: the perspective this post will be written from, and
+  // whether the user chose it or rotation did.
+  platformLog("info", "angle_resolved", {
+    cycleId, topicId: topic.slug, angle,
+    mode: angleResult.selected ? "user-selected" : "auto-rotated"
+  });
 
   // ── Research phase ─────────────────────────────────────────
   let researchBrief = null;

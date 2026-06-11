@@ -74,6 +74,28 @@
     .create-form { display: none; }
     .create-form.open { display: block; }
     .generating { text-align: center; padding: 1rem; color: #0073b1; font-style: italic; }
+    .tpl-sub { font-size: 0.78rem; color: #888; margin: 0.15rem 0 0.5rem; }
+    .tpl-influence { position: relative; padding-top: 26px; margin-bottom: 0.75rem; }
+    .tpl-arc { position: absolute; top: 4px; left: 12%; right: 16%; height: 22px; border: 2px solid #7b1fa2; border-bottom: none; border-radius: 14px 14px 0 0; }
+    .tpl-arc span { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 0.4rem; font-size: 0.7rem; color: #7b1fa2; white-space: nowrap; }
+    .tpl-arc::after { content: '\25BC'; position: absolute; right: -6px; bottom: -7px; color: #7b1fa2; font-size: 0.7rem; }
+    .tpl-flow { display: flex; gap: 0.4rem; align-items: stretch; }
+    .tpl-box { flex: 1; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.5rem; background: #fafafa; min-width: 0; }
+    .tpl-box-title { font-weight: 600; font-size: 0.8rem; }
+    .tpl-box-sub { font-size: 0.7rem; color: #999; margin-bottom: 0.35rem; }
+    .tpl-box-text { font-size: 0.78rem; color: #555; }
+    .tpl-box-note { font-size: 0.7rem; color: #e65100; font-style: italic; margin-top: 0.25rem; }
+    .tpl-box-empty { font-size: 0.78rem; color: #999; font-style: italic; }
+    .tpl-arrow { display: flex; flex-direction: column; justify-content: center; align-items: center; color: #888; font-size: 0.9rem; }
+    .tpl-arrow span { font-size: 0.66rem; text-align: center; line-height: 1.15; margin-bottom: 0.1rem; max-width: 58px; }
+    .tpl-queries { list-style: decimal; padding-left: 1.2rem; font-size: 0.78rem; color: #333; }
+    .tpl-queries li { margin-bottom: 0.15rem; }
+    .tpl-hl-angle { background: #f3e5f5; color: #7b1fa2; border-radius: 3px; padding: 0 0.15rem; }
+    .tpl-hl-fill { background: #fff3e0; color: #e65100; border-radius: 3px; padding: 0 0.15rem; }
+    .tpl-skip { color: #c62828; }
+    .tpl-chip { border: 1px solid #b39ddb; background: #f3e5f5; color: #5e35b1; border-radius: 12px; padding: 0.12rem 0.5rem; font-size: 0.72rem; font-family: monospace; cursor: pointer; margin-right: 0.25rem; }
+    .tpl-chip:hover { background: #e1bee7; }
+    .tpl-chip-hint { font-size: 0.7rem; color: #999; }
   </style>
 </head>
 <body>
@@ -162,6 +184,7 @@
     </div>
   </div>
   <script src="/app/shared/manager-nav.js"></script>
+  <script src="topic-templates.js"></script>
   <script src="topics.js"></script>
 </body>
 </html>

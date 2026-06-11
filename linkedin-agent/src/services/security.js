@@ -136,13 +136,20 @@ export function isSafeUrl(urlStr) {
 // Checks HTTPS safety + common image extensions/content hints.
 // Does NOT fetch the URL — purely syntactic.
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i;
-const IMAGE_CONTENT_TYPES = new Set([
-  "image/jpeg", "image/png", "image/gif", "image/webp",
-  "image/bmp", "image/svg+xml"
-]);
 
+// Image-capture fix: the old exact-MIME allowlist rejected the
+// harvester's own "image/unknown" label and modern types like
+// image/avif, while the extension fallback rejected extension-less
+// CDN URLs — so most real-world feed images were silently dropped.
+// Like a browser, we now honor any declared image/* type; the
+// extension test remains only for candidates with no type at all.
+// SSRF checks are unchanged — worst-case false positive here is a
+// broken thumbnail, not an unsafe fetch.
 export function isImageUrl(urlStr, contentType) {
   if (!isSafeUrl(urlStr)) return false;
-  if (contentType && IMAGE_CONTENT_TYPES.has(contentType.toLowerCase())) return true;
+  // Trust any declared image/* type (see rationale above).
+  if (typeof contentType === "string" && contentType.trim().toLowerCase().startsWith("image/")) {
+    return true;
+  }
   return IMAGE_EXTENSIONS.test(urlStr);
 }

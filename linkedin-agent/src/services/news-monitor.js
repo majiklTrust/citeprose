@@ -23,7 +23,8 @@ import cron from "node-cron";
 import { logActivity } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } from "./sanitize-content.js";
-import { isImageUrl } from "./security.js";
+import { extractArticleImage } from "./article-image.js";
+import { resolvePollSchedule } from "../config/poll-schedule.js";
 import { currentClient } from "../db/with-tenant.js";
 import { withTenant } from "../db/with-tenant.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
@@ -34,7 +35,8 @@ const parser = new Parser({
   customFields: {
     item: [
       ["media:content", "media:content", { keepArray: false }],
-      ["media:thumbnail", "media:thumbnail", { keepArray: false }]
+      ["media:thumbnail", "media:thumbnail", { keepArray: false }],
+      ["media:group", "media:group", { keepArray: false }]
     ]
   }
 });
@@ -83,50 +85,11 @@ function coerceString(val) {
 
 // ── Feed Fetching ────────────────────────────────────────────
 
-// Extract the best available image URL from an RSS item.
-// Checks multiple fields in priority order:
-//   1. enclosure (standard RSS 2.0 — most reliable)
-//   2. media:content (Media RSS namespace)
-//   3. media:thumbnail (Media RSS namespace)
-// Each candidate is validated: must be HTTPS, safe host, and
-// look like an image URL (extension or content-type check).
-// Returns null if no valid image found.
-
-function extractArticleImage(item) {
-  const candidates = [];
-
-  // RSS 2.0 enclosure — { url, type, length }
-  if (item.enclosure?.url) {
-    candidates.push({
-      url: item.enclosure.url,
-      type: item.enclosure.type || null
-    });
-  }
-
-  // Media RSS — media:content.$.url
-  const mediaContent = item["media:content"];
-  if (mediaContent?.$?.url) {
-    candidates.push({
-      url: mediaContent.$.url,
-      type: mediaContent.$.medium === "image" ? "image/unknown" : (mediaContent.$.type || null)
-    });
-  }
-
-  // Media RSS — media:thumbnail.$.url
-  const mediaThumbnail = item["media:thumbnail"];
-  if (mediaThumbnail?.$?.url) {
-    candidates.push({
-      url: mediaThumbnail.$.url,
-      type: "image/unknown"
-    });
-  }
-
-  for (const c of candidates) {
-    if (isImageUrl(c.url, c.type)) return c.url;
-  }
-
-  return null;
-}
+// Article image extraction lives in services/article-image.js
+// (pure module; image-capture fix). It handles enclosure,
+// media:content/media:thumbnail — including array shapes and
+// media:group nesting — and runs every candidate through the
+// SSRF + image checks in security.js.
 // Must be called inside withTenant.
 // feedRow: a row from feeds_v2 (id, url, name, tier, etc.)
 
@@ -332,15 +295,27 @@ export async function pollAllFeeds() {
 
   let totalNew = 0;
   let totalLinked = 0;
+  // Visibility (1.6.80): the per-feed refresh_minutes cooldown is
+  // the binding rate limiter, so a poll pass that fetches nothing
+  // is normal — these counters make that explicit on the console
+  // instead of looking like a silent failure.
+  let fetched = 0;
+  let cooldownSkipped = 0;
+  const minRefreshMinutes = feeds.length > 0
+    ? Math.min(...feeds.map(f => f.refresh_minutes)) : null;
 
   for (const feedRow of feeds) {
     // Skip feeds that aren't due for polling yet
     if (feedRow.last_polled_at) {
       const minutesSincePoll = (Date.now() - new Date(feedRow.last_polled_at).getTime()) / 60000;
-      if (minutesSincePoll < feedRow.refresh_minutes) continue;
+      if (minutesSincePoll < feedRow.refresh_minutes) {
+        cooldownSkipped++;
+        continue;
+      }
     }
 
     const result = await fetchFeed(feedRow);
+    fetched++;
     totalNew += result.newArticles;
     totalLinked += result.linked;
     await new Promise(r => setTimeout(r, 1500));
@@ -363,10 +338,12 @@ export async function pollAllFeeds() {
   await logActivity("info", "feed_poll_complete", {
     newArticles: totalNew,
     linked: totalLinked,
-    prunedLinks: pruned.rowCount
+    prunedLinks: pruned.rowCount,
+    fetched, cooldownSkipped, minRefreshMinutes
   });
   platformLog("info", "feed_poll_complete", {
-    newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount
+    newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount,
+    fetched, cooldownSkipped, minRefreshMinutes
   });
 
   return totalNew;
@@ -663,14 +640,22 @@ export function startMonitor() {
     console.error("[news-monitor] initial poll failed:", err.message);
   });
 
-  // Hourly poll for all tenants
-  monitorJob = cron.schedule("0 * * * *", () => {
+  // Recurring poll for all tenants. Schedule is FEED_POLL_CRON
+  // (validated; numeric 5-field syntax) with hourly as the safe
+  // default — an invalid value logs loudly and polling continues
+  // hourly rather than silently stopping.
+  const sched = resolvePollSchedule(process.env.FEED_POLL_CRON);
+  if (!sched.valid) {
+    console.error(`[news-monitor] FEED_POLL_CRON "${sched.rejected}" is not a supported cron expression — using default "${sched.expression}" (hourly)`);
+    platformLog("error", "feed_poll_cron_invalid", { rejected: sched.rejected, using: sched.expression });
+  }
+  monitorJob = cron.schedule(sched.expression, () => {
     runPollForAllTenants().catch(err => {
       console.error("[news-monitor] scheduled poll failed:", err.message);
     });
   });
 
-  console.log("📡 News monitor started — polling feeds hourly across all active tenants");
+  console.log(`📡 News monitor started — polling feeds on "${sched.expression}" (${sched.source}); per-feed refresh_minutes cooldowns gate each fetch (see feed_poll_complete for fetched/cooldownSkipped/minRefreshMinutes)`);
 }
 
 export function stopMonitor() {

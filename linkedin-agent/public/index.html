@@ -554,7 +554,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.8.21</div>
+                <div className="header-subtitle">v1.8.22</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -594,7 +594,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.8.21 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.8.22 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1033,10 +1033,24 @@
                   </div>
                 )}
 
-                {selectedPost.quality && (
+                {(() => {
+                  // Quality panel source: live preview carries
+                  // selectedPost.quality; a saved/reopened post does
+                  // not, so reconstruct it from news_context (persisted
+                  // qualityScores/qualityOverall/qualityPass). Returns
+                  // null when no scores exist, so the panel is simply
+                  // omitted rather than erroring.
+                  let quality = selectedPost.quality;
+                  if (!quality) {
+                    const qs = ctx?.qualityScores;
+                    if (qs && Object.keys(qs).length > 0) {
+                      quality = { scores: qs, overall: ctx?.qualityOverall, pass: ctx?.qualityPass };
+                    }
+                  }
+                  return quality ? (
                   <div className="quality-panel">
                     <div className="section-heading-plain">Quality Assessment</div>
-                    {Object.entries(selectedPost.quality.scores || {}).map(([key, val]) => (
+                    {Object.entries(quality.scores || {}).map(([key, val]) => (
                       <div key={key} className="quality-row">
                         <span className="quality-label">
                           {key.replace(/_/g, ' ')}
@@ -1051,12 +1065,13 @@
                       </div>
                     ))}
                     <div className="quality-overall">
-                      Overall: <strong style={{ color: selectedPost.quality.pass ? 'var(--accent-green)' : 'var(--accent-amber)' }}>
-                        {selectedPost.quality.overall}/10 {selectedPost.quality.pass ? '✓ Pass' : '⚠ Needs work'}
+                      Overall: <strong style={{ color: quality.pass ? 'var(--accent-green)' : 'var(--accent-amber)' }}>
+                        {quality.overall}/10 {quality.pass ? '✓ Pass' : '⚠ Needs work'}
                       </strong>
                     </div>
                   </div>
-                )}
+                  ) : null;
+                })()}
                 {selectedPost.status === 'pending_approval' && (() => {
                   const availableImages = getArticleImages(selectedPost);
                   return (

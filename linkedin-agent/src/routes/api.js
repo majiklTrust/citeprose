@@ -488,6 +488,8 @@ router.post("/api/generate-preview", requirePermission("preview_post"), async (r
         sourcesUsed: g.sourcesUsed || [],
         researchSummary: g.researchSummary || null,
         qualityScores: q?.scores,
+        qualityOverall: q?.overall,
+        qualityPass: q?.pass,
         factualFlags: q?.factual_flags,
         primarySource,
         articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
@@ -575,6 +577,8 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         sourcesUsed: sourcesUsed || [],
         researchSummary: researchSummary || null,
         qualityScores: quality?.scores,
+        qualityOverall: quality?.overall,
+        qualityPass: quality?.pass,
         factualFlags: quality?.factual_flags,
         // Zero Trust: primarySource arrives in req.body — revalidate it
         // (canonical url, re-derived domain) before persisting. A value

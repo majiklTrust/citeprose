@@ -49,6 +49,7 @@ import { selectPrimarySource, sanitizePrimarySource } from "../services/source-p
 import { getAnthropicModel } from "../config/ai.js";
 import { getPublishMode } from "../services/linkedin-publisher.js";
 import { handleImageProxy } from "./image-proxy.js";
+import { collectSourceLinks, mergeArticleImages } from "../services/post-image-hydrate.js";
 
 const router = Router();
 
@@ -228,12 +229,63 @@ function parsePostId(raw) {
   return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
+// ── Read-time image hydration ────────────────────────────────
+// articleImages in news_context is a snapshot frozen at generation
+// time; posts generated before image capture/backfill repaired
+// articles_v2 carry an empty snapshot forever. For modal-relevant
+// statuses (draft, pending_approval) derive the picker list from
+// CURRENT article data: one batched query joins the posts' source
+// links against articles_v2.image_url, then merge (stored first,
+// derived fills, deduped, capped 20). articles_v2/feeds_v2 are
+// platform-global, so this works inside any tenant context.
+async function hydrateArticleImages(posts) {
+  const targets = posts.filter(p => p.status === "draft" || p.status === "pending_approval");
+  if (targets.length === 0) return;
+  const perPostLinks = new Map();
+  const allLinks = new Set();
+  for (const p of targets) {
+    let ctx = p.news_context;
+    if (typeof ctx === "string") { try { ctx = JSON.parse(ctx); } catch { ctx = null; } }
+    const links = collectSourceLinks(ctx);
+    perPostLinks.set(p.id, { ctx, links });
+    for (const l of links) allLinks.add(l);
+  }
+  if (allLinks.size === 0) {
+    for (const p of targets) {
+      const { ctx } = perPostLinks.get(p.id);
+      p.articleImages = mergeArticleImages(ctx && ctx.articleImages, []);
+    }
+    return;
+  }
+  const c = client();
+  const r = await c.query(
+    `SELECT DISTINCT ON (a.link) a.link, a.image_url, a.title, f.name AS feed_name
+     FROM articles_v2 a
+     LEFT JOIN feed_articles fa ON fa.article_id = a.id
+     LEFT JOIN feeds_v2 f ON f.id = fa.feed_id
+     WHERE a.link = ANY($1) AND a.image_url IS NOT NULL
+     ORDER BY a.link, f.name`,
+    [Array.from(allLinks)]
+  );
+  const byLink = new Map();
+  for (const row of r.rows) {
+    byLink.set(row.link, { imageUrl: row.image_url, title: row.title, feedName: row.feed_name, link: row.link });
+  }
+  for (const p of targets) {
+    const { ctx, links } = perPostLinks.get(p.id);
+    const derived = links.map(l => byLink.get(l)).filter(Boolean);
+    p.articleImages = mergeArticleImages(ctx && ctx.articleImages, derived);
+  }
+}
+
 router.get("/api/posts", requirePermission("view_dashboard"), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || "50");
     const status = req.query.status;
     const posts = await withTenant(req.tenant.id, async () => {
-      return status ? await getPostsByStatus(status) : await getAllPosts(limit);
+      const rows = status ? await getPostsByStatus(status) : await getAllPosts(limit);
+      await hydrateArticleImages(rows);
+      return rows;
     });
     res.json({ posts });
   } catch (err) {
@@ -247,7 +299,9 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
     const id = parsePostId(req.params.id);
     if (id === null) return res.status(400).json({ error: "Invalid post id" });
     const post = await withTenant(req.tenant.id, async () => {
-      return getPost(id);
+      const row = await getPost(id);
+      if (row) await hydrateArticleImages([row]);
+      return row;
     });
     if (!post) return res.status(404).json({ error: "Post not found" });
     res.json({ post });

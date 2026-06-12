@@ -25,7 +25,7 @@ import { pool, closePool } from "../src/db/pool.js";
 import { isSafeUrl } from "../src/services/security.js";
 import { pickOgImage } from "../src/services/og-image.js";
 import { resolveWindow } from "./lib/backfill-window.js";
-import { createInterface } from "node:readline";
+import { createInterface } from "node:readline/promises";
 
 async function fetchPage(url) {
   const controller = new AbortController();
@@ -89,15 +89,16 @@ async function main() {
 
   // Confirmation gate — operator must explicitly proceed.
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise(resolve => {
-    rl.question("[og-backfill] Proceed? (y/n): ", resolve);
-  });
+  const answer = await rl.question("[og-backfill] Proceed? (Y/n): ");
   rl.close();
-  if (answer.trim().toLowerCase() !== "y") {
+  const a = answer.trim().toLowerCase();
+  if (a !== "" && a !== "y") {
     console.log("[og-backfill] Cancelled.");
     await closePool();
     return;
   }
+
+  console.log(`[og-backfill] Starting — processing ${rows.length} articles. Progress every 25.`);
 
   let updated = 0, noImage = 0, unsafe = 0, errors = 0, done = 0;
 

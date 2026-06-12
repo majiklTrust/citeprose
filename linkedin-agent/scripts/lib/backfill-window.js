@@ -24,7 +24,7 @@ const DEFAULT_DAYS = 160;
 function toPosInt(v) {
   if (typeof v !== "string" || !/^\d+$/.test(v)) return null;
   const n = parseInt(v, 10);
-  return n > 0 ? n : null;
+  return n >= 0 ? n : null;
 }
 
 export function resolveWindow(arg1, arg2) {

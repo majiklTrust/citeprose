@@ -22,6 +22,7 @@ import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
+import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -96,12 +97,22 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     });
     template = null;
 
-    const response = await callAnthropic(client, {
+    // Phase 1 LLM observability: requestParams is BOTH dumped and
+    // sent, so the trace provably shows the exact bytes the backend
+    // receives (fully rendered — placeholders already resolved).
+    const requestParams = {
       model,
       max_tokens: 2000,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{ role: "user", content: assembledPrompt }]
-    });
+    };
+    platformLog("info", "llm_request_web_search",
+      buildLlmRequestInfo("web_search", "1 of 4", requestParams, { cycleId, topicId, angle }));
+    if (traceEnabled(process.env.LLM_TRACE)) {
+      platformLog("debug", "llm_payload_web_search",
+        buildLlmPayloadDebug("web_search", requestParams, cycleId));
+    }
+    const response = await callAnthropic(client, requestParams);
     assembledPrompt = null;
 
     const textBlocks = response.content.filter(b => b.type === "text");
@@ -211,11 +222,18 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     });
     template = null;
 
-    const response = await callAnthropic(client, {
+    const requestParams = {
       model,
       max_tokens: 2000,
       messages: [{ role: "user", content: assembledPrompt }]
-    });
+    };
+    platformLog("info", "llm_request_corroboration",
+      buildLlmRequestInfo("corroboration", "2 of 4", requestParams, { cycleId }));
+    if (traceEnabled(process.env.LLM_TRACE)) {
+      platformLog("debug", "llm_payload_corroboration",
+        buildLlmPayloadDebug("corroboration", requestParams, cycleId));
+    }
+    const response = await callAnthropic(client, requestParams);
     assembledPrompt = null;
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();

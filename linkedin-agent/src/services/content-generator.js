@@ -10,6 +10,7 @@ import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
+import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
@@ -235,12 +236,20 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   try {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
-    const response = await callAnthropic(client, {
+    const requestParams = {
       model,
       max_tokens: 1500,
       system: topic.system_context || undefined,
       messages: [{ role: "user", content: userPrompt }]
-    });
+    };
+    platformLog("info", "llm_request_main_post_generation",
+      buildLlmRequestInfo("main_post_generation", "3 of 4", requestParams,
+        { cycleId, topicId: topic.slug, angle, corroborationSkipped: skipCorroboration }));
+    if (traceEnabled(process.env.LLM_TRACE)) {
+      platformLog("debug", "llm_payload_main_post_generation",
+        buildLlmPayloadDebug("main_post_generation", requestParams, cycleId));
+    }
+    const response = await callAnthropic(client, requestParams);
     userPrompt = null;
 
     const raw = response.content[0].text.trim();
@@ -322,11 +331,18 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   });
   template = null;
 
-  const response = await callAnthropic(client, {
+  const requestParams = {
     model,
     max_tokens: 800,
     messages: [{ role: "user", content: assembledPrompt }]
-  });
+  };
+  platformLog("info", "llm_request_quality_check",
+    buildLlmRequestInfo("quality_check", "4 of 4", requestParams, { cycleId }));
+  if (traceEnabled(process.env.LLM_TRACE)) {
+    platformLog("debug", "llm_payload_quality_check",
+      buildLlmPayloadDebug("quality_check", requestParams, cycleId));
+  }
+  const response = await callAnthropic(client, requestParams);
   assembledPrompt = null;
 
   const raw = response.content[0].text.trim();

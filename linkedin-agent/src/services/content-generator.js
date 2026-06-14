@@ -11,6 +11,7 @@ import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
+import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
@@ -213,6 +214,30 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 
   const topicHashtags = topic.hashtags || [];
 
+  // ── Verified metrics (METRICS FIDELITY) ────────────────────
+  // Pull the topic's verified metrics so the model can cite them via
+  // {{METRIC_key}} tokens that are substituted with exact values
+  // after generation. Guarded: a missing tenant context, absent
+  // topic id, or fetch error degrades to research-only generation —
+  // it must never break the existing path.
+  let metricGroups = [];
+  const metricsByKey = new Map();
+  try {
+    if (topic.id !== null && topic.id !== undefined) {
+      const { getMetricsForTopic } = await import("./metric-store.js");
+      metricGroups = await getMetricsForTopic(topic.id);
+      for (const grp of metricGroups) {
+        for (const mt of grp.metrics) metricsByKey.set(mt.metricKey, mt);
+      }
+    }
+  } catch (err) {
+    platformLog("warn", "metric_fetch_failed", { cycleId, topicId: topic.slug, error: err.message });
+    metricGroups = [];
+    metricsByKey.clear();
+  }
+  const metricBlock = buildMetricBlock(metricGroups);
+  platformLog("info", "metrics_loaded", { cycleId, topicId: topic.slug, groups: metricGroups.length, metrics: metricsByKey.size });
+
   let cgTemplate = await vaultGet("content_generator");
   if (!cgTemplate) {
     platformLog("error", "prompt_vault_miss", { key: "content_generator" });
@@ -222,6 +247,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     TOPIC_NAME: topic.name,
     ANGLE: angle,
     RESEARCH_BLOCK: researchBlock,
+    METRIC_BLOCK: metricBlock,
     RECENT_SUMMARIES: recentSummaries || "(no recent posts)",
     ATTESTATION_RULE: !skipCorroboration ? "\n10. Include the attestation line after the Sources line." : "",
     ATTESTATION_BODY: !skipCorroboration ? " and attestation line" : ""
@@ -255,6 +281,34 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     const raw = response.content[0].text.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
+
+    // ── Metric tokenization + fidelity verification ────────────
+    // Substitute {{METRIC_key}} with exact verified values, then
+    // verify. Token integrity always blocks (an unknown token would
+    // otherwise print literally / a fabricated metric reference).
+    // Strict number-policing (every number must be a verified metric
+    // or appear in the research) is OPT-IN via METRIC_FIDELITY_STRICT,
+    // because on-by-default it would block research-driven posts whose
+    // legitimate numbers (years, counts, cited stats) are not metrics.
+    const strictFidelity = (process.env.METRIC_FIDELITY_STRICT || "").trim() === "1";
+    const sub = substituteMetricTokens(parsed.body, metricsByKey);
+    const allowedNumbers = strictFidelity ? extractNumericTokens(researchBlock) : [];
+    const fidelity = verifyMetricFidelity(sub.text, metricsByKey, { strict: strictFidelity, allowedNumbers });
+    if (!fidelity.ok) {
+      const reason = fidelity.unknownTokens.length
+        ? "Unknown metric token(s): " + fidelity.unknownTokens.join(", ")
+        : "Unverified number(s) not traceable to a metric or the research: " + fidelity.unverifiedNumbers.join(", ");
+      await logActivity("warn", "metric_fidelity_violation", { cycleId, topicId: topic.slug, reason });
+      platformLog("warn", "metric_fidelity_violation", {
+        cycleId, topicId: topic.slug,
+        unknownTokens: fidelity.unknownTokens, unverifiedNumbers: fidelity.unverifiedNumbers, strict: strictFidelity
+      });
+      return { blocked: true, reason: "Metric fidelity check failed. " + reason, topicId: topic.slug, angle, cycleId };
+    }
+    parsed.body = sub.text;
+    if (sub.substituted.length) {
+      platformLog("info", "metric_tokens_substituted", { cycleId, topicId: topic.slug, count: sub.substituted.length, keys: sub.substituted });
+    }
 
     const allHashtags = [...new Set([
       ...parsed.hashtags,

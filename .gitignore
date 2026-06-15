@@ -1,3 +1,6 @@
 *.sh
 *.env*
 linkedin-agent/*.js
+data/pgsql/drop
+data/pgsql/*.py
+data/pgsql/*.sql

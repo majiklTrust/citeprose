@@ -68,6 +68,14 @@
     /* Content genre insert panel */
     .genre-panel { border: 1px solid #e0e0e0; border-left: 3px solid #e65100; border-radius: 6px; padding: 1rem; background: #fff; margin-bottom: 2rem; }
     .genre-panel h2 { font-size: 1.05rem; font-weight: 700; color: #333; margin-bottom: 0.2rem; }
+    /* Heading row: title on the left, genre loader inline to its right
+       (left-aligned, not pushed to the far edge). Mirrors the
+       query-card header pattern. Wraps below the title on narrow
+       viewports. */
+    .genre-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-bottom: 0.2rem; }
+    .genre-head h2 { margin-bottom: 0; }
+    .genre-head .genre-loader { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+    .genre-head .genre-loader .hint { font-size: 0.72rem; color: #999; margin-top: 0; text-align: left; }
     .genre-panel .panel-sub { font-size: 0.78rem; color: #888; margin-bottom: 0.9rem; }
     .genre-field { margin-bottom: 0.7rem; }
     .genre-field label { display: block; font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 0.25rem; }
@@ -82,6 +90,12 @@
     .genre-result.visible { display: inline-block; }
     .genre-result.ok { background: #e8f5e9; color: #2e7d32; }
     .genre-result.err { background: #ffebee; color: #c62828; }
+    .genre-field select { width: 100%; max-width: 360px; padding: 0.4rem 0.55rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; background: #fff; }
+    /* Loader select styled by ID — it lives in the heading row, not a .genre-field. */
+    #genre-select { width: 300px; max-width: 300px; padding: 0.4rem 0.55rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; background: #fff; }
+    /* Per-field widths: genre at half width, description full (matches textarea). */
+    #genre-name { max-width: 300px; }
+    #genre-desc { max-width: none; }
   </style>
 </head>
 <body>
@@ -101,17 +115,22 @@
            text is sent over the authenticated admin request and only
            the ciphertext is persisted. -->
       <div class="genre-panel">
-        <h2>Add or Update Content Generator Genre</h2>
-        <p class="panel-sub">Create a new genre-specific content_generator template, or update an existing one (including default). Encrypted at rest. Overwriting an existing template asks for confirmation first.</p>
+        <div class="genre-head">
+          <h2>Add or Update Content Generator Genre</h2>
+          <div class="genre-loader">
+            <select id="genre-select" aria-label="Load existing genre"><option value="__new__">— New genre —</option></select>
+            <div class="hint">Loads the genre name and its description below.</div>
+          </div>
+        </div>
 
         <div class="genre-field">
           <label for="genre-name">Genre</label>
-          <input type="text" id="genre-name" placeholder="e.g. technical_deep_dive or default" autocomplete="off">
+          <input type="text" id="genre-name" placeholder="e.g. environmental_sustainability" autocomplete="off">
           <div class="hint">Lowercase, starts with a letter, 2–32 chars. Use "default" to update the base template.</div>
         </div>
 
         <div class="genre-field">
-          <label for="genre-desc">Description (optional)</label>
+          <label for="genre-desc">Description</label>
           <input type="text" id="genre-desc" placeholder="Short description of this genre's purpose" autocomplete="off">
         </div>
 

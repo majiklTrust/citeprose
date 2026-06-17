@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- The document itself must revalidate so the browser always sees
        the current ?v= on its subresources. Subresources below are
-       cache-busted by 34.0; this meta keeps the bootstrap
+       cache-busted by {{CSSVERSION}}; this meta keeps the bootstrap
        HTML from being served stale by heuristic/CDN caching, without
        depending on the global no-cache toggle in the server. -->
   <meta http-equiv="Cache-Control" content="no-cache">
   <title>Platform Admin — LinkedIn Agent</title>
-  <link rel="stylesheet" href="/styles/app.css?v=34.0">
+  <link rel="stylesheet" href="/styles/app.css?v={{CSSVERSION}}">
   <style>
     .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
     .page-title { font-size: 1.5rem; font-weight: 700; color: #333; margin-bottom: 0.2rem; }
@@ -132,6 +132,6 @@
       </div>
     </div>
   </div>
-  <script src="platform-admin.js?v=34.0"></script>
+  <script src="platform-admin.js?v={{CSSVERSION}}"></script>
 </body>
 </html>

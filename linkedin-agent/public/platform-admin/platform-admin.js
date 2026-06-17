@@ -25,6 +25,8 @@
       if (!data) return;
       document.getElementById("main-content").style.display = "block";
       renderQueries(data.queries || []);
+      bindGenrePanel();
+      loadGenreOptions();
     })
     .catch(function (err) {
       document.getElementById("auth-wall").style.display = "block";
@@ -244,5 +246,174 @@
         btn.disabled = false;
         btn.textContent = destructive ? "Run (Destructive)" : "Run";
       });
+  }
+  // ── Content genre upsert panel ───────────────────────────
+  // Posts to the dedicated /content-genre endpoint (NOT /execute).
+  // Server-side encryption; this sends plaintext over the
+  // authenticated request and shows the result. Any genre may be
+  // created or updated, including 'default'. Overwriting an
+  // existing template prompts for confirmation (HTTP 409), then
+  // resends with confirmed:true.
+
+  function bindGenrePanel() {
+    var btn = document.getElementById("genre-submit");
+    if (!btn) return;
+    btn.addEventListener("click", function () { submitGenre(false); });
+
+    var select = document.getElementById("genre-select");
+    if (select) {
+      select.addEventListener("change", function () { applyGenreSelection(); });
+    }
+  }
+
+  // ── Genre loader dropdown ─────────────────────────────────
+  // Fetches genre METADATA only (genre + description) via the
+  // content-generator-genres registry query. Never fetches or
+  // displays template plaintext — that stays behind the vault
+  // boundary. Selecting a genre loads its name and description
+  // into the editable fields; the template textarea stays manual.
+
+  var GENRE_META = {};   // genre -> description
+
+  function loadGenreOptions() {
+    fetch(API + "/api/platform-admin/execute", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "content-generator-genres", params: {}, confirmed: false })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data || !data.success || !data.rows) return;
+        var select = document.getElementById("genre-select");
+        if (!select) return;
+
+        GENRE_META = {};
+        // Rebuild options: "New genre" first, then each existing genre.
+        select.innerHTML = '<option value="__new__">— New genre —</option>';
+        data.rows.forEach(function (row) {
+          GENRE_META[row.genre] = row.description || "";
+          var opt = document.createElement("option");
+          opt.value = row.genre;
+          opt.textContent = row.genre;
+          select.appendChild(opt);
+        });
+
+        // Default to 'default' if present, then load its metadata.
+        if (Object.prototype.hasOwnProperty.call(GENRE_META, "default")) {
+          select.value = "default";
+        }
+        applyGenreSelection();
+      })
+      .catch(function (err) {
+        console.error("Genre list load failed:", err);
+      });
+  }
+
+  function applyGenreSelection() {
+    var select = document.getElementById("genre-select");
+    var nameEl = document.getElementById("genre-name");
+    var descEl = document.getElementById("genre-desc");
+    if (!select) return;
+
+    var choice = select.value;
+    if (choice === "__new__") {
+      // New genre: clear fields for fresh entry.
+      nameEl.value = "";
+      descEl.value = "";
+      return;
+    }
+    // Existing genre: load name + description (metadata only).
+    nameEl.value = choice;
+    descEl.value = GENRE_META[choice] || "";
+  }
+
+  function setGenreBusy(busy) {
+    var btn = document.getElementById("genre-submit");
+    if (!btn) return;
+    btn.disabled = busy;
+    btn.textContent = busy ? "Saving..." : "Save Genre Template";
+  }
+
+  function submitGenre(confirmed) {
+    var nameEl = document.getElementById("genre-name");
+    var descEl = document.getElementById("genre-desc");
+    var tmplEl = document.getElementById("genre-template");
+    var resultEl = document.getElementById("genre-result");
+
+    var genre = (nameEl.value || "").trim();
+    var description = (descEl.value || "").trim();
+    var template = tmplEl.value || "";
+
+    // Client-side pre-validation mirrors the server rules so the
+    // admin gets instant feedback. 'default' is a valid genre.
+    // The server re-validates — this is convenience, not the
+    // security boundary.
+    resultEl.className = "genre-result";
+    if (!/^[a-z][a-z0-9_]{1,31}$/.test(genre)) {
+      showGenreResult(resultEl, false, "Genre must be lowercase, start with a letter, 2–32 chars.");
+      return;
+    }
+    if (template.trim().length === 0) {
+      showGenreResult(resultEl, false, "Template text is required.");
+      return;
+    }
+    if (description.length === 0) {
+      showGenreResult(resultEl, false, "Description is required.");
+      return;
+    }
+
+    setGenreBusy(true);
+
+    fetch(API + "/api/platform-admin/content-genre", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        genre: genre, template: template,
+        description: description, confirmed: confirmed === true
+      })
+    })
+      .then(function (res) {
+        return res.json().then(function (d) {
+          return { status: res.status, ok: res.ok, data: d };
+        });
+      })
+      .then(function (r) {
+        // 409 → template exists; confirm overwrite, then resend.
+        if (r.status === 409 && r.data.needsConfirm) {
+          setGenreBusy(false);
+          if (window.confirm(r.data.message)) {
+            submitGenre(true);
+          }
+          return;
+        }
+        setGenreBusy(false);
+        if (!r.ok || !r.data.success) {
+          showGenreResult(resultEl, false, r.data.error || "Save failed");
+          return;
+        }
+        var verb = r.data.action === "updated" ? "updated" : "created";
+        showGenreResult(resultEl, true, "Genre '" + genre + "' " + verb + ".");
+        // Clear inputs only on create, so an update leaves the
+        // fields in place for further edits.
+        if (r.data.action === "created") {
+          nameEl.value = "";
+          descEl.value = "";
+          tmplEl.value = "";
+        }
+        // Refresh the dropdown so a newly created genre appears and
+        // an updated description is reflected.
+        loadGenreOptions();
+      })
+      .catch(function (err) {
+        setGenreBusy(false);
+        showGenreResult(resultEl, false, "Network error: " + err.message);
+      });
+  }
+
+  function showGenreResult(el, ok, msg) {
+    el.className = "genre-result visible " + (ok ? "ok" : "err");
+    el.textContent = msg;
   }
 })();

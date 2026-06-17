@@ -35,9 +35,6 @@
     "refresh": "npm audit fix ; npm ci --omit=dev 2>&1",
     "350_": "",
     "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",
-    "backfill1": "echo -n 'y\\n'|node scripts/backfill-og-images.js 1",
-    "backfill3": "echo -n 'y\\n'|node scripts/backfill-og-images.js 3",
-    "backfill7": "echo -n 'y\\n'|node scripts/backfill-og-images.js 7",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
     "logout": "curl -I http://localhost:3001/auth/logout",
@@ -120,3 +117,4 @@
     "supertest": "^7.2.2"
   }
 }
+

@@ -40,6 +40,7 @@ import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
+import { storePromptGenre } from "../services/prompt-vault.js";
 
 const router = Router();
 
@@ -351,11 +352,24 @@ const QUERY_REGISTRY = {
 
   "prompt-vault-inventory": {
     label: "Prompt Vault Inventory",
-    description: "Lists every vaulted prompt: key, description, encryption version, and last update. Encrypted content is never exposed.",
-    capability: "See exactly which prompts Phase 1 protects and when each was last rotated.",
-    sql: `SELECT key, description, encryption_version, updated_at
+    description: "Lists every vaulted prompt: key, genre, description, encryption version, and last update. Encrypted content is never exposed.",
+    capability: "See exactly which prompts and genre variants the vault protects and when each was last rotated.",
+    sql: `SELECT key, genre, description, encryption_version, updated_at
           FROM prompt_vault
-          ORDER BY key`,
+          ORDER BY key, genre`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "content-generator-genres": {
+    label: "Content Generator Genres",
+    description: "Lists the genre variants configured for the content_generator prompt. Encrypted content is never exposed.",
+    capability: "Confirm which content genres exist before inserting a new one.",
+    sql: `SELECT genre, description, updated_at
+          FROM prompt_vault
+          WHERE key = 'content_generator'
+          ORDER BY genre`,
     params: [],
     destructive: false,
     readOnly: true
@@ -785,6 +799,71 @@ export default function createPlatformAdminRoutes() {
       res.status(500).json({ error: "An internal error occurred" });
     } finally {
       client.release();
+    }
+  });
+
+  // ── Content genre insert ─────────────────────────────────
+  // Dedicated endpoint — NOT part of QUERY_REGISTRY/execute.
+  //
+  // Why separate: the /execute path runs raw registry SQL and is
+  // firewalled from prompt_vault.value_enc by design (encryption
+  // must never happen client-side). Inserting a genre template
+  // requires server-side AES-256-GCM encryption, so it goes
+  // through storePromptGenre() in prompt-vault.js — the same
+  // encrypt() the default prompt uses. Plaintext is received over
+  // the authenticated admin request, encrypted in memory, and only
+  // the ciphertext blob is persisted. The body is never logged.
+  //
+  // SECURITY NOTE (tracked, high priority): the template plaintext
+  // travels over the wire and lives briefly in server memory during
+  // this request. Same exposure profile as seeding the default
+  // prompt. TLS termination at the ALB/CloudFront protects it in
+  // transit. A future hardening pass should reduce this window.
+  //
+  // Gated by router-level requireAuth + requirePlatformAdmin.
+  router.post("/content-genre", async (req, res) => {
+    const { genre, template, description, confirmed } = req.body || {};
+
+    // Audit the attempt WITHOUT the template body or any ciphertext.
+    platformLog("info", "content_genre_write_attempt", {
+      admin: req.user.sub,
+      genre: typeof genre === "string" ? genre : "(invalid)",
+      templateLength: typeof template === "string" ? template.length : 0,
+      confirmed: confirmed === true
+    });
+
+    try {
+      const result = await storePromptGenre(
+        "content_generator", genre, template, description, confirmed === true
+      );
+      res.json({ success: true, action: result.action, key: "content_generator", genre });
+    } catch (err) {
+      // CONFIRM_OVERWRITE is not a failure — it tells the UI the
+      // template already exists and to ask the admin to confirm
+      // the overwrite, then resend with confirmed:true. 409 Conflict.
+      if (err.code === "CONFIRM_OVERWRITE") {
+        return res.status(409).json({
+          needsConfirm: true,
+          message: "A template for genre '" + genre + "' already exists. Overwrite it?"
+        });
+      }
+      // Map known validation codes to safe 400s; everything else
+      // is a generic 500 that never leaks internals.
+      const SAFE = {
+        INVALID_GENRE:  "Genre must be lowercase, start with a letter, and be 2-32 characters.",
+        EMPTY_TEMPLATE: "Template text is required.",
+        EMPTY_DESCRIPTION: "Description is required."
+      };
+      if (err.code && SAFE[err.code]) {
+        platformLog("warn", "content_genre_write_rejected", {
+          admin: req.user.sub, genre, reason: err.code
+        });
+        return res.status(400).json({ error: SAFE[err.code], code: err.code });
+      }
+      platformLog("error", "content_genre_write_failed", {
+        admin: req.user.sub, error: err.message
+      });
+      return res.status(500).json({ error: "An internal error occurred" });
     }
   });
 

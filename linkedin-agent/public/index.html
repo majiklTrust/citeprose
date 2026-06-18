@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/app/favicon.png">
-  <title>LinkedIn AI Agent — Command Center</title>
+  <title>Market Intelligence — Command Center</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -905,7 +905,7 @@
         return (
           <div className="app-container">
             <div className="login-wall">
-              <div className="login-wall-title">LinkedIn AI Agent</div>
+              <div className="login-wall-title">Market Intelligence</div>
               <div className="login-wall-subtitle">Authentication required to access the dashboard</div>
               <a href="/auth/login" className="login-btn">Log In</a>
             </div>
@@ -918,7 +918,7 @@
           <div className="app-container">
             <div className="header">
               <div>
-                <div className="header-title">LinkedIn AI Agent</div>
+                <div className="header-title">Market Intelligence</div>
                 <div className="header-subtitle">Command Center</div>
               </div>
             </div>
@@ -957,8 +957,8 @@
           <div className="app-container">
             <div className="header">
               <div>
-                <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.9.21</div>
+                <div className="header-title">Market Intelligence</div>
+                <div className="header-subtitle">v1.9.23</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -997,8 +997,8 @@
           {/* Header */}
           <div className="header">
             <div>
-              <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.9.21 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-title">Market Intelligence</div>
+              <div className="header-subtitle">v1.9.23 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1188,27 +1188,11 @@
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
                 <div className="vstack-sm">
-                  <select className="topic-selector" value={selectedTopic}
-                    onChange={e => { setSelectedTopic(e.target.value); setSelectedAngle(''); }}>
-                    <option value="">Auto-select topic</option>
-                    {topics.filter(t => t.enabled !== false).map(t => (
-                      <option key={t.id} value={t.slug}>{t.name}</option>
-                    ))}
-                  </select>
-                  {(() => {
-                    const t = topics.find(t => t.slug === selectedTopic);
-                    const angles = (t && Array.isArray(t.content_angles)) ? t.content_angles.filter(a => typeof a === 'string' && a.trim()) : [];
-                    if (!selectedTopic || angles.length === 0) return null;
-                    return (
-                      <select className="topic-selector" value={selectedAngle}
-                        onChange={e => setSelectedAngle(e.target.value)}>
-                        <option value="">Auto-select angle</option>
-                        {angles.map(a => (
-                          <option key={a} value={a}>{a}</option>
-                        ))}
-                      </select>
-                    );
-                  })()}
+                  {/**
+                  <button className="btn btn-primary btn-full" onClick={() => setShowComposer(true)}>
+                    ✎ Compose
+                  </button>
+                  **/}
                   <div className="toggle-row">
                     <span className={`toggle-label ${loading.corroboration ? 'toggle-label-inactive' : (status.corroboration || 'enabled') === 'enabled' ? 'toggle-label-active' : 'toggle-label-inactive'}`}>
                       {loading.corroboration ? 'Working...' : `Corroboration ${(status.corroboration || 'enabled') === 'enabled' ? 'ON' : 'OFF'}`}
@@ -1221,14 +1205,16 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
-                  {/**<div style={{ display: 'flex', gap: '8px' }}>
+                  {/**
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
                     </button>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
                       ✎ Compose
                     </button>
-                  </div>**/}
+                  </div>
+                  **/}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}

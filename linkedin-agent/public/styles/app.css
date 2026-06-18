@@ -381,7 +381,9 @@ body::after {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.25rem;
+  /* Card padding aligned to .post-card (0.8rem 1rem) for a consistent
+     card frame across the dashboard. */
+  padding: 0.8rem 1rem;
   margin-bottom: 1rem;
 }
 

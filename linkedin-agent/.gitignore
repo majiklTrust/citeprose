@@ -5,4 +5,4 @@ node_modules/
 deploy
 scripts/LinkedIn_Agent_Testing/
 !cssversion.js
-
+!audit_node_project.sh

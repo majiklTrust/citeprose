@@ -197,7 +197,8 @@ router.get("/topic-metrics", requirePermission("preview_post"), async (req, res)
 // selectable for the given topic. A metric-bearing genre is selectable
 // only when the topic has at least one usable metric; otherwise it is
 // returned not-selectable with a reason. topicId is optional — without
-// it, no compatibility judgment is made (all selectable).
+// it (auto-select) no topic supplies metrics, so metric-bearing
+// genres are not selectable; non-metric genres always are.
 router.get("/genres", requirePermission("preview_post"), async (req, res) => {
   try {
     const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";
@@ -223,13 +224,13 @@ router.get("/genres", requirePermission("preview_post"), async (req, res) => {
     }
 
     const menu = genres.map((g) => {
-      const blockedByMetrics = g.metricBearing && topicHasMetrics === false;
+      const blockedByMetrics = g.metricBearing && !topicHasMetrics;
       return {
         genre: g.genre,
         description: g.description,
         metricBearing: g.metricBearing,
         selectable: !blockedByMetrics,
-        reason: blockedByMetrics ? "Needs metric data; this topic has none." : null
+        reason: blockedByMetrics ? "Needs a topic with metric data." : null
       };
     });
 

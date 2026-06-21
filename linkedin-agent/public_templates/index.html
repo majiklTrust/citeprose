@@ -163,93 +163,54 @@
       none: { cls: 'corroboration-none', text: 'Uncorroborated' },
     };
 
-    // ── Composer (Cycle 4) ───────────────────────────────────
-    // Self-contained component with its own state — decoupled from
-    // handlePreview. Reads the three /api/compose endpoints. Power
-    // path beside the quick Preview button. Generates a draft and
-    // shows it read-only; save/approval is a later cycle.
+    // ── Composer — Create a post (1.9.31) ────────────────────
+    // Create-only: topic + angle + a clean, metric-free genre
+    // picker. Generates a draft via /api/compose/generate (which
+    // PERSISTS it server-side) and hands the result to the shared
+    // post-detail modal through onGenerated. The genre catalog is
+    // platform-level and topic-independent, so it loads once on
+    // mount; the internal 'refine' genre is excluded server-side.
+    // Metric fidelity is out of scope for this flow by design —
+    // no landscape, no metric preview, no fidelity panel.
     function Composer({ API, topics, onClose, onGenerated }) {
       const [topicSlug, setTopicSlug] = useState('');
       const [angle, setAngle] = useState('');
       const [genres, setGenres] = useState([]);
-      const [landscape, setLandscape] = useState(null);
       const [selectedGenre, setSelectedGenre] = useState('default');
+      const [genresLoading, setGenresLoading] = useState(false);
       const [loading, setLoading] = useState(false);
-      const [menuLoading, setMenuLoading] = useState(false);
       const [error, setError] = useState(null);
-      const [preview, setPreview] = useState(null);
-      const [previewLoading, setPreviewLoading] = useState(false);
-      const [blockInfo, setBlockInfo] = useState(null);
       const abortRef = React.useRef(null);
       const cancelKindRef = React.useRef(null);
       const mountedRef = React.useRef(true);
 
-      // On topic change: load the compatibility-annotated genre menu,
-      // and the metric landscape when a topic is chosen.
+      // Genre catalog is platform-level and topic-independent — load
+      // it once on mount. Read only name + description; the server
+      // already excludes the internal refine genre, and any metric
+      // flags it returns are ignored here. If 'default' isn't present
+      // for some reason, fall back to the first genre so a card is
+      // always visibly selected.
       useEffect(() => {
         let cancelled = false;
-        setMenuLoading(true);
+        setGenresLoading(true);
         setError(null);
-        const genresUrl = topicSlug
-          ? `${API}/api/compose/genres?topicId=${encodeURIComponent(topicSlug)}`
-          : `${API}/api/compose/genres`;
-        const tasks = [fetch(genresUrl).then(r => r.json())];
-        if (topicSlug) {
-          tasks.push(fetch(`${API}/api/compose/topic-metrics?topicId=${encodeURIComponent(topicSlug)}`).then(r => r.json()));
-        }
-        Promise.all(tasks).then(results => {
-          if (cancelled) return;
-          const list = Array.isArray(results[0].genres) ? results[0].genres : [];
-          setGenres(list);
-          setLandscape(topicSlug && results[1] ? (results[1].landscape || null) : null);
-          const firstSelectable = list.find(x => x.selectable);
-          setSelectedGenre(firstSelectable ? firstSelectable.genre : 'default');
-          setMenuLoading(false);
-        }).catch(err => {
-          if (cancelled) return;
-          setError('Failed to load genres: ' + err.message);
-          setMenuLoading(false);
-        });
+        fetch(`${API}/api/compose/genres`)
+          .then(r => r.json())
+          .then(data => {
+            if (cancelled) return;
+            const list = Array.isArray(data.genres) ? data.genres : [];
+            setGenres(list.map(g => ({ genre: g.genre, description: g.description })));
+            setSelectedGenre(prev =>
+              list.some(g => g.genre === prev) ? prev : (list[0] ? list[0].genre : 'default'));
+            setGenresLoading(false);
+          })
+          .catch(err => {
+            if (cancelled) return;
+            setError('Failed to load genres: ' + err.message);
+            setGenresLoading(false);
+          });
         return () => { cancelled = true; };
-      }, [topicSlug]);
-
-      // Pre-generation fidelity preview: whenever the topic+genre pair
-      // settles, fetch the verbatim metric values and citations the
-      // engine would lock in. Cancellation discards any stale response
-      // (e.g. the transient pair while the menu is reselecting a genre),
-      // so only the latest pair's result is shown. No topic → nothing to
-      // preview.
-      useEffect(() => {
-        if (!topicSlug || !selectedGenre) {
-          setPreview(null);
-          setPreviewLoading(false);
-          return;
-        }
-        let cancelled = false;
-        setPreviewLoading(true);
-        const url = `${API}/api/compose/metric-preview?topicId=${encodeURIComponent(topicSlug)}&genre=${encodeURIComponent(selectedGenre)}`;
-        fetch(url).then(r => r.json()).then(data => {
-          if (cancelled) return;
-          setPreview(data && !data.error ? data : null);
-          setPreviewLoading(false);
-        }).catch(() => {
-          if (cancelled) return;
-          setPreview(null);
-          setPreviewLoading(false);
-        });
-        return () => { cancelled = true; };
-      }, [topicSlug, selectedGenre]);
-
-      // Any prior generation outcome belongs to the previous topic+genre
-      // selection. When the selection changes, clear the draft, the
-      // fidelity block, and any generation error so a stale result can
-      // never be mistaken for the current one. (Runs on mount harmlessly;
-      // a menu-load error set asynchronously by the genres effect lands
-      // after this and survives.)
-      useEffect(() => {
-        setBlockInfo(null);
-        setError(null);
-      }, [topicSlug, selectedGenre]);
+      }, []);
 
       // Lifecycle: abort any in-flight generation when the Composer
       // unmounts (operator closed it mid-request). Prevents both a
@@ -280,9 +241,6 @@
       const angles = (topic && Array.isArray(topic.content_angles))
         ? topic.content_angles.filter(a => typeof a === 'string' && a.trim())
         : [];
-      const totalMetrics = landscape && Array.isArray(landscape.groups)
-        ? landscape.groups.reduce((n, g) => n + (g.metricCount || 0), 0)
-        : 0;
 
       async function handleGenerate() {
         if (loading) return; // double-submit guard (button is also disabled)
@@ -300,7 +258,6 @@
 
         setLoading(true);
         setError(null);
-        setBlockInfo(null);
         try {
           const res = await fetch(`${API}/api/compose/generate`, {
             method: 'POST',
@@ -329,10 +286,11 @@
             throw new Error('The server returned an unexpected response. Please try again.');
           }
 
+          // A fidelity or no-source stop saves nothing and comes back as
+          // { blocked, reason }. Surface the reason inline — no separate
+          // panel; this flow doesn't deal in metric tokens.
           if (data.blocked) {
-            if (mountedRef.current) {
-              setBlockInfo({ reason: data.reason || 'Metric fidelity check failed.', fidelity: data.fidelity || null });
-            }
+            if (mountedRef.current) setError(data.reason || 'The draft was withheld by a quality check. Please try again.');
             return;
           }
 
@@ -364,7 +322,7 @@
         <div className="composer-overlay" onClick={loading ? undefined : onClose}>
           <div className="composer-modal" onClick={e => e.stopPropagation()}>
             <div className="composer-head">
-              <h2 className="composer-title">Compose a Post</h2>
+              <h2 className="composer-title">Create a post</h2>
               <button className="composer-close" onClick={onClose}>✕</button>
             </div>
 
@@ -388,76 +346,23 @@
               </React.Fragment>
             )}
 
-            {landscape && (
-              <div className="composer-note">
-                {landscape.groupCount > 0
-                  ? `This topic has ${landscape.groupCount} metric group${landscape.groupCount === 1 ? '' : 's'} (${totalMetrics} verified metric${totalMetrics === 1 ? '' : 's'}).`
-                  : 'This topic has no metrics — metric-bearing genres are unavailable.'}
-              </div>
-            )}
-
             <label className="composer-label">Genre</label>
-            {menuLoading ? (
+            {genresLoading ? (
               <div className="composer-note">Loading genres…</div>
             ) : (
               <div className="composer-genres">
                 {genres.map(g => (
                   <label key={g.genre}
-                    className={`composer-genre${g.selectable ? '' : ' disabled'}${selectedGenre === g.genre ? ' selected' : ''}`}>
+                    className={`composer-genre${selectedGenre === g.genre ? ' selected' : ''}`}>
                     <input type="radio" name="composer-genre" value={g.genre}
                       checked={selectedGenre === g.genre}
-                      disabled={!g.selectable}
                       onChange={() => setSelectedGenre(g.genre)} />
                     <span className="composer-genre-main">
-                      <span className="composer-genre-name">{g.genre}{g.metricBearing ? ' • metrics' : ''}</span>
+                      <span className="composer-genre-name">{g.genre}</span>
                       {g.description && <span className="composer-genre-desc">{g.description}</span>}
-                      {!g.selectable && g.reason && <span className="composer-genre-reason">{g.reason}</span>}
                     </span>
                   </label>
                 ))}
-              </div>
-            )}
-
-            {topicSlug && (previewLoading || preview) && (
-              <div className="composer-metrics">
-                {previewLoading ? (
-                  <div className="composer-note">Checking metrics…</div>
-                ) : preview && preview.status === 'ready' ? (
-                  <React.Fragment>
-                    <div className="composer-metrics-head">
-                      {preview.metricCount} verified metric{preview.metricCount === 1 ? '' : 's'} will be locked into this post
-                    </div>
-                    {preview.groups.map(g => (
-                      <div key={g.groupSlug} className="composer-metric-group">
-                        {g.groupLabel && <div className="composer-metric-group-label">{g.groupLabel}</div>}
-                        {g.metrics.map(m => (
-                          <div key={m.metricKey} className="composer-metric">
-                            <div className="composer-metric-value">
-                              {m.value}{m.unit ? ' ' + m.unit : ''}
-                              <span className="composer-metric-key"> · {m.metricKey}</span>
-                            </div>
-                            {m.source && m.source.name && (
-                              <div className="composer-metric-source">
-                                {m.source.name}{m.source.locator ? ', ' + m.source.locator : ''}
-                              </div>
-                            )}
-                            {m.source && m.source.quote && (
-                              <div className="composer-metric-quote">“{m.source.quote}”</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </React.Fragment>
-                ) : preview && preview.status === 'needs_metrics' ? (
-                  <div className="composer-metrics-warn">
-                    This genre uses verified metrics, but this topic has none. Add metrics or choose another genre.
-                  </div>
-                ) : preview && preview.status === 'genre_no_metrics' ? (
-                  <div className="composer-note">
-                    This genre does not incorporate metrics — the post is generated from research only.
-                  </div>
-                ) : null}
               </div>
             )}
 
@@ -471,29 +376,9 @@
                 <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
               </div>
             ) : (
-              <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={menuLoading}>
-                Generate Draft
+              <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={genresLoading}>
+                Generate with AI
               </button>
-            )}
-
-            {blockInfo && (
-              <div className="composer-block">
-                <div className="composer-block-head">⚠ Draft withheld — fidelity check failed</div>
-                <div className="composer-block-body">
-                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unknownTokens) && blockInfo.fidelity.unknownTokens.length > 0 && (
-                    <div className="composer-block-line">The draft referenced metric token(s) that aren't verified: {blockInfo.fidelity.unknownTokens.join(', ')}.</div>
-                  )}
-                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unverifiedNumbers) && blockInfo.fidelity.unverifiedNumbers.length > 0 && (
-                    <div className="composer-block-line">The draft contained number(s) not traceable to a verified metric or the research: {blockInfo.fidelity.unverifiedNumbers.join(', ')}.</div>
-                  )}
-                  {(!blockInfo.fidelity ||
-                    ((!Array.isArray(blockInfo.fidelity.unknownTokens) || blockInfo.fidelity.unknownTokens.length === 0) &&
-                     (!Array.isArray(blockInfo.fidelity.unverifiedNumbers) || blockInfo.fidelity.unverifiedNumbers.length === 0))) && (
-                    <div className="composer-block-line">{blockInfo.reason}</div>
-                  )}
-                  <div className="composer-block-note">This is the fidelity guarantee at work — the draft was withheld rather than publish an unverified figure. Generate again to retry.</div>
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -695,6 +580,42 @@
           fetchAll();
         } catch (err) {
           alert('Failed to discard: ' + err.message);
+        }
+      }
+
+      // Rewrite with AI: one-click, in-place refinement of the open post's
+      // existing copy. No modal, no inputs — the server uses the post's own
+      // topic, angle, saved genre, and stored research as context and the
+      // metric-free 'refine' prompt to tighten the draft. A pending post
+      // drops to draft on the server; a preview keeps its (already-draft)
+      // row. Works for a DB-loaded draft/pending post (id) or a freshly
+      // generated preview (draftPostId).
+      async function handleRewrite(post, e) {
+        if (e) e.stopPropagation();
+        const id = post.id || post.draftPostId;
+        if (!id) return;
+        setLoading(l => ({ ...l, rewrite: true }));
+        try {
+          const res = await fetch(`${API}/api/posts/${id}/rewrite`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || `Rewrite failed (server returned ${res.status})`);
+          }
+          // Patch the open modal in place. For a DB-loaded post the refine
+          // forced status to draft, so reflect that; a preview is gated by
+          // isPreview (not status), so leave its status untouched.
+          setSelectedPost(sp => sp ? {
+            ...sp,
+            title: data.post.title,
+            content: data.post.content,
+            hashtags: data.post.hashtags || [],
+            status: sp.isPreview ? sp.status : (data.post.status || 'draft')
+          } : sp);
+          fetchAll();
+        } catch (err) {
+          alert('Rewrite failed: ' + err.message);
+        } finally {
+          setLoading(l => ({ ...l, rewrite: false }));
         }
       }
 
@@ -1217,7 +1138,7 @@
                       ✎ Compose
                     </button>
                     **/}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComingSoon(true)}>
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
                       ✚ Create
                     </button>
                   </div>
@@ -1402,6 +1323,14 @@
             const ctx = parseNewsContext(selectedPost);
             const corrobLevel = getCorroborationLevel(ctx);
             const corrobLabel = CORROB_LABELS[corrobLevel];
+            // Rewrite-with-AI is offered for an editable post: a preview
+            // (gated by isPreview, id lives in draftPostId) or a DB-loaded
+            // draft / pending_approval post. Anything else (approved,
+            // published, rejected) is not refinable, matching the server.
+            const rewriteId = selectedPost.id || selectedPost.draftPostId;
+            const rewritable = !!rewriteId && (selectedPost.isPreview
+              || selectedPost.status === 'draft'
+              || selectedPost.status === 'pending_approval');
             return (
             <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -1459,6 +1388,14 @@
                     <span key={i} className="hashtag">{tag}</span>
                   ))}
                 </div>
+
+                {rewritable && (
+                  <div className="modal-rewrite" style={{ margin: '0.75rem 0' }}>
+                    <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite}>
+                      {loading.rewrite ? <span className="loading-spinner"></span> : '✦ Rewrite with AI'}
+                    </button>
+                  </div>
+                )}
 
                 {ctx?.researchSummary?.sourceList && ctx.researchSummary.sourceList.length > 0 && (
                   <div className="source-list">

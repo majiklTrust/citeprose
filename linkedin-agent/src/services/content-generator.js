@@ -9,7 +9,7 @@ import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
-import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
+import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./prompt-vault.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
@@ -422,4 +422,91 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   const raw = response.content[0].text.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
   return JSON.parse(cleaned);
+}
+
+// ── Refine an existing draft ─────────────────────────────────
+// One-pass polish of an already-generated post. Does NOT re-run research
+// or touch the metric apparatus (no METRIC_BLOCK, no tokenization, no
+// fidelity gate) — it sharpens the wording of content the user already
+// has. The post's existing copy is the input; topic, angle, genre, and a
+// source list (from the stored research) are context so the voice holds
+// and facts aren't dropped or invented.
+//
+// The template is the content_generator prompt's 'refine' genre variant.
+// CRITICAL fail-closed step: the vault silently falls back to the default
+// (GENERATION) template for a missing genre, which would regenerate from
+// scratch instead of refining. So existence is checked first and the call
+// throws REFINE_NOT_CONFIGURED rather than running the wrong prompt.
+export async function refinePost(
+  { topicName, angle, genre, title, content, hashtags, sourceContext },
+  userSub = null,
+  actionToken = null
+) {
+  const cycleId = crypto.randomBytes(4).toString("hex");
+
+  const configured = await genreExists("content_generator", "refine");
+  if (!configured) {
+    platformLog("error", "refine_prompt_missing", { cycleId });
+    const e = new Error("Refine prompt is not configured (content_generator/refine genre missing).");
+    e.code = "REFINE_NOT_CONFIGURED";
+    throw e;
+  }
+
+  let template = actionToken
+    ? await getAuthorizedPrompt("content_generator", actionToken, "refine")
+    : await getPrompt("content_generator", "refine");
+  if (!template) {
+    platformLog("error", "refine_prompt_load_failed", { cycleId });
+    const e = new Error("Refine prompt could not be loaded.");
+    e.code = "REFINE_NOT_CONFIGURED";
+    throw e;
+  }
+
+  let userPrompt = renderPrompt(template, {
+    TOPIC_NAME: topicName || "",
+    ANGLE: angle || "",
+    GENRE: genre || "default",
+    CURRENT_TITLE: title || "",
+    CURRENT_BODY: content || "",
+    CURRENT_HASHTAGS: (Array.isArray(hashtags) ? hashtags : []).join(" "),
+    SOURCE_CONTEXT: sourceContext || "(no source list recorded)"
+  });
+  template = null;
+
+  await logActivity("info", "post_refine_started", { cycleId, genre: genre || "default" });
+  platformLog("info", "post_refine_started", { cycleId, genre: genre || "default" });
+
+  try {
+    const client = await newAnthropicClient();
+    const model = await getAnthropicModel();
+    const requestParams = {
+      model,
+      max_tokens: 1500,
+      messages: [{ role: "user", content: userPrompt }]
+    };
+    platformLog("info", "llm_request_refine",
+      buildLlmRequestInfo("refine", "1 of 1", requestParams, { cycleId, genre: genre || "default" }));
+    if (traceEnabled(process.env.LLM_TRACE)) {
+      platformLog("debug", "llm_payload_refine",
+        buildLlmPayloadDebug("refine", requestParams, cycleId));
+    }
+    const response = await callAnthropic(client, requestParams);
+    userPrompt = null;
+
+    const raw = response.content[0].text.trim();
+    const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    // Keep the post's hashtags if the model returned none, and cap at 6
+    // as generation does.
+    const refinedHashtags = Array.isArray(parsed.hashtags) && parsed.hashtags.length
+      ? parsed.hashtags.slice(0, 6)
+      : (Array.isArray(hashtags) ? hashtags : []);
+
+    platformLog("info", "post_refine_success", { cycleId, wordCount: (parsed.body || "").split(/\s+/).length });
+    return { cycleId, title: parsed.title, content: parsed.body, hashtags: refinedHashtags };
+  } catch (err) {
+    platformLog("error", "post_refine_failed", { cycleId, error: err.message });
+    throw err;
+  }
 }

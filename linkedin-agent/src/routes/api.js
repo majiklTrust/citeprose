@@ -25,6 +25,7 @@ import {
   updatePost,
   updatePostStatus,
   deletePost,
+  applyRefinedContent,
   logActivity
 } from "../services/database.js";
 import {
@@ -33,7 +34,8 @@ import {
   canPostNow,
   forceCycle
 } from "../services/scheduler.js";
-import { generatePost, qualityCheck } from "../services/content-generator.js";
+import { generatePost, qualityCheck, refinePost } from "../services/content-generator.js";
+import { getTopicBySlug } from "../tenant/topic-store.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { validateToken } from "../services/linkedin-api.js";
 import { getArticleStats, getArticlesForTopic, pollAllFeeds, pollSingleFeed } from "../services/news-monitor.js";
@@ -230,6 +232,23 @@ function parsePostId(raw) {
   return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
+// Formats the post's stored research (news_context) into a plain source
+// list for the refine prompt's context — names + tiers when the full
+// summary is present, otherwise the bare sourcesUsed names. Refine never
+// re-runs research; this is only so the model knows which sources back the
+// post and stays within them.
+function buildRefineSourceContext(ctx) {
+  if (ctx && ctx.researchSummary && Array.isArray(ctx.researchSummary.sourceList) && ctx.researchSummary.sourceList.length) {
+    return ctx.researchSummary.sourceList
+      .map(s => `- ${s.name}${s.tier ? ` (${s.tier})` : ""}`)
+      .join("\n");
+  }
+  if (ctx && Array.isArray(ctx.sourcesUsed) && ctx.sourcesUsed.length) {
+    return ctx.sourcesUsed.map(n => `- ${n}`).join("\n");
+  }
+  return "(no source list recorded)";
+}
+
 // ── Read-time image hydration ────────────────────────────────
 // articleImages in news_context is a snapshot frozen at generation
 // time; posts generated before image capture/backfill repaired
@@ -382,6 +401,70 @@ router.delete("/api/posts/:id", requirePermission("edit_post"), async (req, res)
     if (!deleted) return res.status(404).json({ error: "Draft not found" });
     res.json({ success: true, deleted: true });
   } catch (err) {
+    platformLog("error", "api_error", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// POST /api/posts/:id/rewrite — refine an existing draft/pending post in
+// place. One-click (no body): the post's own topic, angle, genre, and
+// stored research are the context; the metric-free 'refine' prompt polishes
+// the existing copy. The result is written back via applyRefinedContent,
+// which drops a pending post to draft. Gated by edit_post — it mutates the
+// post, same gate as PATCH/DELETE.
+//
+// Status mapping:
+//   NOT_FOUND             → 404
+//   NOT_REFINABLE         → 409 (wrong state)
+//   REFINE_NOT_CONFIGURED → 503 (the 'refine' genre hasn't been seeded yet)
+router.post("/api/posts/:id/rewrite", requirePermission("edit_post"), async (req, res) => {
+  try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
+
+    // Same action-token shape generation uses — it authorizes the
+    // content_generator key (the refine genre lives under it).
+    const actionToken = createActionToken("generate-content", req.user.sub);
+
+    const updated = await withTenant(req.tenant.id, async () => {
+      const post = await getPost(id);
+      if (!post) { const e = new Error("Post not found"); e.code = "NOT_FOUND"; throw e; }
+      if (post.status !== "draft" && post.status !== "pending_approval") {
+        const e = new Error(`Post ${id} cannot be refined (status: ${post.status}).`);
+        e.code = "NOT_REFINABLE";
+        throw e;
+      }
+
+      const topic = await getTopicBySlug(post.topic_id);
+      const ctx = (post.news_context && typeof post.news_context === "object") ? post.news_context : {};
+      const angle = typeof ctx.angle === "string" ? ctx.angle : "";
+
+      const refined = await refinePost({
+        topicName: topic ? topic.name : post.topic_id,
+        angle,
+        genre: post.genre || "default",
+        title: post.title,
+        content: post.content,
+        hashtags: post.hashtags,
+        sourceContext: buildRefineSourceContext(ctx)
+      }, req.user?.sub || null, actionToken);
+
+      const row = await applyRefinedContent(id, {
+        title: refined.title,
+        content: refined.content,
+        hashtags: refined.hashtags
+      });
+      await logActivity("info", "post_refined", { postId: id, fromStatus: post.status, cycleId: refined.cycleId }, req.user?.sub || null);
+      return row;
+    });
+
+    res.json({ success: true, post: updated });
+  } catch (err) {
+    if (err.code === "NOT_FOUND")     return res.status(404).json({ error: err.message });
+    if (err.code === "NOT_REFINABLE") return res.status(409).json({ error: err.message });
+    if (err.code === "REFINE_NOT_CONFIGURED") {
+      return res.status(503).json({ error: "Rewrite isn't configured yet — add the 'refine' genre to the content_generator prompt." });
+    }
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

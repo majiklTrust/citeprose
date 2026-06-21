@@ -54,6 +54,15 @@ router.use((req, res, next) => {
 // Mirrors the DB CHECK in 19-prompt-genre.sql. 'default' is valid.
 const GENRE_RE = /^[a-z][a-z0-9_]{1,31}$/;
 
+// Internal genre reserved for the Rewrite (refine) prompt. It lives under
+// the content_generator key so it's editable in the same platform-admin
+// screen as the others, but it is NOT a user-selectable content style — so
+// it is filtered out of the Composer's genre menu below, server-side (Zero
+// Trust: it never reaches the client). The refine route fetches it by this
+// exact key. Centralized so the reserved name has one home; this is the one
+// hardcoded value introduced for Rewrite — promote to config later.
+const INTERNAL_REFINE_GENRE = "refine";
+
 // POST /api/compose/generate
 // Body: { topicId?, angle?, genre? }
 // Generates a draft from the chosen genre and returns it. Does not
@@ -205,7 +214,18 @@ router.get("/genres", requirePermission("preview_post"), async (req, res) => {
 
     // Genre catalog is platform-level (not tenant-scoped) — read it
     // outside withTenant. Metadata + flag only, no ciphertext.
-    const genres = await listGenresForKey("content_generator");
+    //
+    // Two exclusions, both server-side so the picker only ever receives
+    // what it should display:
+    //   1. the internal refine genre — never a user-facing style (the
+    //      platform-admin genre list still shows it for editing); and
+    //   2. metric-bearing genres (metric_bearing = true, e.g. 'metricvalue')
+    //      — these drive the metric pipeline and are out of scope for the
+    //      Create flow, which offers metric-free content styles only.
+    // A metric-bearing genre stays valid on the backend (genreExists in
+    // /generate accepts it); it is simply not offered here.
+    const genres = (await listGenresForKey("content_generator"))
+      .filter((g) => g.genre !== INTERNAL_REFINE_GENRE && g.metricBearing !== true);
 
     let topicHasMetrics = null;
     let resolvedSlug = null;

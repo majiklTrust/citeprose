@@ -1,3 +1,4 @@
+!#/bin/bash
 # The status route calls four things in sequence: getPostStats(), canPostNow(), validateToken(), and getArticleStats(). Test them individually:
 curl -s http://localhost:3001/api/status | python3 -m json.tool
 node -e "

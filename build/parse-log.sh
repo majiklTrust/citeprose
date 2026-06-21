@@ -1,3 +1,4 @@
+!#/bin/bash
 curl -s http://localhost:3001/api/logs?limit=3 | python3 -c "
 import json, sys
 logs = json.load(sys.stdin)['logs']

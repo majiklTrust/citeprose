@@ -92,7 +92,7 @@ export async function getAvailableTopics(userSub = null) {
   return topics.map(t => ({ id: t.slug, name: t.name }));
 }
 
-export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null) {
+export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null, genre = "default") {
   if (typeof topic === "string") {
     topic = await getTopicBySlug(topic);
   }
@@ -238,7 +238,14 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   const metricBlock = buildMetricBlock(metricGroups);
   platformLog("info", "metrics_loaded", { cycleId, topicId: topic.slug, groups: metricGroups.length, metrics: metricsByKey.size });
 
-  let cgTemplate = await vaultGet("content_generator");
+  // Genre applies ONLY to the content_generator template — never to
+  // the research, verification, or injection-defense prompts (they
+  // stay genre-invariant via vaultGet's default). A missing genre row
+  // falls back to 'default' inside the vault, so this can never fail
+  // generation for an unknown genre.
+  let cgTemplate = actionToken
+    ? await getAuthorizedPrompt("content_generator", actionToken, genre)
+    : await getPrompt("content_generator", genre);
   if (!cgTemplate) {
     platformLog("error", "prompt_vault_miss", { key: "content_generator" });
     throw new Error("Content generation prompt not configured");
@@ -332,6 +339,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     return {
       cycleId,
       topicId: topic.slug,
+      genre,
       title: parsed.title,
       content: parsed.body,
       hashtags: allHashtags,

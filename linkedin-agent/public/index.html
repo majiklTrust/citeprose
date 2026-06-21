@@ -961,7 +961,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v1.9.27</div>
+                <div className="header-subtitle">v1.9.28</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1001,7 +1001,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v1.9.27 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.28 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1023,7 +1023,7 @@
                 <div className="toggle-thumb"></div>
               </div>
               <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
-                {(status.mode || 'manual').toUpperCase()}
+                {status.mode === 'auto' ? 'AGENTIC' : 'MANUAL'}
               </span>
             </div>
             </div>
@@ -1249,7 +1249,7 @@
                     }}
                     onClick={handleForceCycle}
                     disabled={(status.mode || 'manual') !== 'auto'}
-                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Auto mode to enable' : 'Run one scheduler cycle now'}
+                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Agentic mode to enable' : 'Run one scheduler cycle now'}
                   >
                     {loading.forceCycle ? <span className="loading-spinner"></span> : '⟳ Force Scheduler Cycle'}
                   </button>

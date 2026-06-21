@@ -1023,7 +1023,7 @@
                 <div className="toggle-thumb"></div>
               </div>
               <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
-                {(status.mode || 'manual').toUpperCase()}
+                {status.mode === 'auto' ? 'AGENTIC' : 'MANUAL'}
               </span>
             </div>
             </div>
@@ -1249,7 +1249,7 @@
                     }}
                     onClick={handleForceCycle}
                     disabled={(status.mode || 'manual') !== 'auto'}
-                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Auto mode to enable' : 'Run one scheduler cycle now'}
+                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Agentic mode to enable' : 'Run one scheduler cycle now'}
                   >
                     {loading.forceCycle ? <span className="loading-spinner"></span> : '⟳ Force Scheduler Cycle'}
                   </button>

@@ -958,7 +958,7 @@
             <div className="header">
               <div>
                 <div className="header-title">LinkedIn AI Agent</div>
-                <div className="header-subtitle">v1.9.20</div>
+                <div className="header-subtitle">v1.9.21</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -998,7 +998,7 @@
           <div className="header">
             <div>
               <div className="header-title">LinkedIn AI Agent</div>
-              <div className="header-subtitle">v1.9.20 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.21 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1221,12 +1221,19 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
-                  <button className="btn btn-primary btn-full" onClick={handlePreview}>
-                    {loading.preview ? <span className="loading-spinner"></span> : '✦ Preview New Post'}
-                  </button>
-                  {/**<button className="btn btn-ghost btn-full" onClick={() => setShowComposer(true)}>
-                    ✎ Compose
-                  </button>**/}
+                  {/**<div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
+                      {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
+                    </button>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
+                      ✎ Compose
+                    </button>
+                  </div>**/}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
+                      {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
+                    </button>
+                  </div>
                   <button
                     className={`btn ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
                     style={{

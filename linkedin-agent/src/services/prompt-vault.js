@@ -24,6 +24,7 @@ import {
 } from "node:crypto";
 import { query } from "../db/pool.js";
 import { platformLog } from "./platform-log.js";
+import { computeTemplateFingerprint } from "./template-crypto.js";
 
 // ── Encryption constants ─────────────────────────────────────
 
@@ -197,6 +198,17 @@ export async function storePrompt(key, plaintext, description, genre = "default"
 // valid genre id and may be created or updated like any other.
 const GENRE_RE = /^[a-z][a-z0-9_]{1,31}$/;
 
+// Keywords whose presence in a template's plaintext marks the genre
+// as metric-bearing. Scanned at submit time (before encryption) and
+// stored as a flag, so reads never decrypt. Substring match. Extend
+// this list as new metric placeholders are introduced.
+const METRIC_KEYWORDS = ["METRIC_BLOCK"];
+
+function detectMetricBearing(plaintext) {
+  const text = typeof plaintext === "string" ? plaintext : "";
+  return METRIC_KEYWORDS.some((kw) => text.includes(kw));
+}
+
 /**
  * Create or update a genre template for a prompt key (upsert).
  *
@@ -254,18 +266,25 @@ export async function storePromptGenre(key, genre, plaintext, description, confi
     throw e;
   }
 
+  // Derive the metric-bearing flag from the plaintext at submit time
+  // (source of truth, no read-time decryption). Then run the
+  // pre-encryption crypto hook (placeholder) while plaintext is in
+  // hand. Both happen before encrypt().
+  const metricBearing = detectMetricBearing(plaintext);
+  computeTemplateFingerprint(plaintext);
+
   const encrypted = encrypt(plaintext);
 
   await query(
-    `INSERT INTO prompt_vault (key, genre, value_enc, description)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO prompt_vault (key, genre, value_enc, description, metric_bearing)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (key, genre) DO UPDATE
-       SET value_enc = $3, description = $4, updated_at = now()`,
-    [key, genre, encrypted, description || null]
+       SET value_enc = $3, description = $4, metric_bearing = $5, updated_at = now()`,
+    [key, genre, encrypted, description || null, metricBearing]
   );
 
   platformLog("info", exists ? "content_genre_updated" : "content_genre_inserted", {
-    key, genre, descriptionLength: (description || "").length
+    key, genre, metricBearing, descriptionLength: (description || "").length
   });
 
   return { action: exists ? "updated" : "created" };

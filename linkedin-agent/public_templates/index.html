@@ -45,11 +45,6 @@
     .composer-genre-desc { font-size: 0.76rem; color: #777; }
     .composer-genre-reason { font-size: 0.72rem; color: #b45309; font-style: italic; }
     .composer-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
-    .composer-result { margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem; }
-    .composer-result-head { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 0.4rem; }
-    .composer-result-title { font-size: 1rem; font-weight: 700; color: #222; margin-bottom: 0.4rem; }
-    .composer-result-body { font-size: 0.85rem; color: #333; white-space: pre-wrap; line-height: 1.5; }
-    .composer-result-tags { font-size: 0.8rem; color: #2563eb; margin-top: 0.5rem; }
     .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
     .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
     .composer-metrics-warn { font-size: 0.8rem; color: #b45309; background: #fffbeb; border-radius: 4px; padding: 0.4rem 0.6rem; }
@@ -173,13 +168,12 @@
     // handlePreview. Reads the three /api/compose endpoints. Power
     // path beside the quick Preview button. Generates a draft and
     // shows it read-only; save/approval is a later cycle.
-    function Composer({ API, topics, onClose }) {
+    function Composer({ API, topics, onClose, onGenerated }) {
       const [topicSlug, setTopicSlug] = useState('');
       const [angle, setAngle] = useState('');
       const [genres, setGenres] = useState([]);
       const [landscape, setLandscape] = useState(null);
       const [selectedGenre, setSelectedGenre] = useState('default');
-      const [draft, setDraft] = useState(null);
       const [loading, setLoading] = useState(false);
       const [menuLoading, setMenuLoading] = useState(false);
       const [error, setError] = useState(null);
@@ -253,7 +247,6 @@
       // a menu-load error set asynchronously by the genres effect lands
       // after this and survives.)
       useEffect(() => {
-        setDraft(null);
         setBlockInfo(null);
         setError(null);
       }, [topicSlug, selectedGenre]);
@@ -307,7 +300,6 @@
 
         setLoading(true);
         setError(null);
-        setDraft(null);
         setBlockInfo(null);
         try {
           const res = await fetch(`${API}/api/compose/generate`, {
@@ -344,7 +336,11 @@
             return;
           }
 
-          if (mountedRef.current) setDraft(data.draft || null);
+          // Success: the server has PERSISTED this as a draft (postId).
+          // Hand it to the shared post-detail modal — same review/edit/
+          // Queue-for-Approval path as the Generate (Preview) button — and
+          // let the parent close the Composer.
+          if (mountedRef.current) onGenerated(data);
         } catch (err) {
           if (err && err.name === 'AbortError') {
             const kind = cancelKindRef.current;
@@ -374,7 +370,7 @@
 
             <label className="composer-label">Topic</label>
             <select className="topic-selector" value={topicSlug}
-              onChange={e => { setTopicSlug(e.target.value); setAngle(''); setDraft(null); }}>
+              onChange={e => { setTopicSlug(e.target.value); setAngle(''); }}>
               <option value="">Auto-select topic</option>
               {topics.filter(t => t.enabled !== false).map(t => (
                 <option key={t.id} value={t.slug}>{t.name}</option>
@@ -499,30 +495,6 @@
                 </div>
               </div>
             )}
-
-            {draft && (
-              <div className="composer-result">
-                <div className="composer-result-head">Draft — genre: {draft.genre}{draft.angle ? ' · angle: ' + draft.angle : ''}</div>
-                {draft.fidelity && (
-                  <div className="composer-fidelity-ok">
-                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0
-                      ? '✓ Fidelity verified — ' + draft.fidelity.usedMetricKeys.length + ' verified metric' + (draft.fidelity.usedMetricKeys.length === 1 ? '' : 's') + ' locked into this post'
-                      : draft.fidelity.metricsAvailable > 0
-                        ? '✓ Fidelity verified — no metric figures were used in this post'
-                        : '✓ Fidelity verified'}
-                    {draft.fidelity.strict ? ' · strict number-policing on' : ''}
-                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0 && (
-                      <div className="composer-fidelity-keys">{draft.fidelity.usedMetricKeys.join(', ')}</div>
-                    )}
-                  </div>
-                )}
-                <div className="composer-result-title">{draft.title}</div>
-                <div className="composer-result-body">{draft.content}</div>
-                {Array.isArray(draft.hashtags) && draft.hashtags.length > 0 && (
-                  <div className="composer-result-tags">{draft.hashtags.map(h => '#' + h).join(' ')}</div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       );
@@ -542,6 +514,7 @@
       const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
       const [showComposer, setShowComposer] = useState(false);
+      const [showComingSoon, setShowComingSoon] = useState(false);
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -825,6 +798,36 @@
         }
         setLoading(l => ({ ...l, preview: false }));
         if (overlay) overlay.style.display = 'none';
+      }
+
+      // Composer success handoff. The composed post is already PERSISTED
+      // as a draft server-side (data.postId); open it in the same
+      // post-detail modal the Preview button uses so edit + Queue for
+      // Approval behave identically. Composed posts additionally carry a
+      // genre and a fidelity summary, surfaced in the modal.
+      function handleComposerResult(data) {
+        setSelectedPost({
+          ...data.post,
+          quality: data.quality,
+          isPreview: true,
+          draftPostId: data.postId,
+          genre: data.genre,
+          fidelity: data.fidelity || null,
+          title: data.post.title,
+          content: data.post.content,
+          hashtags: data.post.hashtags,
+          topic_id: data.post.topicId,
+          articleImages: data.post.articleImages || [],
+          news_context: JSON.stringify({
+            sourcesUsed: data.post.sourcesUsed || [],
+            researchSummary: data.post.researchSummary || null,
+            qualityScores: data.quality?.scores,
+            factualFlags: data.quality?.factual_flags,
+            articleImages: data.post.articleImages || []
+          })
+        });
+        setImageChoice({ mode: 'none', url: null });
+        setShowComposer(false);
       }
 
       async function handleRefreshFeeds() {
@@ -1188,11 +1191,44 @@
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
                 <div className="vstack-sm">
-                  {/**
-                  <button className="btn btn-primary btn-full" onClick={() => setShowComposer(true)}>
-                    ✎ Compose
-                  </button>
-                  **/}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={handlePreview} disabled={loading.preview}>
+                      {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
+                    </button>
+                    {/**
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
+                      ✎ Compose
+                    </button>
+                    **/}
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComingSoon(true)}>
+                      ✚ Create
+                    </button>
+                  </div>
+
+                  {/* Topic picker for the Generate button — Auto-select if
+                      none chosen. Dependent angle picker appears once a topic
+                      that defines angles is selected. */}
+                  <select className="topic-selector" value={selectedTopic}
+                    onChange={e => { setSelectedTopic(e.target.value); setSelectedAngle(''); }}>
+                    <option value="">Auto-select topic</option>
+                    {topics.filter(t => t.enabled !== false).map(t => (
+                      <option key={t.id} value={t.slug}>{t.name}</option>
+                    ))}
+                  </select>
+                  {(() => {
+                    const qaTopic = topics.find(x => x.slug === selectedTopic);
+                    const qaAngles = (qaTopic && Array.isArray(qaTopic.content_angles))
+                      ? qaTopic.content_angles.filter(a => typeof a === 'string' && a.trim())
+                      : [];
+                    return (selectedTopic && qaAngles.length > 0) ? (
+                      <select className="topic-selector" value={selectedAngle}
+                        onChange={e => setSelectedAngle(e.target.value)}>
+                        <option value="">Auto-select angle</option>
+                        {qaAngles.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    ) : null;
+                  })()}
+
                   <div className="toggle-row">
                     <span className={`toggle-label ${loading.corroboration ? 'toggle-label-inactive' : (status.corroboration || 'enabled') === 'enabled' ? 'toggle-label-active' : 'toggle-label-inactive'}`}>
                       {loading.corroboration ? 'Working...' : `Corroboration ${(status.corroboration || 'enabled') === 'enabled' ? 'ON' : 'OFF'}`}
@@ -1204,21 +1240,6 @@
                         disabled={loading.corroboration} />
                       <span className="toggle-track"></span>
                     </label>
-                  </div>
-                  {/**
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
-                      {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
-                    </button>
-                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
-                      ✎ Compose
-                    </button>
-                  </div>
-                  **/}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
-                      {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
-                    </button>
                   </div>
                   <button
                     className={`btn ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
@@ -1258,7 +1279,7 @@
                         </div>
                       ))}
                     </div>
-                    <button className="btn btn-primary btn-refresh-full"
+                    <button className="btn btn-primary btn-refresh-full btn-tight"
                       onClick={handleRefreshFeeds}>
                       {loading.feeds ? <span className="loading-spinner"></span> : '↻ Refresh Feeds Now'}
                     </button>
@@ -1347,7 +1368,16 @@
           </div>
 
           {showComposer && (
-            <Composer API={API} topics={topics} onClose={() => setShowComposer(false)} />
+            <Composer API={API} topics={topics} onClose={() => setShowComposer(false)} onGenerated={handleComposerResult} />
+          )}
+
+          {showComingSoon && (
+            <div className="modal-overlay" onClick={() => setShowComingSoon(false)}>
+              <div className="modal-content modal-content-sm" onClick={e => e.stopPropagation()}>
+                <button className="modal-close" onClick={() => setShowComingSoon(false)}>✕</button>
+                <h3 className="modal-heading">AI Content Coming Soon</h3>
+              </div>
+            </div>
           )}
 
           {/* Post Detail Modal */}
@@ -1375,6 +1405,21 @@
                 </div>
 
                 <h3 className="modal-heading">{selectedPost.title}</h3>
+
+                {/**selectedPost.fidelity && (
+                  <div className="composer-fidelity-ok">
+                    {Array.isArray(selectedPost.fidelity.usedMetricKeys) && selectedPost.fidelity.usedMetricKeys.length > 0
+                      ? '✓ Fidelity verified — ' + selectedPost.fidelity.usedMetricKeys.length + ' verified metric' + (selectedPost.fidelity.usedMetricKeys.length === 1 ? '' : 's') + ' locked into this post'
+                      : selectedPost.fidelity.metricsAvailable > 0
+                        ? '✓ Fidelity verified — no metric figures were used in this post'
+                        : '✓ Fidelity verified'}
+                    {selectedPost.genre && selectedPost.genre !== 'default' ? ' · genre: ' + selectedPost.genre : ''}
+                    {selectedPost.fidelity.strict ? ' · strict number-policing on' : ''}
+                    {Array.isArray(selectedPost.fidelity.usedMetricKeys) && selectedPost.fidelity.usedMetricKeys.length > 0 && (
+                      <div className="composer-fidelity-keys">{selectedPost.fidelity.usedMetricKeys.join(', ')}</div>
+                    )}
+                  </div>
+                )**/}
 
                 {ctx?.researchSummary && (
                   <div className="research-summary">

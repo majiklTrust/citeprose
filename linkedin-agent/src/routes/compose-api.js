@@ -22,11 +22,13 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
-import { generatePost } from "../services/content-generator.js";
+import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { genreExists, listGenresForKey, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
+import { createPost, logActivity } from "../services/database.js";
+import { selectPrimarySource } from "../services/source-provenance.js";
 
 const router = Router();
 
@@ -82,21 +84,70 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
     });
 
     const actionToken = createActionToken("generate-content", req.user.sub);
+
+    // Mirror the Generate (Preview) flow so a composed post is PERSISTED
+    // immediately as a draft — generate -> resolve primary source (fail
+    // closed) -> quality check -> auto-save. The chosen genre is threaded
+    // into generation and recorded on the saved row. A fidelity or
+    // no-source stop returns { blocked } and saves nothing.
     const result = await withTenant(req.tenant.id, async () => {
-      return generatePost(topicId, null, actionToken, angle, genre);
+      const g = await generatePost(topicId, null, actionToken, angle, genre);
+      if (g.blocked) return { generated: g, quality: null, postId: null };
+
+      const preferUrl = (Array.isArray(g.articleImages) && g.articleImages[0] && g.articleImages[0].link) || null;
+      const primarySource = selectPrimarySource((g.researchSummary && g.researchSummary.sourceList) || [], { preferUrl });
+      if (!primarySource) {
+        await logActivity("info", "compose_blocked_no_primary_source", { cycleId: g.cycleId, topicId: g.topicId }, req.user?.sub || null);
+        return {
+          generated: { blocked: true, reason: "No attributable primary source could be resolved", topicId: g.topicId, angle: g.angle, fidelity: g.fidelity || null },
+          quality: null, postId: null
+        };
+      }
+
+      const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
+
+      const storedContext = {
+        angle: g.angle || "",
+        sourcesUsed: g.sourcesUsed || [],
+        researchSummary: g.researchSummary || null,
+        qualityScores: q?.scores,
+        qualityOverall: q?.overall,
+        qualityPass: q?.pass,
+        factualFlags: q?.factual_flags,
+        primarySource,
+        articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
+      };
+
+      const postId = await createPost({
+        topicId: g.topicId,
+        title: g.title,
+        content: g.content,
+        hashtags: g.hashtags || [],
+        newsContext: storedContext,
+        scheduledFor: null,
+        imageUrl: null,
+        genre
+      });
+
+      await logActivity("info", "compose_auto_saved", { postId, title: g.title, topicId: g.topicId, genre }, req.user?.sub || null);
+
+      return { generated: g, quality: q, postId };
     });
 
-    // generatePost returns { blocked, reason, ... } on a fail-safe stop
-    // (e.g. metric fidelity). Surface it as a normal response, not a 500.
-    if (result && result.blocked) {
+    // A blocked result (fidelity or no primary source) saves nothing and
+    // is surfaced as a normal response, not a 500.
+    if (result.generated.blocked) {
       return res.json({
-        blocked: true, reason: result.reason,
-        topicId: result.topicId, angle: result.angle, genre,
-        fidelity: result.fidelity || null
+        blocked: true, reason: result.generated.reason,
+        topicId: result.generated.topicId, angle: result.generated.angle, genre,
+        fidelity: result.generated.fidelity || null
       });
     }
 
-    res.json({ draft: result });
+    res.json({
+      post: result.generated, quality: result.quality, postId: result.postId,
+      genre, fidelity: result.generated.fidelity || null
+    });
   } catch (err) {
     platformLog("error", "compose_generate_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });

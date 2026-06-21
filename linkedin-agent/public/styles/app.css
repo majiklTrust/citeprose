@@ -343,6 +343,11 @@ body::after {
   transition: all 0.2s;
 }
 
+/* Tight variant: 25% of the base .btn padding (0.5rem 1rem). Used by the
+   Quick Actions button row and the Refresh Feeds button so three buttons
+   fit comfortably on one line. */
+.btn.btn-tight { padding: 0.125rem 0.25rem; }
+
 .btn-approve {
   background: var(--accent-green);
   color: white;
@@ -500,6 +505,9 @@ body::after {
   max-height: 80vh;
   overflow-y: auto;
 }
+
+/* Compact centered variant for short message dialogs. */
+.modal-content-sm { max-width: 360px; text-align: center; }
 
 .modal-close {
   float: right;

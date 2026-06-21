@@ -141,7 +141,7 @@ export function initDatabase() {
 
 // ── Post CRUD ────────────────────────────────────────────────
 
-export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl }) {
+export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl, genre }) {
   const c = client();
   const scheduled = validateScheduledFor(scheduledFor);
   const topicIntId = await resolveTopicIdBySlug(c, topicId);
@@ -155,10 +155,10 @@ export async function createPost({ topicId, title, content, hashtags, newsContex
   }
 
   const r = await c.query(
-    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status)
-     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft')
+    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status, genre)
+     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft', $8)
      RETURNING id`,
-    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null]
+    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null, genre || 'default']
   );
   return r.rows[0].id;
 }

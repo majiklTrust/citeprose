@@ -9,8 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css?v=34.0">
-  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=34.0">
+  <link rel="stylesheet" href="/app/styles/app.css?v=35.0">
+  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=35.0">
 </head>
 <body>
   <div id="root"></div>
@@ -681,6 +681,23 @@
         }
       }
 
+      // Discard a draft: delete the persisted row, then close + refresh.
+      // A DB-loaded draft carries `id`; a preview carries `draftPostId`
+      // (the row saved at generation). If neither is present nothing was
+      // persisted, so just close the modal.
+      async function handleDiscard(post, e) {
+        if (e) e.stopPropagation();
+        const id = post.id || post.draftPostId;
+        if (!id) { setSelectedPost(null); return; }
+        try {
+          await mutate(`${API}/api/posts/${id}`, { method: 'DELETE' });
+          setSelectedPost(null);
+          fetchAll();
+        } catch (err) {
+          alert('Failed to discard: ' + err.message);
+        }
+      }
+
       function openEditModal(post, e) {
         if (e) e.stopPropagation();
         setEditingPost(post);
@@ -961,7 +978,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v1.9.28</div>
+                <div className="header-subtitle">v1.9.30</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1001,7 +1018,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v1.9.28 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.30 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1651,7 +1668,7 @@
                       <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); }}>
                         Edit
                       </button>
-                      <button className="btn btn-reject" onClick={() => setSelectedPost(null)}>
+                      <button className="btn btn-reject" onClick={(e) => handleDiscard(selectedPost, e)}>
                         Discard
                       </button>
                     </div>

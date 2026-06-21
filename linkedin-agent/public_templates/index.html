@@ -681,6 +681,23 @@
         }
       }
 
+      // Discard a draft: delete the persisted row, then close + refresh.
+      // A DB-loaded draft carries `id`; a preview carries `draftPostId`
+      // (the row saved at generation). If neither is present nothing was
+      // persisted, so just close the modal.
+      async function handleDiscard(post, e) {
+        if (e) e.stopPropagation();
+        const id = post.id || post.draftPostId;
+        if (!id) { setSelectedPost(null); return; }
+        try {
+          await mutate(`${API}/api/posts/${id}`, { method: 'DELETE' });
+          setSelectedPost(null);
+          fetchAll();
+        } catch (err) {
+          alert('Failed to discard: ' + err.message);
+        }
+      }
+
       function openEditModal(post, e) {
         if (e) e.stopPropagation();
         setEditingPost(post);
@@ -1651,7 +1668,7 @@
                       <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); }}>
                         Edit
                       </button>
-                      <button className="btn btn-reject" onClick={() => setSelectedPost(null)}>
+                      <button className="btn btn-reject" onClick={(e) => handleDiscard(selectedPost, e)}>
                         Discard
                       </button>
                     </div>

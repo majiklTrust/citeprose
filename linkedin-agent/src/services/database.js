@@ -259,6 +259,19 @@ export async function updatePost(id, fields) {
   return row;
 }
 
+export async function deletePost(id) {
+  // Hard-delete a DRAFT only. Forced RLS scopes the DELETE to the
+  // current tenant (call this inside withTenant), and the status
+  // guard prevents discarding a pending/scheduled/published post
+  // through this path. Returns true only if a row was removed.
+  const c = client();
+  const result = await c.query(
+    `DELETE FROM posts WHERE id = $1 AND status = 'draft' RETURNING id`,
+    [id]
+  );
+  return result.rowCount > 0;
+}
+
 export async function updatePostStatus(id, status, extra = {}) {
   const c = client();
   const sets = ["status = $1::post_status"];

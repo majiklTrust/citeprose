@@ -24,6 +24,7 @@ import {
   createPost,
   updatePost,
   updatePostStatus,
+  deletePost,
   logActivity
 } from "../services/database.js";
 import {
@@ -358,6 +359,29 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
     if (err.code === "NOT_FOUND")    return res.status(404).json({ error: err.message });
     if (err.code === "NOT_EDITABLE") return res.status(409).json({ error: err.message });
     if (err.code === "NO_FIELDS")    return res.status(400).json({ error: err.message });
+    platformLog("error", "api_error", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// DELETE /api/posts/:id — discard a DRAFT. Hard-deletes the row.
+// Gated by edit_post (same as save-preview/edit). deletePost only
+// removes status='draft' rows, and forced RLS scopes it to the
+// tenant, so this cannot delete a pending/scheduled/published post
+// or another tenant's row. A no-op delete (already gone, not a
+// draft, or not this tenant) returns 404.
+router.delete("/api/posts/:id", requirePermission("edit_post"), async (req, res) => {
+  try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
+    const deleted = await withTenant(req.tenant.id, async () => {
+      const ok = await deletePost(id);
+      if (ok) await logActivity("info", "post_discarded", { postId: id }, req.user?.sub || null);
+      return ok;
+    });
+    if (!deleted) return res.status(404).json({ error: "Draft not found" });
+    res.json({ success: true, deleted: true });
+  } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

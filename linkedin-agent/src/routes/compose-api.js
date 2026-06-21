@@ -24,7 +24,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { generatePost } from "../services/content-generator.js";
 import { createActionToken } from "../services/prompt-actions.js";
-import { genreExists, listGenresForKey } from "../services/prompt-vault.js";
+import { genreExists, listGenresForKey, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
 
@@ -36,6 +36,18 @@ const resolveTenant = createTenantResolver();
 // Authenticated + tenant-scoped for every Composer route.
 router.use(requireAuth);
 router.use(resolveTenant);
+
+// Zero Trust: every Composer response carries tenant-derived data
+// (drafts, verbatim metric values, citations, genre metadata). None of
+// it is cacheable — forbid storage by the browser and any intermediary
+// so a shared cache can never serve one tenant's data to another, and
+// stale authorization-derived results are never replayed. Applied once
+// at the router boundary rather than per-handler so the policy cannot
+// be forgotten on a future route.
+router.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 // Mirrors the DB CHECK in 19-prompt-genre.sql. 'default' is valid.
 const GENRE_RE = /^[a-z][a-z0-9_]{1,31}$/;
@@ -172,6 +184,108 @@ router.get("/genres", requirePermission("preview_post"), async (req, res) => {
     res.json({ topicId: resolvedSlug, topicHasMetrics, genres: menu });
   } catch (err) {
     platformLog("error", "compose_genres_failed", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// GET /api/compose/metric-preview?topicId=<slug>&genre=<genre>
+// The pre-generation fidelity preview: the verbatim metric values and
+// citations that will be locked into the post, exactly as the engine
+// resolves them for this topic and genre — surfaced BEFORE the LLM runs
+// so the operator can verify them.
+//
+// "Will these be injected?" is answered authoritatively against the LIVE
+// content_generator template (templateUsesMetricBlock) — the same
+// template generation reads — not the cached metric_bearing column,
+// which can drift. The preview otherwise mirrors generation: the same
+// per-topic, enabled-only metrics (getMetricsForTopic under RLS) and the
+// same genre→default template fallback inside the vault. It returns
+// STRUCTURED data only: never the assembled metric block (its
+// instructional header and {{METRIC_key}} token scheme are prompt-
+// assembly internals) and never the template plaintext.
+router.get("/metric-preview", requirePermission("preview_post"), async (req, res) => {
+  try {
+    const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";
+    const rawGenre = typeof req.query.genre === "string" ? req.query.genre.trim() : "";
+    const genre = rawGenre || "default";
+
+    if (!slug) {
+      return res.status(400).json({ error: "topicId is required" });
+    }
+    if (!GENRE_RE.test(genre)) {
+      return res.status(400).json({ error: "Invalid genre format." });
+    }
+    if (genre !== "default") {
+      const exists = await genreExists("content_generator", genre);
+      if (!exists) {
+        return res.status(400).json({ error: "Unknown genre: " + genre });
+      }
+    }
+
+    // Tenant-scoped: resolve the topic and load its enabled metrics
+    // under RLS — the same reader generation uses, so the preview shows
+    // exactly the metrics generation would see.
+    const resolved = await withTenant(req.tenant.id, async () => {
+      const topic = await getTopicBySlug(slug);
+      if (!topic) return null;
+      const groups = await getMetricsForTopic(topic.id);
+      return { slug: topic.slug, groups };
+    });
+    if (!resolved) {
+      return res.status(404).json({ error: "Topic not found" });
+    }
+
+    // Authoritative, platform-level: does the live template for this
+    // genre actually inject the block? Boolean only — the template
+    // plaintext stays inside the vault module.
+    const metricBearing = await templateUsesMetricBlock("content_generator", genre);
+
+    const groups = resolved.groups.map((g) => ({
+      groupSlug: g.groupSlug,
+      groupLabel: g.groupLabel,
+      metrics: (Array.isArray(g.metrics) ? g.metrics : []).map((m) => ({
+        metricKey: m.metricKey,
+        value: m.value,
+        unit: m.unit,
+        source: {
+          name: m.source ? m.source.name : null,
+          quote: m.source ? m.source.quote : null,
+          locator: m.source ? m.source.locator : null,
+          url: m.source ? m.source.url : null
+        }
+      }))
+    }));
+    const metricCount = groups.reduce((n, g) => n + g.metrics.length, 0);
+    const willInjectMetrics = metricBearing && metricCount > 0;
+
+    // status drives the operator-facing framing:
+    //   ready            — metrics exist and this genre will lock them in
+    //   needs_metrics     — genre injects the block but the topic has none
+    //                       (the genre menu already disables this pairing;
+    //                        surfaced here as defense in depth)
+    //   genre_no_metrics  — this genre's template does not use metrics, so
+    //                       none are injected regardless of the topic
+    let status;
+    if (!metricBearing) {
+      status = "genre_no_metrics";
+    } else if (metricCount === 0) {
+      status = "needs_metrics";
+    } else {
+      status = "ready";
+    }
+
+    res.json({
+      topicId: resolved.slug,
+      genre,
+      metricBearing,
+      willInjectMetrics,
+      status,
+      groupCount: groups.length,
+      metricCount,
+      groups
+    });
+  } catch (err) {
+    platformLog("error", "compose_metric_preview_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
 });

@@ -137,6 +137,31 @@ export async function getPrompt(key, genre = "default") {
 }
 
 /**
+ * Whether the live template that generation would use for (key, genre)
+ * injects the metric block — i.e. it contains the {{METRIC_BLOCK}}
+ * placeholder that renderPrompt substitutes at generation time. Reads
+ * and inspects the DECRYPTED template SERVER-SIDE via the same vault
+ * resolution (including the default-genre fallback) generation uses,
+ * and returns ONLY a boolean — the plaintext never leaves this module.
+ *
+ * Prefer this over the cached metric_bearing column whenever an answer
+ * must match what generation will actually do: the column is written at
+ * save time and can drift from the live template (for example, a row
+ * seeded outside storePromptGenre), whereas this inspects the template
+ * generation reads now. The token test is detectMetricBearing — the
+ * same predicate the write path uses to set the column — so the live
+ * check and the stored flag are computed identically.
+ *
+ * @param {string} key — prompt identifier (e.g. "content_generator")
+ * @param {string} genre — genre variant (defaults to "default")
+ * @returns {Promise<boolean>}
+ */
+export async function templateUsesMetricBlock(key, genre = "default") {
+  const plaintext = await _decryptFromVault(key, genre);
+  return detectMetricBearing(plaintext);
+}
+
+/**
  * Internal: fetch and decrypt from the vault table.
  *
  * Looks up the (key, genre) row first. If the requested genre is

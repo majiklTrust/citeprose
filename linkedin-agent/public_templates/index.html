@@ -50,6 +50,16 @@
     .composer-result-title { font-size: 1rem; font-weight: 700; color: #222; margin-bottom: 0.4rem; }
     .composer-result-body { font-size: 0.85rem; color: #333; white-space: pre-wrap; line-height: 1.5; }
     .composer-result-tags { font-size: 0.8rem; color: #2563eb; margin-top: 0.5rem; }
+    .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
+    .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
+    .composer-metrics-warn { font-size: 0.8rem; color: #b45309; background: #fffbeb; border-radius: 4px; padding: 0.4rem 0.6rem; }
+    .composer-metric-group { margin-bottom: 0.5rem; }
+    .composer-metric-group-label { font-size: 0.74rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.25rem; }
+    .composer-metric { padding: 0.35rem 0 0.35rem 0.6rem; border-left: 2px solid #cbd5e1; margin-bottom: 0.35rem; }
+    .composer-metric-value { font-size: 0.88rem; font-weight: 700; color: #1e293b; }
+    .composer-metric-key { font-size: 0.72rem; font-weight: 400; color: #94a3b8; }
+    .composer-metric-source { font-size: 0.76rem; color: #475569; margin-top: 0.1rem; }
+    .composer-metric-quote { font-size: 0.76rem; color: #64748b; font-style: italic; margin-top: 0.15rem; line-height: 1.4; }
   </style>
 
   <script type="text/babel">
@@ -164,6 +174,8 @@
       const [loading, setLoading] = useState(false);
       const [menuLoading, setMenuLoading] = useState(false);
       const [error, setError] = useState(null);
+      const [preview, setPreview] = useState(null);
+      const [previewLoading, setPreviewLoading] = useState(false);
 
       // On topic change: load the compatibility-annotated genre menu,
       // and the metric landscape when a topic is chosen.
@@ -193,6 +205,33 @@
         });
         return () => { cancelled = true; };
       }, [topicSlug]);
+
+      // Pre-generation fidelity preview: whenever the topic+genre pair
+      // settles, fetch the verbatim metric values and citations the
+      // engine would lock in. Cancellation discards any stale response
+      // (e.g. the transient pair while the menu is reselecting a genre),
+      // so only the latest pair's result is shown. No topic → nothing to
+      // preview.
+      useEffect(() => {
+        if (!topicSlug || !selectedGenre) {
+          setPreview(null);
+          setPreviewLoading(false);
+          return;
+        }
+        let cancelled = false;
+        setPreviewLoading(true);
+        const url = `${API}/api/compose/metric-preview?topicId=${encodeURIComponent(topicSlug)}&genre=${encodeURIComponent(selectedGenre)}`;
+        fetch(url).then(r => r.json()).then(data => {
+          if (cancelled) return;
+          setPreview(data && !data.error ? data : null);
+          setPreviewLoading(false);
+        }).catch(() => {
+          if (cancelled) return;
+          setPreview(null);
+          setPreviewLoading(false);
+        });
+        return () => { cancelled = true; };
+      }, [topicSlug, selectedGenre]);
 
       const topic = topics.find(t => t.slug === topicSlug);
       const angles = (topic && Array.isArray(topic.content_angles))
@@ -277,6 +316,49 @@
                     </span>
                   </label>
                 ))}
+              </div>
+            )}
+
+            {topicSlug && (previewLoading || preview) && (
+              <div className="composer-metrics">
+                {previewLoading ? (
+                  <div className="composer-note">Checking metrics…</div>
+                ) : preview && preview.status === 'ready' ? (
+                  <React.Fragment>
+                    <div className="composer-metrics-head">
+                      {preview.metricCount} verified metric{preview.metricCount === 1 ? '' : 's'} will be locked into this post
+                    </div>
+                    {preview.groups.map(g => (
+                      <div key={g.groupSlug} className="composer-metric-group">
+                        {g.groupLabel && <div className="composer-metric-group-label">{g.groupLabel}</div>}
+                        {g.metrics.map(m => (
+                          <div key={m.metricKey} className="composer-metric">
+                            <div className="composer-metric-value">
+                              {m.value}{m.unit ? ' ' + m.unit : ''}
+                              <span className="composer-metric-key"> · {m.metricKey}</span>
+                            </div>
+                            {m.source && m.source.name && (
+                              <div className="composer-metric-source">
+                                {m.source.name}{m.source.locator ? ', ' + m.source.locator : ''}
+                              </div>
+                            )}
+                            {m.source && m.source.quote && (
+                              <div className="composer-metric-quote">“{m.source.quote}”</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </React.Fragment>
+                ) : preview && preview.status === 'needs_metrics' ? (
+                  <div className="composer-metrics-warn">
+                    This genre uses verified metrics, but this topic has none. Add metrics or choose another genre.
+                  </div>
+                ) : preview && preview.status === 'genre_no_metrics' ? (
+                  <div className="composer-note">
+                    This genre does not incorporate metrics — the post is generated from research only.
+                  </div>
+                ) : null}
               </div>
             )}
 

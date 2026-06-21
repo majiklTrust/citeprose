@@ -90,9 +90,12 @@ function decrypt(blob) {
  *
  * @param {string} key — prompt identifier
  * @param {string} actionToken — signed token from createActionToken
+ * @param {string} [genre="default"] — genre variant; falls back
+ *        to the default-genre template if the requested genre
+ *        has no row.
  * @returns {Promise<string|null>}
  */
-export async function getAuthorizedPrompt(key, actionToken) {
+export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
   // Lazy import to avoid circular dependency at module load
   var { validateActionToken } = await import("./prompt-actions.js");
 
@@ -109,7 +112,7 @@ export async function getAuthorizedPrompt(key, actionToken) {
     key, action: validation.action, sub: validation.sub
   });
 
-  return _decryptFromVault(key);
+  return _decryptFromVault(key, genre);
 }
 
 /**
@@ -123,44 +126,167 @@ export async function getAuthorizedPrompt(key, actionToken) {
  * operations.
  *
  * @param {string} key — prompt identifier
+ * @param {string} [genre="default"] — genre variant; falls back
+ *        to the default-genre template if absent.
  * @returns {Promise<string|null>}
  */
-export async function getPrompt(key) {
-  platformLog("debug", "prompt_access_internal", { key });
-  return _decryptFromVault(key);
+export async function getPrompt(key, genre = "default") {
+  platformLog("debug", "prompt_access_internal", { key, genre });
+  return _decryptFromVault(key, genre);
 }
 
 /**
  * Internal: fetch and decrypt from the vault table.
+ *
+ * Looks up the (key, genre) row first. If the requested genre is
+ * not 'default' and has no row, falls back to the default-genre
+ * template so content generation never fails for a missing genre.
+ * The fallback is logged so a missing genre is visible.
  * @private
  */
-async function _decryptFromVault(key) {
+async function _decryptFromVault(key, genre = "default") {
   var result = await query(
-    "SELECT value_enc FROM prompt_vault WHERE key = $1",
-    [key]
+    "SELECT value_enc FROM prompt_vault WHERE key = $1 AND genre = $2",
+    [key, genre]
   );
+
+  // Fall back to the default genre when a non-default genre is
+  // requested but not present. This guarantees a usable template.
+  if (result.rows.length === 0 && genre !== "default") {
+    platformLog("info", "prompt_genre_fallback", { key, requestedGenre: genre });
+    result = await query(
+      "SELECT value_enc FROM prompt_vault WHERE key = $1 AND genre = $2",
+      [key, "default"]
+    );
+  }
+
   if (result.rows.length === 0) return null;
   return decrypt(result.rows[0].value_enc);
 }
 
 /**
  * Encrypt and store a prompt template. Upserts — inserts if
- * new, updates if the key already exists.
+ * new, updates if the (key, genre) pair already exists.
+ *
+ * Defaults to the 'default' genre so existing seed callers that
+ * pass only (key, plaintext, description) continue to target the
+ * base template unchanged.
  *
  * @param {string} key — prompt identifier
  * @param {string} plaintext — the prompt template text
  * @param {string} [description] — human-readable description
+ * @param {string} [genre="default"] — genre variant
  */
-export async function storePrompt(key, plaintext, description) {
+export async function storePrompt(key, plaintext, description, genre = "default") {
   const encrypted = encrypt(plaintext);
   await query(
-    `INSERT INTO prompt_vault (key, value_enc, description)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (key) DO UPDATE
-       SET value_enc = $2, description = $3, updated_at = now()`,
-    [key, encrypted, description || null]
+    `INSERT INTO prompt_vault (key, genre, value_enc, description)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (key, genre) DO UPDATE
+       SET value_enc = $3, description = $4, updated_at = now()`,
+    [key, genre, encrypted, description || null]
   );
-  platformLog("info", "prompt_stored", { key, descriptionLength: (description || "").length });
+  platformLog("info", "prompt_stored", {
+    key, genre, descriptionLength: (description || "").length
+  });
+}
+
+// ── Genre validation ─────────────────────────────────────────
+// Mirrors the DB CHECK constraint in 19-prompt-genre.sql.
+// Lowercase, starts with a letter, 2-32 chars. 'default' is a
+// valid genre id and may be created or updated like any other.
+const GENRE_RE = /^[a-z][a-z0-9_]{1,31}$/;
+
+/**
+ * Create or update a genre template for a prompt key (upsert).
+ *
+ * Any genre — including 'default' — may be written. Creating a
+ * brand-new (key, genre) needs no confirmation. Overwriting an
+ * existing one requires `confirmed = true`; without it the call
+ * throws CONFIRM_OVERWRITE so the caller can ask the operator to
+ * confirm. This keeps new-genre creation a single action while
+ * making an overwrite of a live template deliberate.
+ *
+ * Encryption is identical to every other prompt (same key, same
+ * AES-256-GCM, fresh IV). Plaintext is never logged or returned.
+ *
+ * @param {string} key — prompt identifier (e.g. "content_generator")
+ * @param {string} genre — genre id; must match GENRE_RE ('default' allowed)
+ * @param {string} plaintext — the prompt template text
+ * @param {string} [description] — human-readable description
+ * @param {boolean} [confirmed=false] — required to overwrite an existing row
+ * @returns {Promise<{action: "created"|"updated"}>}
+ * @throws {Error} with a stable `.code`:
+ *           INVALID_GENRE     — genre fails validation
+ *           EMPTY_TEMPLATE    — plaintext missing/blank
+ *           EMPTY_DESCRIPTION — description missing/blank
+ *           CONFIRM_OVERWRITE — row exists and confirmed !== true
+ */
+export async function storePromptGenre(key, genre, plaintext, description, confirmed = false) {
+  if (typeof genre !== "string" || !GENRE_RE.test(genre)) {
+    const e = new Error("Genre must be lowercase, start with a letter, 2-32 chars");
+    e.code = "INVALID_GENRE";
+    throw e;
+  }
+  if (typeof plaintext !== "string" || plaintext.trim().length === 0) {
+    const e = new Error("Template text is required");
+    e.code = "EMPTY_TEMPLATE";
+    throw e;
+  }
+  if (typeof description !== "string" || description.trim().length === 0) {
+    const e = new Error("Description is required");
+    e.code = "EMPTY_DESCRIPTION";
+    throw e;
+  }
+
+  // Does this (key, genre) already exist? Determines create-vs-update
+  // and whether confirmation is required.
+  const existing = await query(
+    "SELECT 1 FROM prompt_vault WHERE key = $1 AND genre = $2",
+    [key, genre]
+  );
+  const exists = existing.rows.length > 0;
+
+  // Overwriting a live template is a deliberate, confirmed action.
+  if (exists && confirmed !== true) {
+    const e = new Error("A template for this genre already exists; confirm to overwrite");
+    e.code = "CONFIRM_OVERWRITE";
+    throw e;
+  }
+
+  const encrypted = encrypt(plaintext);
+
+  await query(
+    `INSERT INTO prompt_vault (key, genre, value_enc, description)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (key, genre) DO UPDATE
+       SET value_enc = $3, description = $4, updated_at = now()`,
+    [key, genre, encrypted, description || null]
+  );
+
+  platformLog("info", exists ? "content_genre_updated" : "content_genre_inserted", {
+    key, genre, descriptionLength: (description || "").length
+  });
+
+  return { action: exists ? "updated" : "created" };
+}
+
+/**
+ * Metadata-only existence check for a (key, genre) pair. Reads no
+ * ciphertext — used by the Composer boundary to validate a requested
+ * genre before generation, so an unknown genre is rejected with a
+ * clear error rather than silently falling back to default.
+ *
+ * @param {string} key — prompt identifier (e.g. "content_generator")
+ * @param {string} genre — genre id to check
+ * @returns {Promise<boolean>}
+ */
+export async function genreExists(key, genre) {
+  const result = await query(
+    "SELECT 1 FROM prompt_vault WHERE key = $1 AND genre = $2 LIMIT 1",
+    [key, genre]
+  );
+  return result.rows.length > 0;
 }
 
 /**
@@ -181,13 +307,14 @@ export function renderPrompt(template, vars) {
 
 /**
  * List prompt keys and metadata (no decrypted content).
- * Safe for admin visibility.
+ * Safe for admin visibility. Includes genre so admins can see
+ * which genre variants exist per key.
  *
- * @returns {Promise<Array<{key, description, updated_at}>>}
+ * @returns {Promise<Array<{key, genre, description, updated_at}>>}
  */
 export async function listPrompts() {
   const result = await query(
-    "SELECT key, description, updated_at FROM prompt_vault ORDER BY key"
+    "SELECT key, genre, description, updated_at FROM prompt_vault ORDER BY key, genre"
   );
   return result.rows;
 }

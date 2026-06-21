@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.9.13
+// v1.9.14
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -52,7 +52,7 @@ export function platformLog(level, action, details) {
 // ═════════════════════════════════════════════════════════════
 export function createApp(ctx) {
   const {
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -475,6 +475,11 @@ export function createApp(ctx) {
   // requires manage_own_topics (same gate as topics).
   instance.use("/api/feeds", feedsRoutes);
 
+  // Composer API routes — mounted at /api/compose. Own auth+tenant
+  // middleware inside the router; decoupled from the Preview path.
+  // Must be before apiRoutes (api.js's guard 404s unknown /api/*).
+  instance.use("/api/compose", composeRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -532,13 +537,14 @@ export async function buildAppForTests() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
+  const { default: composeRoutes }       = await import("./routes/compose-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
   await initRegistry(platformLog);
 
   return createApp({
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -607,6 +613,7 @@ export async function start() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
+  const { default: composeRoutes }       = await import("./routes/compose-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -624,7 +631,7 @@ export async function start() {
 
   // STEP 6: Build app
   app = createApp({
-    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes,
+    apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -643,7 +650,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  1.9.13
+║           LinkedIn AI Content Agent  1.9.14
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

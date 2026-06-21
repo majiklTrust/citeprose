@@ -91,7 +91,8 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
     if (result && result.blocked) {
       return res.json({
         blocked: true, reason: result.reason,
-        topicId: result.topicId, angle: result.angle, genre
+        topicId: result.topicId, angle: result.angle, genre,
+        fidelity: result.fidelity || null
       });
     }
 

@@ -60,6 +60,15 @@
     .composer-metric-key { font-size: 0.72rem; font-weight: 400; color: #94a3b8; }
     .composer-metric-source { font-size: 0.76rem; color: #475569; margin-top: 0.1rem; }
     .composer-metric-quote { font-size: 0.76rem; color: #64748b; font-style: italic; margin-top: 0.15rem; line-height: 1.4; }
+    .composer-actions { display: flex; flex-direction: column; gap: 0.4rem; }
+    .composer-cancel { align-self: center; }
+    .composer-block { margin-top: 0.8rem; border: 1px solid #fecaca; border-radius: 6px; background: #fef2f2; overflow: hidden; }
+    .composer-block-head { font-size: 0.82rem; font-weight: 700; color: #b91c1c; padding: 0.6rem 0.8rem; background: #fee2e2; }
+    .composer-block-body { padding: 0.7rem 0.8rem; }
+    .composer-block-line { font-size: 0.82rem; color: #7f1d1d; margin-bottom: 0.45rem; line-height: 1.5; }
+    .composer-block-note { font-size: 0.76rem; color: #9a3412; background: #fff7ed; border-radius: 4px; padding: 0.45rem 0.6rem; margin-top: 0.5rem; line-height: 1.45; }
+    .composer-fidelity-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 0.45rem 0.6rem; margin-bottom: 0.6rem; }
+    .composer-fidelity-keys { font-size: 0.72rem; font-weight: 400; color: #4d7c5a; margin-top: 0.2rem; word-break: break-word; }
   </style>
 
   <script type="text/babel">
@@ -176,6 +185,10 @@
       const [error, setError] = useState(null);
       const [preview, setPreview] = useState(null);
       const [previewLoading, setPreviewLoading] = useState(false);
+      const [blockInfo, setBlockInfo] = useState(null);
+      const abortRef = React.useRef(null);
+      const cancelKindRef = React.useRef(null);
+      const mountedRef = React.useRef(true);
 
       // On topic change: load the compatibility-annotated genre menu,
       // and the metric landscape when a topic is chosen.
@@ -233,6 +246,43 @@
         return () => { cancelled = true; };
       }, [topicSlug, selectedGenre]);
 
+      // Any prior generation outcome belongs to the previous topic+genre
+      // selection. When the selection changes, clear the draft, the
+      // fidelity block, and any generation error so a stale result can
+      // never be mistaken for the current one. (Runs on mount harmlessly;
+      // a menu-load error set asynchronously by the genres effect lands
+      // after this and survives.)
+      useEffect(() => {
+        setDraft(null);
+        setBlockInfo(null);
+        setError(null);
+      }, [topicSlug, selectedGenre]);
+
+      // Lifecycle: abort any in-flight generation when the Composer
+      // unmounts (operator closed it mid-request). Prevents both a
+      // dangling request and a state update on an unmounted component.
+      // mountedRef gates every post-await setState in handleGenerate.
+      useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+          mountedRef.current = false;
+          if (abortRef.current) {
+            cancelKindRef.current = 'unmount';
+            abortRef.current.abort();
+          }
+        };
+      }, []);
+
+      // Operator-initiated abort of an in-flight generation. The reason
+      // is recorded before abort() so the catch can distinguish a user
+      // cancel from a timeout or an unmount.
+      function handleCancel() {
+        if (abortRef.current) {
+          cancelKindRef.current = 'user';
+          abortRef.current.abort();
+        }
+      }
+
       const topic = topics.find(t => t.slug === topicSlug);
       const angles = (topic && Array.isArray(topic.content_angles))
         ? topic.content_angles.filter(a => typeof a === 'string' && a.trim())
@@ -242,27 +292,80 @@
         : 0;
 
       async function handleGenerate() {
+        if (loading) return; // double-submit guard (button is also disabled)
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        cancelKindRef.current = null;
+        // Client-side backstop: the AI pipeline can outlast the gateway
+        // timeout. Abort after a ceiling above it so the UI never hangs
+        // indefinitely if no response (or error page) arrives.
+        const timeoutId = setTimeout(() => {
+          cancelKindRef.current = 'timeout';
+          controller.abort();
+        }, 90000);
+
         setLoading(true);
         setError(null);
         setDraft(null);
+        setBlockInfo(null);
         try {
           const res = await fetch(`${API}/api/compose/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topicId: topicSlug || undefined, angle: angle || undefined, genre: selectedGenre })
+            body: JSON.stringify({ topicId: topicSlug || undefined, angle: angle || undefined, genre: selectedGenre }),
+            signal: controller.signal
           });
-          const data = await res.json();
-          if (!res.ok || data.error) throw new Error(data.error || `Server returned ${res.status}`);
-          if (data.blocked) { setError('Could not generate: ' + data.reason); setLoading(false); return; }
-          setDraft(data.draft);
+
+          // A gateway timeout or proxy error is typically HTML, not JSON.
+          // Parse defensively so we never surface a raw JSON-parse error.
+          let data = null;
+          const ctype = res.headers.get('content-type') || '';
+          if (ctype.indexOf('application/json') !== -1) {
+            try { data = await res.json(); } catch (e) { data = null; }
+          }
+
+          if (!res.ok) {
+            const serverMsg = data && data.error ? data.error : null;
+            const gateway = res.status === 502 || res.status === 503 || res.status === 504;
+            throw new Error(serverMsg
+              || (gateway
+                ? 'The generation timed out or the service was briefly unavailable. The AI pipeline can exceed the gateway limit under load — please try again.'
+                : 'Generation failed (server returned ' + res.status + ').'));
+          }
+          if (!data) {
+            throw new Error('The server returned an unexpected response. Please try again.');
+          }
+
+          if (data.blocked) {
+            if (mountedRef.current) {
+              setBlockInfo({ reason: data.reason || 'Metric fidelity check failed.', fidelity: data.fidelity || null });
+            }
+            return;
+          }
+
+          if (mountedRef.current) setDraft(data.draft || null);
         } catch (err) {
-          setError('Generation failed: ' + err.message);
+          if (err && err.name === 'AbortError') {
+            const kind = cancelKindRef.current;
+            if (kind !== 'unmount' && mountedRef.current) {
+              setError(kind === 'timeout'
+                ? 'Generation timed out. The AI pipeline can exceed the gateway limit under load — please try again.'
+                : 'Generation cancelled.');
+            }
+          } else if (mountedRef.current) {
+            setError((err && err.message) || 'Generation failed.');
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          if (abortRef.current === controller) abortRef.current = null;
+          cancelKindRef.current = null;
+          if (mountedRef.current) setLoading(false);
         }
-        setLoading(false);
       }
 
       return (
-        <div className="composer-overlay" onClick={onClose}>
+        <div className="composer-overlay" onClick={loading ? undefined : onClose}>
           <div className="composer-modal" onClick={e => e.stopPropagation()}>
             <div className="composer-head">
               <h2 className="composer-title">Compose a Post</h2>
@@ -364,13 +467,55 @@
 
             {error && <div className="composer-error">{error}</div>}
 
-            <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={loading || menuLoading}>
-              {loading ? <span className="loading-spinner"></span> : 'Generate Draft'}
-            </button>
+            {loading ? (
+              <div className="composer-actions">
+                <button className="btn btn-primary btn-full" disabled>
+                  <span className="loading-spinner"></span> Generating…
+                </button>
+                <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
+              </div>
+            ) : (
+              <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={menuLoading}>
+                Generate Draft
+              </button>
+            )}
+
+            {blockInfo && (
+              <div className="composer-block">
+                <div className="composer-block-head">⚠ Draft withheld — fidelity check failed</div>
+                <div className="composer-block-body">
+                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unknownTokens) && blockInfo.fidelity.unknownTokens.length > 0 && (
+                    <div className="composer-block-line">The draft referenced metric token(s) that aren't verified: {blockInfo.fidelity.unknownTokens.join(', ')}.</div>
+                  )}
+                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unverifiedNumbers) && blockInfo.fidelity.unverifiedNumbers.length > 0 && (
+                    <div className="composer-block-line">The draft contained number(s) not traceable to a verified metric or the research: {blockInfo.fidelity.unverifiedNumbers.join(', ')}.</div>
+                  )}
+                  {(!blockInfo.fidelity ||
+                    ((!Array.isArray(blockInfo.fidelity.unknownTokens) || blockInfo.fidelity.unknownTokens.length === 0) &&
+                     (!Array.isArray(blockInfo.fidelity.unverifiedNumbers) || blockInfo.fidelity.unverifiedNumbers.length === 0))) && (
+                    <div className="composer-block-line">{blockInfo.reason}</div>
+                  )}
+                  <div className="composer-block-note">This is the fidelity guarantee at work — the draft was withheld rather than publish an unverified figure. Generate again to retry.</div>
+                </div>
+              </div>
+            )}
 
             {draft && (
               <div className="composer-result">
                 <div className="composer-result-head">Draft — genre: {draft.genre}{draft.angle ? ' · angle: ' + draft.angle : ''}</div>
+                {draft.fidelity && (
+                  <div className="composer-fidelity-ok">
+                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0
+                      ? '✓ Fidelity verified — ' + draft.fidelity.usedMetricKeys.length + ' verified metric' + (draft.fidelity.usedMetricKeys.length === 1 ? '' : 's') + ' locked into this post'
+                      : draft.fidelity.metricsAvailable > 0
+                        ? '✓ Fidelity verified — no metric figures were used in this post'
+                        : '✓ Fidelity verified'}
+                    {draft.fidelity.strict ? ' · strict number-policing on' : ''}
+                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0 && (
+                      <div className="composer-fidelity-keys">{draft.fidelity.usedMetricKeys.join(', ')}</div>
+                    )}
+                  </div>
+                )}
                 <div className="composer-result-title">{draft.title}</div>
                 <div className="composer-result-body">{draft.content}</div>
                 {Array.isArray(draft.hashtags) && draft.hashtags.length > 0 && (

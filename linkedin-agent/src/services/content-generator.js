@@ -310,7 +310,13 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
         cycleId, topicId: topic.slug,
         unknownTokens: fidelity.unknownTokens, unverifiedNumbers: fidelity.unverifiedNumbers, strict: strictFidelity
       });
-      return { blocked: true, reason: "Metric fidelity check failed. " + reason, topicId: topic.slug, angle, cycleId };
+      return { blocked: true, reason: "Metric fidelity check failed. " + reason, topicId: topic.slug, angle, cycleId,
+        fidelity: {
+          verified: false,
+          strict: strictFidelity,
+          unknownTokens: fidelity.unknownTokens,
+          unverifiedNumbers: fidelity.unverifiedNumbers
+        } };
     }
     parsed.body = sub.text;
     if (sub.substituted.length) {
@@ -352,6 +358,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
         totalSourceItems: researchBrief.summary.totalSourceItems,
         corroborationSkipped: skipCorroboration,
         sourceList: researchBrief.sourceList || []
+      },
+      fidelity: {
+        verified: true,
+        strict: strictFidelity,
+        usedMetricKeys: sub.substituted,
+        metricsAvailable: metricsByKey.size
       }
     };
   } catch (err) {

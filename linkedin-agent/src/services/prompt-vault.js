@@ -309,6 +309,26 @@ export async function genreExists(key, genre) {
 }
 
 /**
+ * List the genres configured for a prompt key with the metadata the
+ * composer's genre menu needs: genre id, description, and the stored
+ * metric_bearing flag. Reads no ciphertext.
+ *
+ * @param {string} key — prompt identifier (e.g. "content_generator")
+ * @returns {Promise<Array<{genre, description, metricBearing}>>}
+ */
+export async function listGenresForKey(key) {
+  const result = await query(
+    "SELECT genre, description, metric_bearing FROM prompt_vault WHERE key = $1 ORDER BY genre",
+    [key]
+  );
+  return result.rows.map((r) => ({
+    genre: r.genre,
+    description: r.description,
+    metricBearing: r.metric_bearing === true
+  }));
+}
+
+/**
  * Substitute {{VARIABLE}} placeholders in a prompt template.
  * Unknown placeholders are left as-is (defense against partial
  * rendering producing broken prompts).

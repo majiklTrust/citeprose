@@ -24,7 +24,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { generatePost } from "../services/content-generator.js";
 import { createActionToken } from "../services/prompt-actions.js";
-import { genreExists } from "../services/prompt-vault.js";
+import { genreExists, listGenresForKey } from "../services/prompt-vault.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
 
@@ -123,6 +123,55 @@ router.get("/topic-metrics", requirePermission("preview_post"), async (req, res)
     res.json({ landscape });
   } catch (err) {
     platformLog("error", "compose_topic_metrics_failed", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// GET /api/compose/genres?topicId=<slug>
+// The composer's genre menu. Returns each content_generator genre with
+// its description and metric_bearing flag, annotated with whether it is
+// selectable for the given topic. A metric-bearing genre is selectable
+// only when the topic has at least one usable metric; otherwise it is
+// returned not-selectable with a reason. topicId is optional — without
+// it, no compatibility judgment is made (all selectable).
+router.get("/genres", requirePermission("preview_post"), async (req, res) => {
+  try {
+    const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";
+
+    // Genre catalog is platform-level (not tenant-scoped) — read it
+    // outside withTenant. Metadata + flag only, no ciphertext.
+    const genres = await listGenresForKey("content_generator");
+
+    let topicHasMetrics = null;
+    let resolvedSlug = null;
+    if (slug) {
+      const probe = await withTenant(req.tenant.id, async () => {
+        const topic = await getTopicBySlug(slug);
+        if (!topic) return null;
+        const groups = await getMetricsForTopic(topic.id);
+        return { slug: topic.slug, hasMetrics: groups.length > 0 };
+      });
+      if (!probe) {
+        return res.status(404).json({ error: "Topic not found" });
+      }
+      topicHasMetrics = probe.hasMetrics;
+      resolvedSlug = probe.slug;
+    }
+
+    const menu = genres.map((g) => {
+      const blockedByMetrics = g.metricBearing && topicHasMetrics === false;
+      return {
+        genre: g.genre,
+        description: g.description,
+        metricBearing: g.metricBearing,
+        selectable: !blockedByMetrics,
+        reason: blockedByMetrics ? "Needs metric data; this topic has none." : null
+      };
+    });
+
+    res.json({ topicId: resolvedSlug, topicHasMetrics, genres: menu });
+  } catch (err) {
+    platformLog("error", "compose_genres_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
 });

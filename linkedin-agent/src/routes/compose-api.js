@@ -25,6 +25,8 @@ import { platformLog } from "../services/platform-log.js";
 import { generatePost } from "../services/content-generator.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { genreExists } from "../services/prompt-vault.js";
+import { getTopicBySlug } from "../tenant/topic-store.js";
+import { getMetricsForTopic } from "../services/metric-store.js";
 
 const router = Router();
 
@@ -84,6 +86,43 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
     res.json({ draft: result });
   } catch (err) {
     platformLog("error", "compose_generate_failed", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// GET /api/compose/topic-metrics?topicId=<slug>
+// Metric landscape for a topic: group count and metric count per
+// group. Metadata only — verbatim values and citations are a later
+// cycle. Drives the composer's compatibility-aware genre menu and the
+// group-resolution step.
+router.get("/topic-metrics", requirePermission("preview_post"), async (req, res) => {
+  try {
+    const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";
+    if (!slug) {
+      return res.status(400).json({ error: "topicId is required" });
+    }
+
+    const landscape = await withTenant(req.tenant.id, async () => {
+      const topic = await getTopicBySlug(slug);
+      if (!topic) return null;
+      const groups = await getMetricsForTopic(topic.id);
+      return {
+        topicId: topic.slug,
+        groupCount: groups.length,
+        groups: groups.map(g => ({
+          groupSlug: g.groupSlug,
+          groupLabel: g.groupLabel,
+          metricCount: Array.isArray(g.metrics) ? g.metrics.length : 0
+        }))
+      };
+    });
+
+    if (!landscape) {
+      return res.status(404).json({ error: "Topic not found" });
+    }
+    res.json({ landscape });
+  } catch (err) {
+    platformLog("error", "compose_topic_metrics_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
 });

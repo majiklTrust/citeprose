@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.9.3",
+  "version": "1.9.21",
   "config": {
     "cssversion": "34.0",
     "appname": "Market Intelligence"
@@ -117,4 +117,3 @@
     "supertest": "^7.2.2"
   }
 }
-

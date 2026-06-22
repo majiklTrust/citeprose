@@ -4,3 +4,4 @@ linkedin-agent/*.js
 data/pgsql/drop
 data/pgsql/*.py
 data/pgsql/*.sql
+data/pgsql/findings_export.jsonl

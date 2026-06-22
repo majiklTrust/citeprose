@@ -27,6 +27,49 @@
     </div>
   </div>
   <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+  <style>
+    .composer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; overflow-y: auto; }
+    .composer-modal { background: #fff; border-radius: 8px; width: 100%; max-width: 640px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+    .composer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .composer-title { font-size: 1.2rem; font-weight: 700; color: #222; margin: 0; }
+    .composer-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #666; line-height: 1; }
+    .composer-label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.8rem 0 0.3rem; }
+    .composer-note { font-size: 0.78rem; color: #666; background: #f5f7fa; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
+    .composer-genres { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
+    .composer-genre { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; }
+    .composer-genre.selected { border-color: #2563eb; background: #eff5ff; }
+    .composer-genre.disabled { opacity: 0.55; cursor: not-allowed; background: #fafafa; }
+    .composer-genre input { margin-top: 0.2rem; }
+    .composer-genre-main { display: flex; flex-direction: column; gap: 0.1rem; }
+    .composer-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
+    .composer-genre-desc { font-size: 0.76rem; color: #777; }
+    .composer-genre-reason { font-size: 0.72rem; color: #b45309; font-style: italic; }
+    .composer-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
+    .composer-result { margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem; }
+    .composer-result-head { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 0.4rem; }
+    .composer-result-title { font-size: 1rem; font-weight: 700; color: #222; margin-bottom: 0.4rem; }
+    .composer-result-body { font-size: 0.85rem; color: #333; white-space: pre-wrap; line-height: 1.5; }
+    .composer-result-tags { font-size: 0.8rem; color: #2563eb; margin-top: 0.5rem; }
+    .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
+    .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
+    .composer-metrics-warn { font-size: 0.8rem; color: #b45309; background: #fffbeb; border-radius: 4px; padding: 0.4rem 0.6rem; }
+    .composer-metric-group { margin-bottom: 0.5rem; }
+    .composer-metric-group-label { font-size: 0.74rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.25rem; }
+    .composer-metric { padding: 0.35rem 0 0.35rem 0.6rem; border-left: 2px solid #cbd5e1; margin-bottom: 0.35rem; }
+    .composer-metric-value { font-size: 0.88rem; font-weight: 700; color: #1e293b; }
+    .composer-metric-key { font-size: 0.72rem; font-weight: 400; color: #94a3b8; }
+    .composer-metric-source { font-size: 0.76rem; color: #475569; margin-top: 0.1rem; }
+    .composer-metric-quote { font-size: 0.76rem; color: #64748b; font-style: italic; margin-top: 0.15rem; line-height: 1.4; }
+    .composer-actions { display: flex; flex-direction: column; gap: 0.4rem; }
+    .composer-cancel { align-self: center; }
+    .composer-block { margin-top: 0.8rem; border: 1px solid #fecaca; border-radius: 6px; background: #fef2f2; overflow: hidden; }
+    .composer-block-head { font-size: 0.82rem; font-weight: 700; color: #b91c1c; padding: 0.6rem 0.8rem; background: #fee2e2; }
+    .composer-block-body { padding: 0.7rem 0.8rem; }
+    .composer-block-line { font-size: 0.82rem; color: #7f1d1d; margin-bottom: 0.45rem; line-height: 1.5; }
+    .composer-block-note { font-size: 0.76rem; color: #9a3412; background: #fff7ed; border-radius: 4px; padding: 0.45rem 0.6rem; margin-top: 0.5rem; line-height: 1.45; }
+    .composer-fidelity-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 0.45rem 0.6rem; margin-bottom: 0.6rem; }
+    .composer-fidelity-keys { font-size: 0.72rem; font-weight: 400; color: #4d7c5a; margin-top: 0.2rem; word-break: break-word; }
+  </style>
 
   <script type="text/babel">
     const { useState, useEffect, useCallback } = React;
@@ -125,6 +168,366 @@
       none: { cls: 'corroboration-none', text: 'Uncorroborated' },
     };
 
+    // ── Composer (Cycle 4) ───────────────────────────────────
+    // Self-contained component with its own state — decoupled from
+    // handlePreview. Reads the three /api/compose endpoints. Power
+    // path beside the quick Preview button. Generates a draft and
+    // shows it read-only; save/approval is a later cycle.
+    function Composer({ API, topics, onClose }) {
+      const [topicSlug, setTopicSlug] = useState('');
+      const [angle, setAngle] = useState('');
+      const [genres, setGenres] = useState([]);
+      const [landscape, setLandscape] = useState(null);
+      const [selectedGenre, setSelectedGenre] = useState('default');
+      const [draft, setDraft] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [menuLoading, setMenuLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [preview, setPreview] = useState(null);
+      const [previewLoading, setPreviewLoading] = useState(false);
+      const [blockInfo, setBlockInfo] = useState(null);
+      const abortRef = React.useRef(null);
+      const cancelKindRef = React.useRef(null);
+      const mountedRef = React.useRef(true);
+
+      // On topic change: load the compatibility-annotated genre menu,
+      // and the metric landscape when a topic is chosen.
+      useEffect(() => {
+        let cancelled = false;
+        setMenuLoading(true);
+        setError(null);
+        const genresUrl = topicSlug
+          ? `${API}/api/compose/genres?topicId=${encodeURIComponent(topicSlug)}`
+          : `${API}/api/compose/genres`;
+        const tasks = [fetch(genresUrl).then(r => r.json())];
+        if (topicSlug) {
+          tasks.push(fetch(`${API}/api/compose/topic-metrics?topicId=${encodeURIComponent(topicSlug)}`).then(r => r.json()));
+        }
+        Promise.all(tasks).then(results => {
+          if (cancelled) return;
+          const list = Array.isArray(results[0].genres) ? results[0].genres : [];
+          setGenres(list);
+          setLandscape(topicSlug && results[1] ? (results[1].landscape || null) : null);
+          const firstSelectable = list.find(x => x.selectable);
+          setSelectedGenre(firstSelectable ? firstSelectable.genre : 'default');
+          setMenuLoading(false);
+        }).catch(err => {
+          if (cancelled) return;
+          setError('Failed to load genres: ' + err.message);
+          setMenuLoading(false);
+        });
+        return () => { cancelled = true; };
+      }, [topicSlug]);
+
+      // Pre-generation fidelity preview: whenever the topic+genre pair
+      // settles, fetch the verbatim metric values and citations the
+      // engine would lock in. Cancellation discards any stale response
+      // (e.g. the transient pair while the menu is reselecting a genre),
+      // so only the latest pair's result is shown. No topic → nothing to
+      // preview.
+      useEffect(() => {
+        if (!topicSlug || !selectedGenre) {
+          setPreview(null);
+          setPreviewLoading(false);
+          return;
+        }
+        let cancelled = false;
+        setPreviewLoading(true);
+        const url = `${API}/api/compose/metric-preview?topicId=${encodeURIComponent(topicSlug)}&genre=${encodeURIComponent(selectedGenre)}`;
+        fetch(url).then(r => r.json()).then(data => {
+          if (cancelled) return;
+          setPreview(data && !data.error ? data : null);
+          setPreviewLoading(false);
+        }).catch(() => {
+          if (cancelled) return;
+          setPreview(null);
+          setPreviewLoading(false);
+        });
+        return () => { cancelled = true; };
+      }, [topicSlug, selectedGenre]);
+
+      // Any prior generation outcome belongs to the previous topic+genre
+      // selection. When the selection changes, clear the draft, the
+      // fidelity block, and any generation error so a stale result can
+      // never be mistaken for the current one. (Runs on mount harmlessly;
+      // a menu-load error set asynchronously by the genres effect lands
+      // after this and survives.)
+      useEffect(() => {
+        setDraft(null);
+        setBlockInfo(null);
+        setError(null);
+      }, [topicSlug, selectedGenre]);
+
+      // Lifecycle: abort any in-flight generation when the Composer
+      // unmounts (operator closed it mid-request). Prevents both a
+      // dangling request and a state update on an unmounted component.
+      // mountedRef gates every post-await setState in handleGenerate.
+      useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+          mountedRef.current = false;
+          if (abortRef.current) {
+            cancelKindRef.current = 'unmount';
+            abortRef.current.abort();
+          }
+        };
+      }, []);
+
+      // Operator-initiated abort of an in-flight generation. The reason
+      // is recorded before abort() so the catch can distinguish a user
+      // cancel from a timeout or an unmount.
+      function handleCancel() {
+        if (abortRef.current) {
+          cancelKindRef.current = 'user';
+          abortRef.current.abort();
+        }
+      }
+
+      const topic = topics.find(t => t.slug === topicSlug);
+      const angles = (topic && Array.isArray(topic.content_angles))
+        ? topic.content_angles.filter(a => typeof a === 'string' && a.trim())
+        : [];
+      const totalMetrics = landscape && Array.isArray(landscape.groups)
+        ? landscape.groups.reduce((n, g) => n + (g.metricCount || 0), 0)
+        : 0;
+
+      async function handleGenerate() {
+        if (loading) return; // double-submit guard (button is also disabled)
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        cancelKindRef.current = null;
+        // Client-side backstop: the AI pipeline can outlast the gateway
+        // timeout. Abort after a ceiling above it so the UI never hangs
+        // indefinitely if no response (or error page) arrives.
+        const timeoutId = setTimeout(() => {
+          cancelKindRef.current = 'timeout';
+          controller.abort();
+        }, 90000);
+
+        setLoading(true);
+        setError(null);
+        setDraft(null);
+        setBlockInfo(null);
+        try {
+          const res = await fetch(`${API}/api/compose/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topicId: topicSlug || undefined, angle: angle || undefined, genre: selectedGenre }),
+            signal: controller.signal
+          });
+
+          // A gateway timeout or proxy error is typically HTML, not JSON.
+          // Parse defensively so we never surface a raw JSON-parse error.
+          let data = null;
+          const ctype = res.headers.get('content-type') || '';
+          if (ctype.indexOf('application/json') !== -1) {
+            try { data = await res.json(); } catch (e) { data = null; }
+          }
+
+          if (!res.ok) {
+            const serverMsg = data && data.error ? data.error : null;
+            const gateway = res.status === 502 || res.status === 503 || res.status === 504;
+            throw new Error(serverMsg
+              || (gateway
+                ? 'The generation timed out or the service was briefly unavailable. The AI pipeline can exceed the gateway limit under load — please try again.'
+                : 'Generation failed (server returned ' + res.status + ').'));
+          }
+          if (!data) {
+            throw new Error('The server returned an unexpected response. Please try again.');
+          }
+
+          if (data.blocked) {
+            if (mountedRef.current) {
+              setBlockInfo({ reason: data.reason || 'Metric fidelity check failed.', fidelity: data.fidelity || null });
+            }
+            return;
+          }
+
+          if (mountedRef.current) setDraft(data.draft || null);
+        } catch (err) {
+          if (err && err.name === 'AbortError') {
+            const kind = cancelKindRef.current;
+            if (kind !== 'unmount' && mountedRef.current) {
+              setError(kind === 'timeout'
+                ? 'Generation timed out. The AI pipeline can exceed the gateway limit under load — please try again.'
+                : 'Generation cancelled.');
+            }
+          } else if (mountedRef.current) {
+            setError((err && err.message) || 'Generation failed.');
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          if (abortRef.current === controller) abortRef.current = null;
+          cancelKindRef.current = null;
+          if (mountedRef.current) setLoading(false);
+        }
+      }
+
+      return (
+        <div className="composer-overlay" onClick={loading ? undefined : onClose}>
+          <div className="composer-modal" onClick={e => e.stopPropagation()}>
+            <div className="composer-head">
+              <h2 className="composer-title">Compose a Post</h2>
+              <button className="composer-close" onClick={onClose}>✕</button>
+            </div>
+
+            <label className="composer-label">Topic</label>
+            <select className="topic-selector" value={topicSlug}
+              onChange={e => { setTopicSlug(e.target.value); setAngle(''); setDraft(null); }}>
+              <option value="">Auto-select topic</option>
+              {topics.filter(t => t.enabled !== false).map(t => (
+                <option key={t.id} value={t.slug}>{t.name}</option>
+              ))}
+            </select>
+
+            {topicSlug && angles.length > 0 && (
+              <React.Fragment>
+                <label className="composer-label">Angle</label>
+                <select className="topic-selector" value={angle}
+                  onChange={e => setAngle(e.target.value)}>
+                  <option value="">Auto-select angle</option>
+                  {angles.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </React.Fragment>
+            )}
+
+            {landscape && (
+              <div className="composer-note">
+                {landscape.groupCount > 0
+                  ? `This topic has ${landscape.groupCount} metric group${landscape.groupCount === 1 ? '' : 's'} (${totalMetrics} verified metric${totalMetrics === 1 ? '' : 's'}).`
+                  : 'This topic has no metrics — metric-bearing genres are unavailable.'}
+              </div>
+            )}
+
+            <label className="composer-label">Genre</label>
+            {menuLoading ? (
+              <div className="composer-note">Loading genres…</div>
+            ) : (
+              <div className="composer-genres">
+                {genres.map(g => (
+                  <label key={g.genre}
+                    className={`composer-genre${g.selectable ? '' : ' disabled'}${selectedGenre === g.genre ? ' selected' : ''}`}>
+                    <input type="radio" name="composer-genre" value={g.genre}
+                      checked={selectedGenre === g.genre}
+                      disabled={!g.selectable}
+                      onChange={() => setSelectedGenre(g.genre)} />
+                    <span className="composer-genre-main">
+                      <span className="composer-genre-name">{g.genre}{g.metricBearing ? ' • metrics' : ''}</span>
+                      {g.description && <span className="composer-genre-desc">{g.description}</span>}
+                      {!g.selectable && g.reason && <span className="composer-genre-reason">{g.reason}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {topicSlug && (previewLoading || preview) && (
+              <div className="composer-metrics">
+                {previewLoading ? (
+                  <div className="composer-note">Checking metrics…</div>
+                ) : preview && preview.status === 'ready' ? (
+                  <React.Fragment>
+                    <div className="composer-metrics-head">
+                      {preview.metricCount} verified metric{preview.metricCount === 1 ? '' : 's'} will be locked into this post
+                    </div>
+                    {preview.groups.map(g => (
+                      <div key={g.groupSlug} className="composer-metric-group">
+                        {g.groupLabel && <div className="composer-metric-group-label">{g.groupLabel}</div>}
+                        {g.metrics.map(m => (
+                          <div key={m.metricKey} className="composer-metric">
+                            <div className="composer-metric-value">
+                              {m.value}{m.unit ? ' ' + m.unit : ''}
+                              <span className="composer-metric-key"> · {m.metricKey}</span>
+                            </div>
+                            {m.source && m.source.name && (
+                              <div className="composer-metric-source">
+                                {m.source.name}{m.source.locator ? ', ' + m.source.locator : ''}
+                              </div>
+                            )}
+                            {m.source && m.source.quote && (
+                              <div className="composer-metric-quote">“{m.source.quote}”</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </React.Fragment>
+                ) : preview && preview.status === 'needs_metrics' ? (
+                  <div className="composer-metrics-warn">
+                    This genre uses verified metrics, but this topic has none. Add metrics or choose another genre.
+                  </div>
+                ) : preview && preview.status === 'genre_no_metrics' ? (
+                  <div className="composer-note">
+                    This genre does not incorporate metrics — the post is generated from research only.
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {error && <div className="composer-error">{error}</div>}
+
+            {loading ? (
+              <div className="composer-actions">
+                <button className="btn btn-primary btn-full" disabled>
+                  <span className="loading-spinner"></span> Generating…
+                </button>
+                <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
+              </div>
+            ) : (
+              <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={menuLoading}>
+                Generate Draft
+              </button>
+            )}
+
+            {blockInfo && (
+              <div className="composer-block">
+                <div className="composer-block-head">⚠ Draft withheld — fidelity check failed</div>
+                <div className="composer-block-body">
+                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unknownTokens) && blockInfo.fidelity.unknownTokens.length > 0 && (
+                    <div className="composer-block-line">The draft referenced metric token(s) that aren't verified: {blockInfo.fidelity.unknownTokens.join(', ')}.</div>
+                  )}
+                  {blockInfo.fidelity && Array.isArray(blockInfo.fidelity.unverifiedNumbers) && blockInfo.fidelity.unverifiedNumbers.length > 0 && (
+                    <div className="composer-block-line">The draft contained number(s) not traceable to a verified metric or the research: {blockInfo.fidelity.unverifiedNumbers.join(', ')}.</div>
+                  )}
+                  {(!blockInfo.fidelity ||
+                    ((!Array.isArray(blockInfo.fidelity.unknownTokens) || blockInfo.fidelity.unknownTokens.length === 0) &&
+                     (!Array.isArray(blockInfo.fidelity.unverifiedNumbers) || blockInfo.fidelity.unverifiedNumbers.length === 0))) && (
+                    <div className="composer-block-line">{blockInfo.reason}</div>
+                  )}
+                  <div className="composer-block-note">This is the fidelity guarantee at work — the draft was withheld rather than publish an unverified figure. Generate again to retry.</div>
+                </div>
+              </div>
+            )}
+
+            {draft && (
+              <div className="composer-result">
+                <div className="composer-result-head">Draft — genre: {draft.genre}{draft.angle ? ' · angle: ' + draft.angle : ''}</div>
+                {draft.fidelity && (
+                  <div className="composer-fidelity-ok">
+                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0
+                      ? '✓ Fidelity verified — ' + draft.fidelity.usedMetricKeys.length + ' verified metric' + (draft.fidelity.usedMetricKeys.length === 1 ? '' : 's') + ' locked into this post'
+                      : draft.fidelity.metricsAvailable > 0
+                        ? '✓ Fidelity verified — no metric figures were used in this post'
+                        : '✓ Fidelity verified'}
+                    {draft.fidelity.strict ? ' · strict number-policing on' : ''}
+                    {Array.isArray(draft.fidelity.usedMetricKeys) && draft.fidelity.usedMetricKeys.length > 0 && (
+                      <div className="composer-fidelity-keys">{draft.fidelity.usedMetricKeys.join(', ')}</div>
+                    )}
+                  </div>
+                )}
+                <div className="composer-result-title">{draft.title}</div>
+                <div className="composer-result-body">{draft.content}</div>
+                {Array.isArray(draft.hashtags) && draft.hashtags.length > 0 && (
+                  <div className="composer-result-tags">{draft.hashtags.map(h => '#' + h).join(' ')}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [status, setStatus] = useState(null);
       const [posts, setPosts] = useState([]);
@@ -138,6 +541,7 @@
       const [editingPost, setEditingPost] = useState(null);
       const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
+      const [showComposer, setShowComposer] = useState(false);
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -554,7 +958,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v1.9.3</div>
+                <div className="header-subtitle">v1.9.21</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -594,7 +998,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v1.9.3 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.21 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -801,16 +1205,14 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
-                  {/**
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  {/**<div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
                     </button>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
                       ✎ Compose
                     </button>
-                  </div>
-                  **/}
+                  </div>**/}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePreview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
@@ -941,6 +1343,10 @@
             </div>
 
           </div>
+
+          {showComposer && (
+            <Composer API={API} topics={topics} onClose={() => setShowComposer(false)} />
+          )}
 
           {/* Post Detail Modal */}
           {selectedPost && (() => {

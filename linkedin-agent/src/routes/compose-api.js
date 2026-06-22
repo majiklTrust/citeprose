@@ -22,11 +22,13 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
-import { generatePost } from "../services/content-generator.js";
+import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { genreExists, listGenresForKey, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
+import { createPost, logActivity } from "../services/database.js";
+import { selectPrimarySource } from "../services/source-provenance.js";
 
 const router = Router();
 
@@ -51,6 +53,15 @@ router.use((req, res, next) => {
 
 // Mirrors the DB CHECK in 19-prompt-genre.sql. 'default' is valid.
 const GENRE_RE = /^[a-z][a-z0-9_]{1,31}$/;
+
+// Internal genre reserved for the Rewrite (refine) prompt. It lives under
+// the content_generator key so it's editable in the same platform-admin
+// screen as the others, but it is NOT a user-selectable content style — so
+// it is filtered out of the Composer's genre menu below, server-side (Zero
+// Trust: it never reaches the client). The refine route fetches it by this
+// exact key. Centralized so the reserved name has one home; this is the one
+// hardcoded value introduced for Rewrite — promote to config later.
+const INTERNAL_REFINE_GENRE = "refine";
 
 // POST /api/compose/generate
 // Body: { topicId?, angle?, genre? }
@@ -82,21 +93,70 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
     });
 
     const actionToken = createActionToken("generate-content", req.user.sub);
+
+    // Mirror the Generate (Preview) flow so a composed post is PERSISTED
+    // immediately as a draft — generate -> resolve primary source (fail
+    // closed) -> quality check -> auto-save. The chosen genre is threaded
+    // into generation and recorded on the saved row. A fidelity or
+    // no-source stop returns { blocked } and saves nothing.
     const result = await withTenant(req.tenant.id, async () => {
-      return generatePost(topicId, null, actionToken, angle, genre);
+      const g = await generatePost(topicId, null, actionToken, angle, genre);
+      if (g.blocked) return { generated: g, quality: null, postId: null };
+
+      const preferUrl = (Array.isArray(g.articleImages) && g.articleImages[0] && g.articleImages[0].link) || null;
+      const primarySource = selectPrimarySource((g.researchSummary && g.researchSummary.sourceList) || [], { preferUrl });
+      if (!primarySource) {
+        await logActivity("info", "compose_blocked_no_primary_source", { cycleId: g.cycleId, topicId: g.topicId }, req.user?.sub || null);
+        return {
+          generated: { blocked: true, reason: "No attributable primary source could be resolved", topicId: g.topicId, angle: g.angle, fidelity: g.fidelity || null },
+          quality: null, postId: null
+        };
+      }
+
+      const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
+
+      const storedContext = {
+        angle: g.angle || "",
+        sourcesUsed: g.sourcesUsed || [],
+        researchSummary: g.researchSummary || null,
+        qualityScores: q?.scores,
+        qualityOverall: q?.overall,
+        qualityPass: q?.pass,
+        factualFlags: q?.factual_flags,
+        primarySource,
+        articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
+      };
+
+      const postId = await createPost({
+        topicId: g.topicId,
+        title: g.title,
+        content: g.content,
+        hashtags: g.hashtags || [],
+        newsContext: storedContext,
+        scheduledFor: null,
+        imageUrl: null,
+        genre
+      });
+
+      await logActivity("info", "compose_auto_saved", { postId, title: g.title, topicId: g.topicId, genre }, req.user?.sub || null);
+
+      return { generated: g, quality: q, postId };
     });
 
-    // generatePost returns { blocked, reason, ... } on a fail-safe stop
-    // (e.g. metric fidelity). Surface it as a normal response, not a 500.
-    if (result && result.blocked) {
+    // A blocked result (fidelity or no primary source) saves nothing and
+    // is surfaced as a normal response, not a 500.
+    if (result.generated.blocked) {
       return res.json({
-        blocked: true, reason: result.reason,
-        topicId: result.topicId, angle: result.angle, genre,
-        fidelity: result.fidelity || null
+        blocked: true, reason: result.generated.reason,
+        topicId: result.generated.topicId, angle: result.generated.angle, genre,
+        fidelity: result.generated.fidelity || null
       });
     }
 
-    res.json({ draft: result });
+    res.json({
+      post: result.generated, quality: result.quality, postId: result.postId,
+      genre, fidelity: result.generated.fidelity || null
+    });
   } catch (err) {
     platformLog("error", "compose_generate_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
@@ -146,14 +206,26 @@ router.get("/topic-metrics", requirePermission("preview_post"), async (req, res)
 // selectable for the given topic. A metric-bearing genre is selectable
 // only when the topic has at least one usable metric; otherwise it is
 // returned not-selectable with a reason. topicId is optional — without
-// it, no compatibility judgment is made (all selectable).
+// it (auto-select) no topic supplies metrics, so metric-bearing
+// genres are not selectable; non-metric genres always are.
 router.get("/genres", requirePermission("preview_post"), async (req, res) => {
   try {
     const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";
 
     // Genre catalog is platform-level (not tenant-scoped) — read it
     // outside withTenant. Metadata + flag only, no ciphertext.
-    const genres = await listGenresForKey("content_generator");
+    //
+    // Two exclusions, both server-side so the picker only ever receives
+    // what it should display:
+    //   1. the internal refine genre — never a user-facing style (the
+    //      platform-admin genre list still shows it for editing); and
+    //   2. metric-bearing genres (metric_bearing = true, e.g. 'metricvalue')
+    //      — these drive the metric pipeline and are out of scope for the
+    //      Create flow, which offers metric-free content styles only.
+    // A metric-bearing genre stays valid on the backend (genreExists in
+    // /generate accepts it); it is simply not offered here.
+    const genres = (await listGenresForKey("content_generator"))
+      .filter((g) => g.genre !== INTERNAL_REFINE_GENRE && g.metricBearing !== true);
 
     let topicHasMetrics = null;
     let resolvedSlug = null;
@@ -172,13 +244,13 @@ router.get("/genres", requirePermission("preview_post"), async (req, res) => {
     }
 
     const menu = genres.map((g) => {
-      const blockedByMetrics = g.metricBearing && topicHasMetrics === false;
+      const blockedByMetrics = g.metricBearing && !topicHasMetrics;
       return {
         genre: g.genre,
         description: g.description,
         metricBearing: g.metricBearing,
         selectable: !blockedByMetrics,
-        reason: blockedByMetrics ? "Needs metric data; this topic has none." : null
+        reason: blockedByMetrics ? "Needs a topic with metric data." : null
       };
     });
 

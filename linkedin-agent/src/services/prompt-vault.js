@@ -94,6 +94,9 @@ function decrypt(blob) {
  * @param {string} [genre="default"] — genre variant; falls back
  *        to the default-genre template if the requested genre
  *        has no row.
+ * @param {string} [genre="default"] — genre variant; falls back
+ *        to the default-genre template if the requested genre
+ *        has no row.
  * @returns {Promise<string|null>}
  */
 export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
@@ -114,6 +117,7 @@ export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
   });
 
   return _decryptFromVault(key, genre);
+  return _decryptFromVault(key, genre);
 }
 
 /**
@@ -127,6 +131,8 @@ export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
  * operations.
  *
  * @param {string} key — prompt identifier
+ * @param {string} [genre="default"] — genre variant; falls back
+ *        to the default-genre template if absent.
  * @param {string} [genre="default"] — genre variant; falls back
  *        to the default-genre template if absent.
  * @returns {Promise<string|null>}
@@ -168,6 +174,11 @@ export async function templateUsesMetricBlock(key, genre = "default") {
  * not 'default' and has no row, falls back to the default-genre
  * template so content generation never fails for a missing genre.
  * The fallback is logged so a missing genre is visible.
+ *
+ * Looks up the (key, genre) row first. If the requested genre is
+ * not 'default' and has no row, falls back to the default-genre
+ * template so content generation never fails for a missing genre.
+ * The fallback is logged so a missing genre is visible.
  * @private
  */
 async function _decryptFromVault(key, genre = "default") {
@@ -175,6 +186,17 @@ async function _decryptFromVault(key, genre = "default") {
     "SELECT value_enc FROM prompt_vault WHERE key = $1 AND genre = $2",
     [key, genre]
   );
+
+  // Fall back to the default genre when a non-default genre is
+  // requested but not present. This guarantees a usable template.
+  if (result.rows.length === 0 && genre !== "default") {
+    platformLog("info", "prompt_genre_fallback", { key, requestedGenre: genre });
+    result = await query(
+      "SELECT value_enc FROM prompt_vault WHERE key = $1 AND genre = $2",
+      [key, "default"]
+    );
+  }
+
 
   // Fall back to the default genre when a non-default genre is
   // requested but not present. This guarantees a usable template.
@@ -197,15 +219,26 @@ async function _decryptFromVault(key, genre = "default") {
  * Defaults to the 'default' genre so existing seed callers that
  * pass only (key, plaintext, description) continue to target the
  * base template unchanged.
+ * new, updates if the (key, genre) pair already exists.
+ *
+ * Defaults to the 'default' genre so existing seed callers that
+ * pass only (key, plaintext, description) continue to target the
+ * base template unchanged.
  *
  * @param {string} key — prompt identifier
  * @param {string} plaintext — the prompt template text
  * @param {string} [description] — human-readable description
  * @param {string} [genre="default"] — genre variant
+ * @param {string} [genre="default"] — genre variant
  */
 export async function storePrompt(key, plaintext, description, genre = "default") {
   const encrypted = encrypt(plaintext);
   await query(
+    `INSERT INTO prompt_vault (key, genre, value_enc, description)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (key, genre) DO UPDATE
+       SET value_enc = $3, description = $4, updated_at = now()`,
+    [key, genre, encrypted, description || null]
     `INSERT INTO prompt_vault (key, genre, value_enc, description)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (key, genre) DO UPDATE
@@ -373,7 +406,10 @@ export function renderPrompt(template, vars) {
  * List prompt keys and metadata (no decrypted content).
  * Safe for admin visibility. Includes genre so admins can see
  * which genre variants exist per key.
+ * Safe for admin visibility. Includes genre so admins can see
+ * which genre variants exist per key.
  *
+ * @returns {Promise<Array<{key, genre, description, updated_at}>>}
  * @returns {Promise<Array<{key, genre, description, updated_at}>>}
  */
 export async function listPrompts() {

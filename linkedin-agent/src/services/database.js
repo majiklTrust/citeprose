@@ -141,7 +141,7 @@ export function initDatabase() {
 
 // ── Post CRUD ────────────────────────────────────────────────
 
-export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl }) {
+export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl, genre }) {
   const c = client();
   const scheduled = validateScheduledFor(scheduledFor);
   const topicIntId = await resolveTopicIdBySlug(c, topicId);
@@ -155,10 +155,10 @@ export async function createPost({ topicId, title, content, hashtags, newsContex
   }
 
   const r = await c.query(
-    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status)
-     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft')
+    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status, genre)
+     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft', $8)
      RETURNING id`,
-    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null]
+    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null, genre || 'default']
   );
   return r.rows[0].id;
 }
@@ -173,7 +173,7 @@ export async function getPost(id) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url
+            p.image_url, p.genre
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.id = $1`,
@@ -254,6 +254,61 @@ export async function updatePost(id, fields) {
     params
   );
 
+  const row = r.rows[0];
+  if (!Array.isArray(row.hashtags)) row.hashtags = row.hashtags || [];
+  return row;
+}
+
+export async function deletePost(id) {
+  // Hard-delete a DRAFT only. Forced RLS scopes the DELETE to the
+  // current tenant (call this inside withTenant), and the status
+  // guard prevents discarding a pending/scheduled/published post
+  // through this path. Returns true only if a row was removed.
+  const c = client();
+  const result = await c.query(
+    `DELETE FROM posts WHERE id = $1 AND status = 'draft' RETURNING id`,
+    [id]
+  );
+  return result.rowCount > 0;
+}
+
+// Writes AI-refined content back to a post. Distinct from updatePost
+// (which is pending_approval-only and never changes status): refine must
+// accept BOTH draft and pending_approval, and it forces status to 'draft'
+// so a refined pending post drops back for re-review while a draft stays a
+// draft. Locks the row for the transaction. RLS scopes it to the tenant.
+//
+// Throws with a stable .code on a bad target so the route maps it:
+//   NOT_FOUND      → 404
+//   NOT_REFINABLE  → 409
+export async function applyRefinedContent(id, fields) {
+  const c = client();
+
+  const guard = await c.query(
+    `SELECT id, status FROM posts WHERE id = $1 FOR UPDATE`,
+    [id]
+  );
+  if (guard.rows.length === 0) {
+    const err = new Error(`Post ${id} not found`);
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+  const status = guard.rows[0].status;
+  if (status !== "draft" && status !== "pending_approval") {
+    const err = new Error(
+      `Post ${id} cannot be refined (status: ${status}). Only draft or pending_approval posts can be refined.`
+    );
+    err.code = "NOT_REFINABLE";
+    throw err;
+  }
+
+  const r = await c.query(
+    `UPDATE posts
+        SET title = $1, content = $2, hashtags = $3::jsonb, status = 'draft'::post_status
+      WHERE id = $4
+      RETURNING id, title, content, hashtags, status`,
+    [fields.title, fields.content, JSON.stringify(fields.hashtags || []), id]
+  );
   const row = r.rows[0];
   if (!Array.isArray(row.hashtags)) row.hashtags = row.hashtags || [];
   return row;

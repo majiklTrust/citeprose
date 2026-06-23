@@ -94,9 +94,6 @@ function decrypt(blob) {
  * @param {string} [genre="default"] — genre variant; falls back
  *        to the default-genre template if the requested genre
  *        has no row.
- * @param {string} [genre="default"] — genre variant; falls back
- *        to the default-genre template if the requested genre
- *        has no row.
  * @returns {Promise<string|null>}
  */
 export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
@@ -131,8 +128,6 @@ export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
  * operations.
  *
  * @param {string} key — prompt identifier
- * @param {string} [genre="default"] — genre variant; falls back
- *        to the default-genre template if absent.
  * @param {string} [genre="default"] — genre variant; falls back
  *        to the default-genre template if absent.
  * @returns {Promise<string|null>}
@@ -228,7 +223,6 @@ async function _decryptFromVault(key, genre = "default") {
  * @param {string} key — prompt identifier
  * @param {string} plaintext — the prompt template text
  * @param {string} [description] — human-readable description
- * @param {string} [genre="default"] — genre variant
  * @param {string} [genre="default"] — genre variant
  */
 export async function storePrompt(key, plaintext, description, genre = "default") {

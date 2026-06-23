@@ -135,8 +135,8 @@ const QUERY_REGISTRY = {
     label: "List All Memberships",
     description: "Shows all tenant memberships with auth provider and role.",
     capability: "See who has access to which tenant, by auth provider and role.",
-    sql: `SELECT t.slug, m.auth_provider::text, m.auth_sub,
-                 m.role::text, m.created_at
+    sql: `SELECT t.slug, m.auth_sub,
+                 m.role::text, m.auth_provider::text, m.created_at
           FROM memberships m
           JOIN tenants t ON t.id = m.tenant_id
           ORDER BY t.slug, m.created_at`,

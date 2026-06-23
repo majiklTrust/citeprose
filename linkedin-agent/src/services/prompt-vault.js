@@ -403,12 +403,11 @@ export function renderPrompt(template, vars) {
  * Safe for admin visibility. Includes genre so admins can see
  * which genre variants exist per key.
  *
- * @returns {Promise<Array<{key, genre, description, updated_at}>>}
- * @returns {Promise<Array<{key, genre, description, updated_at}>>}
+ * @returns {Promise<Array<{key, genre, description, updated_at, metric_bearing}>>}
  */
 export async function listPrompts() {
   const result = await query(
-    "SELECT key, genre, description, updated_at FROM prompt_vault ORDER BY key, genre"
+    "SELECT key, genre, description, updated_at, metric_bearing FROM prompt_vault ORDER BY key, metric_bearing, genre"
   );
   return result.rows;
 }

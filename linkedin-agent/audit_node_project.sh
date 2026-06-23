@@ -2,7 +2,7 @@
 
 cp package-lock.json package-lock.json.bak.nogit
 
-npm ci --ignore-scripts
+npm ci --ignore-scripts --omit=dev
 npm -v                  # 11.16.0+ enables Step 3b's allowlist
 npm ls axios            # must NOT be 1.14.1
 npm pkg get scripts     # confirm no preinstall|install|postinstall|prepare does real work (build)

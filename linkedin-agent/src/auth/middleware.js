@@ -87,10 +87,14 @@ function isDevBypass(req) {
  * to req.user = null (no synthetic identity available).
  *
  * DEV_BYPASS_SUB should be the auth_sub of a real membership
- * row (e.g. "***REMOVED***"). The tenant
+ * row (e.g. "auth0|0123456789"). The tenant
  * resolver uses it to look up the workspace.
  */
 function syntheticDevUser() {
+  if (process.env.NODE_ENV === "production") {
+    platformLog("warn", "synthetic_user_suppressed_in_prod", {})
+    return null;
+  }
   const sub = process.env.DEV_BYPASS_SUB;
   if (!sub || typeof sub !== 'string' || sub.trim().length === 0) return null;
   return {

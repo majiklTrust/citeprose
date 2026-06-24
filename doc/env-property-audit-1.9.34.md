@@ -14,7 +14,9 @@
 
 **Delta vs 1.9.33.** The 1.9.34 change is a post-status state-machine refactor — a new `src/services/post-status.js` (which reads **no** environment variables), `setPostScheduled` generalized to `transitionPostStatus`, and the `/api/posts/:id/schedule` route generalized to `/api/posts/:id/status`. It **adds no new environment variables and removes none**: the inventory is unchanged at **63 properties**. Only line numbers moved — the new `post-status.js` import shifted `AGENT_MODE`'s dead read in `database.js` (135 → 136) and all four `scheduler.js` reads (`MIN_HOURS_BETWEEN_POSTS` 42 → 43, `MAX_POSTS_PER_10_DAYS` 43 → 44, `MIN_MINUTES_BETWEEN_SCHEDULED_POSTS` 274 → 277, `PREFERRED_POST_HOUR` 334 → 348). Those panel headers are updated below; every code panel is otherwise byte-identical to 1.9.33.
 
-**New in this revision.** Each section now carries a deep **If unset / missing** analysis directly beneath its code panel, stating the concrete effect of the variable being absent (or, for the encrypted vars, undecryptable). The pattern at a glance: every numeric/threshold var falls back to a validated default; every at-rest secret and every required connection var fails **closed**; a handful of URL/origin and mode vars fail **silently** in ways worth knowing.
+**Reviser's note — this revision.** Each section now carries, directly beneath its code panel, (a) a deep **If unset / missing** analysis stating the concrete effect of the variable being absent (or, for the encrypted vars, undecryptable), and (b) **Example settings** — a standard/safe value plus, where a meaningful range exists, a lower/0 and an upper-limit value (skipped where a min or max is not meaningful — secrets, enums, URLs). The behavioural pattern at a glance: every numeric/threshold var falls back to a validated default; every at-rest secret and every required connection var fails **closed**; a handful of URL/origin and mode vars fail **silently** in ways worth knowing.
+
+**Completeness re-check.** Prompted by a check for a `RATE_LIMIT_MAX` property, the inventory was re-derived by scanning **every** `process.env` access shape — dot (`process.env.X`), bracket-literal (`process.env["X"]`), bracket-dynamic (`process.env[v]`), destructuring, and whole-object spread (`{ ...process.env }`) — across all source and script files, plus a full-tree text search of every file type. Result: **no missing properties; the count stays at 63.** `RATE_LIMIT_MAX` is **not read anywhere** in the codebase. The application's one rate limiter — the registration validate-key oracle guard — is governed by a **hardcoded** constant, `MAX_VALIDATION_ATTEMPTS = 3` (`src/routes/registration-api.js:43`), not an environment variable. That makes it a candidate for future parameterization, but it is not a `.env` property today, so it gets no section here.
 
 A short **Audit findings summary** is at the very end.
 
@@ -46,6 +48,10 @@ Seeds the platform's default agent operating mode (`manual` vs automated) and is
 
 **If unset / missing:** No effect. The only live read (the banner) falls back to `"manual"` and prints `MANUAL`; the `database.js` read is unreachable, and the real per-tenant mode lives in the Postgres `agent_state` table. An empty string behaves identically (falsy → `"manual"`).
 
+**Example settings** — enumerated; no numeric range (and the live read is dead — banner only).
+1. *Standard* — `AGENT_MODE=manual` — the default; banner shows `MANUAL`.
+2. *Alternative* — `AGENT_MODE=automated` — any non-`manual` string only changes the banner text; real mode lives in per-tenant `agent_state`.
+
 ---
 
 ## ALLOWED_ORIGINS
@@ -65,6 +71,11 @@ Comma-separated CORS allowlist. Split, trimmed, trailing slashes stripped, then 
 
 **If unset / missing:** The explicit cross-origin contribution is empty, so the CORS allowlist reduces to just the normalized `AUTH0_PUBLIC_ORIGIN` plus the resolved server origin (the empty entry is dropped by `.filter(Boolean)`). CORS stays default-deny — nothing is opened — but any *legitimately separate* front-end origin (e.g. the CloudFront/S3 site calling the ALB API on a different host) is CORS-blocked until you add it here. Safe by default; a silent functional outage only for a genuinely cross-origin front end.
 
+**Example settings** — comma-separated origins; no numeric range.
+1. *Standard / safe* — `ALLOWED_ORIGINS=https://app.***REMOVED***` — adds one extra browser origin to the default-deny allowlist.
+2. *Null / empty* — `ALLOWED_ORIGINS=` (or unset) — allowlist reduces to `AUTH0_PUBLIC_ORIGIN` + the server's own origin.
+3. *Several* — `ALLOWED_ORIGINS=https://app.***REMOVED***,https://admin.***REMOVED***` — multiple front-end origins.
+
 ---
 
 ## ANTHROPIC_API_KEY_ENCRYPTED
@@ -82,6 +93,8 @@ Comma-separated CORS allowlist. Split, trimmed, trailing slashes stripped, then 
 ```
 
 **If unset / missing:** No effect whatsoever — the variable is only `delete`d at boot, and deleting an absent key is a no-op.
+
+**Example settings** — none. This value is never read; the correct action is to **remove it from `.env`**.
 
 ---
 
@@ -104,6 +117,10 @@ Deployment-level Anthropic model override. Level 2 of a three-tier fallback: per
 
 **If unset / missing:** Tier 2 is skipped and resolution falls to the hardcoded `DEFAULT_MODEL` (`claude-haiku-4-5-20251001`); generation still works. A per-tenant `agent_state` model (tier 1) still wins where set, so unset only means "no deployment-wide model override."
 
+**Example settings** — a model identifier; no numeric range.
+1. *Standard* — `ANTHROPIC_MODEL=claude-haiku-4-5-20251001` — matches the hardcoded default tier.
+2. *Alternative* — `ANTHROPIC_MODEL=claude-sonnet-4-6` — a more capable, costlier model deployment-wide (per-tenant `agent_state` still overrides).
+
 ---
 
 ## API_COOLDOWN_MS
@@ -120,6 +137,11 @@ export function getCooldownMs() {
 ```
 
 **If unset / missing:** `parseInt(undefined)` → `NaN`, which fails the `>0` guard, so the validated default `10000` ms (10 s) is used. Benign. The only risk is on a heavily rate-limited key where 10 s is too short — a tuning concern, not a failure.
+
+**Example settings**
+1. *Standard / safe* — `API_COOLDOWN_MS=10000` — 10 s between Anthropic calls (the validated default).
+2. *Lower* — `API_COOLDOWN_MS=1000` — 1 s; faster but risks 429s on rate-limited keys (must be > 0; `0`/negative → 10 s).
+3. *Upper* — `API_COOLDOWN_MS=65000` — 65 s; very conservative (the former free-tier value). No hard cap — illustrative.
 
 ---
 
@@ -147,6 +169,10 @@ export function getServerAddress() {
 
 **If unset / missing:** `getServerAddress()` takes Path 2 and *infers* the origin from the bound socket (using `DASHBOARD_PORT`, default 3001). In dev that yields a correct `localhost:3001` origin. In production behind the ALB/CloudFront the inferred origin is the internal bind address, not the public URL, so any other consumer of `getServerAddress()` would see an internal origin. CORS is not broken by this as long as `AUTH0_PUBLIC_ORIGIN` is set (it is added to the allowlist separately), but you should set `APP_BASE_URL` in production so derived URLs are canonical.
 
+**Example settings** — a base URL; no numeric range.
+1. *Standard* — `APP_BASE_URL=https://alpha.***REMOVED***` — explicit public origin (recommended in production).
+2. *Null* — `APP_BASE_URL=` (or unset) — origin is inferred from the bound socket via `DASHBOARD_PORT`.
+
 ---
 
 ## APP_NAME
@@ -165,6 +191,10 @@ Product name interpolated into the registration invitation email subject/body. D
 ```
 
 **If unset / missing:** Falls back to `"Content Agent"` in the invitation email subject/body. Purely cosmetic; registration is unaffected.
+
+**Example settings** — a display string; no numeric range.
+1. *Standard* — `APP_NAME=Content Agent` — the default used in the invite email.
+2. *Alternative* — `APP_NAME=Acme Insights` — custom product name.
 
 ---
 
@@ -185,6 +215,10 @@ function getConfig() {
 ```
 
 **If unset / missing:** Falls back to `"https://linkedin-agent-api"`. This is benign **only if** that string equals your Auth0 API identifier. If your Auth0 API uses a different identifier, tokens are issued for the wrong `aud`, JWT audience validation fails, and every Auth0 login is rejected — an auth outage, not a crash. Treat the default as a value that must match your Auth0 tenant configuration.
+
+**Example settings** — an API identifier; no numeric range.
+1. *Standard* — `AUTH0_AUDIENCE=https://linkedin-agent-api` — the default (must match your Auth0 API identifier).
+2. *Alternative* — `AUTH0_AUDIENCE=https://your-tenant-api` — when your Auth0 API uses a different identifier.
 
 ---
 
@@ -218,6 +252,9 @@ function decEnv(name) {
 
 **If unset / missing:** `process.env[name]` is `undefined` → `decEnv` returns `""` (fail-soft). `getConfig()` then has an empty client ID, `init()` reports the Auth0 provider as not configured, and Auth0 login is unavailable. Fail-soft at the decrypt layer, fail-closed at the provider layer — no crash, but if Auth0 is your only provider, no one can log in.
 
+**Example settings** — stored **encrypted** (AES-256-GCM); no numeric range.
+1. *Standard* — `AUTH0_CLIENT_ID=<ciphertext from encrypt-platform-key.js>` — the encrypted form of your Auth0 application Client ID.
+
 ---
 
 ## AUTH0_CLIENT_SECRET
@@ -231,6 +268,9 @@ function decEnv(name) {
 ```
 
 **If unset / missing:** Same path as the client ID — `decEnv` yields `""`, the provider is marked unconfigured, and the server-side code-for-token exchange cannot authenticate the client, so Auth0 login fails at the callback. Fail-soft decrypt, fail-closed provider; no crash.
+
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `AUTH0_CLIENT_SECRET=<ciphertext from encrypt-platform-key.js>` — the encrypted form of your Auth0 Client Secret.
 
 ---
 
@@ -249,6 +289,9 @@ Auth0 tenant domain. Trimmed, then any accidental scheme/trailing slash stripped
 
 **If unset / missing:** Resolves to `""`, so the issuer/JWKS/authorize URLs cannot be built and `init()` reports the provider missing. The app still boots; Auth0 login is simply unavailable (fail-closed, no crash).
 
+**Example settings** — a hostname; no numeric range.
+1. *Standard* — `AUTH0_DOMAIN=your-tenant.us.auth0.com` — your Auth0 tenant domain (scheme/trailing slash are stripped if included).
+
 ---
 
 ## AUTH0_LOGOUT_URI
@@ -266,6 +309,10 @@ Post-logout redirect target. When unset, derived from the public origin (`${orig
 ```
 
 **If unset / missing:** Derived from the public origin as `${origin}/`. Benign as long as the origin resolves. If the origin is *also* empty (production with `AUTH0_PUBLIC_ORIGIN` unset), the logout URI becomes `""` and `init()` fails loud by design. So unset alone is fine — it only matters jointly with a missing origin.
+
+**Example settings** — a URL; no numeric range.
+1. *Standard* — `AUTH0_LOGOUT_URI=https://alpha.***REMOVED***/` — explicit post-logout target.
+2. *Null* — `AUTH0_LOGOUT_URI=` (or unset) — derived as `${origin}/` (empty in production if the origin is also unset → fail-loud).
 
 ---
 
@@ -291,6 +338,10 @@ The public origin users load the app from — source of truth for redirect/logou
 
 **If unset / missing:** In dev it defaults to `http://localhost:${DASHBOARD_PORT}` and everything works. In **production** (`isProd`) it resolves to `""`, which cascades the redirect/logout URIs to empty and makes `init()` **fail loud** — intentional, to prevent a localhost value leaking into production. It is also dropped from the CORS allowlist when empty. Net: a required production variable whose absence is caught loudly rather than silently.
 
+**Example settings** — a URL; no numeric range.
+1. *Standard* — `AUTH0_PUBLIC_ORIGIN=https://alpha.***REMOVED***` — required in production.
+2. *Null* — `AUTH0_PUBLIC_ORIGIN=` (or unset) — dev: defaults to `http://localhost:${DASHBOARD_PORT}`; production: fails loud.
+
 ---
 
 ## AUTH0_REDIRECT_URI
@@ -305,6 +356,10 @@ OAuth callback URL. Overrides the origin-derived `${origin}/auth/callback` when 
 
 **If unset / missing:** Derived as `${origin}/auth/callback`. Benign provided the origin resolves *and* the derived URL is registered as an Allowed Callback URL in Auth0. If the origin is empty (production without `AUTH0_PUBLIC_ORIGIN`) it becomes `""` and `init()` fails loud. Unset alone is acceptable; the derived value must match Auth0's configuration.
 
+**Example settings** — a URL; no numeric range.
+1. *Standard* — `AUTH0_REDIRECT_URI=https://alpha.***REMOVED***/auth/callback` — must be an Auth0 Allowed Callback URL.
+2. *Null* — `AUTH0_REDIRECT_URI=` (or unset) — derived as `${origin}/auth/callback`.
+
 ---
 
 ## AUTH0_SCOPES
@@ -318,6 +373,10 @@ OAuth scopes requested at login. Default `"openid profile email"`.
 ```
 
 **If unset / missing:** Falls back to `"openid profile email"` — the standard OIDC scopes. Benign; only matters if you require additional scopes.
+
+**Example settings** — space-separated scopes; no numeric range.
+1. *Standard* — `AUTH0_SCOPES=openid profile email` — the default OIDC scopes.
+2. *Alternative* — `AUTH0_SCOPES=openid profile email offline_access` — adds refresh-token issuance.
 
 ---
 
@@ -337,6 +396,9 @@ Callback path for the **mock** auth provider only (dev/test). Default `"/auth/mo
 ```
 
 **If unset / missing:** Falls back to `/auth/mock/callback`. This affects the **mock** provider only, which is hard-blocked in production regardless, so the practical impact is nil outside dev/test.
+
+**Example settings** — a path (mock provider, dev/test only); no numeric range.
+1. *Standard* — `AUTH_CALLBACK_URL=/auth/mock/callback` — the default mock callback path.
 
 ---
 
@@ -362,6 +424,11 @@ function resolveIntervalMinutes() {
 
 **If unset / missing:** `raw` is `undefined` → coerced to `""` → `NaN` → returns `15`, and the `batch_publish_interval_invalid` warning is **skipped** (it fires only for a non-empty bad value). The batch publisher runs every 15 minutes. Benign, no log noise.
 
+**Example settings**
+1. *Standard / safe* — `BATCH_PUBLISH_INTERVAL_MINUTES=15` — publisher runs every 15 min (default).
+2. *Lower* — `BATCH_PUBLISH_INTERVAL_MINUTES=1` — every minute (the validator floor; `0`/invalid → 15).
+3. *Upper* — `BATCH_PUBLISH_INTERVAL_MINUTES=59` — the validator ceiling (~hourly).
+
 ---
 
 ## BATCH_PUBLISH_MAX_PER_RUN
@@ -379,6 +446,11 @@ function resolveMaxPerRun() {
 
 **If unset / missing:** `NaN` fails the 1–200 range check, so the default `25` is used — up to 25 posts per tenant per run. Benign.
 
+**Example settings**
+1. *Standard / safe* — `BATCH_PUBLISH_MAX_PER_RUN=25` — up to 25 posts/tenant/run (default).
+2. *Lower* — `BATCH_PUBLISH_MAX_PER_RUN=1` — one post per run (the validator floor).
+3. *Upper* — `BATCH_PUBLISH_MAX_PER_RUN=200` — the validator cap (drains a backlog fast; more LinkedIn calls).
+
 ---
 
 ## BRAND_NAME
@@ -392,6 +464,10 @@ Brand string for the registration email (Phase-1 single-brand-from-`.env` per yo
 ```
 
 **If unset / missing:** Falls back to `"Content Agent"` in the registration email. Cosmetic.
+
+**Example settings** — a display string; no numeric range.
+1. *Standard* — `BRAND_NAME=Content Agent` — the default in the registration email.
+2. *Alternative* — `BRAND_NAME=Acme` — custom brand.
 
 ---
 
@@ -422,6 +498,11 @@ export function getDashboardFeedLimit() {
 
 **If unset / missing:** On the live path, `parseInt(undefined)` → `NaN` → `NaN || 8` → `8`; the Research Monitor shows 8 feeds. Benign. Note the live read's `|| 8` shape means an explicit `0` (or any non-numeric) also collapses to 8 — you cannot set it to zero — but unset is handled cleanly.
 
+**Example settings**
+1. *Standard / safe* — `DASHBOARD_FEED_LIMIT=8` — 8 feeds in the Research Monitor (default).
+2. *Lower* — `DASHBOARD_FEED_LIMIT=1` — one feed (the effective floor; `0` collapses back to 8 because the live read uses `|| 8`).
+3. *Upper* — `DASHBOARD_FEED_LIMIT=50` — many feeds. No hard cap — illustrative.
+
 ---
 
 ## DASHBOARD_PORT
@@ -447,6 +528,11 @@ HTTP listen port and the fallback port for origin construction. Default `3001`.
 ```
 
 **If unset / missing:** The server listens on `3001`, the origin-fallback port is `3001`, and the dev localhost origin uses `3001`. Benign **only if** your process manager / ALB target group / reverse proxy expects 3001. If your proxy forwards to a different port and this is unset, the app binds 3001 and the proxy can't reach it — a self-inflicted outage. Must align with the deployment's expected port.
+
+**Example settings**
+1. *Standard / safe* — `DASHBOARD_PORT=3001` — the default listen port.
+2. *Lower* — `DASHBOARD_PORT=80` — a privileged port (requires elevated privileges/capability).
+3. *Upper* — `DASHBOARD_PORT=65535` — the maximum valid TCP port. Must match your proxy/target-group expectation.
 
 ---
 
@@ -498,6 +584,10 @@ function isDevBypass(req) {
 
 **If unset / missing:** The dev auth bypass is **off** — `if (!bypassOrigins) return false` short-circuits, and normal authentication is enforced. This is the secure default; the bypass is only ever reachable under `NODE_ENV=dev` *and* a non-empty allowlist. (Unrelated cosmetic: the unlabelled banner prints the literal `undefined`, noted above.)
 
+**Example settings** — comma-separated origins (only active under `NODE_ENV=dev`); no numeric range.
+1. *Standard / safe* — unset — bypass off; auth enforced.
+2. *Dev-enable* — `DEV_BYPASS_ORIGINS=http://localhost:3001` — permits the bypass for that origin in local dev only.
+
 ---
 
 ## DEV_BYPASS_SUB
@@ -535,6 +625,10 @@ function syntheticDevUser() {
 
 **If unset / missing:** No synthetic identity is produced — `syntheticDevUser()` returns `null`, and the OAuth-callback and homepage paths skip their bypass branches. Even if bypass origins were set, there is no identity to inject, so the tenant resolver has no `req.user` and protected routes return 403. Fail-closed.
 
+**Example settings** — a membership `sub`; no numeric range.
+1. *Standard / safe* — unset — no synthetic identity; protected routes 403 under bypass.
+2. *Dev-enable* — `DEV_BYPASS_SUB=auth0|local-dev-user` — a real `auth_sub` whose workspace loads without login (dev only).
+
 ---
 
 ## DOMAIN_MATCH_THRESHOLD
@@ -553,6 +647,11 @@ export function getDomainMatchThreshold() {
 
 **If unset / missing:** `parseFloat(undefined)` → `NaN` → default `0.4`. A feed needs ≥ 0.4 tag-overlap to match a topic in the v2 matching tier. Benign, and only consulted when `FEEDS_MANAGER_VERSION` resolves to 2.
 
+**Example settings**
+1. *Standard / safe* — `DOMAIN_MATCH_THRESHOLD=0.4` — default tag-overlap bar (v2 tier).
+2. *Lower / 0* — `DOMAIN_MATCH_THRESHOLD=0.0` — every feed matches (disables selectivity).
+3. *Upper* — `DOMAIN_MATCH_THRESHOLD=1.0` — full overlap required (very strict).
+
 ---
 
 ## ENCRYPTION_SALT
@@ -566,6 +665,8 @@ export function getDomainMatchThreshold() {
 ```
 
 **If unset / missing:** No effect — only `delete`d at boot; deleting an absent variable is a no-op.
+
+**Example settings** — none. Never read; **remove it from `.env`**.
 
 ---
 
@@ -659,6 +760,9 @@ function deriveRegKey(registrationId) {
 
 **If unset / missing:** **Total boot failure, fail-closed, in every consumer.** Each `deriveKey`/signing function throws on `!secret`. Critically, the Postgres connection variables are decrypted via `decryptPlatformSecret` → `deriveKey` at pool load, so an absent `ENCRYPTION_SECRET` means the DB pool cannot initialize and **the application cannot start** — credentials, the prompt vault, action-token signing, and registration-key derivation all throw as well. There is no fallback by design (this is root key material). Note too that it is deliberately *not* scrubbed from `process.env`, so unlike the other secrets it lingers in `/proc/<pid>/environ` — the documented tradeoff that the planned move to AWS Secrets Manager is meant to close.
 
+**Example settings** — root key material; a high-entropy random string, no numeric range (and **never** scrubbed, so treat the host environment as sensitive).
+1. *Standard / safe* — `ENCRYPTION_SECRET=<64+ chars of cryptographic randomness>` — e.g. the output of `openssl rand -hex 32`. There is no meaningful lower/upper *value* — longer-and-random is the only axis.
+
 ---
 
 ## FEEDS_MANAGER_VERSION
@@ -685,6 +789,10 @@ export async function getFeedsManagerVersion() {
 
 **If unset / missing:** `parseInt(undefined)` → `NaN`, which is neither 1 nor 2, so the default `1` (topics + catchall, no domain-overlap tier) is used. Benign; a per-tenant `agent_state` value can still select tier 2.
 
+**Example settings** — enumerated (`1` or `2`); `0`/invalid → default `1`.
+1. *Standard* — `FEEDS_MANAGER_VERSION=1` — topics + catchall matching (default).
+2. *Higher tier* — `FEEDS_MANAGER_VERSION=2` — adds domain-overlap matching (consults `DOMAIN_MATCH_THRESHOLD`).
+
 ---
 
 ## FEED_POLL_CRON
@@ -706,6 +814,11 @@ Cron schedule for the recurring feed poll across all tenants. Validated (5-field
 ```
 
 **If unset / missing:** `resolvePollSchedule(undefined)` returns `{ valid: true, source: "default" }`, so the hourly default schedule is used and **no** error is logged (the invalid-cron log path fires only for a non-empty malformed value). Feeds are polled hourly across all tenants. Benign.
+
+**Example settings** — a 5-field numeric cron; invalid → hourly default.
+1. *Standard / safe* — `FEED_POLL_CRON=0 * * * *` — hourly (the default).
+2. *More frequent* — `FEED_POLL_CRON=*/15 * * * *` — every 15 minutes.
+3. *Less frequent* — `FEED_POLL_CRON=0 */6 * * *` — every 6 hours.
 
 ---
 
@@ -731,6 +844,9 @@ function getClientId() {
 
 **If unset / missing:** `getClientId()` throws `"LINKEDIN_CLIENT_ID is not set"` the first time the OAuth flow needs it (connect/authorize). The app still boots and unrelated features work, but **LinkedIn connect and publish are broken** until it is set. Fail-closed, lazy.
 
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `LINKEDIN_CLIENT_ID=<ciphertext from encrypt-platform-key.js>` — the encrypted LinkedIn OAuth Client ID.
+
 ---
 
 ## LINKEDIN_CLIENT_SECRET
@@ -755,6 +871,9 @@ function getClientSecret() {
 
 **If unset / missing:** `getClientSecret()` throws on the same pattern; the code-for-token exchange cannot run, so connecting a LinkedIn account fails at the callback step. App boots; only LinkedIn auth/publish breaks. Fail-closed, lazy.
 
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `LINKEDIN_CLIENT_SECRET=<ciphertext from encrypt-platform-key.js>` — the encrypted LinkedIn OAuth Client Secret.
+
 ---
 
 ## LINKEDIN_IMAGE_MAX_BYTES
@@ -771,6 +890,11 @@ function getImageMaxBytes() {
 ```
 
 **If unset / missing:** `NaN` fails the `>0` guard → default `10 * 1024 * 1024` (10 MB). Benign; only consulted in image-posting mode.
+
+**Example settings**
+1. *Standard / safe* — `LINKEDIN_IMAGE_MAX_BYTES=10485760` — 10 MB (default).
+2. *Lower* — `LINKEDIN_IMAGE_MAX_BYTES=1048576` — 1 MB cap (must be > 0; `0`/invalid → 10 MB).
+3. *Upper* — `LINKEDIN_IMAGE_MAX_BYTES=20971520` — 20 MB (around LinkedIn's practical image ceiling — illustrative).
 
 ---
 
@@ -789,6 +913,11 @@ function getImagePollIntervalMs() {
 
 **If unset / missing:** Defaults to `2000` ms between image-processing polls. Benign.
 
+**Example settings**
+1. *Standard / safe* — `LINKEDIN_IMAGE_POLL_INTERVAL_MS=2000` — 2 s between processing polls (default).
+2. *Lower* — `LINKEDIN_IMAGE_POLL_INTERVAL_MS=500` — 0.5 s (faster, more requests; must be > 0).
+3. *Upper* — `LINKEDIN_IMAGE_POLL_INTERVAL_MS=10000` — 10 s (slower). No hard cap — illustrative.
+
 ---
 
 ## LINKEDIN_IMAGE_POLL_MAX
@@ -805,6 +934,11 @@ function getImagePollMaxAttempts() {
 ```
 
 **If unset / missing:** Defaults to `10` attempts. Benign; at the default 2 s interval that is ~20 s of processing wait — only a concern for unusually slow/large image uploads, which is a tuning matter.
+
+**Example settings**
+1. *Standard / safe* — `LINKEDIN_IMAGE_POLL_MAX=10` — up to 10 attempts (default).
+2. *Lower* — `LINKEDIN_IMAGE_POLL_MAX=1` — single check, fail fast (must be > 0).
+3. *Upper* — `LINKEDIN_IMAGE_POLL_MAX=60` — long wait for slow processing. No hard cap — illustrative.
 
 ---
 
@@ -824,6 +958,10 @@ function getPublishMode() {
 ```
 
 **If unset / missing:** Defaults to `text-posting`. Benign, but note the consequence: to publish images you must explicitly set `image-posting` (or the `rest` alias) — leaving this unset silently restricts you to text-only posts.
+
+**Example settings** — enumerated; no numeric range.
+1. *Standard* — `LINKEDIN_PUBLISH_MODE=text-posting` — text posts (default; `legacy` is an alias).
+2. *Alternative* — `LINKEDIN_PUBLISH_MODE=image-posting` — image posts (`rest` is an alias).
 
 ---
 
@@ -847,6 +985,10 @@ function getPublishTarget() {
 ```
 
 **If unset / missing:** Defaults to `personal`, so posts are authored as the connected **person** URN. If you intended to publish to an **organization** page and forget this, posts are silently routed to the personal profile instead — a content-routing mistake that produces no error. Worth an explicit value whenever org posting is intended.
+
+**Example settings** — enumerated; no numeric range.
+1. *Standard* — `LINKEDIN_PUBLISH_TARGET=personal` — author as the person URN (default).
+2. *Alternative* — `LINKEDIN_PUBLISH_TARGET=organization` — author as the org URN.
 
 ---
 
@@ -882,6 +1024,10 @@ OAuth `redirect_uri` sent in both the authorize request and the token exchange. 
 
 **If unset / missing:** There is **no guard**, so `redirect_uri` is `undefined` and `URLSearchParams` serializes it as the literal string `"undefined"` in both the authorize URL and the token-exchange body. The two legs "match each other" but match nothing registered, so LinkedIn rejects the flow with an opaque `redirect_uri` error and no fast-fail. This is the open recommendation: add a one-line startup presence check (it is public config, safe to log).
 
+**Example settings** — a URL (sent verbatim; **no guard**); no numeric range.
+1. *Standard* — `LINKEDIN_REDIRECT_URI=https://alpha.***REMOVED***/auth/linkedin/callback` — must match the value registered in your LinkedIn app.
+2. *Null* — `LINKEDIN_REDIRECT_URI=` (or unset) — the literal string `undefined` is sent to LinkedIn and the flow fails opaquely.
+
 ---
 
 ## LINKEDIN_TOKEN_CHECK_MINUTES
@@ -897,6 +1043,11 @@ function getTokenCacheTtl() {
 ```
 
 **If unset / missing:** Defaults to `10` minutes of token-validity caching. Benign.
+
+**Example settings**
+1. *Standard / safe* — `LINKEDIN_TOKEN_CHECK_MINUTES=10` — 10-min validity cache (default).
+2. *Lower / 0* — `LINKEDIN_TOKEN_CHECK_MINUTES=0` — disables caching (validate on every check).
+3. *Upper* — `LINKEDIN_TOKEN_CHECK_MINUTES=1440` — 24-h cache (fewer checks, staler). No hard cap — illustrative.
 
 ---
 
@@ -918,6 +1069,10 @@ function getLinkedInVersion() {
 ```
 
 **If unset / missing:** Defaults to `"202509"`. Benign **while** LinkedIn still supports that version. Because LinkedIn sunsets versions after ~12 months, a stale default eventually causes API errors — so the risk is on the hardcoded default aging out, not on "unset" per se. Track LinkedIn's current supported version and set this when it changes.
+
+**Example settings** — a date-based version string; no numeric range.
+1. *Standard* — `LINKEDIN_VERSION=202509` — the default (must be a version your LinkedIn product supports).
+2. *Newer* — `LINKEDIN_VERSION=202512` — a later monthly version once approved (illustrative).
 
 ---
 
@@ -943,6 +1098,10 @@ Opt-in observability switch. When truthy (via `traceEnabled(...)`), each of the 
 
 **If unset / missing:** `traceEnabled(undefined)` → `false`, so the `llm_payload_*` DEBUG dumps are disabled and only metadata `llm_request_*` INFO markers are logged. This is both the intended default and the safer one — since the redaction/size-cap guard for those dumps is still deferred, keeping them off by default avoids writing fully assembled prompts to logs.
 
+**Example settings** — a toggle; no numeric range.
+1. *Standard / safe* — unset (or `LLM_TRACE=0`) — only metadata logged (default; safest while redaction is deferred).
+2. *On* — `LLM_TRACE=1` — also dumps fully assembled prompts at DEBUG.
+
 ---
 
 ## MAX_AGE_DAYS
@@ -960,6 +1119,11 @@ export function getMaxAgeDays() {
 
 **If unset / missing:** `NaN` fails `>0` → default `20` days. Articles older than 20 days are excluded from generation. Benign.
 
+**Example settings**
+1. *Standard / safe* — `MAX_AGE_DAYS=20` — 20-day research window (default).
+2. *Lower* — `MAX_AGE_DAYS=1` — today only (near-empty windows; must be > 0).
+3. *Upper* — `MAX_AGE_DAYS=365` — a year of history (larger prompts/cost). No hard cap — illustrative.
+
 ---
 
 ## MAX_AGE_DAYS_PRUNE
@@ -976,6 +1140,11 @@ export function getMaxAgeDaysPrune() {
 ```
 
 **If unset / missing:** Defaults to `60` days; `feed_articles` links older than 60 days are pruned during polling. Benign; leaving it unset just means standard 60-day retention.
+
+**Example settings**
+1. *Standard / safe* — `MAX_AGE_DAYS_PRUNE=60` — prune links older than 60 days (default).
+2. *Lower* — `MAX_AGE_DAYS_PRUNE=1` — keep ~1 day (aggressive; must be > 0).
+3. *Upper* — `MAX_AGE_DAYS_PRUNE=365` — keep a year. No hard cap — illustrative.
 
 ---
 
@@ -999,6 +1168,11 @@ const MAX_PER_10_DAYS = () => parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4",
 
 **If unset / missing:** Both reads use `|| "4"`, so the cadence ceiling defaults to 4 posts per rolling 10-day window with no divergence between the scheduler getter and the status-route re-read. Benign.
 
+**Example settings**
+1. *Standard / safe* — `MAX_POSTS_PER_10_DAYS=4` — 4 posts per rolling 10 days (default).
+2. *Lower / 0* — `MAX_POSTS_PER_10_DAYS=0` — blocks publishing entirely (count ≥ 0 always trips the cadence gate).
+3. *Upper* — `MAX_POSTS_PER_10_DAYS=10` — higher cadence. No hard cap — illustrative.
+
 ---
 
 ## MAX_RESEARCH_ARTICLES
@@ -1015,6 +1189,11 @@ export function getMaxResearchArticles() {
 ```
 
 **If unset / missing:** `NaN` fails `>0` → default `30`. The research set is capped at 30 articles, bounding prompt size and token cost. Benign.
+
+**Example settings**
+1. *Standard / safe* — `MAX_RESEARCH_ARTICLES=30` — cap at 30 articles (default).
+2. *Lower* — `MAX_RESEARCH_ARTICLES=1` — minimal context, cheapest (must be > 0).
+3. *Upper* — `MAX_RESEARCH_ARTICLES=100` — rich context, higher token cost. No hard cap — illustrative.
 
 ---
 
@@ -1041,6 +1220,10 @@ Opt-in (`"1"`) strict number-policing in generated posts: when on, every number 
 
 **If unset / missing:** `("").trim() === "1"` is false, so strict number-policing is **off** — the deliberate default, since on-by-default would block legitimate research-driven numbers (years, counts, cited stats). Token-integrity checks still run regardless. Benign.
 
+**Example settings** — a toggle (`"1"` = on); no numeric range.
+1. *Standard / safe* — unset (or any value ≠ `1`) — lenient number policing (default).
+2. *On* — `METRIC_FIDELITY_STRICT=1` — every number must trace to a verified metric or the research block, else generation is rejected.
+
 ---
 
 ## MIN_HOURS_BETWEEN_POSTS
@@ -1054,6 +1237,11 @@ const MIN_HOURS = () => parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "72", 10
 ```
 
 **If unset / missing:** Defaults to `72` hours of minimum spacing between published posts in the cadence decision. Benign.
+
+**Example settings**
+1. *Standard / safe* — `MIN_HOURS_BETWEEN_POSTS=72` — 72-h minimum spacing (default).
+2. *Lower / 0* — `MIN_HOURS_BETWEEN_POSTS=0` — no spacing (back-to-back allowed).
+3. *Upper* — `MIN_HOURS_BETWEEN_POSTS=168` — one week between posts. No hard cap — illustrative.
 
 ---
 
@@ -1081,6 +1269,11 @@ export const SOURCE_RULES = {
 
 **If unset / missing:** The reader returns `2` for `undefined`/blank, so the corroboration gate requires 2 distinct independent sources. Fail-safe by construction — a missing or bad value can never disable the gate or push it absurdly high (floored at 1, capped at 10). Read once at module load, so a change requires a restart.
 
+**Example settings**
+1. *Standard / safe* — `MIN_INDEPENDENT_SOURCES=2` — 2 distinct sources (default).
+2. *Lower* — `MIN_INDEPENDENT_SOURCES=1` — single source suffices (the floor; `0`/invalid → 2).
+3. *Upper* — `MIN_INDEPENDENT_SOURCES=10` — the cap (strictest corroboration). Read once at load — restart to change.
+
 ---
 
 ## MIN_MINUTES_BETWEEN_SCHEDULED_POSTS
@@ -1094,6 +1287,10 @@ const SCHEDULE_SPACING_MIN = () => parseInt(process.env.MIN_MINUTES_BETWEEN_SCHE
 ```
 
 **If unset / missing:** Defaults to `0`, which disables the extra spacing check between user-*scheduled* posts (distinct from the automated cadence rule). Benign — scheduling simply has no minimum gap.
+
+**Example settings**
+1. *Standard / safe* — `MIN_MINUTES_BETWEEN_SCHEDULED_POSTS=0` — no extra spacing (default; also the floor).
+3. *Upper* — `MIN_MINUTES_BETWEEN_SCHEDULED_POSTS=120` — enforce a 2-h gap between user-scheduled posts. No hard cap — illustrative.
 
 ---
 
@@ -1111,6 +1308,10 @@ Enables the mock auth provider for dev/test. Gated behind a hard production bloc
 ```
 
 **If unset / missing:** Not equal to `"true"`, so the mock provider is not configured; and in production it is disabled regardless of this flag. Unset is the safe default — no mock auth.
+
+**Example settings** — a toggle (`"true"` = on; ignored in production); no numeric range.
+1. *Standard / safe* — unset (or `false`) — mock provider off (default).
+2. *Dev-on* — `MOCK_AUTH_ENABLED=true` — enables the mock provider in non-production only.
 
 ---
 
@@ -1164,6 +1365,11 @@ export function _patchSnapshotForTesting(providerName, overrides) {
 
 **If unset / missing:** This is the highest-impact absence in the inventory. Because every gate compares against the *literal* `"production"` or `"dev"`, an unset (or misspelled) value is treated as neither and lands in the most permissive non-bypass posture: session cookies are issued **without** the `Secure` flag, the **HSTS** header is not sent, the `authRequired` default flips to **false**, the test-only `_patchSnapshotForTesting` API is **not** blocked, the Auth0 production-origin requirement is not enforced, and the mock provider may be enabled. The one thing that stays safe is the dev bypass itself (it requires the exact string `"dev"`). The practical danger: shipping to production with `NODE_ENV` unset or mistyped silently disables `Secure`, HSTS, the auth-required default, and the test-API block at once. Your backlog items — `dotenv` `override:false` so a real runtime value wins over `.env`, plus production fail-loud guards — are precisely the mitigations; until they land, the integrity of this one string is the integrity of the whole hardening posture.
 
+**Example settings** — enumerated; the exact literal matters.
+1. *Standard (prod)* — `NODE_ENV=production` — enables `Secure` cookies, HSTS, mandatory-auth default, and the mock/test blocks.
+2. *Dev* — `NODE_ENV=dev` — the only value that can arm the dev auth bypass (local only).
+3. *Anything else / unset* — auth is still enforced via configured providers, but **no** `Secure`/HSTS/auth-required default and the test APIs are open — never use in production.
+
 ---
 
 ## PGDATABASE
@@ -1187,6 +1393,9 @@ if (!PGDATABASE) die(3, "PGDATABASE missing from .env");
 ```
 
 **If unset / missing:** `("").trim()` is empty → the pool throws `"Missing required environment variable: PGDATABASE"` at load and the app **cannot start** (the `dbshell`/`verify` CLI dies the same way). Fail-closed. Plaintext by design, and intentionally not scrubbed so the banner can display it.
+
+**Example settings** — plaintext (not a secret), required; no numeric range.
+1. *Standard* — `PGDATABASE=***REMOVED***` — the live database name (empty/unset → boot throws).
 
 ---
 
@@ -1228,6 +1437,9 @@ for (const v of ENCRYPTED_VARS) delete process.env[v];   // ◄ line 64 — scru
 
 **If unset / missing:** `decryptRequired("PGHOST")` throws `"Missing required environment variable: PGHOST"` and the pool fails to initialize, so **the application cannot start** — no database. The same failure occurs if the value is present but cannot be decrypted (wrong/absent `ENCRYPTION_SECRET`) or decrypts to empty. Fail-closed. (The same applies identically to `PGPORT`, `PGUSER`, and `PGPASSWORD`; the ciphertext is scrubbed from the environment immediately after decryption.)
 
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `PGHOST=<ciphertext from encrypt-platform-key.js>` — the encrypted DB host (plaintext e.g. `127.0.0.1` for the co-located container).
+
 ---
 
 ## PGPASSWORD
@@ -1247,6 +1459,9 @@ export const pool = new pg.Pool({
 
 **If unset / missing:** Same fail-closed boot failure as `PGHOST` — `decryptRequired` throws and the pool will not initialize. The decrypted value is used **only** as the in-memory pool password and is deliberately omitted from the `connectionInfo` summary and banner, so it is never logged.
 
+**Example settings** — stored **encrypted** (never logged); no numeric range.
+1. *Standard* — `PGPASSWORD=<ciphertext from encrypt-platform-key.js>` — the encrypted DB password.
+
 ---
 
 ## PGPORT
@@ -1263,6 +1478,11 @@ if (!Number.isInteger(port) || port < 1) {
 ```
 
 **If unset / missing:** Same fail-closed boot failure as `PGHOST`. Additionally, even when present it must **decrypt to a valid positive integer** — otherwise `parseInt(conn.PGPORT,10)` fails the `Number.isInteger / >= 1` check and throws `"PGPORT did not decrypt to a valid port number"`. Either way the pool does not start.
+
+**Example settings** — stored **encrypted**; plaintext must decrypt to a valid port (1–65535).
+1. *Standard* — `PGPORT=<ciphertext of 5432>` — the default Postgres port, encrypted.
+2. *Lower* — `<ciphertext of 1>` — minimum valid port.
+3. *Upper* — `<ciphertext of 65535>` — maximum valid port. (The `.env` holds the ciphertext, not the number.)
 
 ---
 
@@ -1282,6 +1502,9 @@ export const connectionInfo = {
 ```
 
 **If unset / missing:** Same fail-closed boot failure as `PGHOST`. When present, the decrypted user is also surfaced in the non-secret `connectionInfo` summary / startup banner (safe to display; the password is excluded).
+
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `PGUSER=<ciphertext from encrypt-platform-key.js>` — the encrypted DB user (e.g. plaintext `linkedin_agent_app`).
 
 ---
 
@@ -1312,6 +1535,9 @@ function resolveAdminRole() {
 
 **If unset / missing:** `resolveAdminRole()` throws `"…platform admin queries are disabled"`, so the Platform Admin Console's registry queries are **off** (every admin query is refused); the rest of the app is unaffected. Fail-closed. Note the defense-in-depth: because the role is interpolated into `SET LOCAL ROLE`, the decrypted value is validated against an identifier allowlist *after* decryption, so even a tampered ciphertext cannot inject SQL.
 
+**Example settings** — stored **encrypted**; plaintext must be a valid Postgres identifier (`[a-zA-Z_][a-zA-Z0-9_]*`).
+1. *Standard* — `PLATFORM_ADMIN_DB_ROLE=<ciphertext of e.g. agent_admin>` — the role applied via `SET LOCAL ROLE` (unset → admin queries disabled).
+
 ---
 
 ## PLATFORM_ADMIN_SUBS
@@ -1340,6 +1566,9 @@ function getAdminSubs() {
 
 **If unset / missing:** `getAdminSubs()` returns `null`, so **no platform admins exist** — every `isPlatformAdmin()` check fails and all platform-admin-gated routes (admin console, `/models`, genre administration, etc.) are denied to everyone. Fail-closed: you cannot accidentally grant admin by leaving it unset, and a corrupted value cannot mint an admin — the cost is locking yourself out of admin features until it is set correctly.
 
+**Example settings** — stored **encrypted**; plaintext is a comma-separated `sub` list.
+1. *Standard* — `PLATFORM_ADMIN_SUBS=<ciphertext of e.g. "auth0|abc,workos|def">` — the platform-admin allowlist (unset → no admins).
+
 ---
 
 ## PLATFORM_ANTHROPIC_API_KEY
@@ -1366,6 +1595,9 @@ function getAdminSubs() {
 
 **If unset / missing:** The admin `/models` endpoint returns `503` ("Model listing is not configured"); an undecryptable value does the same. Only that one feature degrades — nothing else uses this key — and the route already sits behind `isPlatformAdmin`. Fail-closed.
 
+**Example settings** — stored **encrypted**; no numeric range.
+1. *Standard* — `PLATFORM_ANTHROPIC_API_KEY=<ciphertext from encrypt-platform-key.js>` — encrypted key for the admin `/models` listing only (unset → 503).
+
 ---
 
 ## PREFERRED_POST_HOUR
@@ -1384,6 +1616,11 @@ export function startScheduler() {
 
 **If unset / missing:** Defaults to `"9"`, so the scheduler ticks at 09:00 and (auto-added 12 h later) 21:00. Benign. Note the value is interpolated **un-validated** into the cron string — a non-numeric *explicit* value would corrupt the expression, but unset safely yields `"9"`, so the risk is a malformed explicit value, not absence.
 
+**Example settings**
+1. *Standard / safe* — `PREFERRED_POST_HOUR=9` — checks at 09:00 and 21:00 (default).
+2. *Lower / 0* — `PREFERRED_POST_HOUR=0` — 00:00 and 12:00.
+3. *Upper* — `PREFERRED_POST_HOUR=23` — 23:00 and 11:00 (valid hours 0–23; the value is interpolated un-validated, so keep it numeric).
+
 ---
 
 ## PUBLIC_ORIGIN
@@ -1400,6 +1637,10 @@ Public origin used to build the registration link in the invite email. Falls bac
 ```
 
 **If unset / missing:** The registration link is built from the incoming request's own `protocol://host`. Usually fine, but it inherits whatever Express sees: behind a proxy that doesn't set `X-Forwarded-*` (or without `trust proxy` configured), `req.protocol`/`req.get("host")` can be the internal values, producing an invite URL that points at an internal host. Setting it explicitly removes that proxy dependency.
+
+**Example settings** — a URL; no numeric range.
+1. *Standard* — `PUBLIC_ORIGIN=https://alpha.***REMOVED***` — explicit origin for the invite link.
+2. *Null* — `PUBLIC_ORIGIN=` (or unset) — built from the request's own `protocol://host` (proxy-dependent).
 
 ---
 
@@ -1418,6 +1659,11 @@ function getRegistrationTTL() {
 
 **If unset / missing:** `NaN` fails `>0` → default `15` minutes for the invite-token lifetime. Benign.
 
+**Example settings**
+1. *Standard / safe* — `REGISTRATION_INVITE_TTL_MINUTES=15` — 15-min invite lifetime (default).
+2. *Lower* — `REGISTRATION_INVITE_TTL_MINUTES=1` — 1-min window (must be > 0).
+3. *Upper* — `REGISTRATION_INVITE_TTL_MINUTES=1440` — 24-h invite. No hard cap — illustrative.
+
 ---
 
 ## SESSION_MAX_AGE_MS
@@ -1433,6 +1679,11 @@ export const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_MS, 10) |
 ```
 
 **If unset / missing:** `parseInt(undefined,10) || 300000` → `300000` (5 minutes), the active value. Benign for security (short base lifetime), and mitigated by the sliding-window refresh. The `|| 300000` shape means an explicit `0` also becomes 5 minutes — you cannot zero it — but unset is handled cleanly.
+
+**Example settings**
+1. *Standard / safe* — `SESSION_MAX_AGE_MS=300000` — 5-min base session (default; the sliding-window refresh extends it).
+2. *Lower* — `SESSION_MAX_AGE_MS=60000` — 1 min (very short; `0` collapses to 5 min).
+3. *Upper* — `SESSION_MAX_AGE_MS=86400000` — 24 h (a former commented value). No hard cap — illustrative.
 
 ---
 
@@ -1451,6 +1702,11 @@ const SESSION_MAX_AGE_REFRESH_RATIO = (() => {
 ```
 
 **If unset / missing:** `parseFloat(undefined)` → `NaN` → default `0.75`, so the session cookie is re-issued after 75% of the base window (~3.75 minutes of activity on the 5-minute default). Benign.
+
+**Example settings**
+1. *Standard / safe* — `SESSION_MAX_AGE_REFRESH_RATIO=0.75` — refresh after 75% of the window (default).
+2. *Lower / 0* — `SESSION_MAX_AGE_REFRESH_RATIO=0.0` — refresh on every request.
+3. *Upper* — `SESSION_MAX_AGE_REFRESH_RATIO=1.0` — never refresh until expiry (disables the sliding window).
 
 ---
 
@@ -1475,6 +1731,11 @@ function getSecret() {
 
 **If unset / missing:** `getSecret()` throws `"Session configuration invalid."` (the message is deliberately generic and leaks nothing) the first time a session is created or read. The app may boot, but **no one can log in or hold a session** — authentication is effectively dead. Fail-closed; distinct key material from `ENCRYPTION_SECRET`.
 
+**Example settings** — hex string, **must be ≥ 32 chars and valid hex** (64 recommended).
+1. *Standard / safe* — `SESSION_SECRET=<64 hex chars>` — e.g. `openssl rand -hex 32` (the recommended length).
+2. *Lower* — `SESSION_SECRET=<exactly 32 hex chars>` — the minimum accepted length (shorter → hard throw).
+3. *Upper* — `SESSION_SECRET=<128 hex chars>` — more entropy; no upper bound enforced.
+
 ---
 
 # Audit findings summary
@@ -1492,6 +1753,9 @@ The configuration layer is, overall, in good shape: nearly every numeric/thresho
 **Minor robustness**
 - `LINKEDIN_REDIRECT_URI` — no presence guard; if unset, `redirect_uri: undefined` is sent to LinkedIn. It's public config (not a secret), so a loud startup check is cheap.
 - Startup banner (`index.js:662`) prints `${process.env.DEV_BYPASS_ORIGINS}` unlabelled; when unset it renders the literal `"undefined"` in production logs. Cosmetic.
+
+**Parameterization candidate (per the no-hard-coded-values rule)**
+- The registration validate-key rate limiter uses a hardcoded `MAX_VALIDATION_ATTEMPTS = 3` (`src/routes/registration-api.js:43`) and an in-memory `Map` window with no env override. There is **no** `RATE_LIMIT_MAX` (or any rate-limit env var) in the codebase. If this limit should be operator-tunable, introduce something like `REGISTRATION_VALIDATION_MAX_ATTEMPTS` with a validated positive-int getter (same shape as the existing `config/research.js` getters) and a safe default of 3. Low priority — the current constant is a sane, safe value.
 
 **Security-critical concentration**
 - `NODE_ENV` alone gates cookie `Secure`, HSTS, dev bypass, the mock provider, the auth-required default, and test-only guards. The posture is correctly fail-closed (only `"dev"` enables bypass; only `"production"` enables hardening; anything else enforces auth). Your backlog items — `dotenv` `override:false` so runtime `NODE_ENV` wins, and the `syntheticDevUser()` production guard — are the right reinforcements; until they land, the integrity of this one string is the integrity of the whole auth posture.

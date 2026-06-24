@@ -588,6 +588,7 @@ export async function start() {
   const { logActivity }                  = await import("./services/database.js");
   const { startScheduler }               = await import("./services/scheduler.js");
   const { startMonitor }                 = await import("./services/news-monitor.js");
+  const { startBatchPublisher }          = await import("./services/batch-publisher.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes }         = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
@@ -672,6 +673,8 @@ export async function start() {
     startScheduler();
     // News monitor — iterates all active tenants each hour
     startMonitor();
+    // Batch publisher — fires scheduled posts at their set time
+    startBatchPublisher();
   });
 
   return { app, server };

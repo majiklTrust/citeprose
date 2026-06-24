@@ -397,6 +397,8 @@
       const [topics, setTopics] = useState([]);
       const [editingPost, setEditingPost] = useState(null);
       const [imageChoice, setImageChoice] = useState({ mode: 'none', url: null });
+      const [showSchedule, setShowSchedule] = useState(false);
+      const [scheduleAt, setScheduleAt] = useState('');
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
       const [showComposer, setShowComposer] = useState(false);
       const [showComingSoon, setShowComingSoon] = useState(false);
@@ -838,6 +840,62 @@
         setLoading(l => ({ ...l, savePreview: false }));
       }
 
+      // Default picker value = next top-of-hour in LOCAL time, formatted
+      // as datetime-local wants ("YYYY-MM-DDTHH:mm", no timezone).
+      function nextHourLocal() {
+        const d = new Date(Date.now() + 60 * 60 * 1000);
+        d.setMinutes(0, 0, 0);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      // Save-then-schedule: persist current editor content, then mark the
+      // post 'scheduled'. datetime-local is LOCAL wall-clock with no zone;
+      // new Date() parses it as local and toISOString() sends UTC. The
+      // server re-validates the time is in the future.
+      async function handleSchedule() {
+        if (!selectedPost) return;
+        if (!scheduleAt) { alert('Pick a date and time first.'); return; }
+        const whenUtc = new Date(scheduleAt);
+        if (isNaN(whenUtc.getTime())) { alert('That date/time is not valid.'); return; }
+        if (whenUtc.getTime() <= Date.now()) { alert('Scheduled time must be in the future.'); return; }
+
+        let selectedImageUrl = null;
+        if (imageChoice.mode === 'auto' && imageChoice.url) {
+          selectedImageUrl = imageChoice.url;
+        } else if (imageChoice.mode === 'custom' && imageChoice.url) {
+          selectedImageUrl = imageChoice.url.trim();
+        }
+
+        setLoading(l => ({ ...l, schedule: true }));
+        try {
+          const id = selectedPost.draftPostId || selectedPost.id;
+          const res = await fetch(`${API}/api/posts/${id}/schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scheduledFor: whenUtc.toISOString(),
+              title: selectedPost.title,
+              content: selectedPost.content,
+              hashtags: selectedPost.hashtags,
+              imageUrl: selectedImageUrl
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setShowSchedule(false);
+            setScheduleAt('');
+            setSelectedPost(null);
+            fetchAll();
+          } else {
+            alert('Schedule failed: ' + (data.error || `server returned ${res.status}`));
+          }
+        } catch (err) {
+          alert('Schedule failed: ' + err.message);
+        }
+        setLoading(l => ({ ...l, schedule: false }));
+      }
+
       const pendingPosts = posts.filter(p => p.status === 'pending_approval' || p.status === 'draft');
       const recentPosts = posts.filter(p => p.status !== 'pending_approval' && p.status !== 'draft');
 
@@ -899,7 +957,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v1.9.32</div>
+                <div className="header-subtitle">v1.9.33</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -917,7 +975,6 @@
               <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0 auto' }}>
                 Your account is authenticated but isn't yet assigned to a workspace.
                 Contact your administrator to be added to one, then log out and back in.
-                <br/><br/><a href="mailto:accountsupport@***REMOVED***" className="text-link-blue">accountsupport@***REMOVED***</a>
               </div>
             </div>
           </div>
@@ -940,7 +997,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v1.9.32 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.33 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1395,6 +1452,34 @@
                     <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite}>
                       {loading.rewrite ? <span className="loading-spinner"></span> : '✦ Rewrite with AI'}
                     </button>
+                    <button
+                      className="btn btn-tight"
+                      style={{ marginLeft: '0.5rem' }}
+                      onClick={() => { setScheduleAt(prev => prev || nextHourLocal()); setShowSchedule(s => !s); }}
+                      disabled={!!loading.schedule}
+                    >
+                      🗓️ Schedule
+                    </button>
+                    {showSchedule && (
+                      <div className="schedule-picker" style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <input
+                          type="datetime-local"
+                          value={scheduleAt}
+                          min={nextHourLocal()}
+                          onChange={e => setScheduleAt(e.target.value)}
+                          style={{ padding: '0.35rem 0.5rem' }}
+                        />
+                        <button className="btn btn-primary btn-tight" onClick={handleSchedule} disabled={!!loading.schedule}>
+                          {loading.schedule ? <span className="loading-spinner"></span> : 'Confirm schedule'}
+                        </button>
+                        <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.schedule}>
+                          Cancel
+                        </button>
+                        <span style={{ fontSize: '0.78rem', opacity: 0.7, width: '100%' }}>
+                          Publishes at the time shown, in your local timezone. Saves current edits first.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 

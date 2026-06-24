@@ -486,9 +486,19 @@ async function restPublish(content, hashtags, imageUrl) {
 //
 // In text-posting mode, imageUrl is ignored with a warning.
 
-export async function publishPost(content, hashtags = [], imageUrl = null) {
+export async function publishPost(content, hashtags = [], imageUrl = null, targetOverride = null) {
   const mode = getPublishMode();
-  const target = getPublishTarget();
+  // Per-post destination seam (MDP-proofing): a post may carry its own
+  // publish_target (personal|organization), which overrides the global
+  // LINKEDIN_PUBLISH_TARGET default. NULL -> global default (today's
+  // behavior, unchanged). NOTE: legacyPublishPost/restPublish still read
+  // the global target internally for URN selection; threading `target`
+  // into them is the remaining wiring when organization/MDP posting is
+  // implemented. For v1 this records the per-post target and keeps the
+  // data flow destination-aware end to end.
+  const target = (targetOverride === "personal" || targetOverride === "organization")
+    ? targetOverride
+    : getPublishTarget();
   const tenant = currentTenantId() || "unknown";
 
   platformLog("info", "publish", {

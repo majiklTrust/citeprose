@@ -32,7 +32,8 @@ import {
   approvePost,
   rejectPost,
   canPostNow,
-  forceCycle
+  forceCycle,
+  schedulePost
 } from "../services/scheduler.js";
 import { generatePost, qualityCheck, refinePost } from "../services/content-generator.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
@@ -499,6 +500,37 @@ router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), a
     });
     res.json({ success: true });
   } catch (err) {
+    platformLog("error", "api_error", { path: req.path, error: err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// ── Scheduling ───────────────────────────────────────────────
+// Save-then-schedule: persists any in-editor content changes to the
+// draft, then marks it 'scheduled' for the batch publisher to fire at
+// the chosen time. Reuses approve_reject_post (scheduling is "approve,
+// but for later"). The client sends UTC; the server re-validates it is
+// in the future and never trusts the client clock.
+router.post("/api/posts/:id/schedule", requirePermission("approve_reject_post"), async (req, res) => {
+  try {
+    const id = parsePostId(req.params.id);
+    if (id === null) return res.status(400).json({ error: "Invalid post id" });
+
+    const { scheduledFor, title, content, hashtags, imageUrl } = req.body;
+
+    if (imageUrl !== undefined && imageUrl !== null && imageUrl !== "" && !isImageUrl(imageUrl)) {
+      return res.status(400).json({ error: "Image URL must be a valid HTTPS image" });
+    }
+
+    const result = await withTenant(req.tenant.id, async () => {
+      return schedulePost(id, scheduledFor, { title, content, hashtags, imageUrl }, req.user?.sub || null);
+    });
+    res.json({ success: true, scheduledFor: result.scheduledForIso });
+  } catch (err) {
+    if (err.code === "VALIDATION")       return res.status(400).json({ error: err.message });
+    if (err.code === "NOT_FOUND")        return res.status(404).json({ error: "Post not found" });
+    if (err.code === "NOT_SCHEDULABLE")  return res.status(409).json({ error: err.message });
+    if (err.code === "SPACING_CONFLICT") return res.status(409).json({ error: err.message });
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

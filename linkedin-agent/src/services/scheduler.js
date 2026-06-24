@@ -26,7 +26,8 @@ import {
   updatePostStatus,
   logActivity,
   getPostStats,
-  getPost
+  getPost,
+  setPostScheduled
 } from "./database.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-publisher.js";
@@ -220,7 +221,7 @@ export async function executePost(postId) {
   }
 
   try {
-    const result = await publishPost(post.content, post.hashtags, post.image_url);
+    const result = await publishPost(post.content, post.hashtags, post.image_url, post.publish_target || null);
 
     await updatePostStatus(postId, "posted", {
       linkedinId: result.postId,
@@ -263,6 +264,41 @@ export async function rejectPost(postId, reason = "", userSub = null) {
   }
   await updatePostStatus(postId, "rejected", { errorMessage: reason });
   await logActivity("info", "post_rejected", { postId, reason }, userSub);
+}
+
+// ── Scheduling (manual) ──────────────────────────────────────
+// Called from /api/posts/:id/schedule inside withTenant. Validates the
+// time, optionally persists in-editor content (save-then-schedule), and
+// marks the post 'scheduled'. The batch publisher fires it at scheduled_for.
+
+const SCHEDULE_SPACING_MIN = () => parseInt(process.env.MIN_MINUTES_BETWEEN_SCHEDULED_POSTS || "0", 10);
+
+export async function schedulePost(postId, scheduledFor, edits = {}, userSub = null) {
+  const when = new Date(scheduledFor);
+  if (!scheduledFor || isNaN(when.getTime())) {
+    const err = new Error("A valid future date/time is required");
+    err.code = "VALIDATION";
+    throw err;
+  }
+  if (when.getTime() <= Date.now()) {
+    const err = new Error("Scheduled time must be in the future");
+    err.code = "VALIDATION";
+    throw err;
+  }
+
+  const spacing = SCHEDULE_SPACING_MIN();
+  await setPostScheduled({
+    id: postId,
+    scheduledFor: when.toISOString(),
+    title: edits.title,
+    content: edits.content,
+    hashtags: edits.hashtags,
+    imageUrl: edits.imageUrl,
+    spacingMinutes: Number.isInteger(spacing) && spacing > 0 ? spacing : 0
+  });
+
+  await logActivity("info", "post_scheduled", { postId, scheduledFor: when.toISOString() }, userSub);
+  return { scheduledForIso: when.toISOString() };
 }
 
 // ── Scheduler Lifecycle ──────────────────────────────────────

@@ -340,6 +340,79 @@ export async function updatePostStatus(id, status, extra = {}) {
   );
 }
 
+// Schedule an existing draft/queued post: optionally persist edited
+// content (save-then-schedule from the preview modal), then set
+// status='scheduled' with scheduled_for. Mirrors save-preview's draft
+// update — a direct UPDATE that bypasses updatePost's pending_approval-
+// only guard. Runs inside the caller's withTenant transaction so the
+// content edit and the status flip commit atomically.
+//
+// spacingMinutes > 0 enforces a minimum gap between a tenant's scheduled
+// posts (anti-spam); 0 disables the check.
+export async function setPostScheduled({ id, scheduledFor, title, content, hashtags, imageUrl, spacingMinutes = 0 }) {
+  const c = client();
+
+  const guard = await c.query(
+    `SELECT status FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
+    [id]
+  );
+  if (guard.rows.length === 0) {
+    const err = new Error(`Post ${id} not found`);
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+  const status = guard.rows[0].status;
+  if (status !== "draft" && status !== "pending_approval") {
+    const err = new Error(`Post ${id} cannot be scheduled (status: ${status})`);
+    err.code = "NOT_SCHEDULABLE";
+    throw err;
+  }
+
+  if (spacingMinutes > 0) {
+    const conflict = await c.query(
+      `SELECT 1 FROM posts
+        WHERE tenant_id = current_tenant_id()
+          AND status = 'scheduled'
+          AND id <> $1
+          AND scheduled_for BETWEEN ($2::timestamptz - make_interval(mins => $3))
+                                AND ($2::timestamptz + make_interval(mins => $3))
+        LIMIT 1`,
+      [id, scheduledFor, spacingMinutes]
+    );
+    if (conflict.rows.length > 0) {
+      const err = new Error(`Another post is scheduled within ${spacingMinutes} minute(s) of that time`);
+      err.code = "SPACING_CONFLICT";
+      throw err;
+    }
+  }
+
+  // Persist edits only for a draft (preview save-then-schedule). A queued
+  // post is scheduled as-is. Only supplied fields are written — omitted
+  // fields are never NULLed out by accident.
+  if (status === "draft") {
+    const sets = [];
+    const params = [];
+    let i = 1;
+    if (typeof title === "string")   { sets.push(`title = $${i++}`);            params.push(title); }
+    if (typeof content === "string") { sets.push(`content = $${i++}`);          params.push(content); }
+    if (Array.isArray(hashtags))     { sets.push(`hashtags = $${i++}::jsonb`);  params.push(JSON.stringify(hashtags)); }
+    if (imageUrl !== undefined)      { sets.push(`image_url = $${i++}`);        params.push((typeof imageUrl === "string" && imageUrl.length) ? imageUrl : null); }
+    if (sets.length) {
+      params.push(id);
+      await c.query(
+        `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i} AND tenant_id = current_tenant_id() AND status = 'draft'`,
+        params
+      );
+    }
+  }
+
+  await c.query(
+    `UPDATE posts SET status = 'scheduled', scheduled_for = $1
+      WHERE id = $2 AND tenant_id = current_tenant_id()`,
+    [scheduledFor, id]
+  );
+}
+
 // Returns all posts with the given status, most recent first.
 // Each row's hashtags is guaranteed to be an array.
 export async function getPostsByStatus(status) {

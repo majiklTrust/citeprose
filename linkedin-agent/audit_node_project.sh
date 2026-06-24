@@ -12,20 +12,21 @@ npm pkg get scripts|grep -E "preinstall|install|postinstall|prepare"
 # The integrity hash is the fingerprint — already enforced by lockfile + npm ci.
 # npm audit signatures verifies the registry's signature on each package plus any
 npm audit signatures
+npm audit --audit-level=critical
 npm audit --audit-level=high
-npm audit --audit-level=medium
+npm audit --audit-level=moderate
 
 # provenance proves origin, not safety
 npm audit signatures --json --include-attestations
 
 npm install --package-lock-only
-git add package-lock.json && git commit -m "lock dependency tree"
 
 cat >.npmrc <<EOF 
 save-exact=true
 EOF
 
 npx lockfile-lint --path package-lock.json --type npm --validate-https --allowed-hosts npm --validate-integrity
+git add package-lock.json && git commit -m "lock dependency tree"
 
 # THIS ESSENTIALLY DOES AN UPGRADE
 # npx npm-check-updates --target patch -u   # review the diff, then: npm install && npm ci
@@ -38,8 +39,8 @@ npx lockfile-lint --path package-lock.json --type npm --validate-https --allowed
 # Compliance. SOC 2 and enterprise security questionnaires increasingly ask for one — relevant for a B2B SaaS.
 # Diff. Compare SBOMs across releases to see exactly what entered your dependency surface between, say, 1.9.24 and 1.9.25.
 npm ci --ignore-scripts
-npm sbom --sbom-format cyclonedx --omit=dev >sbom.cdx.json\
-  && git add sbom.cdx.json
+npm sbom --sbom-format cyclonedx --omit=dev >sbom.cdx.json
+git add sbom.cdx.json
 
 mkdir -p .github
 cat >.github/dependabot.yml <<EOF

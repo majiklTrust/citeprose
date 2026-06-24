@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:a2035ed5-6dda-42c8-a3a2-cab69dff001a",
+  "serialNumber": "urn:uuid:6c0ad5e2-3f9e-4b56-910b-dff77a917ed4",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-06-18T22:13:20.282Z",
+    "timestamp": "2026-06-24T01:27:05.872Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -19,13 +19,13 @@
       }
     ],
     "component": {
-      "bom-ref": "linkedin-ai-agent@1.9.25",
+      "bom-ref": "linkedin-ai-agent@1.9.34",
       "type": "library",
       "name": "linkedin-agent",
-      "version": "1.9.25",
+      "version": "1.9.34",
       "scope": "required",
       "description": "Autonomous AI agent for Market Intelligence content creation",
-      "purl": "pkg:npm/linkedin-ai-agent@1.9.25",
+      "purl": "pkg:npm/linkedin-ai-agent@1.9.34",
       "properties": [],
       "externalReferences": []
     }
@@ -4108,7 +4108,7 @@
   ],
   "dependencies": [
     {
-      "ref": "linkedin-ai-agent@1.9.25",
+      "ref": "linkedin-ai-agent@1.9.34",
       "dependsOn": [
         "@anthropic-ai/sdk@0.104.2",
         "axios@1.16.1",

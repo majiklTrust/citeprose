@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { currentClient, currentTenantId } from "../db/with-tenant.js";
+import { canTransition } from "./post-status.js";
 
 // ── Internal helpers ─────────────────────────────────────────
 
@@ -349,9 +350,11 @@ export async function updatePostStatus(id, status, extra = {}) {
 //
 // spacingMinutes > 0 enforces a minimum gap between a tenant's scheduled
 // posts (anti-spam); 0 disables the check.
-export async function setPostScheduled({ id, scheduledFor, title, content, hashtags, imageUrl, spacingMinutes = 0 }) {
+export async function transitionPostStatus({ id, to, scheduledFor, title, content, hashtags, imageUrl, spacingMinutes = 0 }) {
   const c = client();
 
+  // Lock the row and read current status; the canTransition check MUST run
+  // under this lock to avoid a TOCTOU with a concurrent move/approve.
   const guard = await c.query(
     `SELECT status FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
     [id]
@@ -361,14 +364,14 @@ export async function setPostScheduled({ id, scheduledFor, title, content, hasht
     err.code = "NOT_FOUND";
     throw err;
   }
-  const status = guard.rows[0].status;
-  if (status !== "draft" && status !== "pending_approval") {
-    const err = new Error(`Post ${id} cannot be scheduled (status: ${status})`);
-    err.code = "NOT_SCHEDULABLE";
+  const from = guard.rows[0].status;
+  if (!canTransition(from, to)) {
+    const err = new Error(`Cannot move post from '${from}' to '${to}'`);
+    err.code = "INVALID_TRANSITION";
     throw err;
   }
 
-  if (spacingMinutes > 0) {
+  if (to === "scheduled" && spacingMinutes > 0) {
     const conflict = await c.query(
       `SELECT 1 FROM posts
         WHERE tenant_id = current_tenant_id()
@@ -386,10 +389,10 @@ export async function setPostScheduled({ id, scheduledFor, title, content, hasht
     }
   }
 
-  // Persist edits only for a draft (preview save-then-schedule). A queued
-  // post is scheduled as-is. Only supplied fields are written — omitted
-  // fields are never NULLed out by accident.
-  if (status === "draft") {
+  // Save-then-transition: persist any supplied editor content. The row is
+  // locked and `from` is a pre-publication state, so a content write is safe
+  // regardless of target. Only supplied fields are written.
+  {
     const sets = [];
     const params = [];
     let i = 1;
@@ -400,17 +403,28 @@ export async function setPostScheduled({ id, scheduledFor, title, content, hasht
     if (sets.length) {
       params.push(id);
       await c.query(
-        `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i} AND tenant_id = current_tenant_id() AND status = 'draft'`,
+        `UPDATE posts SET ${sets.join(", ")} WHERE id = $${i} AND tenant_id = current_tenant_id()`,
         params
       );
     }
   }
 
-  await c.query(
-    `UPDATE posts SET status = 'scheduled', scheduled_for = $1
-      WHERE id = $2 AND tenant_id = current_tenant_id()`,
-    [scheduledFor, id]
-  );
+  // Status + scheduled_for hygiene: entering 'scheduled' sets the time;
+  // leaving it CLEARS the time, so the batch publisher (which claims WHERE
+  // status='scheduled') can never fire a now-unscheduled post.
+  if (to === "scheduled") {
+    await c.query(
+      `UPDATE posts SET status = 'scheduled', scheduled_for = $1
+        WHERE id = $2 AND tenant_id = current_tenant_id()`,
+      [scheduledFor, id]
+    );
+  } else {
+    await c.query(
+      `UPDATE posts SET status = $1::post_status, scheduled_for = NULL
+        WHERE id = $2 AND tenant_id = current_tenant_id()`,
+      [to, id]
+    );
+  }
 }
 
 // Returns all posts with the given status, most recent first.

@@ -114,6 +114,16 @@
       }
     }
 
+    // Which date to show for a post. A SCHEDULED post must show WHEN it will
+    // publish (scheduled_for), not when it was created. A posted one shows
+    // posted_at. formatDate already renders in the viewer's local timezone.
+    function postDisplayDate(post) {
+      if (!post) return '—';
+      if (post.status === 'scheduled' && post.scheduled_for) return formatDate(post.scheduled_for);
+      if (post.posted_at) return formatDate(post.posted_at);
+      return formatDate(post.created_at);
+    }
+
     // Perform a mutating request and throw on a non-OK response so callers
     // surface the failure instead of silently treating it as success.
     async function mutate(url, opts) {
@@ -849,37 +859,44 @@
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       }
 
-      // Save-then-schedule: persist current editor content, then mark the
-      // post 'scheduled'. datetime-local is LOCAL wall-clock with no zone;
-      // new Date() parses it as local and toISOString() sends UTC. The
-      // server re-validates the time is in the future.
-      async function handleSchedule() {
+      // Save-then-transition: persist current editor content, then move the
+      // post to the chosen pre-publication status via the generic endpoint.
+      // For 'scheduled', datetime-local is LOCAL wall-clock with no zone;
+      // new Date() parses it as local and toISOString() sends UTC. The server
+      // re-validates legality (canTransition) and, for scheduling, the time.
+      async function handleStatusChange(to) {
         if (!selectedPost) return;
-        if (!scheduleAt) { alert('Pick a date and time first.'); return; }
-        const whenUtc = new Date(scheduleAt);
-        if (isNaN(whenUtc.getTime())) { alert('That date/time is not valid.'); return; }
-        if (whenUtc.getTime() <= Date.now()) { alert('Scheduled time must be in the future.'); return; }
+        const id = selectedPost.draftPostId || selectedPost.id;
+        if (!id) { alert('This post has not been saved yet.'); return; }
 
+        const body = {
+          to,
+          title: selectedPost.title,
+          content: selectedPost.content,
+          hashtags: selectedPost.hashtags
+        };
         let selectedImageUrl = null;
         if (imageChoice.mode === 'auto' && imageChoice.url) {
           selectedImageUrl = imageChoice.url;
         } else if (imageChoice.mode === 'custom' && imageChoice.url) {
           selectedImageUrl = imageChoice.url.trim();
         }
+        body.imageUrl = selectedImageUrl;
 
-        setLoading(l => ({ ...l, schedule: true }));
+        if (to === 'scheduled') {
+          if (!scheduleAt) { alert('Pick a date and time first.'); return; }
+          const whenUtc = new Date(scheduleAt);
+          if (isNaN(whenUtc.getTime())) { alert('That date/time is not valid.'); return; }
+          if (whenUtc.getTime() <= Date.now()) { alert('Scheduled time must be in the future.'); return; }
+          body.scheduledFor = whenUtc.toISOString();
+        }
+
+        setLoading(l => ({ ...l, statusChange: true }));
         try {
-          const id = selectedPost.draftPostId || selectedPost.id;
-          const res = await fetch(`${API}/api/posts/${id}/schedule`, {
+          const res = await fetch(`${API}/api/posts/${id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              scheduledFor: whenUtc.toISOString(),
-              title: selectedPost.title,
-              content: selectedPost.content,
-              hashtags: selectedPost.hashtags,
-              imageUrl: selectedImageUrl
-            })
+            body: JSON.stringify(body)
           });
           const data = await res.json();
           if (res.ok && data.success) {
@@ -888,12 +905,12 @@
             setSelectedPost(null);
             fetchAll();
           } else {
-            alert('Schedule failed: ' + (data.error || `server returned ${res.status}`));
+            alert('Status change failed: ' + (data.error || `server returned ${res.status}`));
           }
         } catch (err) {
-          alert('Schedule failed: ' + err.message);
+          alert('Status change failed: ' + err.message);
         }
-        setLoading(l => ({ ...l, schedule: false }));
+        setLoading(l => ({ ...l, statusChange: false }));
       }
 
       const pendingPosts = posts.filter(p => p.status === 'pending_approval' || p.status === 'draft');
@@ -1108,7 +1125,7 @@
                         <div className="post-preview">{post.content}</div>
                         <div className="post-footer">
                           <div className="post-meta">
-                            <span className="post-date">{formatDate(post.created_at)}</span>
+                            <span className="post-date">{postDisplayDate(post)}</span>
                             {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
                           </div>
                           <div className="post-actions">
@@ -1157,10 +1174,15 @@
                     <div className="post-title-text">{post.title}</div>
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
-                      <span className="post-date">{formatDate(post.posted_at || post.created_at)}</span>
+                      <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
                       {(post.status === 'draft' || post.status === 'pending_approval') && (
                         <button className="btn btn-edit btn-action-sm" onClick={(e) => openEditModal(post, e)}>
                           Edit
+                        </button>
+                      )}
+                      {post.status === 'scheduled' && (
+                        <button className="btn btn-edit btn-action-sm" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
+                          Manage
                         </button>
                       )}
                     </div>
@@ -1389,6 +1411,12 @@
             const rewritable = !!rewriteId && (selectedPost.isPreview
               || selectedPost.status === 'draft'
               || selectedPost.status === 'pending_approval');
+            const moveId = selectedPost.id || selectedPost.draftPostId;
+            const movable = !!moveId && (selectedPost.isPreview
+              || selectedPost.status === 'draft'
+              || selectedPost.status === 'pending_approval'
+              || selectedPost.status === 'scheduled');
+            const currStatus = selectedPost.isPreview ? 'draft' : selectedPost.status;
             return (
             <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -1403,12 +1431,21 @@
                   {!selectedPost.isPreview && selectedPost.status === 'draft' && (
                     <span className="post-status badge-draft">DRAFT</span>
                   )}
+                  {!selectedPost.isPreview && selectedPost.status === 'scheduled' && (
+                    <span className="post-status" style={{ background: 'rgba(56,189,248,0.18)', color: '#38bdf8' }}>SCHEDULED</span>
+                  )}
                   <span className={`corroboration-badge ${corrobLabel.cls}`}>
                     {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
                   </span>
                 </div>
 
                 <h3 className="modal-heading">{selectedPost.title}</h3>
+
+                {!selectedPost.isPreview && selectedPost.status === 'scheduled' && selectedPost.scheduled_for && (
+                  <div className="schedule-banner" style={{ margin: '0.5rem 0', padding: '0.55rem 0.75rem', borderRadius: 6, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', fontSize: '0.88rem' }}>
+                    🗓️ Scheduled to publish <strong>{formatDate(selectedPost.scheduled_for)}</strong> · your local time
+                  </div>
+                )}
 
                 {/**selectedPost.fidelity && (
                   <div className="composer-fidelity-ok">
@@ -1452,14 +1489,31 @@
                     <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite}>
                       {loading.rewrite ? <span className="loading-spinner"></span> : '✦ Rewrite with AI'}
                     </button>
-                    <button
-                      className="btn btn-tight"
-                      style={{ marginLeft: '0.5rem' }}
-                      onClick={() => { setScheduleAt(prev => prev || nextHourLocal()); setShowSchedule(s => !s); }}
-                      disabled={!!loading.schedule}
-                    >
-                      🗓️ Schedule
-                    </button>
+                  </div>
+                )}
+
+                {movable && (
+                  <div className="modal-move" style={{ margin: '0.75rem 0', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.7, marginBottom: '0.4rem' }}>Move this post to:</div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {currStatus !== 'draft' && (
+                        <button className="btn btn-tight" onClick={() => handleStatusChange('draft')} disabled={!!loading.statusChange}>
+                          ✎ Draft
+                        </button>
+                      )}
+                      {currStatus !== 'pending_approval' && currStatus !== 'draft' && (
+                        <button className="btn btn-tight" onClick={() => handleStatusChange('pending_approval')} disabled={!!loading.statusChange}>
+                          ⏳ Queue for Approval
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-tight"
+                        onClick={() => { setScheduleAt(prev => prev || nextHourLocal()); setShowSchedule(s => !s); }}
+                        disabled={!!loading.statusChange}
+                      >
+                        🗓️ {currStatus === 'scheduled' ? 'Reschedule' : 'Schedule'}
+                      </button>
+                    </div>
                     {showSchedule && (
                       <div className="schedule-picker" style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <input
@@ -1469,10 +1523,10 @@
                           onChange={e => setScheduleAt(e.target.value)}
                           style={{ padding: '0.35rem 0.5rem' }}
                         />
-                        <button className="btn btn-primary btn-tight" onClick={handleSchedule} disabled={!!loading.schedule}>
-                          {loading.schedule ? <span className="loading-spinner"></span> : 'Confirm schedule'}
+                        <button className="btn btn-primary btn-tight" onClick={() => handleStatusChange('scheduled')} disabled={!!loading.statusChange}>
+                          {loading.statusChange ? <span className="loading-spinner"></span> : 'Confirm time'}
                         </button>
-                        <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.schedule}>
+                        <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.statusChange}>
                           Cancel
                         </button>
                         <span style={{ fontSize: '0.78rem', opacity: 0.7, width: '100%' }}>

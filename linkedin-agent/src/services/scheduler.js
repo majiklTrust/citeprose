@@ -27,8 +27,9 @@ import {
   logActivity,
   getPostStats,
   getPost,
-  setPostScheduled
+  transitionPostStatus
 } from "./database.js";
+import { PRE_PUB_STATUSES } from "./post-status.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-publisher.js";
 import { runOutputFilter } from "./output-filter.js";
@@ -266,39 +267,52 @@ export async function rejectPost(postId, reason = "", userSub = null) {
   await logActivity("info", "post_rejected", { postId, reason }, userSub);
 }
 
-// ── Scheduling (manual) ──────────────────────────────────────
-// Called from /api/posts/:id/schedule inside withTenant. Validates the
-// time, optionally persists in-editor content (save-then-schedule), and
-// marks the post 'scheduled'. The batch publisher fires it at scheduled_for.
-
+// ── Status transitions (manual) ──────────────────────────────
+// Called from POST /api/posts/:id/status inside withTenant. Moves a post
+// between the pre-publication states (draft, pending_approval, scheduled).
+// The canTransition policy (post-status.js) is the single authority and is
+// enforced under row lock in transitionPostStatus. Entering 'scheduled'
+// requires a future time; leaving it clears scheduled_for. Any supplied
+// editor content is saved with the move (save-then-transition).
 const SCHEDULE_SPACING_MIN = () => parseInt(process.env.MIN_MINUTES_BETWEEN_SCHEDULED_POSTS || "0", 10);
 
-export async function schedulePost(postId, scheduledFor, edits = {}, userSub = null) {
-  const when = new Date(scheduledFor);
-  if (!scheduledFor || isNaN(when.getTime())) {
-    const err = new Error("A valid future date/time is required");
+export async function transitionStatus(postId, to, opts = {}, userSub = null) {
+  if (!PRE_PUB_STATUSES.includes(to)) {
+    const err = new Error(`Unsupported target status '${to}'`);
     err.code = "VALIDATION";
     throw err;
   }
-  if (when.getTime() <= Date.now()) {
-    const err = new Error("Scheduled time must be in the future");
-    err.code = "VALIDATION";
-    throw err;
+
+  let scheduledForIso = null;
+  if (to === "scheduled") {
+    const when = new Date(opts.scheduledFor);
+    if (!opts.scheduledFor || isNaN(when.getTime())) {
+      const err = new Error("A valid future date/time is required to schedule");
+      err.code = "VALIDATION";
+      throw err;
+    }
+    if (when.getTime() <= Date.now()) {
+      const err = new Error("Scheduled time must be in the future");
+      err.code = "VALIDATION";
+      throw err;
+    }
+    scheduledForIso = when.toISOString();
   }
 
   const spacing = SCHEDULE_SPACING_MIN();
-  await setPostScheduled({
+  await transitionPostStatus({
     id: postId,
-    scheduledFor: when.toISOString(),
-    title: edits.title,
-    content: edits.content,
-    hashtags: edits.hashtags,
-    imageUrl: edits.imageUrl,
-    spacingMinutes: Number.isInteger(spacing) && spacing > 0 ? spacing : 0
+    to,
+    scheduledFor: scheduledForIso,
+    title: opts.title,
+    content: opts.content,
+    hashtags: opts.hashtags,
+    imageUrl: opts.imageUrl,
+    spacingMinutes: to === "scheduled" && Number.isInteger(spacing) && spacing > 0 ? spacing : 0
   });
 
-  await logActivity("info", "post_scheduled", { postId, scheduledFor: when.toISOString() }, userSub);
-  return { scheduledForIso: when.toISOString() };
+  await logActivity("info", "post_status_changed", { postId, to, scheduledFor: scheduledForIso }, userSub);
+  return { status: to, scheduledForIso };
 }
 
 // ── Scheduler Lifecycle ──────────────────────────────────────

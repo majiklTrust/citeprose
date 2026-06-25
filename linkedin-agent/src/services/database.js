@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { currentClient, currentTenantId } from "../db/with-tenant.js";
-import { canTransition } from "./post-status.js";
+import { canTransition, isEditable } from "./post-status.js";
 
 // ── Internal helpers ─────────────────────────────────────────
 
@@ -145,7 +145,7 @@ export function initDatabase() {
 export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl, genre }) {
   const c = client();
   const scheduled = validateScheduledFor(scheduledFor);
-  const topicIntId = await resolveTopicIdBySlug(c, topicId);
+  const topicIntId = topicId ? await resolveTopicIdBySlug(c, topicId) : null;
 
   // news_context is JSONB nullable; pass JS object or null directly.
   // If caller passed a string, keep current behavior and wrap it
@@ -210,9 +210,9 @@ export async function updatePost(id, fields) {
     err.code = "NOT_FOUND";
     throw err;
   }
-  if (guard.rows[0].status !== "pending_approval") {
+  if (!isEditable(guard.rows[0].status)) {
     const err = new Error(
-      `Post ${id} is not editable (status: ${guard.rows[0].status}). Only pending_approval posts can be edited.`
+      `Post ${id} is not editable (status: ${guard.rows[0].status}).`
     );
     err.code = "NOT_EDITABLE";
     throw err;
@@ -353,10 +353,11 @@ export async function updatePostStatus(id, status, extra = {}) {
 export async function transitionPostStatus({ id, to, scheduledFor, title, content, hashtags, imageUrl, spacingMinutes = 0 }) {
   const c = client();
 
-  // Lock the row and read current status; the canTransition check MUST run
-  // under this lock to avoid a TOCTOU with a concurrent move/approve.
+  // Lock the row and read current status + content; the canTransition and
+  // empty-content checks MUST run under this lock to avoid a TOCTOU with a
+  // concurrent move/approve.
   const guard = await c.query(
-    `SELECT status FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
+    `SELECT status, content FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
     [id]
   );
   if (guard.rows.length === 0) {
@@ -368,6 +369,16 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
   if (!canTransition(from, to)) {
     const err = new Error(`Cannot move post from '${from}' to '${to}'`);
     err.code = "INVALID_TRANSITION";
+    throw err;
+  }
+
+  // Empty-content guard: a post may sit empty as a draft, but it cannot be
+  // queued or scheduled empty. effectiveContent = the supplied edit if any,
+  // else what is already stored.
+  const effectiveContent = typeof content === "string" ? content : guard.rows[0].content;
+  if ((to === "scheduled" || to === "pending_approval") && !(effectiveContent || "").trim()) {
+    const err = new Error("Add some content before scheduling or queuing this post.");
+    err.code = "EMPTY_CONTENT";
     throw err;
   }
 

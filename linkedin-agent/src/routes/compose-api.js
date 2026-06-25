@@ -27,7 +27,7 @@ import { createActionToken } from "../services/prompt-actions.js";
 import { genreExists, listGenresForKey, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
-import { createPost, logActivity } from "../services/database.js";
+import { createPost, logActivity, getPost } from "../services/database.js";
 import { selectPrimarySource } from "../services/source-provenance.js";
 
 const router = Router();
@@ -160,6 +160,34 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
   } catch (err) {
     platformLog("error", "compose_generate_failed", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// POST /api/compose/blank
+// Blank-canvas / manual authoring path (No genre). Creates an EMPTY draft
+// (no AI, no research, no topic) and returns it so the client can open it
+// directly in the editor. genre is provenance-only and NOT NULL in the
+// schema, so a hand-written post is recorded as 'manual'.
+router.post("/blank", requirePermission("preview_post"), async (req, res) => {
+  try {
+    const post = await withTenant(req.tenant.id, async () => {
+      const id = await createPost({
+        topicId: null,
+        title: "",
+        content: "",
+        hashtags: [],
+        newsContext: null,
+        scheduledFor: null,
+        imageUrl: null,
+        genre: "manual"
+      });
+      await logActivity("info", "blank_draft_created", { postId: id }, req.user?.sub || null);
+      return getPost(id);
+    });
+    res.json({ post });
+  } catch (err) {
+    console.error("[compose/blank] failed:", err.message);
+    res.status(500).json({ error: "Could not create a blank draft." });
   }
 });
 

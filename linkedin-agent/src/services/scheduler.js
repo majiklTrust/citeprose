@@ -252,6 +252,11 @@ export async function approvePost(postId, userSub = null) {
   if (post.status !== "pending_approval") {
     throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
   }
+  if (!(post.content || "").trim()) {
+    const err = new Error("Cannot publish an empty post.");
+    err.code = "EMPTY_CONTENT";
+    throw err;
+  }
   await updatePostStatus(postId, "approved");
   await logActivity("info", "post_approved", { postId }, userSub);
   return executePost(postId);

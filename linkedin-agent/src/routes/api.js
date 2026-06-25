@@ -486,6 +486,7 @@ router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), 
     });
     res.json({ success: true, result });
   } catch (err) {
+    if (err.code === "EMPTY_CONTENT") return res.status(400).json({ error: err.message });
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
@@ -536,6 +537,7 @@ router.post("/api/posts/:id/status", requirePermission("approve_reject_post"), a
     if (err.code === "INVALID_TRANSITION") return res.status(409).json({ error: err.message });
     if (err.code === "NOT_FOUND")          return res.status(404).json({ error: "Post not found" });
     if (err.code === "SPACING_CONFLICT")   return res.status(409).json({ error: err.message });
+    if (err.code === "EMPTY_CONTENT")      return res.status(400).json({ error: err.message });
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
@@ -706,6 +708,15 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
             [title || null, content || null, hashtags ? JSON.stringify(hashtags) : null, validatedImageUrl, postId]
           );
         }
+        const chk = await client().query(
+          `SELECT content FROM posts WHERE id = $1 AND tenant_id = current_tenant_id()`,
+          [postId]
+        );
+        if (!(chk.rows[0]?.content || "").trim()) {
+          const err = new Error("Add some content before queuing this post.");
+          err.code = "EMPTY_CONTENT";
+          throw err;
+        }
         await updatePostStatus(postId, "pending_approval");
         await logActivity("info", "draft_promoted_to_queue", { postId, title }, req.user?.sub || null);
         return postId;
@@ -747,6 +758,7 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
 
     res.json({ success: true, postId: savedId });
   } catch (err) {
+    if (err.code === "EMPTY_CONTENT") return res.status(400).json({ error: err.message });
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

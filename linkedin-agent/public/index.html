@@ -182,11 +182,11 @@
     // mount; the internal 'refine' genre is excluded server-side.
     // Metric fidelity is out of scope for this flow by design —
     // no landscape, no metric preview, no fidelity panel.
-    function Composer({ API, topics, onClose, onGenerated }) {
+    function Composer({ API, topics, onClose, onGenerated, onNewDraft }) {
       const [topicSlug, setTopicSlug] = useState('');
       const [angle, setAngle] = useState('');
       const [genres, setGenres] = useState([]);
-      const [selectedGenre, setSelectedGenre] = useState('default');
+      const [selectedGenre, setSelectedGenre] = useState('');
       const [genresLoading, setGenresLoading] = useState(false);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
@@ -328,6 +328,24 @@
         }
       }
 
+      async function handleNewPost() {
+        setError(null);
+        try {
+          const res = await fetch(`${API}/api/compose/blank`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+          if (res.ok && data.post) {
+            onNewDraft(data.post);
+          } else if (mountedRef.current) {
+            setError(data.error || 'Could not create a blank post.');
+          }
+        } catch (err) {
+          if (mountedRef.current) setError((err && err.message) || 'Could not create a blank post.');
+        }
+      }
+
       return (
         <div className="composer-overlay" onClick={loading ? undefined : onClose}>
           <div className="composer-modal" onClick={e => e.stopPropagation()}>
@@ -336,23 +354,27 @@
               <button className="composer-close" onClick={onClose}>✕</button>
             </div>
 
-            <label className="composer-label">Topic</label>
-            <select className="topic-selector" value={topicSlug}
-              onChange={e => { setTopicSlug(e.target.value); setAngle(''); }}>
-              <option value="">Auto-select topic</option>
-              {topics.filter(t => t.enabled !== false).map(t => (
-                <option key={t.id} value={t.slug}>{t.name}</option>
-              ))}
-            </select>
-
-            {topicSlug && angles.length > 0 && (
+            {selectedGenre !== '' && (
               <React.Fragment>
-                <label className="composer-label">Angle</label>
-                <select className="topic-selector" value={angle}
-                  onChange={e => setAngle(e.target.value)}>
-                  <option value="">Auto-select angle</option>
-                  {angles.map(a => <option key={a} value={a}>{a}</option>)}
+                <label className="composer-label">Topic</label>
+                <select className="topic-selector" value={topicSlug}
+                  onChange={e => { setTopicSlug(e.target.value); setAngle(''); }}>
+                  <option value="">Auto-select topic</option>
+                  {topics.filter(t => t.enabled !== false).map(t => (
+                    <option key={t.id} value={t.slug}>{t.name}</option>
+                  ))}
                 </select>
+
+                {topicSlug && angles.length > 0 && (
+                  <React.Fragment>
+                    <label className="composer-label">Angle</label>
+                    <select className="topic-selector" value={angle}
+                      onChange={e => setAngle(e.target.value)}>
+                      <option value="">Auto-select angle</option>
+                      {angles.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </React.Fragment>
+                )}
               </React.Fragment>
             )}
 
@@ -361,6 +383,15 @@
               <div className="composer-note">Loading genres…</div>
             ) : (
               <div className="composer-genres">
+                <label className={`composer-genre${selectedGenre === '' ? ' selected' : ''}`}>
+                  <input type="radio" name="composer-genre" value=""
+                    checked={selectedGenre === ''}
+                    onChange={() => setSelectedGenre('')} />
+                  <span className="composer-genre-main">
+                    <span className="composer-genre-name">no genre</span>
+                    <span className="composer-genre-desc">Start from a blank canvas and write the post yourself.</span>
+                  </span>
+                </label>
                 {genres.map(g => (
                   <label key={g.genre}
                     className={`composer-genre${selectedGenre === g.genre ? ' selected' : ''}`}>
@@ -386,8 +417,8 @@
                 <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
               </div>
             ) : (
-              <button className="btn btn-primary btn-full" onClick={handleGenerate} disabled={genresLoading}>
-                Generate with AI
+              <button className="btn btn-primary btn-full" onClick={selectedGenre === '' ? handleNewPost : handleGenerate} disabled={genresLoading}>
+                {selectedGenre === '' ? 'New Post' : 'Generate with AI'}
               </button>
             )}
           </div>
@@ -676,7 +707,9 @@
             const data = await res.json();
             throw new Error(data.error || 'Failed to save');
           }
+          const updated = { ...editingPost, title: editFields.title, content: editFields.content, hashtags };
           setEditingPost(null);
+          setSelectedPost(updated);
           fetchAll();
         } catch (err) {
           alert('Save failed: ' + err.message);
@@ -755,6 +788,16 @@
       // post-detail modal the Preview button uses so edit + Queue for
       // Approval behave identically. Composed posts additionally carry a
       // genre and a fidelity summary, surfaced in the modal.
+      function handleNewDraftResult(post) {
+        setShowComposer(false);
+        setEditingPost(post);
+        setEditFields({
+          title: post.title || '',
+          content: post.content || '',
+          hashtags: (post.hashtags || []).join(', ')
+        });
+      }
+
       function handleComposerResult(data) {
         setSelectedPost({
           ...data.post,
@@ -974,7 +1017,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v1.9.34</div>
+                <div className="header-subtitle">v1.9.35</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1014,7 +1057,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v1.9.34 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v1.9.35 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1386,7 +1429,7 @@
           </div>
 
           {showComposer && (
-            <Composer API={API} topics={topics} onClose={() => setShowComposer(false)} onGenerated={handleComposerResult} />
+            <Composer API={API} topics={topics} onClose={() => setShowComposer(false)} onGenerated={handleComposerResult} onNewDraft={handleNewDraftResult} />
           )}
 
           {showComingSoon && (
@@ -1434,9 +1477,11 @@
                   {!selectedPost.isPreview && selectedPost.status === 'scheduled' && (
                     <span className="post-status" style={{ background: 'rgba(56,189,248,0.18)', color: '#38bdf8' }}>SCHEDULED</span>
                   )}
-                  <span className={`corroboration-badge ${corrobLabel.cls}`}>
-                    {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
-                  </span>
+                  {selectedPost.news_context && (
+                    <span className={`corroboration-badge ${corrobLabel.cls}`}>
+                      {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
+                    </span>
+                  )}
                 </div>
 
                 <h3 className="modal-heading">{selectedPost.title}</h3>
@@ -1486,7 +1531,7 @@
 
                 {rewritable && (
                   <div className="modal-rewrite" style={{ margin: '0.75rem 0' }}>
-                    <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite}>
+                    <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite || !(selectedPost.content || '').trim()}>
                       {loading.rewrite ? <span className="loading-spinner"></span> : '✦ Rewrite with AI'}
                     </button>
                   </div>
@@ -1502,7 +1547,7 @@
                         </button>
                       )}
                       {currStatus !== 'pending_approval' && currStatus !== 'draft' && (
-                        <button className="btn btn-tight" onClick={() => handleStatusChange('pending_approval')} disabled={!!loading.statusChange}>
+                        <button className="btn btn-tight" onClick={() => handleStatusChange('pending_approval')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>
                           ⏳ Queue for Approval
                         </button>
                       )}
@@ -1523,7 +1568,7 @@
                           onChange={e => setScheduleAt(e.target.value)}
                           style={{ padding: '0.35rem 0.5rem' }}
                         />
-                        <button className="btn btn-primary btn-tight" onClick={() => handleStatusChange('scheduled')} disabled={!!loading.statusChange}>
+                        <button className="btn btn-primary btn-tight" onClick={() => handleStatusChange('scheduled')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>
                           {loading.statusChange ? <span className="loading-spinner"></span> : 'Confirm time'}
                         </button>
                         <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.statusChange}>
@@ -1739,7 +1784,7 @@
                       </div>
                     </div>
                     <div className="modal-actions">
-                      <button className="btn btn-approve" onClick={handleSavePreview}>
+                      <button className="btn btn-approve" onClick={handleSavePreview} disabled={loading.savePreview || !(selectedPost.content || '').trim()}>
                         {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
                       </button>
                       <button className="btn btn-edit" onClick={(e) => { openEditModal(selectedPost, e); }}>

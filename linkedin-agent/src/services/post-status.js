@@ -45,3 +45,15 @@ export function isPrePublication(status) {
 export function canTransition(from, to) {
   return PRE_PUB.has(from) && PRE_PUB.has(to);
 }
+
+// ── Editability ──────────────────────────────────────────────
+// States in which a user may edit a post's content. Everything EXCEPT
+// terminal success (posted), terminal reject (rejected), and the in-flight
+// publish states: publishing (claimed by the batch publisher) and approved
+// (approvePost publishes immediately in the same call, so it never rests).
+// scheduled IS editable; the edit publishes at its scheduled time.
+const EDITABLE = new Set(["draft", "pending_approval", "scheduled", "failed", "blocked"]);
+
+export function isEditable(status) {
+  return EDITABLE.has(status);
+}

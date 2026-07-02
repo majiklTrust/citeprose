@@ -114,7 +114,6 @@ export async function getAuthorizedPrompt(key, actionToken, genre = "default") {
   });
 
   return _decryptFromVault(key, genre);
-  return _decryptFromVault(key, genre);
 }
 
 /**
@@ -192,17 +191,6 @@ async function _decryptFromVault(key, genre = "default") {
     );
   }
 
-
-  // Fall back to the default genre when a non-default genre is
-  // requested but not present. This guarantees a usable template.
-  if (result.rows.length === 0 && genre !== "default") {
-    platformLog("info", "prompt_genre_fallback", { key, requestedGenre: genre });
-    result = await query(
-      "SELECT value_enc FROM prompt_vault WHERE key = $1 AND genre = $2",
-      [key, "default"]
-    );
-  }
-
   if (result.rows.length === 0) return null;
   return decrypt(result.rows[0].value_enc);
 }
@@ -228,11 +216,6 @@ async function _decryptFromVault(key, genre = "default") {
 export async function storePrompt(key, plaintext, description, genre = "default") {
   const encrypted = encrypt(plaintext);
   await query(
-    `INSERT INTO prompt_vault (key, genre, value_enc, description)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (key, genre) DO UPDATE
-       SET value_enc = $3, description = $4, updated_at = now()`,
-    [key, genre, encrypted, description || null]
     `INSERT INTO prompt_vault (key, genre, value_enc, description)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (key, genre) DO UPDATE

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.9.36",
+  "version": "1.9.3-6.5",
   "config": {
     "cssversion": "35.0",
     "appname": "Market Intelligence"
@@ -72,7 +72,7 @@
     "zipall1": "rm ../linkedin-agent/data/pgsql/data; rm ../linkedin-agent/data/pgsql/pgsql; zip -9 -r /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip ../linkedin-agent/ -x \"**/LinkedIn_Agent_Testing/*\" -x \"**/deploy/*\" -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip; cd ../linkedin-agent/data/pgsql && ln -s . pgsql && ln -s pgsql data",
     "zipall2": "rm ../linkedin-agent/data/pgsql/data; rm ../linkedin-agent/data/pgsql/pgsql; zip -9 -r /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip ../linkedin-agent/scripts/testing/ ../linkedin-agent/ ../LinkedIn_Agent_Deploy/ -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip; cd ../linkedin-agent/data/pgsql && ln -s . pgsql && ln -s pgsql data",
     "700_": "",
-    "batch-test": "PGUSER=***REMOVED*** bash scripts/testing/batch-run-test.sh",
+    "batch-test": "bash scripts/testing/batch-run-test.sh",
     "batch_test": "npm run batch-test",
     "showtests": "npm run batch-test -- show",
     "testall": "npm run batch-test -- all",
@@ -113,7 +113,6 @@
   },
   "devDependencies": {
     "json-stringify-safe": "^5.0.1",
-    "nodemon": "^3.1.14",
-    "supertest": "^7.2.2"
+    "nodemon": "^3.1.14"
   }
 }

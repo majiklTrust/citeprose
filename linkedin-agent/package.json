@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "1.9.3-6.5",
+  "version": "1.9.3-6.15",
   "config": {
     "cssversion": "35.0",
     "appname": "Market Intelligence"
@@ -50,7 +50,7 @@
     "410_": "",
     "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && npm version $v && npm run build; unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"|$(which grep) 'scripts/testing' >/dev/null && echo && echo found scripts/testing --\\> extracting to git \\\"Testing\\\" project",
     "extract-l": "unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"     || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\"",
-    "extract": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1).zip\" -d .. || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\" -d ..",
+    "extract": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\" -d ..",
     "linkdir": "bash /datavol/LinkedIn_Agent_drop/bin/linkdir.sh",
     "420_": "",
     "extractit": "/datavol/LinkedIn_Agent_drop/bin/extractit.sh",
@@ -73,6 +73,8 @@
     "zipall2": "rm ../linkedin-agent/data/pgsql/data; rm ../linkedin-agent/data/pgsql/pgsql; zip -9 -r /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip ../linkedin-agent/scripts/testing/ ../linkedin-agent/ ../LinkedIn_Agent_Deploy/ -x \"**/migration/*\" -x \"**/.env\" -x \"**/docs/*\" -x \"**/pg.conf\"  -x \"**/.DS_Store\" -x \"**/*tmp*\" -x \"**/.psqlrc\" -x \"**/bashrc-hook.sh\"  -x \"**/*.db*\" -x \"**/*.nogit*\" -x \"**/*.nogit*/*\"  -x \"**/*.md\" -x \"**/.git/*\" -x \"**/node_modules/*\"  -x \"**/.gitignore\" -x \"**/*.tar.gz\" -x \"**/*.log\" -x \"**/*.zip\" -x \"**/*.bak*\" && echo && echo /datavol/$npm_package_name/source/source-all-$npm_package_name-$npm_package_version.zip; cd ../linkedin-agent/data/pgsql && ln -s . pgsql && ln -s pgsql data",
     "700_": "",
     "batch-test": "bash scripts/testing/batch-run-test.sh",
+    "batch-test-bypass": "BYPASS_TEST_LIST=\"test-p3 step 4 test-thetest testing 1 test-thetest testing 2\" bash scripts/testing/batch-run-test.sh",
+    "batch-test-thetest": "bash scripts/testing/batch-run-test.sh test-thetest testing 1 2",
     "batch_test": "npm run batch-test",
     "showtests": "npm run batch-test -- show",
     "testall": "npm run batch-test -- all",

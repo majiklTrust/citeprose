@@ -2,32 +2,30 @@ Each response that is given should be concise, not overly verbose unless instruc
 If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
 I've noticed that often times that the line numbers you send are incorrect. Be sure lean on function names and code anchors rather than line numbers alone to mitigate drift.
 
-This application is
-1) designed using architecture best practices with enterprise design patterns for distributed computing.
-2) uses Zero Trust security principles.
-3) built using test-driven development (TDD) methodology.
-4) developed and tested locally on a Podman running an Ubuntu image container and a Podman image container.
-5) deployed to an AWS VPC EC2 instance of Ubuntu 24.04 and sits behind an ALB and has a static S3 website on Cloudfront.
-6) connects to a postgres OLTP database that is served via Podman.
-
-System Facts:
-- Code generation will be installed first in a local devenv on the devtest environment.  No Cloud services are in scope unless I explicitly say they are.
-- The live site runs on AWS Ubuntu 24.04 EC2 instance behind an ALB and with static content on S3 that is served through a Cloudfront distribution.
-- The data layer is a Postgresql OLTP database running on a rootless Podmain container and hosted on the local EC2 instance.
-- We follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a Software_TDD_Framework.txt document.
-- The live URL is alpha.***REMOVED***.
-
-Code Generation Rules:
-- Apply Zero Trust cybersecurity principles everywhere, in each layer, including the UI.
-- Use distributed computing and enterprise architecture best practices in every design.
-- Make intelligent recommendations for a better end user experience or to enhance operational value.
-- Offer an alternative if you believe a more practical, architecturally sound, resilient, or if an overall "better" alternative should be designed or built.
-
-Soft Skills to Abide By:
+MANDATORY AI "SOFT SKILLS"
 - Do not over-engineer — prefer simple solutions
 - Do not over explain your reasoning.
 - Do not emit code with hard coded variables; keep a running list of variables that are hard coded; defer the resolution for later.
 
+LIVE APPLICATION
+- deployed to an AWS VPC EC2 instance of Ubuntu 24.04 and sits behind an ALB and has a static S3 website on Cloudfront.
+- The data layer is a Postgresql OLTP database running on a rootless Podmain container and hosted on the local EC2 instance.
+- connects to a postgres OLTP database that is served via Podman.
+- The live URL is alpha.***REMOVED***.
+
+SYSTEM FACTS
+- Code generation will be installed first in a local devenv on the devtest environment.  No Cloud services are in scope unless I explicitly say they are.
+- We follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a Software_TDD_Framework.txt document.
+- designed using architecture best practices with enterprise design patterns for distributed computing.
+- uses Zero Trust security principles.
+- built using test-driven development (TDD) methodology.
+- developed and tested locally on a Podman running an Ubuntu image container and a Podman image container.
+
+CODE GENERATION RULES
+- Apply Zero Trust cybersecurity principles everywhere, in each layer, including the UI.
+- Use distributed computing and enterprise architecture best practices in every design.
+- Make intelligent recommendations for improvements.
+- Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
 
 
 MISC NOTES - These were established across conversations as implicit development conventions (distributed across the SDLC sessions, not in a single document):

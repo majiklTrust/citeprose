@@ -211,6 +211,162 @@
       .catch(function (err) { showMessage(err.message, 'error'); });
   }
 
+  // ── AI Model Provider (owner) ───────────────────────────────
+  // Vendor and model options come from the registry-backed
+  // /api/admin/ai-config endpoint. Client-side key verification
+  // mirrors the existing verifyAdminKey() pattern and is UX only:
+  // the server re-validates against the selected vendor before
+  // anything is stored.
+
+  var _aiProviders = [];
+  var _aiCurrent = null;
+  var _aiKeyValidated = false;
+
+  function aiProviderById(id) {
+    for (var i = 0; i < _aiProviders.length; i++) {
+      if (_aiProviders[i].id === id) return _aiProviders[i];
+    }
+    return null;
+  }
+
+  function renderAiModels(providerId, selectedModel) {
+    var select = $('ai-model');
+    select.innerHTML = '';
+    var provider = aiProviderById(providerId);
+    var models = (provider && provider.models) || [];
+    if (models.length === 0) {
+      var opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No models registered for this vendor';
+      select.appendChild(opt);
+      return;
+    }
+    models.forEach(function (m) {
+      var opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label || m.id;
+      if (selectedModel && selectedModel === m.id) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  function renderAiCurrent() {
+    if (!_aiCurrent) { $('ai-current').textContent = ''; return; }
+    var keyNote = _aiCurrent.hasKey ? 'key stored' : 'no key stored yet';
+    $('ai-current').textContent = 'Current: ' + (_aiCurrent.provider || '(none)') +
+      ' / ' + (_aiCurrent.model || '(no model)') + ' (' + keyNote + ')';
+  }
+
+  function loadAiConfig() {
+    fetch(API + '/api/admin/ai-config', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load AI configuration');
+        return res.json();
+      })
+      .then(function (data) {
+        _aiProviders = data.providers || [];
+        _aiCurrent = data.current || null;
+        var select = $('ai-provider');
+        select.innerHTML = '';
+        _aiProviders.forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.label || p.id;
+          if (_aiCurrent && _aiCurrent.provider === p.id) opt.selected = true;
+          select.appendChild(opt);
+        });
+        var activeProvider = (select.value || (_aiProviders[0] && _aiProviders[0].id)) || '';
+        renderAiModels(activeProvider, _aiCurrent && _aiCurrent.model);
+        renderAiCurrent();
+      })
+      .catch(function () {
+        $('ai-current').innerHTML = '<span class="msg msg-error">Failed to load AI configuration</span>';
+      });
+  }
+
+  function verifyAiKey() {
+    var key = $('ai-key').value.trim();
+    var provider = $('ai-provider').value;
+    if (!key) {
+      showMessage('Enter the vendor API key to verify', 'error');
+      return;
+    }
+    $('ai-verify-btn').disabled = true;
+    $('ai-verify-btn').textContent = 'Verifying...';
+    $('ai-key-status').innerHTML = '<span class="ai-status-wait">checking...</span>';
+
+    fetch(API + '/api/register/validate-key', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider, api_key: key })
+    })
+      .then(function (res) {
+        if (res.status === 401) {
+          $('ai-key-status').innerHTML = '<span class="ai-status-bad">invalid key for this vendor</span>';
+          _aiKeyValidated = false;
+          return null;
+        }
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Verification failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data) return;
+        $('ai-key-status').innerHTML = '<span class="ai-status-ok">verified</span>';
+        _aiKeyValidated = true;
+      })
+      .catch(function (err) {
+        $('ai-key-status').innerHTML = '<span class="ai-status-bad">' + escapeHtml(err.message) + '</span>';
+        _aiKeyValidated = false;
+      })
+      .finally(function () {
+        $('ai-verify-btn').disabled = false;
+        $('ai-verify-btn').textContent = 'Verify Key';
+      });
+  }
+
+  function saveAiConfig() {
+    var provider = $('ai-provider').value;
+    var model = $('ai-model').value;
+    var key = $('ai-key').value.trim();
+    if (!provider || !model) {
+      showMessage('Choose a vendor and model', 'error');
+      return;
+    }
+    if (key && !_aiKeyValidated) {
+      showMessage('Please verify the API key first', 'error');
+      return;
+    }
+    var payload = { provider: provider, model: model };
+    if (key) payload.api_key = key;
+
+    $('ai-save-btn').disabled = true;
+    $('ai-save-btn').textContent = 'Saving...';
+
+    fetch(API + '/api/admin/ai-config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function () {
+        showMessage('AI configuration saved', 'success');
+        $('ai-key').value = '';
+        $('ai-key-status').innerHTML = '';
+        _aiKeyValidated = false;
+        loadAiConfig();
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('ai-save-btn').disabled = false;
+        $('ai-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Tenant Registration (platform admin only) ───────────────
 
   function buildRegistrationSection() {
@@ -381,11 +537,26 @@
     $('admin').style.display = 'block';
     loadMembers();
     loadInvites();
+    loadAiConfig();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') createInvite();
     });
+
+    $('ai-provider').addEventListener('change', function () {
+      // Vendor changed: repopulate models from the registry data
+      // and invalidate any previous key verification.
+      renderAiModels(this.value, _aiCurrent && _aiCurrent.provider === this.value ? _aiCurrent.model : null);
+      _aiKeyValidated = false;
+      $('ai-key-status').innerHTML = '';
+    });
+    $('ai-key').addEventListener('input', function () {
+      _aiKeyValidated = false;
+      $('ai-key-status').innerHTML = '';
+    });
+    $('ai-verify-btn').addEventListener('click', verifyAiKey);
+    $('ai-save-btn').addEventListener('click', saveAiConfig);
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

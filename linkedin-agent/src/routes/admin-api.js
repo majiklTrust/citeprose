@@ -25,17 +25,43 @@ import {
   listPendingInvites,
   revokeInvite
 } from "../tenant/invite-store.js";
+import { createAiConfigRoutes } from "./admin-ai-api.js";
 
 const router = Router();
 
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
+// ── Server-side owner gate for the /app/admin PAGE route ─────
+// The static admin page previously relied on the client-side
+// checkAccess() redirect; hiding the page is not access control.
+// This factory returns the SAME chain the admin API enforces
+// (auth -> tenant -> no dev bypass -> owner permission) plus a
+// pure final owner check, for mounting in front of the static
+// handler in index.js. Overrides exist for tests only (factory
+// convention: no shared state between callers).
+export function createAdminPageGate(overrides = {}) {
+  const gateAuth = overrides.requireAuth || requireAuth;
+  const gateTenant = overrides.resolveTenant || resolveTenant;
+  const gateNoBypass = overrides.requireNoDevBypass || requireNoDevBypass();
+  const gatePermission = overrides.requirePermission || requirePermission("manage_users");
+  const gateOwnerOnly = (req, res, next) => {
+    if (req.tenant && req.tenant.role === "owner" && !req.devBypass) return next();
+    return res.status(403).json({ error: "Permission denied" });
+  };
+  return [gateAuth, gateTenant, gateNoBypass, gatePermission, gateOwnerOnly];
+}
+
 // ── Middleware chain for all admin routes ─────────────────────
 router.use(requireAuth);
 router.use(resolveTenant);
 router.use(requireNoDevBypass());
 router.use(requirePermission("manage_users"));
+
+// ── AI vendor / model / key configuration (owner only) ───────
+// Mounted AFTER the blanket chain above, so /api/admin/ai-config
+// inherits the same owner gate as user management.
+router.use(createAiConfigRoutes());
 
 // ── Email validation ─────────────────────────────────────────
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

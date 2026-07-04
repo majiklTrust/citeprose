@@ -22,6 +22,7 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { platformLog } from "../services/platform-log.js";
 import {
   isPlatformAdmin,
+  findTenantByAuthIdentity,
   createRegistrationInvite,
   validateRegistrationToken,
   activateRegistrationToken,
@@ -29,6 +30,7 @@ import {
   getRegistrationAdminKey,
   clearRegistrationKey
 } from "../tenant/platform-db.js";
+import { validateProviderKey } from "../llm/client.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
@@ -51,6 +53,17 @@ function generateSlug(name) {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+// ── Helper: infer auth provider from the sub prefix ──────────
+// Mirrors the private inferProvider in tenant/resolver.js so the
+// owner-session authorization below resolves memberships the same
+// way the tenant resolver does.
+function inferAuthProvider(sub) {
+  if (!sub || typeof sub !== "string") return null;
+  if (sub.startsWith("auth0|") || sub.startsWith("google-oauth2|")) return "auth0";
+  if (sub.startsWith("user_")) return "workos";
+  return null;
 }
 
 // ── Helper: safe error — never leak internals ────────────────
@@ -78,25 +91,25 @@ router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
       return safeError(res, 400, "Valid email address required");
     }
 
-    // If admin is providing an API key, validate it first
+    // If admin is providing an API key, validate it first.
+    // Routed through the provider abstraction (registry, auth
+    // scheme, egress allowlist): registration provisioning stays
+    // on the platform default vendor, anthropic. Zero token cost.
     let validatedKey = null;
     let validatedModel = null;
     if (api_key && typeof api_key === "string" && api_key.trim().length > 0) {
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required when providing an API key");
       }
-      // Validate with Anthropic — zero token cost
-      const keyResponse = await fetch("https://api.anthropic.com/v1/models", {
-        headers: {
-          "x-api-key": api_key.trim(),
-          "anthropic-version": "2023-06-01"
-        }
-      });
-      if (keyResponse.status === 401) {
-        return safeError(res, 401, "Invalid API key");
+      let keyCheck;
+      try {
+        keyCheck = await validateProviderKey("anthropic", api_key.trim());
+      } catch (err) {
+        platformLog("warn", "provider_models_error", { provider: "anthropic", code: err?.code || null });
+        return safeError(res, 502, "Unable to verify API key with the selected provider");
       }
-      if (!keyResponse.ok) {
-        return safeError(res, 502, "Unable to verify API key with Anthropic");
+      if (!keyCheck.valid) {
+        return safeError(res, 401, "Invalid API key");
       }
       validatedKey = api_key.trim();
       validatedModel = model_id.trim();
@@ -222,19 +235,51 @@ router.post("/init", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// Unauthenticated: Validate Anthropic API key + list models
+// Validate a vendor API key + list models (provider-aware)
 // ══════════════════════════════════════════════════════════════
+// One validation path for every caller: registration (token),
+// platform admins (session), and tenant OWNERS (session) using
+// the /app/admin AI configuration screen. The actual check runs
+// through the provider abstraction, so a valid result means the
+// key is valid FOR THE SELECTED VENDOR. `provider` defaults to
+// anthropic to preserve the original single-vendor contract.
 
 router.post("/validate-key", optionalAuth, async (req, res) => {
   try {
-    const { token, api_key } = req.body || {};
+    const { token, api_key, provider } = req.body || {};
+    const providerId = typeof provider === "string" && provider.trim().length > 0
+      ? provider.trim()
+      : "anthropic";
 
-    // Authorization: either a valid registration token OR platform admin session.
-    // Platform admins validate keys during invite creation (before a token exists).
+    // Authorization: a valid registration token, a platform admin
+    // session, or a tenant OWNER session. Owners validate keys from
+    // the admin screen; the same in-memory rate limit that guards
+    // token callers guards them (keyed by their subject).
     const isAdmin = req.user && isPlatformAdmin(req.user.sub);
+    let isOwner = false;
 
-    if (!isAdmin) {
-      // Token required for non-admin callers — prevents oracle attacks
+    if (!isAdmin && req.user && req.user.sub) {
+      const authProvider = req.user.provider || inferAuthProvider(req.user.sub);
+      if (authProvider) {
+        try {
+          const tenant = await findTenantByAuthIdentity(authProvider, req.user.sub);
+          isOwner = !!tenant && tenant.role === "owner";
+        } catch {
+          isOwner = false;
+        }
+      }
+      if (isOwner) {
+        const ownerKey = `sub:${req.user.sub}`;
+        const attempts = validationAttempts.get(ownerKey) || 0;
+        if (attempts >= MAX_VALIDATION_ATTEMPTS) {
+          return safeError(res, 429, "Too many validation attempts. Please try again later.");
+        }
+        validationAttempts.set(ownerKey, attempts + 1);
+      }
+    }
+
+    if (!isAdmin && !isOwner) {
+      // Token required for anonymous callers — prevents oracle attacks
       if (!token || typeof token !== "string") {
         return safeError(res, 400, "Registration token required");
       }
@@ -256,36 +301,27 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
       return safeError(res, 400, "API key required");
     }
 
-    // Call Anthropic /v1/models — zero tokens, validates key + returns models
-    const response = await fetch("https://api.anthropic.com/v1/models", {
-      headers: {
-        "x-api-key": api_key.trim(),
-        "anthropic-version": "2023-06-01"
+    // Vendor models listing via the abstraction — zero tokens,
+    // registry-resolved endpoint, provider auth scheme, egress
+    // allowlist enforced before the call.
+    let outcome;
+    try {
+      outcome = await validateProviderKey(providerId, api_key.trim());
+    } catch (err) {
+      if (err && err.code === "UNKNOWN_PROVIDER") {
+        return safeError(res, 400, "Unknown provider");
       }
-    });
+      platformLog("warn", "provider_models_error", { provider: providerId, code: err?.code || null });
+      return safeError(res, 502, "Unable to verify API key with the selected provider");
+    }
 
-    if (response.status === 401) {
+    if (!outcome.valid) {
       return safeError(res, 401, "Invalid API key");
     }
 
-    if (!response.ok) {
-      platformLog("warn", "anthropic_models_error", { status: response.status });
-      return safeError(res, 502, "Unable to verify API key with Anthropic");
-    }
-
-    const data = await response.json();
-    const models = (data.data || [])
-      .filter(m => m.id && m.id.startsWith("claude-"))
-      .map(m => ({
-        id: m.id,
-        name: m.display_name || m.id,
-        created: m.created_at || null
-      }))
-      .sort((a, b) => (b.created || "").localeCompare(a.created || ""));
-
     res.json({
       valid: true,
-      models
+      models: outcome.models
     });
   } catch (err) {
     platformLog("error", "key_validation_failed", { error: err.message });

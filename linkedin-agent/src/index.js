@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v1.9.3-6.15
+// v2.0.0
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -63,6 +63,13 @@ export function createApp(ctx) {
     invalidateTokenCache,
     createPlatformAdminRoutes
   } = ctx;
+
+  // Server-side owner gate for the /app/admin page. Fail closed:
+  // when a caller builds the app without supplying the gate, the
+  // page route refuses everyone rather than serving ungated.
+  const adminPageGate = Array.isArray(ctx.adminPageGate) && ctx.adminPageGate.length > 0
+    ? ctx.adminPageGate
+    : [(req, res) => res.status(403).json({ error: "Forbidden" })];
 
   const instance = express();
   instance.disable("x-powered-by");
@@ -149,8 +156,10 @@ export function createApp(ctx) {
   instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
-  // to the admin page, not the SPA fallback.
-  instance.use("/app/admin", express.static(path.join(__dirname, "../public/admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
+  // to the admin page, not the SPA fallback. Owner-gated server-side
+  // (auth -> tenant -> no dev bypass -> owner permission) BEFORE the
+  // static handler; the client-side checkAccess() is UX only.
+  instance.use("/app/admin", ...adminPageGate, express.static(path.join(__dirname, "../public/admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Platform admin — super admin only, server-side query execution
   instance.use("/app/platform-admin", express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
@@ -515,7 +524,8 @@ export function createApp(ctx) {
 export async function buildAppForTests() {
   const { logActivity }                  = await import("./services/database.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
-  const { default: adminRoutes }         = await import("./routes/admin-api.js");
+  const { default: adminRoutes,
+          createAdminPageGate }          = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { default: registrationRoutes }  = await import("./routes/registration-api.js");
   const { default: feedsRoutes }          = await import("./routes/feeds-api.js");
@@ -553,7 +563,8 @@ export async function buildAppForTests() {
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
     invalidateTokenCache,
-    createPlatformAdminRoutes
+    createPlatformAdminRoutes,
+    adminPageGate: createAdminPageGate()
   });
 }
 
@@ -590,7 +601,8 @@ export async function start() {
   const { startMonitor }                 = await import("./services/news-monitor.js");
   const { startBatchPublisher }          = await import("./services/batch-publisher.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
-  const { default: adminRoutes }         = await import("./routes/admin-api.js");
+  const { default: adminRoutes,
+          createAdminPageGate }          = await import("./routes/admin-api.js");
   const { default: topicsRoutes }        = await import("./routes/topics-api.js");
   const { default: registrationRoutes }  = await import("./routes/registration-api.js");
   const { default: feedsRoutes }          = await import("./routes/feeds-api.js");
@@ -641,7 +653,8 @@ export async function start() {
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
     invalidateTokenCache,
-    createPlatformAdminRoutes
+    createPlatformAdminRoutes,
+    adminPageGate: createAdminPageGate()
   });
 
   // STEP 7: Listen
@@ -651,7 +664,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  1.9.3-6.15
+║           LinkedIn AI Content Agent  2.0.0
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

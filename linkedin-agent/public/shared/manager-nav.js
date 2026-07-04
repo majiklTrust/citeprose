@@ -2,7 +2,7 @@
 // public/shared/manager-nav.js — Common nav for manager pages
 // ═══════════════════════════════════════════════════════════════
 // Renders a navigation bar with links to Topics, Feeds, and
-// Manage Users (owner only). Included by each manager page.
+// Manage (owner only). Included by each manager page.
 //
 // Usage:
 //   <div id="manager-nav"></div>
@@ -11,7 +11,7 @@
 // The script reads the user's role from /api/status and
 // conditionally shows links based on permissions:
 //   Topics, Feeds → owner + editor (manage_own_topics)
-//   Manage Users  → owner only
+//   Manage        → owner only
 //
 // The current page is highlighted (not linked).
 // ═══════════════════════════════════════════════════════════════
@@ -23,7 +23,7 @@
   var pages = [
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
-    { path: '/app/admin', label: 'Manage Users', roles: ['owner'] }
+    { path: '/app/admin', label: 'Manage', roles: ['owner'] }
   ];
 
   function esc(str) {

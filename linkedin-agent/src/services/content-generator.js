@@ -9,6 +9,7 @@ import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { generateWithTenantLlm, isLlmAbstractionEnabled } from "../llm/client.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./prompt-vault.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
@@ -267,25 +268,49 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   const genStartMs = Date.now();
 
   try {
-    const client = await newAnthropicClient();
-    const model = await getAnthropicModel();
-    const requestParams = {
-      model,
-      max_tokens: 1500,
-      system: topic.system_context || undefined,
-      messages: [{ role: "user", content: userPrompt }]
-    };
-    platformLog("info", "llm_request_main_post_generation",
-      buildLlmRequestInfo("main_post_generation", "3 of 4", requestParams,
-        { cycleId, topicId: topic.slug, angle, corroborationSkipped: skipCorroboration }));
-    if (traceEnabled(process.env.LLM_TRACE)) {
-      platformLog("debug", "llm_payload_main_post_generation",
-        buildLlmPayloadDebug("main_post_generation", requestParams, cycleId));
+    // Vendor call. Flag ON (LLM_ABSTRACTION=1): the orchestrator
+    // resolves the tenant's provider + model, enforces the egress
+    // allowlist, and returns the canonical response, so this
+    // pipeline never learns which vendor served the request.
+    // Flag OFF (default): the pre-existing direct Anthropic path,
+    // byte-for-byte unchanged.
+    let generatedText;
+    let generationModel;
+    if (isLlmAbstractionEnabled()) {
+      const orchestrated = await generateWithTenantLlm({
+        system: topic.system_context || null,
+        user: userPrompt,
+        maxOutputTokens: 1500,
+        temperature: null,
+        stopSequences: null,
+        purpose: "main_post_generation",
+        cycleId
+      });
+      generatedText = orchestrated.text;
+      generationModel = `${orchestrated.provider}/${orchestrated.model}`;
+    } else {
+      const client = await newAnthropicClient();
+      const model = await getAnthropicModel();
+      const requestParams = {
+        model,
+        max_tokens: 1500,
+        system: topic.system_context || undefined,
+        messages: [{ role: "user", content: userPrompt }]
+      };
+      platformLog("info", "llm_request_main_post_generation",
+        buildLlmRequestInfo("main_post_generation", "3 of 4", requestParams,
+          { cycleId, topicId: topic.slug, angle, corroborationSkipped: skipCorroboration }));
+      if (traceEnabled(process.env.LLM_TRACE)) {
+        platformLog("debug", "llm_payload_main_post_generation",
+          buildLlmPayloadDebug("main_post_generation", requestParams, cycleId));
+      }
+      const response = await callAnthropic(client, requestParams);
+      generatedText = response.content[0].text;
+      generationModel = model;
     }
-    const response = await callAnthropic(client, requestParams);
     userPrompt = null;
 
-    const raw = response.content[0].text.trim();
+    const raw = generatedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
 
@@ -332,7 +357,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     const genSuccessDetails = {
       cycleId,
       topicId: topic.slug,
-      model,
+      model: generationModel,
       title: parsed.title,
       wordCount: parsed.body.split(/\s+/).length,
       sourcesUsed: (parsed.sources_used || []).length,
@@ -386,9 +411,6 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nVerified claims (corroborated by 2+ sources): ${researchSummary.verifiedClaims || 0}\nIndependent sources consulted: ${researchSummary.independentSources || 0}\nCorroboration step: ${researchSummary.corroborationSkipped ? 'SKIPPED' : 'COMPLETED'}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";
 
-  const client = await newAnthropicClient();
-  const model = await getAnthropicModel();
-
   const qVaultGet = actionToken
     ? (key) => getAuthorizedPrompt(key, actionToken)
     : (key) => getPrompt(key);
@@ -405,21 +427,40 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   });
   template = null;
 
-  const requestParams = {
-    model,
-    max_tokens: 800,
-    messages: [{ role: "user", content: assembledPrompt }]
-  };
-  platformLog("info", "llm_request_quality_check",
-    buildLlmRequestInfo("quality_check", "4 of 4", requestParams, { cycleId }));
-  if (traceEnabled(process.env.LLM_TRACE)) {
-    platformLog("debug", "llm_payload_quality_check",
-      buildLlmPayloadDebug("quality_check", requestParams, cycleId));
+  // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
+  // the pre-existing direct Anthropic path, unchanged.
+  let reviewText;
+  if (isLlmAbstractionEnabled()) {
+    const orchestrated = await generateWithTenantLlm({
+      system: null,
+      user: assembledPrompt,
+      maxOutputTokens: 800,
+      temperature: null,
+      stopSequences: null,
+      purpose: "quality_check",
+      cycleId: cycleId || null
+    });
+    reviewText = orchestrated.text;
+  } else {
+    const client = await newAnthropicClient();
+    const model = await getAnthropicModel();
+    const requestParams = {
+      model,
+      max_tokens: 800,
+      messages: [{ role: "user", content: assembledPrompt }]
+    };
+    platformLog("info", "llm_request_quality_check",
+      buildLlmRequestInfo("quality_check", "4 of 4", requestParams, { cycleId }));
+    if (traceEnabled(process.env.LLM_TRACE)) {
+      platformLog("debug", "llm_payload_quality_check",
+        buildLlmPayloadDebug("quality_check", requestParams, cycleId));
+    }
+    const response = await callAnthropic(client, requestParams);
+    reviewText = response.content[0].text;
   }
-  const response = await callAnthropic(client, requestParams);
   assembledPrompt = null;
 
-  const raw = response.content[0].text.trim();
+  const raw = reviewText.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
   return JSON.parse(cleaned);
 }
@@ -477,23 +518,40 @@ export async function refinePost(
   platformLog("info", "post_refine_started", { cycleId, genre: genre || "default" });
 
   try {
-    const client = await newAnthropicClient();
-    const model = await getAnthropicModel();
-    const requestParams = {
-      model,
-      max_tokens: 1500,
-      messages: [{ role: "user", content: userPrompt }]
-    };
-    platformLog("info", "llm_request_refine",
-      buildLlmRequestInfo("refine", "1 of 1", requestParams, { cycleId, genre: genre || "default" }));
-    if (traceEnabled(process.env.LLM_TRACE)) {
-      platformLog("debug", "llm_payload_refine",
-        buildLlmPayloadDebug("refine", requestParams, cycleId));
+    // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
+    // the pre-existing direct Anthropic path, unchanged.
+    let refinedText;
+    if (isLlmAbstractionEnabled()) {
+      const orchestrated = await generateWithTenantLlm({
+        system: null,
+        user: userPrompt,
+        maxOutputTokens: 1500,
+        temperature: null,
+        stopSequences: null,
+        purpose: "refine",
+        cycleId
+      });
+      refinedText = orchestrated.text;
+    } else {
+      const client = await newAnthropicClient();
+      const model = await getAnthropicModel();
+      const requestParams = {
+        model,
+        max_tokens: 1500,
+        messages: [{ role: "user", content: userPrompt }]
+      };
+      platformLog("info", "llm_request_refine",
+        buildLlmRequestInfo("refine", "1 of 1", requestParams, { cycleId, genre: genre || "default" }));
+      if (traceEnabled(process.env.LLM_TRACE)) {
+        platformLog("debug", "llm_payload_refine",
+          buildLlmPayloadDebug("refine", requestParams, cycleId));
+      }
+      const response = await callAnthropic(client, requestParams);
+      refinedText = response.content[0].text;
     }
-    const response = await callAnthropic(client, requestParams);
     userPrompt = null;
 
-    const raw = response.content[0].text.trim();
+    const raw = refinedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
 

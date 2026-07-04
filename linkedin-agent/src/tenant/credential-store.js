@@ -38,9 +38,26 @@ const AES_AUTH_TAG_LENGTH_BYTES = 16;
 // strings — they use the typed accessor functions below.
 const STORAGE_KEY = Object.freeze({
   ANTHROPIC_API_KEY:     "anthropic_api_key",
+  OPENAI_API_KEY:        "openai_api_key",
+  GROK_API_KEY:          "grok_api_key",
+  CUSTOM_LLM_API_KEY:    "custom_llm_api_key",
   LINKEDIN_ACCESS_TOKEN: "linkedin_access_token",
   LINKEDIN_PERSON_URN:   "linkedin_person_urn",
   LINKEDIN_ORG_URN:      "linkedin_org_urn"
+});
+
+// LLM provider dimension: each vendor's key lives under its own
+// storage key, so the effective credential lookup is keyed by
+// (tenant, provider). The tenant half comes from RLS plus the
+// HKDF salt; the provider half is this map. Fail closed: a
+// provider missing from this map has no credential path at all.
+// anthropic deliberately reuses the legacy storage key so
+// existing tenants keep working with zero data migration.
+const LLM_PROVIDER_STORAGE_KEY = Object.freeze({
+  anthropic: STORAGE_KEY.ANTHROPIC_API_KEY,
+  openai:    STORAGE_KEY.OPENAI_API_KEY,
+  grok:      STORAGE_KEY.GROK_API_KEY,
+  custom:    STORAGE_KEY.CUSTOM_LLM_API_KEY
 });
 
 // ── Derived-key cache (per tenant UUID) ──────────────────────
@@ -180,6 +197,51 @@ export async function getLinkedInPersonUrn() {
 // has not connected an org page via /auth/linkedin.
 export async function getLinkedInOrgUrn() {
   return fetchDecrypted(STORAGE_KEY.LINKEDIN_ORG_URN);
+}
+
+// ── Public API - LLM provider dimension ──────────────────────
+
+// Maps an LLM provider id to its credentials-table storage key.
+// Own-property lookup only: prototype names like __proto__ or
+// constructor can never resolve to a storage key.
+// Throws on unknown providers BEFORE any tenant or data access.
+export function llmCredentialKeyFor(providerId) {
+  const id = typeof providerId === "string" ? providerId.trim() : "";
+  if (!Object.prototype.hasOwnProperty.call(LLM_PROVIDER_STORAGE_KEY, id)) {
+    throw new Error(`No credential storage key for LLM provider: ${String(providerId)}`);
+  }
+  return LLM_PROVIDER_STORAGE_KEY[id];
+}
+
+// Returns the current tenant's API key for the given LLM provider,
+// in plaintext. The (tenant, provider) pair fully determines the
+// row: tenant via RLS + derived key, provider via storage key.
+//
+// Must be called inside a withTenant() block. Throws if the
+// provider is unknown, if there is no tenant context, if the
+// credential is missing, or if decryption fails.
+export async function getLlmApiKey(providerId) {
+  return fetchDecrypted(llmCredentialKeyFor(providerId));
+}
+
+// True when the current tenant has a stored key for the provider.
+// Existence probe only: the ciphertext is never fetched, nothing
+// is decrypted. Must be called inside a withTenant() block.
+export async function hasLlmApiKey(providerId) {
+  const storageKey = llmCredentialKeyFor(providerId);
+  const tenantId = currentTenantId();
+  if (!tenantId) {
+    throw new Error("credential access called outside tenant context");
+  }
+  const client = currentClient();
+  if (!client) {
+    throw new Error("No database client in tenant context");
+  }
+  const result = await client.query(
+    "SELECT 1 FROM credentials WHERE key = $1",
+    [storageKey]
+  );
+  return result.rows.length > 0;
 }
 
 // ── Public API — generic store ───────────────────────────────

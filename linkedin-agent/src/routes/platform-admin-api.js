@@ -145,6 +145,37 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "show-tenant-members": {
+    label: "Tenant Members",
+    description: "Show the Members.",
+    capability: "Show the Members.",
+    sql: `select t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id,m.id from memberships m
+            join tenants t on t.id = m.tenant_id
+            where t.slug = $1
+            order by m.created_at desc`,
+    params: [
+      { name: "tenant_slug", label: "Tenant Slug", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "update-membership-workspace": {
+    label: "Update Workspace",
+    description: "Authorizes a Tenant Member's workspace.",
+    capability: "Authorizes a Tenant Member's workspace.",
+    sql: `update memberships set auth_sub=$3
+            where tenant_id=$1
+            and id = $2`,
+    params: [
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "id", label: "Member UUID", type: "uuid", required: true },
+      { name: "value", label: "IDP Authorization", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: false
+  },
+
   "tenant-feed-summary": {
     label: "Tenant Feed Summary",
     description: "Feed counts, catchall vs topic-specific, and validation grades for a tenant.",

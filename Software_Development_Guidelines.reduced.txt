@@ -1,6 +1,8 @@
-Each response that is given should be concise, not overly verbose unless instructed otherwise, and end with succinct points. Describe one functional area at a time, from the perspective of the end-user.
+Respond to me using concise language, using abstractions versus verbose and nuanced details. Always conclude a response section succinct points or action items.
+Do not mix talking points together. Stay focused on a single thought process and follow it through to completion.
 If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
-I've noticed that often times that the line numbers you send are incorrect. Be sure lean on function names and code anchors rather than line numbers alone to mitigate drift.
+When performing code analysis you must expand your view beyond the single threaded use case, to include variants of the same use case for multiple conditions. This will help find hidden or other edge cases.
+Be sure to lean on function names and code anchors rather than line numbers alone to mitigate drift.
 
 MANDATORY AI "SOFT SKILLS"
 - Do not over explain your reasoning.
@@ -16,10 +18,13 @@ SYSTEM FACTS
 - developed and tested locally on a Podman running an Ubuntu image container and a Podman image container.
 
 CODE GENERATION RULES
-- Apply Zero Trust cybersecurity principles everywhere, in each layer, including the UI.
-- Use distributed computing and enterprise architecture best practices in every design.
+- Apply Zero Trust cybersecurity principles everywhere, in every node layer and the UX.
+- Use enterprise architecture best practices for distributed computing in every design.
 - Make intelligent recommendations for improvements.
 - Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
+- 600-line is a soft limit for files.
+- Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly
+
 
 LIVE APPLICATION
 - The data layer is a Postgresql OLTP database running on a rootless Podmain container and hosted on the local EC2 instance.
@@ -62,12 +67,4 @@ TDD FRAMEWORK
         including interface contracts and signatures, configuration in
         place of hardcoded values, naming and file conventions, and
         required security patterns.
-
-
-
-MISC NOTES - These were established across conversations as implicit development conventions (distributed across the SDLC sessions, not in a single document):
-Design/Build/Test/Deploy categorization on every response; ask before assuming the category
-600-line is a soft limit for files.
-Factory functions for middleware to prevent shared test state
-Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly
 

@@ -12,9 +12,9 @@ my_path=/datavol/LinkedIn_Agent_drop
 PACKAGE=$my_path/backup/LinkedIn_Agent-$(date +%Y%m%dT%H%M%S)-deploy.zip
 backup_path=~/LinkedIn_Agent_Deploy
 ZIP_EXCLUDE=(
--x ".DS_Store"
--x "**/.git/*" "*/.git" -x ".git/*" -x -x "**.git*"
--x "*/data/*" -x "*/data" -x "data/*" -x "**/data*"
+-x "**/.DS_Store" -x "**/*.dump" -x "**/*.log"
+-x "**/.git/*" "*/.git" -x ".git/*" -x -x "**/*.git*"
+-x "**/data/*" -x "*/data" -x "data/*" -x "**/data*"
 -x "*/build/*" "*/build" -x "build/*" -x "**/build*"
 -x "*.sh"
 -x "*.log"
@@ -39,7 +39,7 @@ my_path=/datavol/LinkedIn_Agent_drop
 PACKAGE=$my_path/backup/LinkedIn_Agent-$(date +%Y%m%dT%H%M%S)-source.zip
 backup_path=~/LinkedIn_Agent/src/LinkedIn_Agent
 ZIP_EXCLUDE=(
--x ".DS_Store"
+-x "**/.DS_Store" -x "**/*.dump" -x "**/*.log"
 -x "**/.env " -x ".env*"
 -x "**/*nogit*"
 -x "**/.git/*" "*/.git" -x ".git/*" -x "**/*.git*" -x "**.git*"
@@ -72,8 +72,8 @@ backup_path=~/LinkedIn_Agent
 project=linkedin-agent
 ZIP_EXCLUDE=(
 -x "**/datavol/*" -x "**/datavol" -x "datavol/*" -x "**/datavol*" -x "**/*datavol*"
--x "**/.DS_Store" -x ".DS_Store"
--x "*/.git/*" -x "*/.git" -x ".git/*" -x "**/*.git*"
+-x "**/.DS_Store" -x "**/*.dump" -x "**/*.log"
+-x "**/.git/*" -x "*/.git" -x ".git/*" -x "**/*.git*"
 -x "**/node_modules/*"
 -x "**/dump" -x "**/dump/*" -x "dump/*" -x "dump"
 -x "drop/*" -x "**/drop" -x "**/*drop*/*" -x "drop" -x "*drop*" -x "*source_link*"
@@ -90,7 +90,7 @@ pushd $backup_path
 #   -x "**/node_modules/*" -x "**/dump/*" -x "**/drop/*" -x "**/online_drop/*" -x "**/awscliv2.zip"
 # read -p waiting x
 zip -9 -r -y $PACKAGE ./ "${ZIP_EXCLUDE[@]}" \
-  -x "**/node_modules/*" -x "**/dump/*" -x "**/drop/*" -x "**/online_drop/*" -x "**/awscliv2.zip"
+  -x "**/node_modules/*" -x "**/dump/*" -x "**/drop/*" -x "**/online_drop/*" -x "**/awscliv2.zip" -x "**/*.dump" -x "**/*.log"
   # -x "**/package*.json"
 zip -j $PACKAGE /datavol/LinkedIn_Agent_drop/bin/backup.sh
 sudo chmod 400 $PACKAGE

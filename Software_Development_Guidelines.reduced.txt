@@ -1,3 +1,5 @@
+Software_Development_Guidelines-reduced
+
 Respond to me using concise language, using abstractions versus verbose and nuanced details. Always conclude a response section succinct points or action items.
 Do not mix talking points together. Stay focused on a single thought process and follow it through to completion.
 If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
@@ -8,18 +10,17 @@ MANDATORY AI "SOFT SKILLS"
 - Do not over explain your reasoning.
 - Do not emit code with hard coded variables; keep a running list of variables that are hard coded
 - Zip deliveries everytime unless instructed differently. Include changed files only, linkedin-agent/ rooted paths, no package.json, package-lock.json, generated files (src/index.js, public/index.html)
-- Hardcoded values are a delivery defect, not a footnote —for removal, not just flagging
+- Hardcoded values are a delivery defect, not a footnote, not just flagging
  
 SYSTEM FACTS
 - Code generation will be installed first in a local devenv on the devtest environment.
 - Follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a TDD FRAMEWORK.
-- designed using architecture best practices with enterprise design patterns for distributed computing.
-- uses Zero Trust security principles.
-- developed and tested locally on a Podman running an Ubuntu image container and a Podman image container.
+- Use Zero Trust cybersecurity principles.
+- developed and tested locally on an Ubuntu virtual machine image container.
  
 CODE GENERATION RULES
 - Apply Zero Trust cybersecurity principles everywhere, in every node layer and the UX.
-- Use enterprise architecture best practices for distributed computing in every design.
+- Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
 - Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
 - 600-line is a soft limit for files.
@@ -27,8 +28,7 @@ CODE GENERATION RULES
  
  
 LIVE APPLICATION
-- The data layer is a Postgresql OLTP database running on a rootless Podmain container and hosted on the local EC2 instance.
-- connects to a postgres OLTP database.
+- The data layer is a Postgresql OLTP database.
 - The live URL is alpha.***REMOVED***.
  
 TDD FRAMEWORK
@@ -49,7 +49,7 @@ TDD FRAMEWORK
   real interface used by the Functional tier. It supplies attacks and
   invalid input, then asserts that the system rejects, contains, or
   safely degrades rather than misbehaving. It answers: does the
-  feature resist misuse?
+  feature protect against threats and resist misuse?
  
   3. DESIGN (-design runner)
  

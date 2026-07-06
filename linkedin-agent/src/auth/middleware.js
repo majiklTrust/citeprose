@@ -20,8 +20,15 @@
 
 import { isAuthEnabled, getProviders, getJwksMap, getIssuers, getSnapshotByIssuer } from "./index.js";
 import { verifyToken } from "./jwt-verifier.js";
-import { readSession, shouldRefreshSession, refreshSession, SESSION_COOKIE_NAME, MS_PER_MINUTE, SESSION_MAX_AGE_MS } from "./session.js";
+import { readSession, shouldRefreshSession, refreshSession, SESSION_COOKIE_NAME, MS_PER_MINUTE, SESSION_MAX_AGE_MS, setSessionLogger } from "./session.js";
 import { platformLog } from "../services/platform-log.js";
+
+// session.js is a foundational crypto module that imports only Node
+// built-ins, so it cannot import the logger itself. The middleware is
+// the auth orchestration layer and already depends on both, so it
+// injects the real logger here at load; session lifecycle debug events
+// then flow through platformLog exactly as before.
+setSessionLogger(platformLog);
 
 // ── Error Responses ──────────────────────────────────────────
 // Generic messages — never leak token details or internal state.

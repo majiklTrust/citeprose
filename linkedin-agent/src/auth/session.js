@@ -14,7 +14,18 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:crypto';
-import { platformLog } from '../services/platform-log.js';
+
+// ── Injectable logger (keeps this module free of the services layer)
+// session.js is a foundational crypto/session module and must import
+// only Node built-ins, so it cannot import platformLog directly. The
+// orchestration layer (auth/middleware.js) wires the real logger in
+// at startup via setSessionLogger(); until then this is a no-op, so
+// the module is silent and safe in tests or any unwired context. Only
+// non-secret, debug-level session lifecycle events are ever passed.
+let sessionLog = () => {};
+export function setSessionLogger(fn) {
+  sessionLog = typeof fn === 'function' ? fn : (() => {});
+}
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -177,7 +188,7 @@ export function createSession(res, tokens) {
     maxAge: SESSION_MAX_AGE_MS,
   });
 
-  platformLog("debug", "session_created", {
+  sessionLog("debug", "session_created", {
     sub: tokens.user.sub,
     ttlMinutes: Math.round(SESSION_MAX_AGE_MS / MS_PER_MINUTE)
   });
@@ -292,13 +303,13 @@ export function refreshSession(res, session) {
       maxAge: SESSION_MAX_AGE_MS,
     });
 
-    platformLog("debug", "session_refreshed", {
+    sessionLog("debug", "session_refreshed", {
       sub: session.user.sub,
       oldRemainingMinutes: Math.round(oldRemainingMs / MS_PER_MINUTE),
       newTtlMinutes: Math.round(SESSION_MAX_AGE_MS / MS_PER_MINUTE)
     });
   } catch (err) {
-    platformLog("debug", "session_refresh_failed", {
+    sessionLog("debug", "session_refresh_failed", {
       sub: session.user?.sub,
       error: err.message
     });

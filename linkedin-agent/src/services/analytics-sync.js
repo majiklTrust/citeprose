@@ -136,21 +136,42 @@ export async function syncTenantAnalytics(deps = {}) {
     }
   }
 
+  // Two DISTINCT missing-configuration states (FR-CC-01 spirit):
+  // no access token means LinkedIn is not connected at all; a token
+  // without an org URN means the org page is not configured. The
+  // first is fixed by Connect/Reconnect, the second by Connect Org
+  // Page. Collapsing them sends the operator to the wrong fix.
   let token, orgUrn;
   try {
     token = await d.getToken();
-    orgUrn = await d.getOrgUrn();
   } catch (err) {
     await d.log("warn", "analytics_sync_skipped", {
       code: LI_ERROR_CODES.NOT_CONNECTED, reason: err.message
     });
     return { status: "not_connected", postsUpdated: 0, postsFailed: 0, demographicsFacets: 0 };
   }
+  try {
+    orgUrn = await d.getOrgUrn();
+  } catch (err) {
+    await d.log("warn", "analytics_sync_skipped", {
+      code: "LINKEDIN_ORG_NOT_CONFIGURED", reason: err.message
+    });
+    return { status: "org_not_configured", postsUpdated: 0, postsFailed: 0, demographicsFacets: 0 };
+  }
 
+  // Org share statistics exist ONLY for organization-authored
+  // posts, so the sweep attempts exactly those. Legacy rows with a
+  // NULL publish_target (published before the per-post column, or
+  // under the env default) are excluded: their authorship is not
+  // recorded, and attempting personally-authored posts against the
+  // org endpoint only manufactures per-post failure noise. An
+  // operator who knows legacy posts were org-authored can backfill
+  // posts.publish_target to include them.
   const { rows: posts } = await (await client()).query(
     `SELECT id, linkedin_id
        FROM posts
       WHERE linkedin_id IS NOT NULL AND status = 'posted'
+        AND publish_target = 'organization'
       ORDER BY posted_at DESC NULLS LAST, id DESC
       LIMIT $1`,
     [d.batchSize]
@@ -224,7 +245,7 @@ export async function runAnalyticsSyncBatch() {
   for (const tenant of tenants) {
     try {
       const r = await withTenant(tenant.id, () => syncTenantAnalytics());
-      if (r.status === "ok" || r.status === "disabled" || r.status === "not_connected") summary.ok++;
+      if (r.status === "ok" || r.status === "disabled" || r.status === "not_connected" || r.status === "org_not_configured") summary.ok++;
       else summary.failed++;
     } catch (err) {
       summary.failed++;

@@ -1122,6 +1122,34 @@
                   <a href="/auth/linkedin" className="text-link-blue">Connect now →</a>
                 </div>
               )}
+              {status.linkedinConnected && (
+                <div className="stat-meta">
+                  Publishing as: {status.publishTarget === 'organization' ? 'Org page' : 'Personal'}
+                  {status.user?.role === 'owner' && (
+                    <button
+                      className="btn-link text-link-blue"
+                      style={{ marginLeft: '0.4rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                      title={status.publishTarget === 'organization' ? 'Switch to personal profile' : 'Switch to organization page'}
+                      onClick={async () => {
+                        const next = status.publishTarget === 'organization' ? 'personal' : 'organization';
+                        try {
+                          await mutate(`${API}/api/linkedin/publish-target`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ target: next })
+                          });
+                          fetchAll();
+                        } catch (err) {
+                          alert('Could not switch publish target: ' + err.message);
+                        }
+                      }}
+                    >⇄ switch</button>
+                  )}
+                  {status.user?.role === 'owner' && (
+                    <span> · <a href="/app/linkedin/" className="text-link-blue">Manage →</a></span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

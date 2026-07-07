@@ -35,6 +35,7 @@ import axios from "axios";
 import { logActivity } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { publishPost as legacyPublishPost } from "./linkedin-api.js";
+import { getPublishTarget, isValidPublishTarget } from "./publish-target.js";
 import {
   getLinkedInAccessToken,
   getLinkedInPersonUrn,
@@ -57,16 +58,9 @@ function getPublishMode() {
   return "text-posting";
 }
 
-function getPublishTarget() {
-  // Controls which LinkedIn identity is used as the post author.
-  //   personal     — urn:li:person:{id} from linkedin_person_urn (default)
-  //   organization — urn:li:organization:{id} from linkedin_org_urn
-  //
-  // Switching is a .env change + restart. Both URNs coexist in
-  // the credentials table — no re-authentication needed.
-  const target = (process.env.LINKEDIN_PUBLISH_TARGET || "personal").toLowerCase();
-  return target === "organization" ? "organization" : "personal";
-}
+// Publish target resolution moved to services/publish-target.js
+// (pure core + per-tenant agent_state layer). This module only
+// consumes the resolved value; it no longer reads the env var.
 
 function getLinkedInVersion() {
   // LinkedIn REST API date-based version. Must match your approved
@@ -354,9 +348,8 @@ async function uploadImageToLinkedIn(token, ownerUrn, imageBuffer, contentType) 
 // and organization page via the author URN. Optionally includes
 // an image if imageUrl is provided.
 
-async function restPublish(content, hashtags, imageUrl) {
+async function restPublish(content, hashtags, imageUrl, target) {
   let token, authorUrn;
-  const target = getPublishTarget();
 
   try {
     token = await getLinkedInAccessToken();
@@ -444,12 +437,12 @@ async function restPublish(content, hashtags, imageUrl) {
       contentLength: fullContent.length,
       hasImage: !!imageUrl,
       mode: "rest",
-      target: getPublishTarget()
+      target
     });
 
     platformLog("info", "linkedin_post_published", {
       postId, hasImage: !!imageUrl, mode: "rest",
-      target: getPublishTarget()
+      target
     });
 
     return { success: true, postId };
@@ -462,7 +455,7 @@ async function restPublish(content, hashtags, imageUrl) {
       error: errorDetail,
       hasImage: !!imageUrl,
       mode: "rest",
-      target: getPublishTarget()
+      target
     });
 
     if (statusCode === 401) {
@@ -496,9 +489,9 @@ export async function publishPost(content, hashtags = [], imageUrl = null, targe
   // into them is the remaining wiring when organization/MDP posting is
   // implemented. For v1 this records the per-post target and keeps the
   // data flow destination-aware end to end.
-  const target = (targetOverride === "personal" || targetOverride === "organization")
+  const target = isValidPublishTarget(targetOverride)
     ? targetOverride
-    : getPublishTarget();
+    : await getPublishTarget();
   const tenant = currentTenantId() || "unknown";
 
   platformLog("info", "publish", {
@@ -518,10 +511,16 @@ export async function publishPost(content, hashtags = [], imageUrl = null, targe
         reason: "LINKEDIN_PUBLISH_MODE=text-posting does not support images"
       });
     }
+    if (target === "organization") {
+      throw new Error(
+        "Organization publishing requires LINKEDIN_PUBLISH_MODE=rest; " +
+        "text-posting mode authors as the personal profile only"
+      );
+    }
     return legacyPublishPost(content, hashtags);
   }
 
-  return restPublish(content, hashtags, imageUrl);
+  return restPublish(content, hashtags, imageUrl, target);
 }
 
 // Re-export for callers that need to check the mode

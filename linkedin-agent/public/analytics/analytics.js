@@ -41,6 +41,7 @@
     LINKEDIN_ENDPOINT_ERROR: 'LinkedIn returned an unexpected endpoint error. Details are in the activity log.',
     LINKEDIN_NETWORK: 'The LinkedIn call failed at the network layer (timeout or connectivity).',
     LINKEDIN_NOT_CONNECTED: 'LinkedIn is not connected for this workspace. Connect it from the dashboard first.',
+    LINKEDIN_ORG_NOT_CONFIGURED: 'LinkedIn is connected, but no organization page is configured. Org analytics needs one: use Connect Org Page in LinkedIn settings.',
     NARRATIVE_NOT_CONFIGURED: 'Narrative synthesis is not configured: the analytics_narrative prompt has not been seeded in the vault.'
   };
 

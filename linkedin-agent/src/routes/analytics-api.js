@@ -171,6 +171,14 @@ router.post("/sync", requirePermission("sync_analytics"), async (req, res) => {
         error: "LinkedIn is not connected for this workspace"
       });
     }
+    if (summary.status === "org_not_configured") {
+      // Distinct from NOT_CONNECTED on purpose: the token is fine,
+      // the organization page is what is missing (FR-CC-01 spirit).
+      return res.status(409).json({
+        success: false, code: "LINKEDIN_ORG_NOT_CONFIGURED",
+        error: "LinkedIn is connected, but no organization page is configured for this workspace"
+      });
+    }
     res.json({ success: true, summary });
   } catch (err) {
     platformLog("error", "analytics_sync_route_failed", { error: err.message });

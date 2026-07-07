@@ -117,6 +117,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     // Tenant-scoped data — only available if caller is authenticated
     // AND has a tenant. Otherwise omit (dashboard handles nulls).
     let stats = null, mode = null, paused = false, corroboration = "enabled";
+    let publishTarget = "personal", linkedinOrgConfigured = false;
     let researchStats = null;
     let cadence = null;
     let tokenStatus = { valid: false };
@@ -176,6 +177,15 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             cadence = await canPostNow();
             tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
             anthropicModel = await getAnthropicModel();
+            // Publish authorship, resolved per tenant (override layer
+            // does not apply to the dashboard summary), plus whether
+            // organization mode is even configurable.
+            try {
+              const { getPublishTarget } = await import("../services/publish-target.js");
+              publishTarget = await getPublishTarget();
+              const { hasLinkedInOrgUrn } = await import("../tenant/credential-store.js");
+              linkedinOrgConfigured = await hasLinkedInOrgUrn();
+            } catch { /* defaults hold */ }
           });
         }
       } catch {
@@ -204,6 +214,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       feedLimit: parseInt(process.env.DASHBOARD_FEED_LIMIT) || 8,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
+      publishTarget,
+      linkedinOrgConfigured,
       anthropicModel,
       publishMode: getPublishMode()
     });

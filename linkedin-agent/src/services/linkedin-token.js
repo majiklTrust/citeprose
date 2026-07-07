@@ -221,3 +221,83 @@ export async function startTokenRefresher() {
     .then((summary) => platformLog("info", "token_refresh_initial_sweep", summary))
     .catch((err) => platformLog("error", "token_refresh_initial_sweep_failed", { error: err.message }));
 }
+
+// ── Manual token set (runs INSIDE withTenant) ─────────────────
+// Operator-supplied token pair, stored atomically alongside the
+// automatic refresher. Contract:
+//   - BOTH tokens required: a lone access token or lone refresh
+//     token leaves the tenant mismatched, so the call refuses and
+//     stores NOTHING (atomicity).
+//   - Expiry seconds are optional. Supplied: bookmarked from
+//     nowSeconds so the refresher respects the pasted pair's real
+//     lifetime. Omitted or invalid: bookmarks are CLEARED, which
+//     shouldRefreshNow treats as "unknown, establish bookkeeping",
+//     so the next sweep rotates the pair and repairs the expiries
+//     from LinkedIn's own numbers. Manual set never needs to be
+//     perfect; the automatic path self-heals it.
+//   - Token VALUES never reach a log. Lengths only.
+// Refreshing never changes scopes: the pasted pair keeps whatever
+// scopes its original authorization carried. Changing scopes is
+// the OAuth reconnect flow's job, not this function's.
+export async function setManualTokens(input = {}, deps = {}) {
+  const d = {
+    nowSeconds: Math.floor(Date.now() / 1000),
+    tenantId: null,
+    ...deps
+  };
+  if (!d.store || !d.setState || !d.log) {
+    const cs = await import("../tenant/credential-store.js");
+    const db = await import("./database.js");
+    d.store = d.store || cs.storeCredential;
+    d.setState = d.setState || db.setAgentState;
+    d.log = d.log || db.logActivity;
+  }
+  if (!d.invalidateCache) {
+    const la = await import("./linkedin-api.js");
+    d.invalidateCache = d.invalidateCache || la.invalidateTokenCache;
+  }
+
+  const accessToken = typeof input.accessToken === "string" ? input.accessToken.trim() : "";
+  const refreshToken = typeof input.refreshToken === "string" ? input.refreshToken.trim() : "";
+  if (!accessToken || !refreshToken) {
+    return {
+      status: "rejected",
+      reason: "both accessToken and refreshToken are required; nothing was stored"
+    };
+  }
+
+  // Strict expiry parse: a positive integer given as a number or an
+  // all-digits string, nothing else. parseInt would accept "1; --"
+  // as 1, turning injection-shaped input into a bookmark.
+  const strictSeconds = (v) => {
+    if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) {
+      const n = Number(v.trim());
+      return Number.isSafeInteger(n) && n > 0 ? n : null;
+    }
+    return null;
+  };
+  const expiresIn = strictSeconds(input.expiresIn);
+  const refreshExpiresIn = strictSeconds(input.refreshTokenExpiresIn);
+  const accessBookmark = expiresIn !== null ? String(d.nowSeconds + expiresIn) : "";
+  const refreshBookmark = refreshExpiresIn !== null ? String(d.nowSeconds + refreshExpiresIn) : "";
+
+  await d.store("linkedin_access_token", accessToken);
+  await d.store("linkedin_refresh_token", refreshToken);
+  await d.setState("linkedin_token_expires_at", accessBookmark);
+  await d.setState("linkedin_refresh_expires_at", refreshBookmark);
+  if (d.tenantId) d.invalidateCache(d.tenantId);
+
+  await d.log("info", "linkedin_tokens_manually_set", {
+    accessTokenLength: accessToken.length,
+    refreshTokenLength: refreshToken.length,
+    accessExpiryBookmarked: accessBookmark !== "",
+    refreshExpiryBookmarked: refreshBookmark !== ""
+  });
+
+  return {
+    status: "stored",
+    accessExpiryBookmarked: accessBookmark !== "",
+    refreshExpiryBookmarked: refreshBookmark !== ""
+  };
+}

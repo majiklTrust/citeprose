@@ -200,6 +200,20 @@ export async function hasLinkedInRefreshToken() {
   }
 }
 
+// Presence probe for the organization page URN, same contract as
+// hasLinkedInRefreshToken: never decrypt-throws on absence. Used by
+// the status endpoint and the publish-target route to answer "is
+// organization mode even configurable" without exception control
+// flow. Must run inside withTenant().
+export async function hasLinkedInOrgUrn() {
+  try {
+    await fetchDecrypted(STORAGE_KEY.LINKEDIN_ORG_URN);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Returns the current tenant's LinkedIn person URN.
 // Format: "urn:li:person:<id>". Used as the author field when
 // publishing a post. Not encrypted-sensitive but stored here

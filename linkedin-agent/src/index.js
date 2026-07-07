@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.1.1
+// v2.1.4
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -54,6 +54,7 @@ export function createApp(ctx) {
   const {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    linkedinConnectionRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -161,6 +162,10 @@ export function createApp(ctx) {
   // roles; the data behind it is permission-gated at the API layer
   // (view_analytics / sync_analytics), matching the feeds pattern.
   instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+
+  // LinkedIn connection settings page (owner controls; the APIs it
+  // calls are manage_linkedin-gated, the shell itself is static).
+  instance.use("/app/linkedin", express.static(path.join(__dirname, "../public/linkedin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback. Owner-gated server-side
@@ -400,6 +405,34 @@ export function createApp(ctx) {
           await storeCredential("linkedin_person_urn", `urn:li:person:${personSub}`);
         }
 
+        // Organization discovery, layered on the SAME grant (no
+        // second OAuth flow exists or is needed). Exactly one
+        // administered org: store it, org mode becomes available.
+        // Several: store nothing here; the owner picks on the
+        // LinkedIn settings page. None or any failure: state it in
+        // the log and move on. Discovery can never break the
+        // connect itself.
+        let discoveredOrg = null;
+        if (personSub) {
+          try {
+            const { fetchAdministeredOrgs } = await import("./services/linkedin-orgs.js");
+            const orgs = await fetchAdministeredOrgs(tokens.accessToken, `urn:li:person:${personSub}`);
+            if (orgs.length === 1) {
+              await storeCredential("linkedin_org_urn", orgs[0].orgUrn);
+              discoveredOrg = orgs[0].orgUrn;
+              platformLog("info", "linkedin_org_connected", { tenant: tenant.slug, via: "oauth_discovery" });
+            } else {
+              platformLog("info", orgs.length === 0 ? "linkedin_org_discovery_none" : "linkedin_org_discovery_multiple", {
+                tenant: tenant.slug, count: orgs.length
+              });
+            }
+          } catch (orgErr) {
+            platformLog("warn", "linkedin_org_discovery_failed", {
+              tenant: tenant.slug, code: orgErr.code || "error"
+            });
+          }
+        }
+
         platformLog("info", "linkedin_credentials_stored", {
           tenant: tenant.slug,
           user: userSub,
@@ -417,6 +450,7 @@ export function createApp(ctx) {
           <p>Logged in as: <strong>${escapeHtml(profileName)}</strong></p>
           ${!personSub ? '<p><em>Profile lookup failed. Token is valid but person URN was not saved. Retry auth to fix.</em></p>' : ''}
           <p>Credentials saved to your workspace.</p>
+          ${discoveredOrg ? '<p><strong>Organization page connected:</strong> discovery found exactly one administered org.</p>' : ''}
           <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
           <p>Redirecting to dashboard...</p>
           <br>
@@ -521,6 +555,11 @@ export function createApp(ctx) {
   // apiRoutes (api.js's guard 404s unknown /api/*).
   instance.use("/api/analytics", analyticsRoutes);
 
+  // LinkedIn connection management (publish target toggle, manual
+  // tokens, org discovery). Owner-gated inside via manage_linkedin.
+  // Must also be before apiRoutes for the same /api/* guard reason.
+  instance.use("/api/linkedin", linkedinConnectionRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -581,6 +620,7 @@ export async function buildAppForTests() {
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
+  const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -589,6 +629,7 @@ export async function buildAppForTests() {
   return createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    linkedinConnectionRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -665,6 +706,7 @@ export async function start() {
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
+  const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -684,6 +726,7 @@ export async function start() {
   app = createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    linkedinConnectionRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -704,7 +747,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.1.1
+║           LinkedIn AI Content Agent  2.1.4
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
@@ -728,12 +771,12 @@ export async function start() {
     startMonitor();
     // Batch publisher — fires scheduled posts at their set time
     startBatchPublisher();
-    // Token refresher — renews LinkedIn tokens before expiry (FR-CC-03).
+    // Token refresher: renews LinkedIn tokens before expiry (FR-CC-03).
     // Async (lazy node-cron import); a startup failure logs loudly and
     // must never become an unhandled rejection that kills the server.
     startTokenRefresher().catch((err) =>
       platformLog("error", "token_refresher_start_failed", { error: err.message }));
-    // Analytics sync — retrieves post metrics + demographics (FR-P1-01)
+    // Analytics sync: retrieves post metrics + demographics (FR-P1-01)
     startAnalyticsSync().catch((err) =>
       platformLog("error", "analytics_sync_start_failed", { error: err.message }));
   });

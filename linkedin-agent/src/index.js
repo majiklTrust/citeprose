@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.2.0
+// v2.2.1
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -55,8 +55,13 @@ export function createApp(ctx) {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
     linkedinConnectionRoutes,
+    advocacyRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
+    signMemberState, verifyMemberState, isMemberState,
+    buildMemberAuthorizationUrl, fetchConnectionsSize,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
@@ -166,6 +171,11 @@ export function createApp(ctx) {
   // LinkedIn connection settings page (owner controls; the APIs it
   // calls are manage_linkedin-gated, the shell itself is static).
   instance.use("/app/linkedin", express.static(path.join(__dirname, "../public/linkedin"), { index: "index.html", setHeaders: staticCacheHeaders }));
+
+  // Advocacy page (Phase 2 Step 1): member self panel for all
+  // roles plus the owner management section; data behind it is
+  // gated at the API layer.
+  instance.use("/app/advocacy", express.static(path.join(__dirname, "../public/advocacy"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback. Owner-gated server-side
@@ -289,6 +299,71 @@ export function createApp(ctx) {
   // ── LinkedIn OAuth ──────────────────────────────────────────
   instance.get("/auth/linkedin/callback", async (req, res) => {
     const { code, error, state } = req.query;
+
+    // ── Member-leg dispatch (Phase 2 Step 1) ─────────────────
+    // Member states are signed (m1. prefix). Verified here FIRST;
+    // everything below this block is the tenant path, byte-for-
+    // byte as before. A member failure renders a member error
+    // page and can never fall through into tenant handling.
+    if (isMemberState(state)) {
+      const memberFail = (msg) => res.status(403).send(`
+        <h2>Advocacy Connection Failed</h2>
+        <p>${escapeHtml(msg)}</p>
+        <a href="/app/advocacy/">Back to Advocacy</a>
+      `);
+      try {
+        const verdict = verifyMemberState(state);
+        if (!verdict.ok || !validateOAuthState(verdict.payload.n)) {
+          platformLog("warn", "advocacy_member_state_rejected", {
+            reason: verdict.ok ? "nonce_invalid" : verdict.reason
+          });
+          return memberFail("Invalid or expired connection state. Please try again from the Advocacy page.");
+        }
+        if (error) {
+          return memberFail(`LinkedIn declined the authorization: ${String(error)}`);
+        }
+        const { sub: memberSub, tenant: tenantId } = verdict.payload;
+        await withTenant(tenantId, async () => {
+          const tokens = await exchangeCodeForToken(code);
+          const profile = await getProfile(tokens.accessToken);
+          const personSub = profile?.sub || null;
+
+          const mc = await import("./tenant/member-credential-store.js");
+          await mc.storeMemberCredential(memberSub, "linkedin_access_token", tokens.accessToken);
+          if (tokens.refreshToken) {
+            await mc.storeMemberCredential(memberSub, "linkedin_refresh_token", tokens.refreshToken);
+          }
+          if (personSub) {
+            await mc.storeMemberCredential(memberSub, "linkedin_person_urn", `urn:li:person:${personSub}`);
+          }
+          await advocacyMarkConnected(memberSub, ADVOCACY_CONSENT_VERSION);
+
+          // Reach snapshot is best-effort: its failure never
+          // breaks the connect (FR-P2-05 input only).
+          try {
+            const size = await fetchConnectionsSize(tokens.accessToken);
+            await advocacySnapshotConnectionsSize(memberSub, size);
+          } catch (reachErr) {
+            platformLog("warn", "advocacy_connections_size_failed", {
+              code: reachErr.code || "error"
+            });
+          }
+          const { logActivity } = await import("./services/database.js");
+          await logActivity("info", "advocacy_member_connected", {
+            consentVersion: ADVOCACY_CONSENT_VERSION,
+            refreshTokenStored: !!tokens.refreshToken
+          }, memberSub);
+        });
+        return res.send(`
+          <h2>Personal LinkedIn Connected</h2>
+          <p>Your profile is connected for advocacy in manual mode: nothing publishes without your approval.</p>
+          <a href="/app/advocacy/">Back to Advocacy</a>
+        `);
+      } catch (err) {
+        platformLog("error", "advocacy_member_connect_failed", { error: err.message });
+        return memberFail("The connection could not be completed. Please try again.");
+      }
+    }
 
     if (!validateOAuthState(state)) {
       return res.status(403).send(`
@@ -501,6 +576,79 @@ export function createApp(ctx) {
     }
   });
 
+  // ── Member OAuth leg (Phase 2 Step 1, TD-2) ────────────────
+  // Same app, same registered redirect URI, the MEMBER scope set
+  // (6), and a SIGNED state the shared callback dispatches on.
+  // Two steps: GET /auth/linkedin/member renders the consent
+  // language (FR-P2-01); the continue link hits /start, which
+  // signs the state and redirects to LinkedIn.
+  async function resolveMemberContext(req) {
+    const session = readSession(req);
+    let userSub = session?.user?.sub || null;
+    if (!userSub && process.env.NODE_ENV === "dev"
+        && !!process.env.DEV_BYPASS_ORIGINS
+        && process.env.DEV_BYPASS_SUB && process.env.DEV_BYPASS_SUB.trim().length > 0) {
+      userSub = process.env.DEV_BYPASS_SUB.trim();
+    }
+    if (!userSub) return { error: "not_signed_in" };
+    const provider = userSub.startsWith("user_") ? "workos" : "auth0";
+    let tenant = null;
+    try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch { /* lookup failed */ }
+    if (!tenant) return { error: "no_workspace" };
+    const self = await withTenant(tenant.id, () => advocacyGetSelf(userSub));
+    if (!self) return { error: "not_enabled" };
+    return { userSub, tenant };
+  }
+
+  instance.get("/auth/linkedin/member", async (req, res) => {
+    try {
+      const ctx = await resolveMemberContext(req);
+      if (ctx.error) {
+        return res.status(403).send(`
+          <h2>Advocacy connection unavailable</h2>
+          <p>${ctx.error === "not_enabled"
+            ? "Advocacy has not been enabled for your account. Ask a workspace owner to enable you first."
+            : "Sign in to your workspace before connecting a personal LinkedIn profile."}</p>
+          <a href="/app/advocacy/">Back to Advocacy</a>
+        `);
+      }
+      res.send(`
+        <h2>Connect your personal LinkedIn profile</h2>
+        <p><strong>Consent (version ${escapeHtml(ADVOCACY_CONSENT_VERSION)}):</strong>
+        by continuing, you authorize this platform to publish posts to YOUR personal
+        LinkedIn profile, in your name, only under your own controls: in manual mode
+        nothing publishes without your explicit approval of each post; auto mode is
+        available only if you yourself opt in later, and you can revoke it or
+        disconnect entirely at any time from the Advocacy page. The platform will
+        read your basic profile (name, headline, photo) and your first-degree
+        connection count. The permissions requested are limited to your identity,
+        your own posting, and that connection count; no advertising or organization
+        permissions are requested on your personal profile.</p>
+        <p><a href="/auth/linkedin/member/start">I consent: continue to LinkedIn</a></p>
+        <p><a href="/app/advocacy/">Cancel</a></p>
+      `);
+    } catch (err) {
+      platformLog("error", "advocacy_consent_page_failed", { error: err.message });
+      res.status(500).send("<h2>Advocacy connection failed</h2><a href=\"/app/advocacy/\">Back</a>");
+    }
+  });
+
+  instance.get("/auth/linkedin/member/start", async (req, res) => {
+    try {
+      const ctx = await resolveMemberContext(req);
+      if (ctx.error) {
+        return res.status(403).send("<h2>Advocacy connection unavailable</h2><a href=\"/app/advocacy/\">Back</a>");
+      }
+      const nonce = generateOAuthState();
+      const state = signMemberState({ sub: ctx.userSub, tenant: ctx.tenant.id, n: nonce });
+      const url = await withTenant(ctx.tenant.id, () => buildMemberAuthorizationUrl(state));
+      res.redirect(url);
+    } catch (err) {
+      platformLog("error", "advocacy_member_auth_url_failed", { error: err.message });
+      res.status(503).send("LinkedIn connection is not configured for this workspace.");
+    }
+  });
+
   // ── Auth Status Probe ─────────────────────────────────────
   // Used by the alpha homepage (site.js) to decide CTA targets.
   // Does NOT go through requireAuth/optionalAuth middleware —
@@ -588,6 +736,11 @@ export function createApp(ctx) {
   // Must also be before apiRoutes for the same /api/* guard reason.
   instance.use("/api/linkedin", linkedinConnectionRoutes);
 
+  // Advocacy participation (Phase 2 Step 1). Owner management is
+  // manage_advocacy-gated inside; member self routes are session-
+  // scoped. Must be before apiRoutes for the /api/* guard reason.
+  instance.use("/api/advocacy", advocacyRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -635,6 +788,15 @@ export async function buildAppForTests() {
   const { escapeHtml,
           generateOAuthState,
           validateOAuthState }           = await import("./services/security.js");
+  const { signMemberState,
+          verifyMemberState,
+          isMemberState }                = await import("./services/oauth-state.js");
+  const { buildMemberAuthorizationUrl,
+          fetchConnectionsSize }         = await import("./services/linkedin-member.js");
+  const { getSelf: advocacyGetSelf,
+          markConnected: advocacyMarkConnected,
+          snapshotConnectionsSize: advocacySnapshotConnectionsSize,
+          CONSENT_TEXT_VERSION: ADVOCACY_CONSENT_VERSION } = await import("./services/advocacy-members.js");
   const { initRegistry,
           isAuthEnabled,
           getDefaultProvider }           = await import("./auth/index.js");
@@ -649,6 +811,7 @@ export async function buildAppForTests() {
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
+  const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -658,8 +821,13 @@ export async function buildAppForTests() {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
     linkedinConnectionRoutes,
+    advocacyRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
+    signMemberState, verifyMemberState, isMemberState,
+    buildMemberAuthorizationUrl, fetchConnectionsSize,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
@@ -719,6 +887,15 @@ export async function start() {
   const { escapeHtml,
           generateOAuthState,
           validateOAuthState }           = await import("./services/security.js");
+  const { signMemberState,
+          verifyMemberState,
+          isMemberState }                = await import("./services/oauth-state.js");
+  const { buildMemberAuthorizationUrl,
+          fetchConnectionsSize }         = await import("./services/linkedin-member.js");
+  const { getSelf: advocacyGetSelf,
+          markConnected: advocacyMarkConnected,
+          snapshotConnectionsSize: advocacySnapshotConnectionsSize,
+          CONSENT_TEXT_VERSION: ADVOCACY_CONSENT_VERSION } = await import("./services/advocacy-members.js");
   const { initRegistry,
           isAuthEnabled,
           getDefaultProvider }           = await import("./auth/index.js");
@@ -735,6 +912,7 @@ export async function start() {
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
+  const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -755,8 +933,13 @@ export async function start() {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
     linkedinConnectionRoutes,
+    advocacyRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
+    signMemberState, verifyMemberState, isMemberState,
+    buildMemberAuthorizationUrl, fetchConnectionsSize,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
     getServerAddress,
@@ -775,7 +958,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.2.0
+║           LinkedIn AI Content Agent  2.2.1
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

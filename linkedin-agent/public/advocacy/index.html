@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/app/favicon.png">
+  <link rel="stylesheet" href="/app/shared/manager-nav.css">
+  <title>Advocacy: LinkedIn Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 2rem; }
+    .container { max-width: 860px; margin: 0 auto; }
+    h1 { margin-bottom: 0.5rem; }
+    .subtitle { font-size: 0.78rem; color: #888; font-weight: 400; margin-top: 0.2rem; }
+    .section { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .section h2 { margin-bottom: 0.35rem; font-size: 1.05rem; }
+    .section-note { font-size: 0.75rem; color: #999; margin-bottom: 1rem; }
+    .btn { padding: 0.45rem 0.9rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .btn-primary { background: #0073b1; color: #fff; }
+    .btn-primary:hover { background: #005a8d; }
+    .btn-secondary { background: #e0e0e0; color: #333; }
+    .btn-secondary:hover { background: #ccc; }
+    .btn-danger { background: #ffebee; color: #c62828; }
+    .msg { padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.85rem; }
+    .msg-error { background: #ffebee; color: #c62828; }
+    .msg-warn { background: #fff3e0; color: #e65100; }
+    .msg-success { background: #e8f5e9; color: #2e7d32; }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.86rem; }
+    .row .k { color: #666; }
+    .row .v { color: #222; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+    .pill-on { background: #e8f5e9; color: #2e7d32; }
+    .pill-off { background: #ffebee; color: #c62828; }
+    .pill-mode { background: #e3f2fd; color: #1565c0; }
+    .toggle-wrap { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .toggle-btn { flex: 1; padding: 0.55rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; cursor: pointer; font-size: 0.85rem; }
+    .toggle-btn.active { background: #0073b1; color: #fff; border-color: #0073b1; font-weight: 600; }
+    .toggle-btn:disabled { opacity: 0.5; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { text-align: left; color: #666; font-weight: 600; padding: 0.4rem 0.5rem; border-bottom: 2px solid #e0e0e0; }
+    td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #f0f0f0; }
+    label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.7rem 0 0.25rem; }
+    input[type=text] { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; font-family: monospace; }
+    .hint { font-size: 0.72rem; color: #999; margin-top: 0.2rem; }
+    .empty { color: #999; font-style: italic; }
+    .loading { text-align: center; padding: 2rem; color: #999; }
+    .access-denied { text-align: center; padding: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="loading" class="loading">Checking access...</div>
+
+    <div id="denied" class="access-denied" style="display:none">
+      <h1>Access denied</h1>
+      <p style="margin-top:0.75rem;color:#666">Sign in to a workspace to view advocacy.</p>
+      <p style="margin-top:1rem"><a href="/app">Back to dashboard</a></p>
+    </div>
+
+    <div id="app" style="display:none">
+      <div id="manager-nav"></div>
+      <h1>Advocacy</h1>
+      <div class="subtitle">Amplify workspace content through personal profiles. Your profile, your consent, your approvals.</div>
+      <div style="height:1.25rem"></div>
+
+      <div id="message"></div>
+
+      <div class="section">
+        <h2>My participation</h2>
+        <div class="section-note">Connecting is your choice alone. In manual mode nothing publishes to your profile without your explicit approval of each post; auto mode exists only if you opt in yourself, and you can disconnect at any time.</div>
+        <div id="me-body" class="empty">Loading...</div>
+        <div id="me-actions" style="margin-top:1rem"></div>
+        <div id="me-mode" style="display:none">
+          <label>Publishing mode</label>
+          <div class="toggle-wrap">
+            <button id="mode-manual" class="toggle-btn">Manual: I approve every post</button>
+            <button id="mode-auto" class="toggle-btn">Auto: publish approved variants for me</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" id="owner-section" style="display:none">
+        <h2>Members (owner)</h2>
+        <div class="section-note">Enabling adds a member to the program; they still must consent and connect themselves. Disabling removes participation and wipes the member's stored tokens.</div>
+        <div id="members-body" class="empty">Loading...</div>
+        <label for="enable-sub">Member auth sub</label>
+        <input type="text" id="enable-sub" autocomplete="off" spellcheck="false" placeholder="auth0|... or user_...">
+        <div class="hint">The member's identity sub as shown in the workspace membership. Enabling validates it against this workspace's memberships.</div>
+        <div style="margin-top:0.9rem">
+          <button id="btn-enable" class="btn btn-primary">Enable member</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app/shared/manager-nav.js"></script>
+  <script src="/app/advocacy/advocacy.js"></script>
+</body>
+</html>

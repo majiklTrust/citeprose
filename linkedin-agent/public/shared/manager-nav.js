@@ -23,6 +23,7 @@
   var pages = [
     { path: '/app/analytics', label: 'Analytics', roles: ['owner', 'editor', 'viewer'] },
     { path: '/app/linkedin', label: 'LinkedIn', roles: ['owner'] },
+    { path: '/app/advocacy', label: 'Advocacy', roles: ['owner', 'editor', 'viewer'] },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
     { path: '/app/admin', label: 'Manage', roles: ['owner'] }

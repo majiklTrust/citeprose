@@ -36,3 +36,23 @@ export const LINKEDIN_OAUTH_SCOPES = Object.freeze([
 export function getLinkedInScopeString() {
   return LINKEDIN_OAUTH_SCOPES.join(" ");
 }
+
+// The MEMBER personal-connection scope set (TD-2, corrected model:
+// per connection type, not per role). Every member personal
+// connection, any role including owner, consents to exactly this
+// minimal set: identity plus personal posting plus the reach
+// metric. Ads and organization scopes stay on the tenant
+// connection only; a member never grants abilities their advocacy
+// participation cannot use.
+export const LINKEDIN_MEMBER_OAUTH_SCOPES = Object.freeze([
+  "openid",
+  "profile",
+  "email",
+  "r_basicprofile",
+  "r_1st_connections_size",
+  "w_member_social"
+]);
+
+export function getLinkedInMemberScopeString() {
+  return LINKEDIN_MEMBER_OAUTH_SCOPES.join(" ");
+}

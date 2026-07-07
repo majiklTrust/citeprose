@@ -41,6 +41,13 @@ export function getLinkedInApiVersion() {
 }
 
 // Per-vendor-call timeout for analytics endpoints.
+// v2 API base (userinfo, connections). Literal lives here per the
+// no-hardcoding rule; env-overridable like the REST base.
+export function getLinkedInV2Base() {
+  const raw = (process.env.LINKEDIN_V2_BASE || "https://api.linkedin.com/v2").trim();
+  return raw.replace(/\/+$/, "");
+}
+
 export function getAnalyticsTimeoutMs() {
   return intEnv("ANALYTICS_TIMEOUT_MS", 15000, { min: 1000, max: 120000 });
 }

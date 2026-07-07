@@ -73,6 +73,26 @@
       </div>
 
       <div class="section">
+        <h2>App credentials</h2>
+        <div class="section-note">
+          Per-workspace LinkedIn app configuration (developer app client id and secret, and the OAuth redirect URI).
+          When set here, they override the platform defaults for this workspace only. Client id and secret are an
+          atomic pair, stored encrypted; the redirect URI is stored as plain text and must match a redirect URL
+          registered on the LinkedIn app. Leave the pair blank to keep using the platform defaults.
+        </div>
+        <div id="appconfig-body" class="empty">Loading...</div>
+        <label for="app-client-id">Client id</label>
+        <input type="password" id="app-client-id" autocomplete="off" spellcheck="false">
+        <label for="app-client-secret">Client secret</label>
+        <input type="password" id="app-client-secret" autocomplete="off" spellcheck="false">
+        <label for="app-redirect-uri">Redirect URI (plain text; empty clears the workspace override)</label>
+        <input type="text" id="app-redirect-uri" autocomplete="off" spellcheck="false" placeholder="https://your-host/auth/linkedin/callback">
+        <div style="margin-top:0.9rem">
+          <button id="btn-set-appconfig" class="btn btn-primary">Store app credentials</button>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>Publish as</h2>
         <div class="section-note">Selects which stored identity authors posts. Per-post overrides still win over this setting. Organization requires a connected org page.</div>
         <div class="toggle-wrap">

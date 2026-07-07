@@ -28,6 +28,7 @@ import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { setManualTokens } from "../services/linkedin-token.js";
+import { setTenantAppCredentials, getTenantAppConfigStatus } from "../services/linkedin-app-credentials.js";
 import { fetchAdministeredOrgs } from "../services/linkedin-orgs.js";
 import { isValidPublishTarget, getPublishTarget } from "../services/publish-target.js";
 import { isOrganizationUrn } from "../services/linkedin-analytics.js";
@@ -61,6 +62,7 @@ router.get("/", requirePermission("manage_linkedin"), async (req, res) => {
         personUrn: await safeGet(getLinkedInPersonUrn),
         orgUrn: await safeGet(getLinkedInOrgUrn),
         publishTarget: await getPublishTarget(),
+        appConfig: await getTenantAppConfigStatus(),
         accessTokenExpiresAt: await safeGet(() => getAgentState("linkedin_token_expires_at")),
         refreshTokenExpiresAt: await safeGet(() => getAgentState("linkedin_refresh_expires_at"))
       };
@@ -125,6 +127,33 @@ router.post("/tokens", requirePermission("manage_linkedin"), async (req, res) =>
   } catch (err) {
     platformLog("error", "linkedin_manual_tokens_failed", { error: err.message });
     res.status(500).json({ error: "Failed to store tokens" });
+  }
+});
+
+// ── POST /app-credentials ─────────────────────────────────────
+// Per-tenant LinkedIn APP credentials (TD-1). clientId+clientSecret
+// are an atomic pair (both or neither); redirectUri is independent,
+// validated as an http(s) URL, and an empty string clears the
+// tenant override back to the platform env default. No secret
+// value is echoed or logged.
+router.post("/app-credentials", requirePermission("manage_linkedin"), async (req, res) => {
+  try {
+    const { clientId, clientSecret, redirectUri } = req.body || {};
+    const result = await withTenant(req.tenant.id, () =>
+      setTenantAppCredentials({ clientId, clientSecret, redirectUri })
+    );
+    if (result.status === "rejected") {
+      return res.status(400).json({ error: result.reason });
+    }
+    res.json({
+      success: true,
+      pairStored: result.pairStored,
+      redirectStored: result.redirectStored,
+      redirectCleared: result.redirectCleared
+    });
+  } catch (err) {
+    platformLog("error", "linkedin_app_credentials_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to store app credentials" });
   }
 });
 

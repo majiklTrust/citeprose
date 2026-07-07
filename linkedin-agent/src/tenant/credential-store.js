@@ -44,7 +44,9 @@ const STORAGE_KEY = Object.freeze({
   LINKEDIN_ACCESS_TOKEN: "linkedin_access_token",
   LINKEDIN_REFRESH_TOKEN: "linkedin_refresh_token",
   LINKEDIN_PERSON_URN:   "linkedin_person_urn",
-  LINKEDIN_ORG_URN:      "linkedin_org_urn"
+  LINKEDIN_ORG_URN:      "linkedin_org_urn",
+  LINKEDIN_APP_CLIENT_ID:     "linkedin_client_id",
+  LINKEDIN_APP_CLIENT_SECRET: "linkedin_client_secret"
 });
 
 // LLM provider dimension: each vendor's key lives under its own
@@ -208,6 +210,25 @@ export async function hasLinkedInRefreshToken() {
 export async function hasLinkedInOrgUrn() {
   try {
     await fetchDecrypted(STORAGE_KEY.LINKEDIN_ORG_URN);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Per-tenant LinkedIn APP credentials (TD-1, Phase 2 Step 0).
+// When present they override the platform env pair for this
+// tenant's OAuth flows. Read only via linkedin-app-credentials.js.
+export async function getLinkedInAppClientId() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_APP_CLIENT_ID);
+}
+export async function getLinkedInAppClientSecret() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_APP_CLIENT_SECRET);
+}
+export async function hasLinkedInAppCredentials() {
+  try {
+    await fetchDecrypted(STORAGE_KEY.LINKEDIN_APP_CLIENT_ID);
+    await fetchDecrypted(STORAGE_KEY.LINKEDIN_APP_CLIENT_SECRET);
     return true;
   } catch {
     return false;

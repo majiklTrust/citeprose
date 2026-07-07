@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.1.4
+// v2.2.0
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -468,9 +468,37 @@ export function createApp(ctx) {
     }
   });
 
-  instance.get("/auth/linkedin", (req, res) => {
+  instance.get("/auth/linkedin", async (req, res) => {
     const state = generateOAuthState();
-    res.redirect(getAuthorizationUrl(state));
+    // Per-tenant app credentials (TD-1): resolve the signed-in
+    // user's tenant exactly the way the callback does, so the auth
+    // URL is built with THAT tenant's client id when one is
+    // configured. No session or no tenant: fall through to the
+    // platform env default (the callback rejects unauthenticated
+    // connects anyway, so nothing weakens).
+    const session = readSession(req);
+    let userSub = session?.user?.sub || null;
+    if (!userSub && process.env.NODE_ENV === "dev"
+        && !!process.env.DEV_BYPASS_ORIGINS
+        && process.env.DEV_BYPASS_SUB && process.env.DEV_BYPASS_SUB.trim().length > 0) {
+      userSub = process.env.DEV_BYPASS_SUB.trim();
+    }
+    let tenant = null;
+    if (userSub) {
+      const provider = userSub.startsWith("user_") ? "workos" : "auth0";
+      try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch { /* lookup failed */ }
+    }
+    try {
+      const url = tenant
+        ? await withTenant(tenant.id, () => getAuthorizationUrl(state))
+        : await getAuthorizationUrl(state);
+      res.redirect(url);
+    } catch (err) {
+      // Explicit and logged, instead of falling into the generic
+      // catch-all that masks everything as 403 Forbidden.
+      platformLog("error", "linkedin_auth_url_failed", { error: err.message });
+      res.status(503).send("LinkedIn connection is not configured. Set tenant app credentials in LinkedIn settings, or the platform LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET environment.");
+    }
   });
 
   // ── Auth Status Probe ─────────────────────────────────────
@@ -747,7 +775,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.1.4
+║           LinkedIn AI Content Agent  2.2.0
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

@@ -64,6 +64,15 @@
     $('target-organization').disabled = !conn.orgConfigured;
     $('target-organization').title = conn.orgConfigured ? '' : 'Connect an organization page first';
 
+    var ac = conn.appConfig || {};
+    var acBody = $('appconfig-body');
+    acBody.className = '';
+    acBody.innerHTML =
+      '<div class="row"><span class="k">Workspace client id + secret</span><span class="v">' +
+      pill(!!ac.tenantPairConfigured, 'workspace pair set', 'using platform default') + '</span></div>' +
+      '<div class="row"><span class="k">Workspace redirect URI</span><span class="v" title="' + esc(ac.tenantRedirectUri) + '">' +
+      esc(ac.tenantRedirectUri || 'using platform default') + '</span></div>';
+
     var orgBody = $('org-body');
     if (conn.orgConfigured) {
       orgBody.className = '';
@@ -153,6 +162,55 @@
     });
   }
 
+  function setAppConfig() {
+    clearMessage();
+    var clientId = $('app-client-id').value.trim();
+    var clientSecret = $('app-client-secret').value.trim();
+    var redirectUri = $('app-redirect-uri').value;
+    var payload = {};
+    if (clientId || clientSecret) {
+      if (!clientId || !clientSecret) {
+        showMessage('Client id and secret are a pair: supply both, or neither. Nothing was stored.', 'error');
+        return;
+      }
+      payload.clientId = clientId;
+      payload.clientSecret = clientSecret;
+    }
+    // The redirect field always submits: a non-empty value stores the
+    // override, an empty value clears it back to the platform default.
+    payload.redirectUri = redirectUri;
+    if (!payload.clientId && redirectUri.trim() === '') {
+      // Nothing to store and nothing to clear was typed; treat an
+      // untouched form as a no-op rather than clearing silently.
+      var current = (conn && conn.appConfig && conn.appConfig.tenantRedirectUri) || null;
+      if (!current) {
+        showMessage('Nothing to store: supply the pair, a redirect URI, or both.', 'warn');
+        return;
+      }
+    }
+    var btn = $('btn-set-appconfig');
+    btn.disabled = true;
+    getJson('/api/linkedin/app-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (r.ok) {
+        var bits = [];
+        if (r.body.pairStored) bits.push('pair stored (encrypted)');
+        if (r.body.redirectStored) bits.push('redirect URI stored');
+        if (r.body.redirectCleared) bits.push('redirect override cleared');
+        showMessage('App credentials updated: ' + (bits.join(', ') || 'no changes') + '.', 'success');
+        $('app-client-id').value = '';
+        $('app-client-secret').value = '';
+        $('app-redirect-uri').value = '';
+        loadStatus();
+      } else {
+        showMessage(r.body.error || 'Failed to store app credentials.', 'error');
+      }
+    }).then(function () { btn.disabled = false; });
+  }
+
   function setTokens() {
     clearMessage();
     var access = $('tok-access').value.trim();
@@ -199,6 +257,7 @@
       $('target-organization').addEventListener('click', function () { setTarget('organization'); });
       $('btn-discover').addEventListener('click', runDiscovery);
       $('btn-set-tokens').addEventListener('click', setTokens);
+      $('btn-set-appconfig').addEventListener('click', setAppConfig);
       loadStatus();
     })
     .catch(function () {

@@ -10,8 +10,12 @@ import {
 } from "../tenant/credential-store.js";
 import { currentTenantId } from "../db/with-tenant.js";
 import { platformLog } from "./platform-log.js";
-import { decryptPlatformSecret } from "./platform-secret.js";
 import { LINKEDIN_OAUTH_SCOPES } from "../config/linkedin-scopes.js";
+import {
+  getTenantLinkedInClientId,
+  getTenantLinkedInClientSecret,
+  getTenantLinkedInRedirectUri
+} from "./linkedin-app-credentials.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
@@ -24,44 +28,22 @@ const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
 // A missing or undecryptable value throws — the OAuth flow fails
 // closed rather than proceeding with a bad credential.
 
-let _clientIdPlain = null, _clientIdCipher = null;
-let _clientSecretPlain = null, _clientSecretCipher = null;
-
-function getClientId() {
-  const cipher = process.env.LINKEDIN_CLIENT_ID;
-  if (!cipher || cipher.trim().length === 0) {
-    throw new Error("LINKEDIN_CLIENT_ID is not set");
-  }
-  if (cipher === _clientIdCipher) return _clientIdPlain;
-  const plain = decryptPlatformSecret(cipher.trim());
-  _clientIdCipher = cipher;
-  _clientIdPlain = plain;
-  return plain;
-}
-
-function getClientSecret() {
-  const cipher = process.env.LINKEDIN_CLIENT_SECRET;
-  if (!cipher || cipher.trim().length === 0) {
-    throw new Error("LINKEDIN_CLIENT_SECRET is not set");
-  }
-  if (cipher === _clientSecretCipher) return _clientSecretPlain;
-  const plain = decryptPlatformSecret(cipher.trim());
-  _clientSecretCipher = cipher;
-  _clientSecretPlain = plain;
-  return plain;
-}
+// App credential resolution (client id, client secret, redirect
+// URI) lives in services/linkedin-app-credentials.js: tenant row
+// first, platform env fallback (TD-1). This module only consumes
+// the resolved values; it no longer reads those env vars.
 
 // ── OAuth 2.0 Flow ───────────────────────────────────────────
 
-export function getAuthorizationUrl(state) {
+export async function getAuthorizationUrl(state) {
   // Full granted scope set (13), from the single source of truth in
   // config/linkedin-scopes.js. Per FR-CC-03: request the confirmed
   // scopes, never a reduced default set.
   const scopes = LINKEDIN_OAUTH_SCOPES;
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: getClientId(),
-    redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
+    client_id: await getTenantLinkedInClientId(),
+    redirect_uri: await getTenantLinkedInRedirectUri(),
     scope: scopes.join(" "),
     state: state || generateState()
   });
@@ -80,9 +62,9 @@ export async function exchangeCodeForToken(code) {
       new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
-        client_id: getClientId(),
-        client_secret: getClientSecret()
+        redirect_uri: await getTenantLinkedInRedirectUri(),
+        client_id: await getTenantLinkedInClientId(),
+        client_secret: await getTenantLinkedInClientSecret()
       }),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
@@ -124,8 +106,8 @@ export async function refreshAccessToken(refreshToken) {
     new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: getClientId(),
-      client_secret: getClientSecret()
+      client_id: await getTenantLinkedInClientId(),
+      client_secret: await getTenantLinkedInClientSecret()
     }),
     { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
   );

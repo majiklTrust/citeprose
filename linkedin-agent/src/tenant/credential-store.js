@@ -42,6 +42,7 @@ const STORAGE_KEY = Object.freeze({
   GROK_API_KEY:          "grok_api_key",
   CUSTOM_LLM_API_KEY:    "custom_llm_api_key",
   LINKEDIN_ACCESS_TOKEN: "linkedin_access_token",
+  LINKEDIN_REFRESH_TOKEN: "linkedin_refresh_token",
   LINKEDIN_PERSON_URN:   "linkedin_person_urn",
   LINKEDIN_ORG_URN:      "linkedin_org_urn"
 });
@@ -178,6 +179,25 @@ export async function getAnthropicApiKey() {
 // Must be called inside a withTenant() block.
 export async function getLinkedInAccessToken() {
   return fetchDecrypted(STORAGE_KEY.LINKEDIN_ACCESS_TOKEN);
+}
+
+// Returns the current tenant's LinkedIn OAuth REFRESH token in
+// plaintext (FR-CC-03). Throws when absent, same contract as the
+// other accessors. Must be called inside a withTenant() block.
+export async function getLinkedInRefreshToken() {
+  return fetchDecrypted(STORAGE_KEY.LINKEDIN_REFRESH_TOKEN);
+}
+
+// Presence probe that never decrypts and never throws on absence:
+// the refresher uses it to decide whether a tenant participates in
+// proactive renewal at all. Must run inside withTenant().
+export async function hasLinkedInRefreshToken() {
+  try {
+    await fetchDecrypted(STORAGE_KEY.LINKEDIN_REFRESH_TOKEN);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Returns the current tenant's LinkedIn person URN.

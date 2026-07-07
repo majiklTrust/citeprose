@@ -45,6 +45,11 @@ var ACTION_REGISTRY = {
     description: "AI-powered RSS feed suggestions",
     vaultKeys: ["feed_discovery"],
     requiredPermission: "manage_feeds"
+  },
+  "analytics-narrative": {
+    description: "Cited narrative summary of stored analytics (FR-P1-06)",
+    vaultKeys: ["analytics_narrative"],
+    requiredPermission: "sync_analytics"
   }
 };
 

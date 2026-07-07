@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.0.3
+// v2.1.1
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -53,6 +53,7 @@ export function platformLog(level, action, details) {
 export function createApp(ctx) {
   const {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
+    analyticsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -60,6 +61,7 @@ export function createApp(ctx) {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
+    setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes
   } = ctx;
@@ -154,6 +156,11 @@ export function createApp(ctx) {
 
   // Topics page — accessible to owners and editors (manage_own_topics)
   instance.use("/app/topics", express.static(path.join(__dirname, "../public/topics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+
+  // Analytics page (CLCIS Phase 1). Static shell for all tenant
+  // roles; the data behind it is permission-gated at the API layer
+  // (view_analytics / sync_analytics), matching the feeds pattern.
+  instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Admin page — must be before /app static so /app/admin/ resolves
   // to the admin page, not the SPA fallback. Owner-gated server-side
@@ -370,6 +377,25 @@ export function createApp(ctx) {
         // Persist credentials — encrypted at rest via AES-256-GCM
         // with a per-tenant derived key.
         await storeCredential("linkedin_access_token", tokens.accessToken);
+        // FR-CC-03: persist the refresh token (encrypted, per tenant)
+        // and both expiry bookmarks so the proactive refresher can
+        // renew before expiry. A missing refresh token is stated
+        // loudly, never guessed around.
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        if (tokens.refreshToken) {
+          await storeCredential("linkedin_refresh_token", tokens.refreshToken);
+          if (Number.isFinite(tokens.refreshTokenExpiresIn)) {
+            await setAgentState("linkedin_refresh_expires_at", String(nowSeconds + tokens.refreshTokenExpiresIn));
+          }
+        } else {
+          platformLog("warn", "linkedin_refresh_token_absent", {
+            tenant: tenant.slug,
+            note: "OAuth response carried no refresh_token; proactive renewal unavailable until the app is enabled for programmatic refresh"
+          });
+        }
+        if (Number.isFinite(tokens.expiresIn)) {
+          await setAgentState("linkedin_token_expires_at", String(nowSeconds + tokens.expiresIn));
+        }
         if (personSub) {
           await storeCredential("linkedin_person_urn", `urn:li:person:${personSub}`);
         }
@@ -489,6 +515,12 @@ export function createApp(ctx) {
   // Must be before apiRoutes (api.js's guard 404s unknown /api/*).
   instance.use("/api/compose", composeRoutes);
 
+  // Analytics API routes (CLCIS Phase 1) mounted at /api/analytics.
+  // Blanket requireAuth + resolveTenant inside the router; per-route
+  // view_analytics / sync_analytics gates (D5). Must be before
+  // apiRoutes (api.js's guard 404s unknown /api/*).
+  instance.use("/api/analytics", analyticsRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -522,7 +554,7 @@ export function createApp(ctx) {
 // is responsible for that setup.
 // ═════════════════════════════════════════════════════════════
 export async function buildAppForTests() {
-  const { logActivity }                  = await import("./services/database.js");
+  const { logActivity, setAgentState }   = await import("./services/database.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes,
           createAdminPageGate }          = await import("./routes/admin-api.js");
@@ -548,6 +580,7 @@ export async function buildAppForTests() {
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
+  const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -555,6 +588,7 @@ export async function buildAppForTests() {
 
   return createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
+    analyticsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -562,6 +596,7 @@ export async function buildAppForTests() {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
+    setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
     adminPageGate: createAdminPageGate()
@@ -596,10 +631,12 @@ export async function start() {
 
   // STEP 4: Dynamic-import services
   const { connectionInfo }               = await import("./db/pool.js");
-  const { logActivity }                  = await import("./services/database.js");
+  const { logActivity, setAgentState }   = await import("./services/database.js");
   const { startScheduler }               = await import("./services/scheduler.js");
   const { startMonitor }                 = await import("./services/news-monitor.js");
   const { startBatchPublisher }          = await import("./services/batch-publisher.js");
+  const { startTokenRefresher }          = await import("./services/linkedin-token.js");
+  const { startAnalyticsSync }           = await import("./services/analytics-sync.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes,
           createAdminPageGate }          = await import("./routes/admin-api.js");
@@ -627,6 +664,7 @@ export async function start() {
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
+  const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -645,6 +683,7 @@ export async function start() {
   // STEP 6: Build app
   app = createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
+    analyticsRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     isAuthEnabled, getDefaultProvider,
@@ -652,6 +691,7 @@ export async function start() {
     getServerAddress,
     logActivity,
     withTenant, findTenantByAuthIdentity, storeCredential,
+    setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
     adminPageGate: createAdminPageGate()
@@ -664,7 +704,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.0.3
+║           LinkedIn AI Content Agent  2.1.1
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
@@ -688,6 +728,14 @@ export async function start() {
     startMonitor();
     // Batch publisher — fires scheduled posts at their set time
     startBatchPublisher();
+    // Token refresher — renews LinkedIn tokens before expiry (FR-CC-03).
+    // Async (lazy node-cron import); a startup failure logs loudly and
+    // must never become an unhandled rejection that kills the server.
+    startTokenRefresher().catch((err) =>
+      platformLog("error", "token_refresher_start_failed", { error: err.message }));
+    // Analytics sync — retrieves post metrics + demographics (FR-P1-01)
+    startAnalyticsSync().catch((err) =>
+      platformLog("error", "analytics_sync_start_failed", { error: err.message }));
   });
 
   return { app, server };

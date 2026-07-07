@@ -1067,6 +1067,9 @@
                 </div>
               )}
               <a href="/" className="btn btn-ghost btn-nav">Home</a>
+              {status?.user?.role && (
+                <a href="/app/analytics/" className="btn btn-ghost btn-nav">Analytics</a>
+              )}
               {(status?.user?.role === 'owner' || status?.user?.role === 'editor') && (
                 <a href="/app/topics/" className="btn btn-ghost btn-nav">Topics</a>
               )}

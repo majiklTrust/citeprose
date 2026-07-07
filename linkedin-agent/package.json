@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "2.0.3",
+  "version": "2.1.1",
   "config": {
     "cssversion": "35.0",
     "appname": "Market Intelligence"
@@ -108,6 +108,7 @@
     "jose": "^6.2.2",
     "node-cron": "^4.4.1",
     "open": "^10.0.0",
+    "openai": "6.45.0",
     "pg": "^8.20.0",
     "rss-parser": "^3.13.0",
     "uuid": "^14.0.0",

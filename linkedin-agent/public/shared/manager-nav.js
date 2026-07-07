@@ -21,6 +21,7 @@
   var currentPath = window.location.pathname.replace(/\/+$/, '');
 
   var pages = [
+    { path: '/app/analytics', label: 'Analytics', roles: ['owner', 'editor', 'viewer'] },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
     { path: '/app/admin', label: 'Manage', roles: ['owner'] }

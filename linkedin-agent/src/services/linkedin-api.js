@@ -91,7 +91,11 @@ export async function exchangeCodeForToken(code) {
     return {
       accessToken: response.data.access_token,
       expiresIn: response.data.expires_in,
-      refreshToken: response.data.refresh_token
+      refreshToken: response.data.refresh_token,
+      // Present when the app is enabled for programmatic refresh;
+      // undefined otherwise. Callers treat absence as "no refresh
+      // capability" and surface it, never guess (FR-CC-03).
+      refreshTokenExpiresIn: response.data.refresh_token_expires_in
     };
   } catch (err) {
     await logActivity("error", "linkedin_token_exchange_failed", {
@@ -99,6 +103,35 @@ export async function exchangeCodeForToken(code) {
     });
     throw err;
   }
+}
+
+// ── Refresh grant (FR-CC-03) ─────────────────────────────────
+// Exchanges a refresh token for a new access token at the same
+// OAuth endpoint, with the same encrypted client credentials.
+// Pure exchange: persistence and expiry bookkeeping live in
+// services/linkedin-token.js. LinkedIn may rotate the refresh
+// token; when it does, the new one is returned and MUST replace
+// the stored one. No token value is ever logged.
+export async function refreshAccessToken(refreshToken) {
+  if (typeof refreshToken !== "string" || refreshToken.length === 0) {
+    throw new Error("refreshAccessToken requires a refresh token");
+  }
+  const response = await axios.post(
+    `${LINKEDIN_AUTH}/accessToken`,
+    new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: getClientId(),
+      client_secret: getClientSecret()
+    }),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+  );
+  return {
+    accessToken: response.data.access_token,
+    expiresIn: response.data.expires_in,
+    refreshToken: response.data.refresh_token,
+    refreshTokenExpiresIn: response.data.refresh_token_expires_in
+  };
 }
 
 // ── Profile ──────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import {
 import { currentTenantId } from "../db/with-tenant.js";
 import { platformLog } from "./platform-log.js";
 import { decryptPlatformSecret } from "./platform-secret.js";
+import { LINKEDIN_OAUTH_SCOPES } from "../config/linkedin-scopes.js";
 
 const LINKEDIN_API = "https://api.linkedin.com/v2";
 const LINKEDIN_AUTH = "https://www.linkedin.com/oauth/v2";
@@ -53,8 +54,10 @@ function getClientSecret() {
 // ── OAuth 2.0 Flow ───────────────────────────────────────────
 
 export function getAuthorizationUrl(state) {
-  const scopes = ["openid", "profile", "w_member_social"];
-  // const scopes = ["openid", "profile", "w_organization_social"];
+  // Full granted scope set (13), from the single source of truth in
+  // config/linkedin-scopes.js. Per FR-CC-03: request the confirmed
+  // scopes, never a reduced default set.
+  const scopes = LINKEDIN_OAUTH_SCOPES;
   const params = new URLSearchParams({
     response_type: "code",
     client_id: getClientId(),

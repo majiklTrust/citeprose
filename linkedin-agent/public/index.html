@@ -173,6 +173,23 @@
       none: { cls: 'corroboration-none', text: 'Uncorroborated' },
     };
 
+    // Destination badge: publish_target is INTENT frozen at
+    // generation (the LINKEDIN card's setting when the draft was
+    // stored). Grey palette, inverse fills: Org dark-on-light-text,
+    // Per light-on-dark-text. Renders nothing for NULL-era posts.
+    function DestBadge({ target }) {
+      if (target !== 'personal' && target !== 'organization') return null;
+      const org = target === 'organization';
+      return (
+        <span className="dest-badge" style={{
+          background: org ? '#616161' : '#e0e0e0',
+          color: org ? '#f5f5f5' : '#424242',
+          padding: '0.1rem 0.5rem', borderRadius: '10px',
+          fontSize: '0.68rem', fontWeight: 600, marginLeft: '0.4rem'
+        }}>{org ? 'Org' : 'Per'}</span>
+      );
+    }
+
     // ── Composer — Create a post (1.9.31) ────────────────────
     // Create-only: topic + angle + a clean, metric-free genre
     // picker. Generates a draft via /api/compose/generate (which
@@ -802,6 +819,7 @@
         setSelectedPost({
           ...data.post,
           quality: data.quality,
+          publish_target: data.publishTarget || null,
           isPreview: true,
           draftPostId: data.postId,
           genre: data.genre,
@@ -1017,7 +1035,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.2.13</div>
+                <div className="header-subtitle">v2.2.17</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1057,7 +1075,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.2.13 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.2.17 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1188,6 +1206,7 @@
                             <span className={`corroboration-badge ${pLabel.cls}`}>
                               {pLevel === 'strong' ? '◉' : pLevel === 'weak' ? '◎' : '○'} {pLabel.text}
                             </span>
+                            <DestBadge target={post.publish_target} />
                           </div>
                           <span className={post.status === 'draft'
                             ? 'post-status badge-draft'
@@ -1241,6 +1260,7 @@
                       <span className="post-topic-badge" style={{ background: getTopicStyle(post.topic_id).bg, color: getTopicStyle(post.topic_id).color }}>
                         {getTopicStyle(post.topic_id).label}
                       </span>
+                      <DestBadge target={post.publish_target} />
                       <span className={`post-status status-${post.status}`}>
                         {post.status.replace('_', ' ').toUpperCase()}
                       </span>
@@ -1513,6 +1533,7 @@
                       {corrobLevel === 'strong' ? '◉' : corrobLevel === 'weak' ? '◎' : '○'} {corrobLabel.text}
                     </span>
                   )}
+                  <DestBadge target={selectedPost.publish_target} />
                 </div>
 
                 <h3 className="modal-heading">{selectedPost.title}</h3>
@@ -1838,7 +1859,7 @@
             <div className="modal-overlay" onClick={() => setEditingPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                 <button className="modal-close" onClick={() => setEditingPost(null)}>✕</button>
-                <h3 className="modal-heading-top">Edit Post</h3>
+                <h3 className="modal-heading-top">Edit Post <DestBadge target={editingPost.publish_target} /></h3>
                 <div className="mb-075">
                   <label className="form-label">Title</label>
                   <input type="text" value={editFields.title}

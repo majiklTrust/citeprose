@@ -142,9 +142,18 @@ export function initDatabase() {
 
 // ── Post CRUD ────────────────────────────────────────────────
 
-export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl, genre }) {
+export async function createPost({ topicId, title, content, hashtags, newsContext, scheduledFor, imageUrl, genre, publishTarget = null }) {
   const c = client();
   const scheduled = validateScheduledFor(scheduledFor);
+  // publish_target is INTENT, captured exactly once, here, at the
+  // moment the draft is first stored: the LINKEDIN card's setting
+  // at generation time (or a validated per-post override). It is
+  // never written again by any path; the publisher HONORS it and
+  // the analytics sync SELECTS on it.
+  const { getPublishTarget } = await import("./publish-target.js");
+  const destination = publishTarget === "personal" || publishTarget === "organization"
+    ? publishTarget
+    : await getPublishTarget();
   const topicIntId = topicId ? await resolveTopicIdBySlug(c, topicId) : null;
 
   // news_context is JSONB nullable; pass JS object or null directly.
@@ -156,10 +165,10 @@ export async function createPost({ topicId, title, content, hashtags, newsContex
   }
 
   const r = await c.query(
-    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status, genre)
-     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft', $8)
+    `INSERT INTO posts (tenant_id, topic_id, title, content, hashtags, news_context, scheduled_for, image_url, status, genre, publish_target)
+     VALUES (current_tenant_id(), $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'draft', $8, $9)
      RETURNING id`,
-    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null, genre || 'default']
+    [topicIntId, title, content, JSON.stringify(hashtags || []), nc == null ? null : JSON.stringify(nc), scheduled, imageUrl || null, genre || 'default', destination]
   );
   return r.rows[0].id;
 }
@@ -172,7 +181,7 @@ export async function getPost(id) {
   const c = client();
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
-            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
             p.image_url, p.genre
      FROM posts p
@@ -444,7 +453,7 @@ export async function getPostsByStatus(status) {
   const c = client();
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
-            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
             p.image_url
      FROM posts p
@@ -460,7 +469,7 @@ export async function getRecentPosts(days = 10) {
   const c = client();
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
-            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
             p.image_url
      FROM posts p
@@ -477,7 +486,7 @@ export async function getAllPosts(limit = 50) {
   const c = client();
   const r = await c.query(
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
-            p.hashtags, p.status, p.linkedin_id, p.created_at,
+            p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
             p.image_url
      FROM posts p

@@ -140,7 +140,11 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
 
       await logActivity("info", "compose_auto_saved", { postId, title: g.title, topicId: g.topicId, genre }, req.user?.sub || null);
 
-      return { generated: g, quality: q, postId };
+      // The stamped destination rides the response so the preview
+      // modal can render the badge without a second fetch: the row
+      // is the source of truth, not a re-read of the card.
+      const stored = await getPost(postId);
+      return { generated: g, quality: q, postId, publishTarget: stored?.publish_target ?? null };
     });
 
     // A blocked result (fidelity or no primary source) saves nothing and
@@ -155,7 +159,8 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
 
     res.json({
       post: result.generated, quality: result.quality, postId: result.postId,
-      genre, fidelity: result.generated.fidelity || null
+      genre, fidelity: result.generated.fidelity || null,
+      publishTarget: result.publishTarget ?? null
     });
   } catch (err) {
     platformLog("error", "compose_generate_failed", { path: req.path, error: err.message });

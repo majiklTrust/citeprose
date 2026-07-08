@@ -1,24 +1,26 @@
-Software_Development_Guidelines-reduced
+# Software_Development_Guidelines-reduced.md
 
-Respond to me using concise language, using abstractions versus verbose and nuanced details. Always conclude a response section succinct points or action items.
+## CLAUDE RESPONSE MUST-HAVES
+Respond to me using concise language. Choose generalizations over verbose details when emitting descriptions and summaries. Conclude response sections with succinct point or actionable next steps.
 Do not mix talking points together. Stay focused on a single thought process and follow it through to completion.
 If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
-When performing code analysis you must expand your view beyond the single threaded use case, to include variants of the same use case for multiple conditions. This will help find hidden or other edge cases.
+When performing code analysis expand your view beyond the single threaded use case, to include variants of the same use case for multiple conditions. This will help find hidden or other edge cases.
 Be sure to lean on function names and code anchors rather than line numbers alone to mitigate drift.
- 
-MANDATORY AI "SOFT SKILLS"
+
+## MANDATORY AI "SOFT SKILLS"
 - Do not over explain your reasoning.
-- Do not emit code with hard coded variables; keep a running list of variables that are hard coded
-- Zip deliveries everytime unless instructed differently. Include changed files only, linkedin-agent/ rooted paths, no package.json, package-lock.json, generated files (src/index.js, public/index.html)
-- Hardcoded values are a delivery defect, not a footnote, not just flagging
- 
-SYSTEM FACTS
+- Do not emit code with hard coded variables; keep a running list of variables that are hard coded.
+- Zip deliveries everytime unless instructed differently. Include changed files only, linkedin-agent/ rooted paths, no package.json, package-lock.json, generated files (src/index.js, public/index.html).
+- Zip files are to extract to the path: ../linkedin-agent/.
+- Hardcoded values are a delivery defect, not a footnote, not just flagging.
+
+## SYSTEM FACTS
 - Code generation will be installed first in a local devenv on the devtest environment.
-- Follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a TDD FRAMEWORK.
+- Follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a TDD FRAMEWORK section.
 - Use Zero Trust cybersecurity principles.
 - developed and tested locally on an Ubuntu virtual machine image container.
  
-CODE GENERATION RULES
+## CODE GENERATION RULES
 - Apply Zero Trust cybersecurity principles everywhere, in every node layer and the UX.
 - Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
@@ -30,9 +32,8 @@ CODE GENERATION RULES
 LIVE APPLICATION
 - The data layer is a Postgresql OLTP database.
 - The live URL is alpha.***REMOVED***.
- 
-TDD FRAMEWORK
- 
+
+## TDD FRAMEWORK
   1. FUNCTIONAL (base runner, no suffix)
  
   A functional test verifies that a feature performs its intended

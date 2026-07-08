@@ -9,8 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css?v=36.0">
-  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=36.0">
+  <link rel="stylesheet" href="/app/styles/app.css?v=37.0">
+  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=37.0">
 </head>
 <body>
   <div id="root"></div>
@@ -181,12 +181,9 @@
       if (target !== 'personal' && target !== 'organization') return null;
       const org = target === 'organization';
       return (
-        <span className="dest-badge" style={{
-          background: org ? '#616161' : '#e0e0e0',
-          color: org ? '#f5f5f5' : '#424242',
-          padding: '0.1rem 0.5rem', borderRadius: '10px',
-          fontSize: '0.68rem', fontWeight: 600, marginLeft: '0.4rem'
-        }}>{org ? 'Org' : 'Per'}</span>
+        <span className={org ? 'dest-badge dest-badge-org' : 'dest-badge dest-badge-per'}>
+          {org ? 'Org' : 'Per'}
+        </span>
       );
     }
 
@@ -1035,7 +1032,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.2.17</div>
+                <div className="header-subtitle">v2.2.19</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1075,7 +1072,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.2.17 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.2.19 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

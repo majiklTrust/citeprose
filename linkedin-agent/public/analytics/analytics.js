@@ -216,6 +216,38 @@
 
   // -- Loaders ---------------------------------------------------
 
+  function renderAmplification(reach) {
+    var el = document.getElementById('amplification-body');
+    if (!reach) {
+      el.className = 'empty';
+      el.textContent = 'Advocacy reach unavailable.';
+      return;
+    }
+    var org = reach.orgFollowers || {};
+    var orgLine = org.count === null || org.count === undefined
+      ? 'not yet retrieved'
+      : Number(org.count).toLocaleString() + (org.retrievedAt ? ' (retrieved ' + when(org.retrievedAt) + ')' : '');
+    var html = '<table><thead><tr><th>Measure</th><th>Value</th></tr></thead><tbody>'
+      + '<tr><td>Organization followers</td><td>' + esc(orgLine) + '</td></tr>'
+      + '<tr><td>Total member reach (' + reach.knownCount + ' member' + (reach.knownCount === 1 ? '' : 's') + ')</td><td>'
+      + Number(reach.totalKnownReach).toLocaleString()
+      + (reach.unknownCount > 0 ? ' (+' + reach.unknownCount + ' member(s) not yet retrieved)' : '') + '</td></tr>'
+      + '<tr><td>Amplification ratio</td><td>' + (reach.amplification === null ? 'not computable yet' : reach.amplification + 'x') + '</td></tr>'
+      + '<tr><td>Posts amplified</td><td>' + reach.postsAmplified + ' (' + reach.variantsPublished + ' member post(s) published)</td></tr>'
+      + '</tbody></table>';
+    if (reach.members && reach.members.length > 0) {
+      html += '<div class="section-note" style="margin-top:0.7rem">'
+        + reach.members.map(function (m) {
+            return esc((m.name || m.sub.slice(0, 18)) + ': '
+              + (m.connectionsSize === null ? 'not retrieved' : Number(m.connectionsSize).toLocaleString() + ' connections')
+              + (m.retrievedAt ? ' (' + when(m.retrievedAt) + ')' : ''));
+          }).join('<br>')
+        + '</div>';
+    }
+    el.className = '';
+    el.innerHTML = html;
+  }
+
   function getJson(path) {
     return fetch(API + path, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       .then(function (res) {
@@ -238,6 +270,10 @@
       if (r.ok) renderHeatmap(r.body);
       else { $('heatmap-body').className = 'empty'; $('heatmap-body').textContent = 'Failed to load heatmap.'; }
     });
+    getJson('/api/advocacy/reach').then(function (r) {
+      renderAmplification(r.ok ? r.body : null);
+    });
+
     getJson('/api/analytics/demographics').then(function (r) {
       if (r.ok) renderDemographics(r.body);
       else { $('demographics-body').className = 'empty'; $('demographics-body').textContent = 'Failed to load demographics.'; }

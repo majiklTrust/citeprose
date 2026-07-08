@@ -21,6 +21,7 @@ import {
 } from "../services/advocacy-members.js";
 import { generateVariantsForPost } from "../services/advocacy-generator.js";
 import { publishApprovedVariant } from "../services/advocacy-publisher.js";
+import { getAdvocacyReach } from "../services/advocacy-reach.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { runOutputFilter } from "../services/output-filter.js";
 import { sanitizeLongText } from "../services/advocacy-generator.js";
@@ -325,6 +326,18 @@ router.post("/members/voice-notes", requirePermission("manage_advocacy"), async 
   } catch (err) {
     platformLog("error", "advocacy_voice_notes_failed", { error: err.message });
     res.status(500).json({ error: "Failed to store voice notes" });
+  }
+});
+
+// ── Reach (Step 4, FR-P2-05): the amplification numbers the
+// Analytics page renders. Same read gate as analytics.
+router.get("/reach", requirePermission("view_analytics"), async (req, res) => {
+  try {
+    const reach = await withTenant(req.tenant.id, () => getAdvocacyReach());
+    res.json(reach);
+  } catch (err) {
+    platformLog("error", "advocacy_reach_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to load advocacy reach" });
   }
 });
 

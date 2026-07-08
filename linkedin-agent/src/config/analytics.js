@@ -75,6 +75,13 @@ export function getTokenRefreshCronRaw() {
   return raw === undefined || String(raw).trim() === "" ? "30 */6 * * *" : raw;
 }
 
+// Cron for the weekly advocacy reach refresh (member connection
+// sizes + org follower total). Default: Mondays 04:15.
+export function getAdvocacyReachCronRaw() {
+  const raw = process.env.ADVOCACY_REACH_CRON;
+  return raw === undefined || String(raw).trim() === "" ? "15 4 * * 1" : raw;
+}
+
 // Refresh the access token this many hours BEFORE expiry.
 export function getTokenRefreshBufferHours() {
   return intEnv("TOKEN_REFRESH_BUFFER_HOURS", 168, { min: 1, max: 24 * 60 });

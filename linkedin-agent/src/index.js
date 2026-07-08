@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.2.5
+// v2.2.7
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -885,6 +885,7 @@ export async function start() {
   const { startMonitor }                 = await import("./services/news-monitor.js");
   const { startBatchPublisher }          = await import("./services/batch-publisher.js");
   const { startTokenRefresher }          = await import("./services/linkedin-token.js");
+  const { startMemberTokenRefresher }    = await import("./services/advocacy-token-refresh.js");
   const { startAnalyticsSync }           = await import("./services/analytics-sync.js");
   const { default: apiRoutes }           = await import("./routes/api.js");
   const { default: adminRoutes,
@@ -972,7 +973,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.2.5
+║           LinkedIn AI Content Agent  2.2.7
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
@@ -999,6 +1000,8 @@ export async function start() {
     // Token refresher: renews LinkedIn tokens before expiry (FR-CC-03).
     // Async (lazy node-cron import); a startup failure logs loudly and
     // must never become an unhandled rejection that kills the server.
+    startMemberTokenRefresher().catch((err) =>
+      console.error("Advocacy token refresher failed to start:", err.message));
     startTokenRefresher().catch((err) =>
       platformLog("error", "token_refresher_start_failed", { error: err.message }));
     // Analytics sync: retrieves post metrics + demographics (FR-P1-01)

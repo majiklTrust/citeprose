@@ -81,7 +81,7 @@
     } else {
       var d = document.createElement('button');
       d.className = 'btn btn-danger';
-      d.textContent = 'Disconnect my profile';
+      d.textContent = 'Disconnect Profile';
       d.addEventListener('click', disconnectMe);
       actions.appendChild(d);
       modeBox.style.display = '';
@@ -178,6 +178,21 @@
       h.style.marginTop = '0.6rem';
       h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status; }).join(', ');
       el.appendChild(h);
+      recent.filter(function (v) { return v.status === 'approved'; }).forEach(function (v) {
+        var pub = document.createElement('button');
+        pub.className = 'btn btn-primary';
+        pub.style.marginTop = '0.5rem';
+        pub.textContent = 'Publish approved variant #' + v.id;
+        pub.addEventListener('click', function () {
+          pub.disabled = true;
+          getJson('/api/advocacy/me/variants/' + v.id + '/publish', { method: 'POST' }).then(function (r) {
+            pub.disabled = false;
+            if (r.ok) { showMessage('Published to your profile (post ' + (r.body.linkedinId || '') + ').', 'success'); loadQueue(); }
+            else showMessage(r.body.error || ('Publish failed' + (r.body.code ? ' (' + r.body.code + ')' : '')), 'error');
+          });
+        });
+        el.appendChild(pub);
+      });
     }
   }
 

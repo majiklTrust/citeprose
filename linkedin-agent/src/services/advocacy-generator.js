@@ -200,7 +200,7 @@ export async function generateVariantsForPost(postId, actionToken, requestedBy) 
   };
 
   const members = await c.query(
-    `SELECT auth_sub, member_name, member_headline, voice_notes
+    `SELECT auth_sub, member_name, member_headline, voice_notes, mode
        FROM advocacy_members
       WHERE connected = true
       ORDER BY enabled_at ASC`
@@ -219,10 +219,11 @@ export async function generateVariantsForPost(postId, actionToken, requestedBy) 
       );
       if (out.notConfigured) { notConfigured = true; break; }
       const isPending = out.status === "pending_approval";
-      await c.query(
+      const inserted = await c.query(
         `INSERT INTO advocacy_variants
            (tenant_id, member_sub, source_post_id, content, hashtags, status, quality)
-         VALUES (current_tenant_id(), $1, $2, $3, $4, $5, $6)`,
+         VALUES (current_tenant_id(), $1, $2, $3, $4, $5, $6)
+         RETURNING id`,
         [
           m.auth_sub, id,
           isPending ? out.content : "",
@@ -233,6 +234,20 @@ export async function generateVariantsForPost(postId, actionToken, requestedBy) 
         ]
       );
       if (isPending) generated++; else failed++;
+
+      // Auto mode (TD-5): the member opted in themselves; publish
+      // the fresh variant immediately, subject to the per-member
+      // caps. Failure or capping never breaks the fan-out; a
+      // capped variant simply stays in the manual queue.
+      if (isPending && m.mode === "auto") {
+        try {
+          const { maybeAutoPublish } = await import("./advocacy-publisher.js");
+          await maybeAutoPublish(inserted.rows[0].id, m.auth_sub);
+        } catch (autoErr) {
+          const { platformLog } = await import("./platform-log.js");
+          platformLog("warn", "advocacy_auto_publish_failed", { error: autoErr.message });
+        }
+      }
     } catch (err) {
       failed++;
       const { platformLog } = await import("./platform-log.js");

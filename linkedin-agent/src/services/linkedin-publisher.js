@@ -36,6 +36,7 @@ import { logActivity } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { publishPost as legacyPublishPost } from "./linkedin-api.js";
 import { getPublishTarget, isValidPublishTarget } from "./publish-target.js";
+import { buildRestPostBody } from "./linkedin-post-request.js";
 import {
   getLinkedInAccessToken,
   getLinkedInPersonUrn,
@@ -364,24 +365,10 @@ async function restPublish(content, hashtags, imageUrl, target) {
     );
   }
 
-  const hashtagString = hashtags.length > 0
-    ? `\n\n${hashtags.join(" ")}`
-    : "";
-  const fullContent = `${content}${hashtagString}`;
-
-  // Build the post payload
-  const payload = {
-    author: authorUrn,
-    commentary: fullContent,
-    visibility: "PUBLIC",
-    distribution: {
-      feedDistribution: "MAIN_FEED",
-      targetEntities: [],
-      thirdPartyDistributionChannels: []
-    },
-    lifecycleState: "PUBLISHED",
-    isReshareDisabledByAuthor: false
-  };
+  // Request shape comes from the SHARED builder (Step 3): the org
+  // and advocacy publishers differ only in token and author, never
+  // in payload shape.
+  const payload = buildRestPostBody({ authorUrn, content, hashtags });
 
   // Upload image if provided
   if (imageUrl) {

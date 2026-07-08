@@ -20,6 +20,7 @@ import {
   setSelfMode, disconnectSelf, setVoiceNotes
 } from "../services/advocacy-members.js";
 import { generateVariantsForPost } from "../services/advocacy-generator.js";
+import { publishApprovedVariant } from "../services/advocacy-publisher.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { runOutputFilter } from "../services/output-filter.js";
 import { sanitizeLongText } from "../services/advocacy-generator.js";
@@ -189,7 +190,19 @@ router.post("/me/variants/:id/approve", async (req, res) => {
       return r.rowCount;
     });
     if (out === 0) return res.status(404).json({ error: "no pending variant with that id in your queue" });
-    res.json({ status: "approved", variantId, note: "Queued for publishing; the publisher arrives with Step 3." });
+    // Manual mode publishes on approval (Step 3). The approval
+    // stands regardless; a publish failure reports its code and
+    // marks the variant per the signed design.
+    const pub = await withTenant(req.tenant.id, () =>
+      publishApprovedVariant(variantId, req.user.sub)
+    );
+    if (pub.status === "published") {
+      return res.json({ status: "published", variantId, linkedinId: pub.linkedinId, note: "Approved and published to your profile." });
+    }
+    res.status(502).json({
+      status: "publish_failed", variantId, code: pub.code || null,
+      error: "Approved, but publishing failed" + (pub.code ? ` (${pub.code})` : "")
+    });
   } catch (err) {
     platformLog("error", "advocacy_variant_approve_failed", { error: err.message });
     res.status(500).json({ error: "Failed to approve variant" });
@@ -222,6 +235,28 @@ router.post("/me/variants/:id/reject", async (req, res) => {
   } catch (err) {
     platformLog("error", "advocacy_variant_reject_failed", { error: err.message });
     res.status(500).json({ error: "Failed to reject variant" });
+  }
+});
+
+router.post("/me/variants/:id/publish", async (req, res) => {
+  try {
+    const variantId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(variantId) || variantId <= 0) {
+      return res.status(400).json({ error: "invalid variant id" });
+    }
+    const pub = await withTenant(req.tenant.id, () =>
+      publishApprovedVariant(variantId, req.user.sub)
+    );
+    if (pub.status === "not_publishable") {
+      return res.status(404).json({ error: "no approved variant with that id in your queue" });
+    }
+    if (pub.status === "published") {
+      return res.json({ status: "published", variantId, linkedinId: pub.linkedinId });
+    }
+    res.status(502).json({ status: "publish_failed", variantId, code: pub.code || null });
+  } catch (err) {
+    platformLog("error", "advocacy_variant_publish_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to publish variant" });
   }
 });
 

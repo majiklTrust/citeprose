@@ -191,9 +191,12 @@ export async function fetchFollowerStatistics(accessToken, orgUrn, deps = {}) {
 
 // ── Org follower total (Phase 2 Step 4, FR-P2-05) ─────────────
 // Phase 1 stored FACETED demographics only; facet sums undercount,
-// so the reach comparison fetches the REAL total from the v2
-// networkSizes endpoint with the tenant token. Unknown maps to
-// null, never zero (FR-CC-07 discipline).
+// so the reach comparison fetches the REAL total from the
+// networkSizes endpoint with the tenant token, on the VERSIONED
+// REST surface: the COMPANY_FOLLOWED_BY_MEMBER edge casing applies
+// from v202305 on the /rest base and is not retrocompatible with
+// the old /v2 casing (live-confirmed 403 on the mismatched pair,
+// 2026-07-08). Unknown maps to null, never zero (FR-CC-07).
 export function mapNetworkSize(raw) {
   const n = raw && typeof raw === "object" ? raw.firstDegreeSize : undefined;
   return typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
@@ -203,7 +206,7 @@ export async function fetchOrgFollowerCount(accessToken, orgUrn, deps = {}) {
   if (typeof orgUrn !== "string" || !/^urn:li:organization:[A-Za-z0-9_-]+$/.test(orgUrn)) {
     throw liError(LI_ERROR_CODES.ENDPOINT_ERROR, "follower count requires an organization URN");
   }
-  const base = deps.base || getLinkedInV2Base();
+  const base = deps.base || getLinkedInRestBase();
   const raw = await liGet(
     `${base}/networkSizes/${encodeURIComponent(orgUrn)}?edgeType=COMPANY_FOLLOWED_BY_MEMBER`,
     accessToken, deps

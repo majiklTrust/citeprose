@@ -228,12 +228,12 @@
       ? 'not yet retrieved'
       : Number(org.count).toLocaleString() + (org.retrievedAt ? ' (retrieved ' + when(org.retrievedAt) + ')' : '');
     var html = '<table><thead><tr><th>Measure</th><th>Value</th></tr></thead><tbody>'
-      + '<tr><td>Organization followers</td><td>' + esc(orgLine) + '</td></tr>'
-      + '<tr><td>Total member reach (' + reach.knownCount + ' member' + (reach.knownCount === 1 ? '' : 's') + ')</td><td>'
+      + '<tr><td>Organization Followers</td><td>' + esc(orgLine) + '</td></tr>'
+      + '<tr><td>Total Member Reach (' + reach.knownCount + ' member' + (reach.knownCount === 1 ? '' : 's') + ')</td><td>'
       + Number(reach.totalKnownReach).toLocaleString()
       + (reach.unknownCount > 0 ? ' (+' + reach.unknownCount + ' member(s) not yet retrieved)' : '') + '</td></tr>'
-      + '<tr><td>Amplification ratio</td><td>' + (reach.amplification === null ? 'not computable yet' : reach.amplification + 'x') + '</td></tr>'
-      + '<tr><td>Posts amplified</td><td>' + reach.postsAmplified + ' (' + reach.variantsPublished + ' member post(s) published)</td></tr>'
+      + '<tr><td>Amplification Ratio</td><td>' + (reach.amplification === null ? 'not computable yet' : reach.amplification + 'x') + '</td></tr>'
+      + '<tr><td>Posts Amplified</td><td>' + reach.postsAmplified + ' (' + reach.variantsPublished + ' member post(s) published)</td></tr>'
       + '</tbody></table>';
     if (reach.members && reach.members.length > 0) {
       html += '<div class="section-note" style="margin-top:0.7rem">'
@@ -302,7 +302,7 @@
         }
       })
       .catch(function () { showMessage('Sync request failed to reach the server.', 'error'); })
-      .then(function () { btn.disabled = false; btn.textContent = 'Sync now'; });
+      .then(function () { btn.disabled = false; btn.textContent = 'Sync Now'; });
   }
 
   function runNarrative() {

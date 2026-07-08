@@ -50,7 +50,10 @@ export async function refreshTenantReach() {
   const summary = { orgTotal: "skipped", members: 0, snapshots: 0, failures: 0 };
 
   // Org follower total, tenant token; failure never blocks the
-  // member snapshots.
+  // member snapshots. The writes ride a SAVEPOINT: withTenant runs
+  // one transaction, and a database rejection (e.g. the agent_state
+  // validation trigger, P0001) would otherwise abort it and poison
+  // every query after, which is exactly the 2026-07-08 cascade.
   try {
     const cs = await import("../tenant/credential-store.js");
     const { fetchOrgFollowerCount } = await import("./linkedin-analytics.js");
@@ -59,8 +62,15 @@ export async function refreshTenantReach() {
     const orgUrn = await cs.getLinkedInOrgUrn();
     const total = await fetchOrgFollowerCount(token, orgUrn);
     if (total !== null) {
-      await setAgentState(ORG_FOLLOWERS_STATE_KEY, String(total));
-      await setAgentState(ORG_FOLLOWERS_AT_STATE_KEY, new Date().toISOString());
+      await c.query("SAVEPOINT reach_org");
+      try {
+        await setAgentState(ORG_FOLLOWERS_STATE_KEY, String(total));
+        await setAgentState(ORG_FOLLOWERS_AT_STATE_KEY, new Date().toISOString());
+        await c.query("RELEASE SAVEPOINT reach_org");
+      } catch (writeErr) {
+        await c.query("ROLLBACK TO SAVEPOINT reach_org");
+        throw writeErr;
+      }
       summary.orgTotal = "stored";
     } else {
       summary.orgTotal = "unavailable";
@@ -83,8 +93,15 @@ export async function refreshTenantReach() {
       const token = await mc.fetchMemberCredential(m.auth_sub, "linkedin_access_token");
       const personUrn = await mc.fetchMemberCredential(m.auth_sub, "linkedin_person_urn");
       const size = await fetchConnectionsSize(token, personUrn);
-      const stored = await snapshotConnectionsSize(m.auth_sub, size);
-      if (stored.status === "stored") summary.snapshots++;
+      await c.query("SAVEPOINT reach_member");
+      try {
+        const stored = await snapshotConnectionsSize(m.auth_sub, size);
+        await c.query("RELEASE SAVEPOINT reach_member");
+        if (stored.status === "stored") summary.snapshots++;
+      } catch (writeErr) {
+        await c.query("ROLLBACK TO SAVEPOINT reach_member");
+        throw writeErr;
+      }
     } catch (err) {
       summary.failures++;
       platformLog("warn", "advocacy_reach_member_failed", { code: err.code || "error" });

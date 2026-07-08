@@ -25,6 +25,7 @@
 // =================================================================
 
 import {
+  getLinkedInV2Base,
   getLinkedInRestBase, getLinkedInApiVersion, getAnalyticsTimeoutMs
 } from "../config/analytics.js";
 import { classifyLinkedInFailure, liError, LI_ERROR_CODES } from "./linkedin-errors.js";

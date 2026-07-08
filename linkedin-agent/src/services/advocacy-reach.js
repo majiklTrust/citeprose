@@ -81,7 +81,8 @@ export async function refreshTenantReach() {
   for (const m of members) {
     try {
       const token = await mc.fetchMemberCredential(m.auth_sub, "linkedin_access_token");
-      const size = await fetchConnectionsSize(token);
+      const personUrn = await mc.fetchMemberCredential(m.auth_sub, "linkedin_person_urn");
+      const size = await fetchConnectionsSize(token, personUrn);
       const stored = await snapshotConnectionsSize(m.auth_sub, size);
       if (stored.status === "stored") summary.snapshots++;
     } catch (err) {

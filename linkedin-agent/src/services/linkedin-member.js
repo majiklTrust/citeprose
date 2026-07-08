@@ -58,26 +58,31 @@ function assertMemberUrl(urlString) {
   }
 }
 
-// First-degree connections size via GET /v2/connections?q=viewer
-// with count=0: the answer rides paging.total. Returns a
-// non-negative integer, or null when the payload does not carry a
-// usable total (unknown is never coerced to zero, FR-CC-07 spirit).
+// First-degree connections size via the SIZE-ONLY endpoint the
+// r_1st_connections_size scope actually grants:
+// GET /v2/connections/{personUrn} -> { firstDegreeSize }.
+// (The q=viewer listing API is a restricted-partner product and
+// returns SCOPE_DENIED under this scope; live-confirmed 2026-07-08.)
+// Unknown maps to null, never zero (FR-CC-07 spirit).
 export function mapConnectionsSize(raw) {
-  const total = raw && typeof raw === "object" && raw.paging && typeof raw.paging === "object"
-    ? raw.paging.total
-    : undefined;
-  return typeof total === "number" && Number.isFinite(total) && total >= 0 ? Math.floor(total) : null;
+  const n = raw && typeof raw === "object" ? raw.firstDegreeSize : undefined;
+  return typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
-export async function fetchConnectionsSize(accessToken, deps = {}) {
+const PERSON_URN_RE = /^urn:li:person:[A-Za-z0-9_-]+$/;
+
+export async function fetchConnectionsSize(accessToken, personUrn, deps = {}) {
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw liError(LI_ERROR_CODES.NOT_CONNECTED, "connections size requires the member access token");
+  }
+  if (typeof personUrn !== "string" || !PERSON_URN_RE.test(personUrn)) {
+    throw liError(LI_ERROR_CODES.ENDPOINT_ERROR, "connections size requires the member person URN");
   }
   const fetchImpl = deps.fetchImpl || globalThis.fetch;
   const base = deps.base || getLinkedInV2Base();
   const timeoutMs = Number.isFinite(deps.timeoutMs) ? deps.timeoutMs : getAnalyticsTimeoutMs();
 
-  const url = `${base}/connections?q=viewer&start=0&count=0`;
+  const url = `${base}/connections/${encodeURIComponent(personUrn)}`;
   assertMemberUrl(url);
 
   const controller = new AbortController();

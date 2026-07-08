@@ -179,7 +179,19 @@ router.post("/sync", requirePermission("sync_analytics"), async (req, res) => {
         error: "LinkedIn is connected, but no organization page is configured for this workspace"
       });
     }
-    res.json({ success: true, summary });
+    // Sync now refreshes EVERYTHING the page shows, advocacy reach
+    // included (Step 4). Best-effort and isolated: a reach failure
+    // never fails the sync it rode along with.
+    let reach = null;
+    try {
+      reach = await withTenant(req.tenant.id, async () => {
+        const { refreshTenantReach } = await import("../services/advocacy-reach.js");
+        return refreshTenantReach();
+      });
+    } catch (reachErr) {
+      platformLog("warn", "analytics_sync_reach_refresh_failed", { error: reachErr.message });
+    }
+    res.json({ success: true, summary, reach });
   } catch (err) {
     platformLog("error", "analytics_sync_route_failed", { error: err.message });
     res.status(500).json({ error: "Analytics sync failed" });

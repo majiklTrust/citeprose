@@ -341,7 +341,8 @@ export function createApp(ctx) {
           // Reach snapshot is best-effort: its failure never
           // breaks the connect (FR-P2-05 input only).
           try {
-            const size = await fetchConnectionsSize(tokens.accessToken);
+            if (!personSub) throw new Error("no person urn for connections size");
+            const size = await fetchConnectionsSize(tokens.accessToken, `urn:li:person:${personSub}`);
             await advocacySnapshotConnectionsSize(memberSub, size);
           } catch (reachErr) {
             platformLog("warn", "advocacy_connections_size_failed", {

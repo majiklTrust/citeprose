@@ -6,3 +6,5 @@ deploy
 scripts/LinkedIn_Agent_Testing/
 !cssversion.js
 !audit_node_project.sh
+get-prompt.mjs
+get-prompt-keys.mjs

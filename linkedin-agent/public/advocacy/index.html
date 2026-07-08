@@ -79,6 +79,12 @@
         </div>
       </div>
 
+      <div class="section" id="queue-section" style="display:none">
+        <h2>Post Variants Queue</h2>
+        <div class="section-note">Variants generated for you from workspace posts. Approve as-is, edit then approve, or reject. Nothing publishes to your profile without your approval here.</div>
+        <div id="queue-body" class="empty">Loading...</div>
+      </div>
+
       <div class="section" id="owner-section" style="display:none">
         <h2>Members (owner)</h2>
         <div class="section-note">Enabling adds a member to the program; they still must consent and connect themselves. Disabling removes participation and wipes the member's stored tokens.</div>
@@ -89,6 +95,24 @@
         <div style="margin-top:0.9rem">
           <button id="btn-enable" class="btn btn-primary">Enable member</button>
         </div>
+        <label for="voice-sub">Voice notes: member auth sub</label>
+        <input type="text" id="voice-sub" autocomplete="off" spellcheck="false" placeholder="auth0|... or user_...">
+        <label for="voice-notes">Voice notes (tone, style, audience; empty clears)</label>
+        <input type="text" id="voice-notes" autocomplete="off" placeholder="e.g. short punchy sentences, no emojis, audience is mid-market CISOs">
+        <div style="margin-top:0.9rem">
+          <button id="btn-voice" class="btn btn-secondary">Save voice notes</button>
+        </div>
+      </div>
+
+      <div class="section" id="generate-section" style="display:none">
+        <h2>Generate variants (owner)</h2>
+        <div class="section-note">Creates one personalized variant per connected member from a workspace post, behind the full safety gate chain. Members approve from their own queues.</div>
+        <label for="gen-post-id">Source post id</label>
+        <input type="text" id="gen-post-id" autocomplete="off" placeholder="e.g. 42">
+        <div style="margin-top:0.9rem">
+          <button id="btn-generate" class="btn btn-primary">Generate for all connected members</button>
+        </div>
+        <div id="gen-status" style="margin-top:1rem" class="empty"></div>
       </div>
     </div>
   </div>

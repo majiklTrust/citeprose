@@ -17,8 +17,12 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import {
   enableMember, disableMember, listMembers, getSelf,
-  setSelfMode, disconnectSelf
+  setSelfMode, disconnectSelf, setVoiceNotes
 } from "../services/advocacy-members.js";
+import { generateVariantsForPost } from "../services/advocacy-generator.js";
+import { createActionToken } from "../services/prompt-actions.js";
+import { runOutputFilter } from "../services/output-filter.js";
+import { sanitizeLongText } from "../services/advocacy-generator.js";
 
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
@@ -113,6 +117,179 @@ router.post("/members", requirePermission("manage_advocacy"), async (req, res) =
   } catch (err) {
     platformLog("error", "advocacy_member_toggle_failed", { error: err.message });
     res.status(500).json({ error: "Failed to update advocacy member" });
+  }
+});
+
+// ── Member queue (Step 2, self-scoped) ────────────────────────
+// Every query is bound to req.user.sub; a variant id belonging to
+// another member is indistinguishable from a nonexistent one
+// (FR-P2-08: no cross-member information leak).
+
+router.get("/me/variants", async (req, res) => {
+  try {
+    const rows = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const { rows } = await currentClient().query(
+        `SELECT id, source_post_id, content, hashtags, status, member_edited,
+                quality, created_at, resolved_at, published_at
+           FROM advocacy_variants
+          WHERE member_sub = $1
+          ORDER BY created_at DESC
+          LIMIT 50`,
+        [req.user.sub]
+      );
+      return rows;
+    });
+    res.json({ variants: rows });
+  } catch (err) {
+    platformLog("error", "advocacy_variants_list_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to load variants" });
+  }
+});
+
+// Approve, with an optional member edit. Approval queues the
+// variant for publishing; the publisher itself is Step 3, so an
+// approved variant holds at 'approved' until that delivery.
+router.post("/me/variants/:id/approve", async (req, res) => {
+  try {
+    const variantId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(variantId) || variantId <= 0) {
+      return res.status(400).json({ error: "invalid variant id" });
+    }
+    const edited = typeof (req.body || {}).content === "string" ? req.body.content : null;
+    let finalContent = null;
+    if (edited !== null) {
+      finalContent = sanitizeLongText(edited);
+      if (!finalContent) {
+        return res.status(400).json({ error: "edited content is empty after sanitization" });
+      }
+      const filter = runOutputFilter(finalContent);
+      if (filter.blocked) {
+        return res.status(400).json({ error: `edited content blocked: ${filter.reason}` });
+      }
+    }
+    const out = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const r = await currentClient().query(
+        `UPDATE advocacy_variants
+            SET status = 'approved',
+                content = COALESCE($3, content),
+                member_edited = member_edited OR $4,
+                resolved_at = now()
+          WHERE id = $1 AND member_sub = $2 AND status = 'pending_approval'
+          RETURNING id`,
+        [variantId, req.user.sub, finalContent, edited !== null]
+      );
+      if (r.rowCount > 0) {
+        const { logActivity } = await import("../services/database.js");
+        await logActivity("info", "advocacy_variant_approved", {
+          variantId, memberEdited: edited !== null
+        }, req.user.sub);
+      }
+      return r.rowCount;
+    });
+    if (out === 0) return res.status(404).json({ error: "no pending variant with that id in your queue" });
+    res.json({ status: "approved", variantId, note: "Queued for publishing; the publisher arrives with Step 3." });
+  } catch (err) {
+    platformLog("error", "advocacy_variant_approve_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to approve variant" });
+  }
+});
+
+router.post("/me/variants/:id/reject", async (req, res) => {
+  try {
+    const variantId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(variantId) || variantId <= 0) {
+      return res.status(400).json({ error: "invalid variant id" });
+    }
+    const out = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const r = await currentClient().query(
+        `UPDATE advocacy_variants
+            SET status = 'rejected', resolved_at = now()
+          WHERE id = $1 AND member_sub = $2 AND status = 'pending_approval'
+          RETURNING id`,
+        [variantId, req.user.sub]
+      );
+      if (r.rowCount > 0) {
+        const { logActivity } = await import("../services/database.js");
+        await logActivity("info", "advocacy_variant_rejected", { variantId }, req.user.sub);
+      }
+      return r.rowCount;
+    });
+    if (out === 0) return res.status(404).json({ error: "no pending variant with that id in your queue" });
+    res.json({ status: "rejected", variantId });
+  } catch (err) {
+    platformLog("error", "advocacy_variant_reject_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to reject variant" });
+  }
+});
+
+// ── Owner generation surface (Step 2) ─────────────────────────
+
+router.post("/generate", requirePermission("manage_advocacy"), async (req, res) => {
+  try {
+    const { postId } = req.body || {};
+    const actionToken = createActionToken("advocacy-variant", req.user.sub);
+    const result = await withTenant(req.tenant.id, () =>
+      generateVariantsForPost(postId, actionToken, req.user.sub)
+    );
+    if (result.status === "rejected") return res.status(400).json({ error: result.reason });
+    if (result.status === "no_members") {
+      return res.status(409).json({ error: "No connected advocacy members to generate for", code: "NO_CONNECTED_MEMBERS" });
+    }
+    if (result.status === "prompt_not_configured") {
+      return res.status(409).json({
+        error: "The advocacy_variant prompt is not seeded in the vault for this workspace",
+        code: "PROMPT_NOT_CONFIGURED"
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    platformLog("error", "advocacy_generate_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to generate variants" });
+  }
+});
+
+// Aggregate queue visibility for the owner: counts only, no
+// content editing surface (FR-P2-04: approval is the member's).
+router.get("/variants/status", requirePermission("manage_advocacy"), async (req, res) => {
+  try {
+    const rows = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const { rows } = await currentClient().query(
+        `SELECT member_sub, status, COUNT(*)::int AS n
+           FROM advocacy_variants
+          GROUP BY member_sub, status
+          ORDER BY member_sub`
+      );
+      return rows;
+    });
+    res.json({ counts: rows });
+  } catch (err) {
+    platformLog("error", "advocacy_status_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to load variant status" });
+  }
+});
+
+router.post("/members/voice-notes", requirePermission("manage_advocacy"), async (req, res) => {
+  try {
+    const { sub, voiceNotes } = req.body || {};
+    const result = await withTenant(req.tenant.id, async () => {
+      const r = await setVoiceNotes(sub, voiceNotes);
+      if (r.status === "stored") {
+        const { logActivity } = await import("../services/database.js");
+        await logActivity("info", "advocacy_voice_notes_set", {
+          memberSub: String(sub || "").trim(), cleared: r.cleared
+        }, req.user.sub);
+      }
+      return r;
+    });
+    if (result.status === "rejected") return res.status(400).json({ error: result.reason });
+    res.json(result);
+  } catch (err) {
+    platformLog("error", "advocacy_voice_notes_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to store voice notes" });
   }
 });
 

@@ -407,7 +407,18 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 // ── Content Quality Check ────────────────────────────────────
 
 export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null) {
-  const sourceContext = researchSummary
+  // Grounding context has two honest shapes:
+  //   object -> the org research brief (original behavior, byte
+  //             identical for the org pipeline), or
+  //   string -> DERIVATIVE grounding: the finished source text the
+  //             reviewed post adapts (advocacy variants). Every
+  //             claim in the reviewed post must trace to it, and
+  //             today's date is stated so legitimately dated
+  //             material is never mistaken for future-dated
+  //             fabrication by a reviewer with an older clock.
+  const sourceContext = typeof researchSummary === "string" && researchSummary.trim().length > 0
+    ? `\nTODAY'S DATE: ${new Date().toISOString().slice(0, 10)}\nGROUND TRUTH FOR THIS DERIVATIVE POST (the finished organization post it adapts). Every claim, number, attribution, and source in the reviewed post must be traceable to this text. Treat dates appearing here as valid even if they postdate your training data:\n${researchSummary.trim()}`
+    : researchSummary
     ? `\nSOURCES PROVIDED TO THE WRITER:\n${researchSummary.sourceList?.map(s => `- ${s.name} (${s.tier})`).join("\n") || "(none)"}\nVerified claims (corroborated by 2+ sources): ${researchSummary.verifiedClaims || 0}\nIndependent sources consulted: ${researchSummary.independentSources || 0}\nCorroboration step: ${researchSummary.corroborationSkipped ? 'SKIPPED' : 'COMPLETED'}`
     : "\n(No research brief was provided — post should avoid specific factual claims)";
 

@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.2.1
+// v2.2.5
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -59,8 +59,8 @@ export function createApp(ctx) {
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,
-    buildMemberAuthorizationUrl, fetchConnectionsSize,
-    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    buildMemberAuthorizationUrl, fetchConnectionsSize, fetchBasicProfile,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize, advocacySetMemberProfile,
     ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
@@ -346,6 +346,16 @@ export function createApp(ctx) {
           } catch (reachErr) {
             platformLog("warn", "advocacy_connections_size_failed", {
               code: reachErr.code || "error"
+            });
+          }
+          // TD-4 inputs, same best-effort discipline: name and
+          // headline personalize variants but never gate a connect.
+          try {
+            const basic = await fetchBasicProfile(tokens.accessToken);
+            await advocacySetMemberProfile(memberSub, basic);
+          } catch (profErr) {
+            platformLog("warn", "advocacy_profile_fetch_failed", {
+              code: profErr.code || "error"
             });
           }
           const { logActivity } = await import("./services/database.js");
@@ -792,10 +802,12 @@ export async function buildAppForTests() {
           verifyMemberState,
           isMemberState }                = await import("./services/oauth-state.js");
   const { buildMemberAuthorizationUrl,
-          fetchConnectionsSize }         = await import("./services/linkedin-member.js");
+          fetchConnectionsSize,
+          fetchBasicProfile }            = await import("./services/linkedin-member.js");
   const { getSelf: advocacyGetSelf,
           markConnected: advocacyMarkConnected,
           snapshotConnectionsSize: advocacySnapshotConnectionsSize,
+          setMemberProfile: advocacySetMemberProfile,
           CONSENT_TEXT_VERSION: ADVOCACY_CONSENT_VERSION } = await import("./services/advocacy-members.js");
   const { initRegistry,
           isAuthEnabled,
@@ -825,8 +837,8 @@ export async function buildAppForTests() {
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,
-    buildMemberAuthorizationUrl, fetchConnectionsSize,
-    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    buildMemberAuthorizationUrl, fetchConnectionsSize, fetchBasicProfile,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize, advocacySetMemberProfile,
     ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
@@ -891,10 +903,12 @@ export async function start() {
           verifyMemberState,
           isMemberState }                = await import("./services/oauth-state.js");
   const { buildMemberAuthorizationUrl,
-          fetchConnectionsSize }         = await import("./services/linkedin-member.js");
+          fetchConnectionsSize,
+          fetchBasicProfile }            = await import("./services/linkedin-member.js");
   const { getSelf: advocacyGetSelf,
           markConnected: advocacyMarkConnected,
           snapshotConnectionsSize: advocacySnapshotConnectionsSize,
+          setMemberProfile: advocacySetMemberProfile,
           CONSENT_TEXT_VERSION: ADVOCACY_CONSENT_VERSION } = await import("./services/advocacy-members.js");
   const { initRegistry,
           isAuthEnabled,
@@ -937,8 +951,8 @@ export async function start() {
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,
-    buildMemberAuthorizationUrl, fetchConnectionsSize,
-    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize,
+    buildMemberAuthorizationUrl, fetchConnectionsSize, fetchBasicProfile,
+    advocacyGetSelf, advocacyMarkConnected, advocacySnapshotConnectionsSize, advocacySetMemberProfile,
     ADVOCACY_CONSENT_VERSION,
     isAuthEnabled, getDefaultProvider,
     createSession, readSession, clearSession,
@@ -958,7 +972,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.2.1
+║           LinkedIn AI Content Agent  2.2.5
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

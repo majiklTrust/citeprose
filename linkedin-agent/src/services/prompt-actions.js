@@ -50,6 +50,11 @@ var ACTION_REGISTRY = {
     description: "Cited narrative summary of stored analytics (FR-P1-06)",
     vaultKeys: ["analytics_narrative"],
     requiredPermission: "sync_analytics"
+  },
+  "advocacy-variant": {
+    description: "Per-member personalized variants of an org post (FR-P2-03)",
+    vaultKeys: ["advocacy_variant", "quality_reviewer"],
+    requiredPermission: "manage_advocacy"
   }
 };
 

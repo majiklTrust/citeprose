@@ -72,7 +72,8 @@ export async function listMembers() {
   const { rows } = await c.query(
     `SELECT auth_sub, enabled_by, enabled_at, consent_granted_at, consent_text_version,
             mode, auto_opted_in_at, connected, disconnected_at,
-            connections_size, connections_size_at
+            connections_size, connections_size_at,
+            member_name, member_headline, voice_notes
        FROM advocacy_members
       ORDER BY enabled_at ASC`
   );
@@ -84,7 +85,8 @@ export async function getSelf(authSub) {
   const { rows } = await c.query(
     `SELECT auth_sub, enabled_at, consent_granted_at, consent_text_version,
             mode, auto_opted_in_at, connected, disconnected_at,
-            connections_size, connections_size_at
+            connections_size, connections_size_at,
+            member_name, member_headline, voice_notes
        FROM advocacy_members
       WHERE auth_sub = $1`,
     [authSub]
@@ -147,17 +149,70 @@ export async function snapshotConnectionsSize(authSub, size) {
 
 // Member-initiated disconnect (FR-P2-02): stops advocacy for them
 // immediately, wipes their secrets, keeps the participation row so
-// the owner still sees them as enabled-but-disconnected.
-// Step 2 hook: void the member's pending variants here.
+// the owner still sees them as enabled-but-disconnected, and VOIDS
+// every live variant (pending or approved-not-published) so nothing
+// generated before the disconnect can still publish in their name.
 export async function disconnectSelf(authSub) {
   const c = await client();
   const { deleteAllMemberCredentials } = await import("../tenant/member-credential-store.js");
   const wiped = await deleteAllMemberCredentials(authSub);
+  const voided = await c.query(
+    `UPDATE advocacy_variants
+        SET status = 'voided', resolved_at = now()
+      WHERE member_sub = $1 AND status IN ('pending_approval', 'approved')`,
+    [authSub]
+  );
   const r = await c.query(
     `UPDATE advocacy_members
         SET connected = false, disconnected_at = now(), mode = 'manual', updated_at = now()
       WHERE auth_sub = $1`,
     [authSub]
   );
-  return { status: r.rowCount > 0 ? "disconnected" : "not_enabled", credentialsWiped: wiped };
+  return {
+    status: r.rowCount > 0 ? "disconnected" : "not_enabled",
+    credentialsWiped: wiped,
+    variantsVoided: voided.rowCount || 0
+  };
+}
+
+// Best-effort connect-time capture of the TD-4 profile inputs.
+export async function setMemberProfile(authSub, profile = {}) {
+  const c = await client();
+  const name = typeof profile.name === "string" && profile.name.trim().length > 0 ? profile.name.trim().slice(0, 200) : null;
+  const headline = typeof profile.headline === "string" && profile.headline.trim().length > 0 ? profile.headline.trim().slice(0, 300) : null;
+  await c.query(
+    `UPDATE advocacy_members
+        SET member_name = COALESCE($2, member_name),
+            member_headline = COALESCE($3, member_headline),
+            updated_at = now()
+      WHERE auth_sub = $1`,
+    [authSub, name, headline]
+  );
+  return { status: "stored", nameStored: name !== null, headlineStored: headline !== null };
+}
+
+// Owner-editable voice notes (TD-4). Empty clears. Injection
+// screening runs BOTH here (refuse at the door) and again at
+// generation time (defense in depth: notes stored before this
+// screen existed still cannot reach a prompt).
+export async function setVoiceNotes(authSub, notes) {
+  const sub = String(authSub || "").trim();
+  if (!sub) return { status: "rejected", reason: "authSub is required" };
+  const { sanitizeSummary, detectPromptInjection } = await import("./sanitize-content.js");
+  const clean = sanitizeSummary(notes);
+  if (clean.length > 0) {
+    const verdict = detectPromptInjection(clean);
+    if (verdict.detected) {
+      return { status: "rejected", reason: "voice notes contain prompt-injection patterns; nothing was stored" };
+    }
+  }
+  const c = await client();
+  const r = await c.query(
+    `UPDATE advocacy_members
+        SET voice_notes = $2, updated_at = now()
+      WHERE auth_sub = $1`,
+    [sub, clean.length > 0 ? clean : null]
+  );
+  if ((r.rowCount || 0) === 0) return { status: "rejected", reason: "no advocacy member with that sub" };
+  return { status: "stored", cleared: clean.length === 0 };
 }

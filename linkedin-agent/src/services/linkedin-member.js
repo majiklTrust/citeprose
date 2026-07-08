@@ -115,3 +115,63 @@ export async function fetchConnectionsSize(accessToken, deps = {}) {
   }
   return mapConnectionsSize(json);
 }
+
+// -- Basic profile (name + headline, r_basicprofile) --------------
+// TD-4 inputs, captured best-effort at connect time. Unknown maps
+// to null, never an empty-string identity.
+export function mapBasicProfile(raw) {
+  if (!raw || typeof raw !== "object") return { name: null, headline: null };
+  const first = typeof raw.localizedFirstName === "string" ? raw.localizedFirstName.trim() : "";
+  const last = typeof raw.localizedLastName === "string" ? raw.localizedLastName.trim() : "";
+  const name = `${first} ${last}`.trim();
+  const headline = typeof raw.localizedHeadline === "string" && raw.localizedHeadline.trim().length > 0
+    ? raw.localizedHeadline.trim() : null;
+  return { name: name.length > 0 ? name : null, headline };
+}
+
+export async function fetchBasicProfile(accessToken, deps = {}) {
+  if (typeof accessToken !== "string" || accessToken.length === 0) {
+    throw liError(LI_ERROR_CODES.NOT_CONNECTED, "basic profile requires the member access token");
+  }
+  const fetchImpl = deps.fetchImpl || globalThis.fetch;
+  const base = deps.base || getLinkedInV2Base();
+  const timeoutMs = Number.isFinite(deps.timeoutMs) ? deps.timeoutMs : getAnalyticsTimeoutMs();
+
+  const url = `${base}/me?projection=(localizedFirstName,localizedLastName,localizedHeadline)`;
+  assertMemberUrl(url);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "X-Restli-Protocol-Version": "2.0.0"
+      },
+      signal: controller.signal
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    throw liError(LI_ERROR_CODES.NETWORK, "basic profile network failure", {
+      endpoint: "/me", cause: err?.name || "fetch_failed"
+    });
+  }
+  clearTimeout(timer);
+
+  if (!response.ok) {
+    let body = "";
+    try { body = await response.text(); } catch { body = ""; }
+    throw classifyLinkedInFailure(response.status, body, "/me");
+  }
+  let json;
+  try {
+    json = await response.json();
+  } catch {
+    throw liError(LI_ERROR_CODES.ENDPOINT_ERROR, "basic profile response unparseable", {
+      endpoint: "/me", status: response.status
+    });
+  }
+  return mapBasicProfile(json);
+}

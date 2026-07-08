@@ -125,6 +125,68 @@
     });
   }
 
+  // -- My queue -----------------------------------------------------
+
+  function renderQueue(variants) {
+    var el = $('queue-body');
+    var pending = (variants || []).filter(function (v) { return v.status === 'pending_approval'; });
+    var recent = (variants || []).filter(function (v) { return v.status !== 'pending_approval'; }).slice(0, 5);
+    if (pending.length === 0 && recent.length === 0) {
+      el.className = 'empty';
+      el.textContent = 'No variants yet. When the owner generates from a workspace post, yours appear here.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = '';
+    pending.forEach(function (v) {
+      var box = document.createElement('div');
+      box.style.cssText = 'border:1px solid #e0e0e0;border-radius:6px;padding:0.8rem;margin-bottom:0.8rem';
+      var meta = document.createElement('div');
+      meta.className = 'hint';
+      meta.textContent = 'Variant #' + v.id + (v.source_post_id ? ' from post ' + v.source_post_id : '') + ', ' + when(v.created_at);
+      var ta = document.createElement('textarea');
+      ta.style.cssText = 'width:100%;min-height:110px;margin:0.5rem 0;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font:inherit;font-size:0.84rem';
+      ta.value = v.content;
+      var approve = document.createElement('button');
+      approve.className = 'btn btn-primary';
+      approve.textContent = 'Approve';
+      approve.addEventListener('click', function () {
+        var payload = ta.value !== v.content ? { content: ta.value } : {};
+        getJson('/api/advocacy/me/variants/' + v.id + '/approve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(function (r) {
+          if (r.ok) { showMessage('Approved' + (r.body.note ? ': ' + r.body.note : '') + '.', 'success'); loadQueue(); }
+          else showMessage(r.body.error || 'Could not approve.', 'error');
+        });
+      });
+      var reject = document.createElement('button');
+      reject.className = 'btn btn-danger';
+      reject.style.marginLeft = '0.5rem';
+      reject.textContent = 'Reject';
+      reject.addEventListener('click', function () {
+        getJson('/api/advocacy/me/variants/' + v.id + '/reject', { method: 'POST' }).then(function (r) {
+          if (r.ok) { showMessage('Rejected.', 'success'); loadQueue(); }
+          else showMessage(r.body.error || 'Could not reject.', 'error');
+        });
+      });
+      box.appendChild(meta); box.appendChild(ta); box.appendChild(approve); box.appendChild(reject);
+      el.appendChild(box);
+    });
+    if (recent.length > 0) {
+      var h = document.createElement('div');
+      h.className = 'hint';
+      h.style.marginTop = '0.6rem';
+      h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status; }).join(', ');
+      el.appendChild(h);
+    }
+  }
+
+  function loadQueue() {
+    return getJson('/api/advocacy/me/variants').then(function (r) {
+      if (r.ok) renderQueue(r.body.variants);
+    });
+  }
+
   // -- Owner section ----------------------------------------------
 
   function renderMembers(members) {
@@ -178,6 +240,19 @@
     });
   }
 
+  function loadGenStatus() {
+    return getJson('/api/advocacy/variants/status').then(function (r) {
+      var el = $('gen-status');
+      if (!r.ok || !r.body.counts || r.body.counts.length === 0) {
+        el.className = 'empty'; el.textContent = 'No variants generated yet.'; return;
+      }
+      el.className = '';
+      el.textContent = 'Queue totals: ' + r.body.counts.map(function (c) {
+        return c.member_sub.slice(0, 18) + ' ' + c.status + ':' + c.n;
+      }).join('  |  ');
+    });
+  }
+
   // -- Init --------------------------------------------------------
 
   fetch(API + '/api/status', { credentials: 'include', headers: { 'Accept': 'application/json' } })
@@ -192,7 +267,12 @@
       $('app').style.display = '';
       $('mode-manual').addEventListener('click', function () { setMode('manual'); });
       $('mode-auto').addEventListener('click', function () { setMode('auto'); });
-      loadMe();
+      loadMe().then(function () {
+        if (me && me.enabled) {
+          $('queue-section').style.display = '';
+          loadQueue();
+        }
+      });
       if (role === 'owner') {
         $('owner-section').style.display = '';
         $('btn-enable').addEventListener('click', function () {
@@ -201,6 +281,39 @@
           toggleMember(sub, true);
         });
         loadMembers();
+        $('generate-section').style.display = '';
+        $('btn-generate').addEventListener('click', function () {
+          clearMessage();
+          var pid = $('gen-post-id').value.trim();
+          if (!pid) { showMessage('Enter a source post id.', 'warn'); return; }
+          $('btn-generate').disabled = true;
+          getJson('/api/advocacy/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId: pid })
+          }).then(function (r) {
+            $('btn-generate').disabled = false;
+            if (r.ok) {
+              showMessage('Generated ' + r.body.generated + ' variant(s) across ' + r.body.members + ' member(s)' + (r.body.failed ? ', ' + r.body.failed + ' failed a gate' : '') + '.', 'success');
+              loadQueue();
+              loadGenStatus();
+            } else {
+              showMessage(r.body.error || 'Generation failed.', 'error');
+            }
+          });
+        });
+        $('btn-voice').addEventListener('click', function () {
+          clearMessage();
+          var sub = $('voice-sub').value.trim();
+          if (!sub) { showMessage('Enter the member auth sub for voice notes.', 'warn'); return; }
+          getJson('/api/advocacy/members/voice-notes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sub: sub, voiceNotes: $('voice-notes').value })
+          }).then(function (r) {
+            if (r.ok) { showMessage(r.body.cleared ? 'Voice notes cleared.' : 'Voice notes saved.', 'success'); loadMembers(); }
+            else showMessage(r.body.error || 'Could not save voice notes.', 'error');
+          });
+        });
+        loadGenStatus();
       }
     })
     .catch(function () {

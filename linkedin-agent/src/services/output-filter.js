@@ -68,8 +68,8 @@ export function scanForSecrets(content) {
 
 const PROMPT_LEAK_PATTERNS = [
   // System prompt preamble phrases
-  { name: "system_prompt_fragment", pattern: /you are a (linkedin|content|social media) (content\s+)?(writer|creator|generator|assistant)/i },
-  { name: "system_context_leak", pattern: /my (system\s+)?(prompt|instructions?) (say|tell|state|indicate|are)/i },
+  { name: "system_prompt_fragment", pattern: /you are a (linkedin|content|social media|helpful|writing) (content\s+)?(writer|creator|generator|assistant)/i },
+  { name: "system_context_leak", pattern: /my (system\s+)?(prompt|instructions?) (say|tell|state|indicate|are|is|was|were)/i },
 
   // Instruction repetition — phrases from the user prompt template
   { name: "instruction_repetition", pattern: /Write in first person\.\s*Sound like a thoughtful practitioner/i },

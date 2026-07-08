@@ -186,6 +186,13 @@ const INJECTION_PATTERNS = [
   // English instruction override
   /ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|context|prompts?|rules)/i,
   /disregard\s+(the\s+)?(above|previous|prior|earlier)\s+(context|instructions|prompts?)/i,
+  // Bare override forms: "disregard the above and ..." with no
+  // trailing noun is the more common real-world phrasing.
+  /disregard\s+(all\s+)?(the\s+)?(above|previous|prior|earlier)\b/i,
+  // Role-marker injection at line start ("SYSTEM:" / "ASSISTANT:").
+  // Line-anchored on purpose: mid-sentence "the system: verify"
+  // style prose must not false-positive.
+  /^\s*(system|assistant)\s*:/im,
   /forget\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|context)/i,
 
   // System prompt extraction

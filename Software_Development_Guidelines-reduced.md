@@ -25,7 +25,7 @@ Be sure to lean on function names and code anchors rather than line numbers alon
 - Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
 - Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
-- 600-line is a soft limit for files.
+- 600-line file cap on new files. Keep architecture best practices for distributed computing a priority.
 - Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly
  
  

@@ -22,6 +22,7 @@ import {
 import { generateVariantsForPost } from "../services/advocacy-generator.js";
 import { publishApprovedVariant } from "../services/advocacy-publisher.js";
 import { getAdvocacyReach } from "../services/advocacy-reach.js";
+import { getAdvocacyInsights, saveMemberReport } from "../services/advocacy-insights.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { runOutputFilter } from "../services/output-filter.js";
 import { sanitizeLongText } from "../services/advocacy-generator.js";
@@ -133,7 +134,9 @@ router.get("/me/variants", async (req, res) => {
       const { currentClient } = await import("../db/with-tenant.js");
       const { rows } = await currentClient().query(
         `SELECT id, source_post_id, content, hashtags, status, member_edited,
-                quality, created_at, resolved_at, published_at
+                quality, created_at, resolved_at, published_at,
+                reach_at_publish, reported_impressions, reported_reactions,
+                reported_comments, reported_at
            FROM advocacy_variants
           WHERE member_sub = $1
           ORDER BY created_at DESC
@@ -338,6 +341,49 @@ router.get("/reach", requirePermission("view_analytics"), async (req, res) => {
   } catch (err) {
     platformLog("error", "advocacy_reach_failed", { error: err.message });
     res.status(500).json({ error: "Failed to load advocacy reach" });
+  }
+});
+
+// ── Step 5: performance intelligence ──────────────────────────
+
+// Program analytics for the Analytics page: counts, rates, gate
+// breakdowns, uptake, activated reach, and member-REPORTED
+// aggregates (provenance stays labeled downstream). Same read
+// gate as the rest of the Analytics page.
+router.get("/insights", requirePermission("view_analytics"), async (req, res) => {
+  try {
+    const insights = await withTenant(req.tenant.id, () => getAdvocacyInsights());
+    res.json(insights);
+  } catch (err) {
+    platformLog("error", "advocacy_insights_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to load advocacy insights" });
+  }
+});
+
+// Member self-report: session-scoped, published variants only,
+// replace-on-save. The values are the member's own numbers from
+// LinkedIn's author view; they are stored and rendered as
+// self-reported, never as API metrics.
+router.post("/me/variants/:id/report", async (req, res) => {
+  try {
+    const variantId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(variantId) || variantId <= 0) {
+      return res.status(400).json({ error: "invalid variant id" });
+    }
+    const result = await withTenant(req.tenant.id, async () => {
+      const r = await saveMemberReport(req.user.sub, variantId, req.body || {});
+      if (r.status === "saved") {
+        const { logActivity } = await import("../services/database.js");
+        await logActivity("info", "advocacy_performance_reported", { variantId }, req.user.sub);
+      }
+      return r;
+    });
+    if (result.status === "rejected") return res.status(400).json({ error: result.reason });
+    if (result.status === "not_reportable") return res.status(404).json({ error: "no published variant with that id in your queue" });
+    res.json(result);
+  } catch (err) {
+    platformLog("error", "advocacy_report_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to save the report" });
   }
 });
 

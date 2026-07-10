@@ -216,6 +216,46 @@
 
   // -- Loaders ---------------------------------------------------
 
+  function renderAdvocacyIntel(d) {
+    var el = document.getElementById('advocacy-intel-body');
+    if (!d || !d.funnel) {
+      el.className = 'empty';
+      el.textContent = 'Advocacy insights unavailable.';
+      return;
+    }
+    var t = d.funnel.totals;
+    var html = '<table><thead><tr><th>Measure</th><th>Value</th></tr></thead><tbody>'
+      + '<tr><td>Variant Funnel</td><td>' + t.generated + ' generated, ' + (t.approved + t.published) + ' approved, '
+      + t.published + ' published' + (d.funnel.publishRate === null ? '' : ' (' + d.funnel.publishRate + '% publish rate)') + '</td></tr>'
+      + '<tr><td>In Queue / Rejected / Failed</td><td>' + t.pending + ' pending, ' + t.rejected + ' rejected, ' + t.failed + ' failed a gate'
+      + (d.funnel.gateFailures.length ? ' (' + d.funnel.gateFailures.map(function (g) { return g.gate + ': ' + g.n; }).join(', ') + ')' : '') + '</td></tr>'
+      + '<tr><td>Activated Reach</td><td>' + Number(d.activatedReach).toLocaleString() + ' connections across ' + d.publishedWithReach + ' published post(s)'
+      + (d.publishedUnknownReach > 0 ? ' (+' + d.publishedUnknownReach + ' with unknown reach)' : '') + '</td></tr>'
+      + '<tr><td>Member Reported <span class="badge badge-pending">self-reported</span></td><td>'
+      + (d.reported.variants === 0 ? 'none reported yet'
+        : Number(d.reported.impressions).toLocaleString() + ' impressions, ' + d.reported.reactions + ' reactions, '
+          + d.reported.comments + ' comments across ' + d.reported.variants + ' post(s), latest ' + when(d.reported.latestAt)) + '</td></tr>'
+      + '</tbody></table>';
+    if (d.funnel.members.length > 0) {
+      html += '<div class="section-note" style="margin-top:0.7rem">'
+        + d.funnel.members.map(function (m) {
+            return esc(m.sub.slice(0, 22) + ': ' + m.published + '/' + m.generated + ' published'
+              + (m.editRate === null ? '' : ', edits ' + m.editRate + '%')
+              + (m.avgDecisionHours === null ? '' : ', avg decision ' + m.avgDecisionHours + 'h'));
+          }).join('<br>')
+        + '</div>';
+    }
+    if (d.uptake.length > 0) {
+      html += '<div class="section-note">'
+        + 'Uptake by source post: ' + d.uptake.slice(0, 8).map(function (u) {
+            return 'post ' + u.sourcePostId + ': ' + u.published + '/' + u.generated;
+          }).join('  |  ')
+        + '</div>';
+    }
+    el.className = '';
+    el.innerHTML = html;
+  }
+
   function renderAmplification(reach) {
     var el = document.getElementById('amplification-body');
     if (!reach) {
@@ -272,6 +312,10 @@
     });
     getJson('/api/advocacy/reach').then(function (r) {
       renderAmplification(r.ok ? r.body : null);
+    });
+
+    getJson('/api/advocacy/insights').then(function (r) {
+      renderAdvocacyIntel(r.ok ? r.body : null);
     });
 
     getJson('/api/analytics/demographics').then(function (r) {

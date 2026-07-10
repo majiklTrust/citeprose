@@ -178,6 +178,46 @@
       h.style.marginTop = '0.6rem';
       h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status; }).join(', ');
       el.appendChild(h);
+      recent.filter(function (v) { return v.status === 'published'; }).forEach(function (v) {
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:0.5rem;padding:0.6rem;border:1px dashed #ccc;border-radius:6px;font-size:0.8rem';
+        var lbl = document.createElement('div');
+        lbl.className = 'hint';
+        lbl.textContent = 'Report performance for #' + v.id + ' (your numbers from LinkedIn, stored as self-reported'
+          + (v.reported_at ? '; last saved ' + when(v.reported_at) : '') + ')';
+        wrap.appendChild(lbl);
+        var inputs = {};
+        ['impressions', 'reactions', 'comments'].forEach(function (f) {
+          var inp = document.createElement('input');
+          inp.type = 'text';
+          inp.placeholder = f;
+          inp.value = v['reported_' + f] === null || v['reported_' + f] === undefined ? '' : String(v['reported_' + f]);
+          inp.style.cssText = 'width:31%;margin-right:2%;padding:0.35rem;border:1px solid #ccc;border-radius:4px;font-size:0.8rem';
+          inputs[f] = inp;
+          wrap.appendChild(inp);
+        });
+        var save = document.createElement('button');
+        save.className = 'btn btn-secondary';
+        save.style.marginTop = '0.4rem';
+        save.textContent = 'Save Report';
+        save.addEventListener('click', function () {
+          save.disabled = true;
+          getJson('/api/advocacy/me/variants/' + v.id + '/report', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              impressions: inputs.impressions.value.trim(),
+              reactions: inputs.reactions.value.trim(),
+              comments: inputs.comments.value.trim()
+            })
+          }).then(function (r) {
+            save.disabled = false;
+            if (r.ok) { showMessage('Performance report saved (self-reported).', 'success'); loadQueue(); }
+            else showMessage(r.body.error || 'Could not save the report.', 'error');
+          });
+        });
+        wrap.appendChild(save);
+        el.appendChild(wrap);
+      });
       recent.filter(function (v) { return v.status === 'approved'; }).forEach(function (v) {
         var pub = document.createElement('button');
         pub.className = 'btn btn-primary';

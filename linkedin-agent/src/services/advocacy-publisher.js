@@ -187,9 +187,11 @@ export async function publishApprovedVariant(variantId, memberSub, opts = {}) {
 
   await c.query(
     `UPDATE advocacy_variants
-        SET status = 'published', linkedin_id = $2, published_at = now()
+        SET status = 'published', linkedin_id = $2, published_at = now(),
+            reach_at_publish = (SELECT connections_size FROM advocacy_members
+                                 WHERE auth_sub = $3)
       WHERE id = $1`,
-    [variantId, published.linkedinId]
+    [variantId, published.linkedinId, memberSub]
   );
   // FR-P2-07 attribution: who, which variant, which source post.
   await logActivity("info", "advocacy_post_published", {

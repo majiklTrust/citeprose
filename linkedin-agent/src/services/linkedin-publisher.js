@@ -369,6 +369,7 @@ async function restPublish(content, hashtags, imageUrl, target) {
   // and advocacy publishers differ only in token and author, never
   // in payload shape.
   const payload = buildRestPostBody({ authorUrn, content, hashtags });
+  const commentaryText = payload.commentary || "";
 
   // Upload image if provided
   if (imageUrl) {
@@ -421,7 +422,7 @@ async function restPublish(content, hashtags, imageUrl, target) {
     await logActivity("info", "linkedin_post_published", {
       postId,
       status: response.status,
-      contentLength: fullContent.length,
+      contentLength: commentaryText.length,
       hasImage: !!imageUrl,
       mode: "rest",
       target

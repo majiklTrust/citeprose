@@ -501,7 +501,7 @@
           // These ONLY run when a tenant exists (role is non-null above).
           if (!statusRes.mode) statusRes.mode = 'manual';
           if (!statusRes.stats) statusRes.stats = {
-            totalPosted: 0, postsLast10Days: 0, pendingApproval: 0, byTopic: []
+            totalPosted: 0, postsInWindow: 0, pendingApproval: 0, byTopic: []
           };
 
           setStatus(statusRes);
@@ -1110,15 +1110,15 @@
               <div className="stat-value">{status.stats.totalPosted}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Posts (10-day)</div>
-              <div className="stat-value">{status.stats.postsLast10Days}</div>
+              <div className="stat-label">Posts ({status.postsWindowDays || 10}-day)</div>
+              <div className="stat-value">{status.stats.postsInWindow}</div>
               <div className="cadence-bar">
                 <div className="cadence-fill" style={{
-                  width: `${(status.stats.postsLast10Days / (status.maxPostsPer10Days || 4)) * 100}%`,
-                  background: status.stats.postsLast10Days >= (status.maxPostsPer10Days || 4) ? 'var(--accent-amber)' : 'var(--accent-green)'
+                  width: `${Math.min(100, (status.stats.postsInWindow / (status.maxPostsPerWindow || 4)) * 100)}%`,
+                  background: status.stats.postsInWindow >= (status.maxPostsPerWindow || 4) ? 'var(--accent-amber)' : 'var(--accent-green)'
                 }}></div>
               </div>
-              <div className="stat-meta">max {status.maxPostsPer10Days || 4} {status.cadence?.allowed ? '— ready to post' : `— ${status.cadence?.reason?.substring(0, 30)}`}</div>
+              <div className="stat-meta">max {status.maxPostsPerWindow || 4} {status.cadence?.allowed ? '— ready to post' : `— ${status.cadence?.reason?.substring(0, 30)}`}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Pending Approval</div>

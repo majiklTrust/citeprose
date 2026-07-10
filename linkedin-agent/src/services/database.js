@@ -19,6 +19,7 @@
 // that still invokes it (e.g., old startup code) fails loudly.
 // ═══════════════════════════════════════════════════════════════
 
+import { getPostsWindowDays } from "../config/posts-window.js";
 import { currentClient, currentTenantId } from "../db/with-tenant.js";
 import { canTransition, isEditable } from "./post-status.js";
 
@@ -595,13 +596,13 @@ export async function getPostStats() {
   const pending = await c.query(
     "SELECT COUNT(*)::int AS count FROM posts WHERE status = 'pending_approval'::post_status"
   );
-  const last10Days = await getRecentPosts(10);
+  const windowPosts = await getRecentPosts(getPostsWindowDays());
 
   return {
     totalPosted: total.rows[0].count,
     byTopic: byTopic.rows,
-    postsLast10Days: last10Days.length,
+    postsInWindow: windowPosts.length,
     pendingApproval: pending.rows[0].count,
-    recentPosts: last10Days
+    recentPosts: windowPosts
   };
 }

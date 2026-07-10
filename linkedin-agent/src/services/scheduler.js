@@ -34,6 +34,7 @@ import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-publisher.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
+import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
 let schedulerJob = null;
@@ -41,24 +42,21 @@ let schedulerJob = null;
 // ── Cadence Rules ────────────────────────────────────────────
 
 const MIN_HOURS = () => parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "72", 10);
-const MAX_PER_10_DAYS = () => parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10);
-
 // Must be called inside withTenant. Returns a cadence decision
 // for the current tenant — respects their post history and the
-// global min-hours / max-per-10-days configuration.
+// global min-hours / max-posts-per-window configuration.
 export async function canPostNow() {
-  const recentPosts = await getRecentPosts(10);
+  const recentPosts = await getRecentPosts(getPostsWindowDays());
   const stats = await getPostStats();
 
-  // Rule 1: Max posts per 10-day window
-  if (stats.postsLast10Days >= MAX_PER_10_DAYS()) {
+  // Rule 1: Max posts per configured window
+  if (stats.postsInWindow >= getMaxPostsPerWindowDays()) {
     return {
       allowed: false,
-      reason: `Already at ${stats.postsLast10Days}/${MAX_PER_10_DAYS()} posts in 10-day window`,
+      reason: `Already at ${stats.postsInWindow}/${getMaxPostsPerWindowDays()} posts in ${getPostsWindowDays()}-day window`,
       nextWindowOpens: estimateNextWindow(recentPosts)
     };
   }
-
   // Rule 2: Minimum hours between posts
   if (recentPosts.length > 0) {
     const lastPost = recentPosts[0];
@@ -83,12 +81,12 @@ export async function canPostNow() {
 }
 
 function estimateNextWindow(recentPosts) {
-  if (recentPosts.length < MAX_PER_10_DAYS()) return "now";
+  if (recentPosts.length < getMaxPostsPerWindowDays()) return "now";
   const oldest = recentPosts[recentPosts.length - 1];
   const postedAtMs = oldest.posted_at instanceof Date
     ? oldest.posted_at.getTime()
     : new Date(String(oldest.posted_at).endsWith("Z") ? oldest.posted_at : oldest.posted_at + "Z").getTime();
-  const agesOut = new Date(postedAtMs + 10 * 24 * 60 * 60 * 1000);
+  const agesOut = new Date(postedAtMs + getPostsWindowDays() * 24 * 60 * 60 * 1000);
   return agesOut.toISOString();
 }
 

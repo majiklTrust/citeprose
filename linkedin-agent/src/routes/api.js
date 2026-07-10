@@ -35,6 +35,7 @@ import {
   forceCycle,
   transitionStatus
 } from "../services/scheduler.js";
+import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { generatePost, qualityCheck, refinePost } from "../services/content-generator.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { createActionToken } from "../services/prompt-actions.js";
@@ -112,7 +113,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     // Platform-level data — no tenant context required
     const serverAddress = getServerAddress().display;
     const authRequired = isAuthEnabled() && !req.devBypass;
-    const maxPostsPer10Days = parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10);
+    const postsWindowDays = getPostsWindowDays();
+    const maxPostsPerWindow = getMaxPostsPerWindowDays();
 
     // Tenant-scoped data — only available if caller is authenticated
     // AND has a tenant. Otherwise omit (dashboard handles nulls).
@@ -209,7 +211,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       corroboration,
       cadence,
       stats,
-      maxPostsPer10Days,
+      postsWindowDays,
+      maxPostsPerWindow,
       researchStats,
       feedLimit: parseInt(process.env.DASHBOARD_FEED_LIMIT) || 8,
       linkedinConnected: tokenStatus.valid,

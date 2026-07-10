@@ -183,14 +183,21 @@ export async function generateVariantsForPost(postId, actionToken, requestedBy) 
   if (!Number.isInteger(id) || id <= 0) {
     return { status: "rejected", reason: "postId must be a positive integer" };
   }
+  // Eligibility is enforced HERE, not only in the dropdown
+  // (decision 2026-07-09): only a PUBLISHED ORGANIZATION post can
+  // seed member variants. Fail-closed for drafts, pending posts,
+  // and personal-profile posts regardless of what the caller sends.
   const post = await c.query(
     `SELECT p.id, p.title, p.content, p.hashtags, t.name AS topic_name
        FROM posts p LEFT JOIN topics t ON t.tenant_id = p.tenant_id AND t.id = p.topic_id
-      WHERE p.id = $1`,
+      WHERE p.id = $1
+        AND p.status = 'posted'
+        AND p.publish_target = 'organization'
+        AND p.linkedin_id IS NOT NULL`,
     [id]
   );
   if (post.rows.length === 0) {
-    return { status: "rejected", reason: "no post with that id in this workspace" };
+    return { status: "rejected", reason: "no published organization post with that id in this workspace" };
   }
   const source = post.rows[0];
   const sourcePost = {

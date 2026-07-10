@@ -31,6 +31,29 @@
   }
   function clearMessage() { $('message').innerHTML = ''; }
 
+  function loadEligiblePosts() {
+    var sel = $('gen-post-id');
+    getJson('/api/advocacy/eligible-posts').then(function (r) {
+      sel.innerHTML = '';
+      if (!r.ok || !r.body.posts || r.body.posts.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No published organization posts yet';
+        sel.appendChild(opt);
+        $('btn-generate').disabled = true;
+        return;
+      }
+      r.body.posts.forEach(function (p) {
+        var opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = '#' + p.id + '  ' + (p.title || '(untitled)')
+          + (p.posted_at ? '  (' + when(p.posted_at) + ')' : '');
+        sel.appendChild(opt);
+      });
+      $('btn-generate').disabled = false;
+    });
+  }
+
   function getJson(path, opts) {
     var o = opts || {};
     o.credentials = 'include';
@@ -337,10 +360,11 @@
         });
         loadMembers();
         $('generate-section').style.display = '';
+        loadEligiblePosts();
         $('btn-generate').addEventListener('click', function () {
           clearMessage();
           var pid = $('gen-post-id').value.trim();
-          if (!pid) { showMessage('Enter a source post id.', 'warn'); return; }
+          if (!pid) { showMessage('Select a source post.', 'warn'); return; }
           $('btn-generate').disabled = true;
           getJson('/api/advocacy/generate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

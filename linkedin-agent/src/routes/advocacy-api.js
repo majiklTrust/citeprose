@@ -266,6 +266,32 @@ router.post("/me/variants/:id/publish", async (req, res) => {
 
 // ── Owner generation surface (Step 2) ─────────────────────────
 
+// Eligible variant sources: PUBLISHED ORGANIZATION posts only
+// (decision 2026-07-09). The dropdown lists these; the generator
+// service enforces the same rule, so the UI filter is convenience
+// and the service is the gate.
+router.get("/eligible-posts", requirePermission("manage_advocacy"), async (req, res) => {
+  try {
+    const rows = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const { rows } = await currentClient().query(
+        `SELECT id, title, posted_at
+           FROM posts
+          WHERE status = 'posted'
+            AND publish_target = 'organization'
+            AND linkedin_id IS NOT NULL
+          ORDER BY posted_at DESC NULLS LAST, id DESC
+          LIMIT 50`
+      );
+      return rows;
+    });
+    res.json({ posts: rows });
+  } catch (err) {
+    platformLog("error", "advocacy_eligible_posts_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to load eligible posts" });
+  }
+});
+
 router.post("/generate", requirePermission("manage_advocacy"), async (req, res) => {
   try {
     const { postId } = req.body || {};

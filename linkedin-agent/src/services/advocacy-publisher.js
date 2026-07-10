@@ -22,15 +22,16 @@
 // =================================================================
 
 import { getLinkedInRestBase, getLinkedInApiVersion, getAnalyticsTimeoutMs } from "../config/analytics.js";
+import { getMaxPostsPerWindowDays, getMinHoursBetweenPosts } from "../config/posts-window.js";
 import { LI_ERROR_CODES, liError, classifyLinkedInFailure, isLinkedInApiError } from "./linkedin-errors.js";
 import { buildRestPostBody } from "./linkedin-post-request.js";
 
 // Same env constants the tenant scheduler applies (TD-5).
 export function getAdvocacyMinHoursBetween() {
-  return Number.parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "72", 10);
+  return Number.parseInt(getMinHoursBetweenPosts() || "24", 10);
 }
 export function getAdvocacyMaxPer10Days() {
-  return Number.parseInt(process.env.MAX_POSTS_PER_10_DAYS || "4", 10);
+  return Number.parseInt(getMaxPostsPerWindowDays() || "4", 10);
 }
 
 // -- Pure caps decision ------------------------------------------

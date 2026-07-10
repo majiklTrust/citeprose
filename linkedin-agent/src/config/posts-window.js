@@ -15,6 +15,11 @@
 // that disables or breaks the cap check.
 // ═══════════════════════════════════════════════════════════════
 
+export function getMinHoursBetweenPosts() {
+  const n = parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "48", 10);
+  return Number.isFinite(n) && n > 0 ? n : 10;
+}
+
 export function getPostsWindowDays() {
   const n = parseInt(process.env.POSTS_WINDOW_DAYS || "10", 10);
   return Number.isFinite(n) && n > 0 ? n : 10;

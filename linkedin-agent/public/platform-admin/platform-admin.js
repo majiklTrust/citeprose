@@ -84,6 +84,10 @@
             html += '<select data-param="' + esc(p.name) + '" data-source="models" disabled>';
             html += '<option value="">Loading models…</option>';
             html += '</select>';
+          } else if (p.type === "select" && p.source === "tenants") {      // ◄ new branch
+            html += '<select data-param="' + esc(p.name) + '" data-source="tenants" disabled>';
+            html += '<option value="">Loading tenants…</option>';
+            html += '</select>';
           } else if (p.type === "select" && p.optgroups) {
             html += '<select data-param="' + esc(p.name) + '">';
             p.optgroups.forEach(function (g) {
@@ -125,6 +129,8 @@
 
     // Populate any dynamic model dropdowns from the live catalog
     populateModelSelects();
+    // Populate any dynamic tenant dropdowns from the platform catalog
+    populateTenantSelects();
   }
 
   // ── Populate model dropdowns from the live Anthropic catalog ──
@@ -160,6 +166,41 @@
       .catch(function () {
         selects.forEach(function (sel) {
           sel.innerHTML = '<option value="">Unable to load models</option>';
+        });
+      });
+  }
+  
+// ── Populate tenant dropdowns from the platform tenant catalog ──
+
+  function populateTenantSelects() {
+    var selects = document.querySelectorAll('select[data-source="tenants"]');
+    if (selects.length === 0) return;
+
+    fetch(API + "/api/platform-admin/tenants", { credentials: "include" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("status " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var tenants = data.tenants || [];
+        selects.forEach(function (sel) {
+          if (tenants.length === 0) {
+            sel.innerHTML = '<option value="">No tenants available</option>';
+            return;
+          }
+          var html = '<option value="">Select a tenant…</option>';
+          tenants.forEach(function (t) {
+            var suffix = (t.status && t.status !== "active") ? " [" + t.status + "]" : "";
+            var label = t.name + " (" + t.slug + ")" + suffix;
+            html += '<option value="' + esc(t.id) + '">' + esc(label) + '</option>';
+          });
+          sel.innerHTML = html;
+          sel.disabled = false;
+        });
+      })
+      .catch(function () {
+        selects.forEach(function (sel) {
+          sel.innerHTML = '<option value="">Unable to load tenants</option>';
         });
       });
   }

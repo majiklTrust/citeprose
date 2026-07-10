@@ -565,7 +565,7 @@ const QUERY_REGISTRY = {
     readOnly: false
   },
 
-  "set-agent-model": {
+"set-agent-model": {
     label: "Set Language Model",
     description: "Sets the per-tenant Language Model override from the live model catalog. Falls back to the deployment default when unset.",
     capability: "Pin or change which LLM a tenant's generation pipeline uses.",
@@ -573,7 +573,7 @@ const QUERY_REGISTRY = {
           VALUES ($1, 'anthropic_model', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }, // ◄ was: label "Tenant UUID", type "uuid"
       { name: "value", label: "Model", type: "select", source: "models", required: true }
     ],
     destructive: false,
@@ -732,6 +732,37 @@ export default function createPlatformAdminRoutes() {
       res.status(502).json({ error: "Could not retrieve models" });
     } finally {
       apiKey = null;
+    }
+  });
+  
+  // ── GET /tenants: tenant catalog for dropdowns ───────────
+  // Populates tenant-select params (e.g. Set Language Model) so an
+  // admin picks a tenant by name instead of pasting a UUID.
+  //
+  // Zero Trust:
+  //   • Reads only the platform tenants table, under the platform
+  //     admin DB role (SET LOCAL ROLE, transaction-scoped).
+  //   • Returns only id, name, slug, and status. No secrets.
+  //   • Behind the isPlatformAdmin gate (router-level).
+  
+  router.get("/tenants", async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SET LOCAL ROLE ${resolveAdminRole()}`);   // ◄ same role elevation POST /execute uses
+      const result = await client.query(
+        `SELECT id, name, slug, status::text AS status
+           FROM tenants
+          ORDER BY name`
+      );
+      await client.query("COMMIT");
+      res.json({ tenants: result.rows });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      platformLog("error", "tenant_list_failed", { admin: req.user.sub, error: err.message });
+      res.status(502).json({ error: "Could not retrieve tenants" });
+    } finally {
+      client.release();
     }
   });
 

@@ -24,6 +24,7 @@ Be sure to lean on function names and code anchors rather than line numbers alon
 - Apply Zero Trust cybersecurity principles everywhere, in every node layer and the UX.
 - Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
+- DO NOT name functions as property or constants. Use getter and setter functions/methods that follow conventional naming standards, e.g., a function to get SOME_PROPERTY would be named getSomePropery().
 - Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
 - 600-line file cap on new files. Keep architecture best practices for distributed computing a priority.
 - Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly

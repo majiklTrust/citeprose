@@ -270,7 +270,7 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       $('loading').style.display = 'none';
-      if (!data.user || data.user.role !== 'owner') {
+      if (!data.user || (data.permissions || []).indexOf('manage_linkedin') === -1) {
         $('denied').style.display = '';
         return;
       }

@@ -21,9 +21,9 @@
   var currentPath = window.location.pathname.replace(/\/+$/, '');
 
   var pages = [
-    { path: '/app/analytics', label: 'Analytics', roles: ['owner', 'editor', 'viewer'] },
-    { path: '/app/linkedin', label: 'LinkedIn', roles: ['owner'] },
-    { path: '/app/advocacy', label: 'Advocacy', roles: ['owner', 'editor', 'viewer'] },
+    { path: '/app/analytics', label: 'Analytics', perm: 'view_analytics' },
+    { path: '/app/linkedin', label: 'LinkedIn', perm: 'manage_linkedin' },
+    { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
     { path: '/app/admin', label: 'Manage', roles: ['owner'] }
@@ -37,7 +37,7 @@
 
   var OM_PAGES = ['/app/analytics', '/app/linkedin', '/app/advocacy'];
 
-  function renderNav(role, omDisabled) {
+  function renderNav(role, omDisabled, permissions) {
     var container = document.getElementById('manager-nav');
     if (!container) return;
 
@@ -45,7 +45,11 @@
     html += '<a href="/app" class="manager-nav-link">← Dashboard</a>';
 
     pages.forEach(function (page) {
-      if (page.roles.indexOf(role) === -1) return;
+      if (page.perm) {
+        // Organization Manager pages: gated by the permission
+        // matrix, the single source of truth (never role names).
+        if ((permissions || []).indexOf(page.perm) === -1) return;
+      } else if (page.roles.indexOf(role) === -1) return;
       if (omDisabled && OM_PAGES.indexOf(page.path) !== -1) return;
 
       var isActive = currentPath === page.path;
@@ -65,7 +69,7 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role, data.organizationManager === 'disabled');
+        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || []);
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

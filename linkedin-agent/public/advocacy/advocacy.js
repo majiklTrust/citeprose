@@ -116,7 +116,7 @@
       a.href = '/auth/linkedin/member';
       var b = document.createElement('button');
       b.className = 'btn btn-primary';
-      b.textContent = p.consent_granted_at ? 'Reconnect personal LinkedIn' : 'Review consent and connect';
+      b.textContent = p.consent_granted_at ? 'Reconnect Personal LinkedIn' : 'Review consent and connect';
       a.appendChild(b);
       actions.appendChild(a);
       modeBox.style.display = 'none';
@@ -218,16 +218,11 @@
       el.appendChild(box);
     });
     if (recent.length > 0) {
-      var h = document.createElement('div');
-      h.className = 'hint';
-      h.style.marginTop = '0.6rem';
-      h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status + (v.source_post_title ? ' (' + v.source_post_title + ')' : ''); }).join(', ');
-      el.appendChild(h);
       recent.filter(function (v) { return v.status === 'published'; }).forEach(function (v) {
         var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:0.5rem;padding:0.6rem;border:1px dashed #ccc;border-radius:6px;font-size:0.8rem';
         var lbl = document.createElement('div');
-        lbl.className = 'hint';
+        lbl.className = 'report-title';
         lbl.textContent = 'Report performance for #' + v.id
           + (v.source_post_title ? ' of "' + v.source_post_title + '"' : '')
           + ' (your numbers from LinkedIn, stored as self-reported'
@@ -342,9 +337,29 @@
     };
   }
 
+  function loadEligibleMembers() {
+    var sel = $('enable-sub');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    getJson('/api/advocacy/eligible-members').then(function (r) {
+      sel.innerHTML = '';
+      var list = (r.ok && r.body.members) ? r.body.members : [];
+      var blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = list.length ? 'Select a member to enroll' : 'All workspace members are enrolled';
+      sel.appendChild(blank);
+      list.forEach(function (m) {
+        var opt = document.createElement('option');
+        opt.value = m.auth_sub;
+        opt.textContent = m.auth_sub + ' (' + m.role + ')';
+        sel.appendChild(opt);
+      });
+      $('btn-enable').disabled = list.length === 0;
+    });
+  }
+
   function loadMembers() {
     return getJson('/api/advocacy/members').then(function (r) {
-      if (r.ok) { renderMembers(r.body.members); populateVoiceSelect(r.body.members || []); }
+      if (r.ok) { renderMembers(r.body.members); populateVoiceSelect(r.body.members || []); loadEligibleMembers(); }
       else { $('members-body').className = 'empty'; $('members-body').textContent = 'Failed to load members.'; }
     });
   }
@@ -391,6 +406,7 @@
         return;
       }
       role = data.user.role;
+      var perms = data.permissions || [];
       $('app').style.display = '';
       $('mode-manual').addEventListener('click', function () { setMode('manual'); });
       $('mode-auto').addEventListener('click', function () { setMode('auto'); });
@@ -400,11 +416,11 @@
           loadQueue();
         }
       });
-      if (role === 'owner') {
+      if (perms.indexOf('manage_advocacy') !== -1) {
         $('owner-section').style.display = '';
         $('btn-enable').addEventListener('click', function () {
           var sub = $('enable-sub').value.trim();
-          if (!sub) { showMessage('Enter the member auth sub to enable.', 'warn'); return; }
+          if (!sub) { showMessage('Select a member to enroll.', 'warn'); return; }
           toggleMember(sub, true);
         });
         loadMembers();

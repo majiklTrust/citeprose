@@ -42,6 +42,21 @@
     label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.7rem 0 0.25rem; }
     input[type=text] { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; font-family: monospace; }
     .hint { font-size: 0.72rem; color: #999; margin-top: 0.2rem; }
+    .partner-note {
+      display: inline-block;
+      margin-top: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      background: #fff3e0;
+      border: 1px solid #ffb74d;
+      border-left: 3px solid #e65100;
+      border-radius: 4px;
+      color: #e65100;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .report-title { font-size: 0.82rem; font-weight: 700; color: #000; margin-bottom: 0.3rem; }
     .empty { color: #999; font-style: italic; }
     .loading { text-align: center; padding: 2rem; color: #999; }
     .access-denied { text-align: center; padding: 3rem; }
@@ -99,22 +114,32 @@
 
       <div class="section" id="queue-section" style="display:none">
         <h2>Post Variants Queue</h2>
+        <div class="partner-note">LinkedIn Partner Required for r_member_postAnalytics</div>
         <div class="section-note">Variants generated for you from workspace posts. Approve as-is, edit then approve, or reject. Nothing publishes to your profile without your approval here.</div>
         <div id="queue-body" class="empty">Loading...</div>
       </div>
 
+      <div class="section" id="generate-section" style="display:none">
+        <h2>Generate Variants</h2>
+        <div class="section-note">Creates one personalized variant per connected member from a workspace post, behind the full safety gate chain. Members approve from their own queues.</div>
+        <label for="gen-post-id">Source post</label>
+        <select id="gen-post-id"></select>
+        <div style="margin-top:0.9rem">
+          <button id="btn-generate" class="btn btn-primary">Generate Variant Post</button>
+        </div>
+
       <div class="section" id="owner-section" style="display:none">
-        <h2>Members (owner)</h2>
+        <h2>Members</h2>
         <div class="section-note">Enabling adds a member to the program; they still must consent and connect themselves. Disabling removes participation and wipes the member's stored tokens.</div>
         <div id="members-body" class="empty">Loading...</div>
-        <label for="enable-sub">Member auth sub</label>
-        <input type="text" id="enable-sub" autocomplete="off" spellcheck="false" placeholder="auth0|... or user_...">
-        <div class="hint">The member's identity sub as shown in the workspace membership. Enabling validates it against this workspace's memberships.</div>
+        <label for="enable-sub">Member</label>
+        <select id="enable-sub"></select>
+        <div class="hint">Workspace members not yet enrolled. Enabling still validates against this workspace's memberships server-side.</div>
         <div style="margin-top:0.9rem">
           <button id="btn-enable" class="btn btn-primary">Enable Member</button>
         </div>
-        <label for="voice-sub">Voice notes: member auth sub</label>
-        <input type="text" id="voice-sub" autocomplete="off" spellcheck="false" placeholder="auth0|... or user_...">
+        <label for="voice-sub">Voice notes: member</label>
+        <select id="voice-sub"></select>
         <label for="voice-notes">Voice notes (tone, style, audience; empty clears)</label>
         <input type="text" id="voice-notes" autocomplete="off" placeholder="e.g. short punchy sentences, no emojis, audience is mid-market CISOs">
         <div style="margin-top:0.9rem">
@@ -122,14 +147,6 @@
         </div>
       </div>
 
-      <div class="section" id="generate-section" style="display:none">
-        <h2>Generate Variants (owner)</h2>
-        <div class="section-note">Creates one personalized variant per connected member from a workspace post, behind the full safety gate chain. Members approve from their own queues.</div>
-        <label for="gen-post-id">Source post</label>
-        <select id="gen-post-id"></select>
-        <div style="margin-top:0.9rem">
-          <button id="btn-generate" class="btn btn-primary">Generate Variant Post</button>
-        </div>
         <div id="gen-status" style="margin-top:1rem" class="empty"></div>
       </div>
     </div>

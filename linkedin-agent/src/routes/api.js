@@ -126,6 +126,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let anthropicModel = null;
     let tenantRole = null;
     let organizationManager = "enabled";
+    let permissions = [];
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
@@ -173,6 +174,13 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             paused = p === "true";
             corroboration = (await getAgentState("corroboration")) || "enabled";
             organizationManager = ((await getAgentState("organization_manager")) === "disabled") ? "disabled" : "enabled";
+            if (tenantRole) {
+              const { currentClient } = await import("../db/with-tenant.js");
+              const { rows: permRows } = await currentClient().query(
+                "SELECT permission FROM role_permissions WHERE role = $1", [tenantRole]
+              );
+              permissions = permRows.map((r) => r.permission);
+            }
             try { researchStats = await getArticleStats(); } catch { /* monitor not ready */ }
             // Cadence and LinkedIn token status are tenant-scoped
             // (each tenant has their own post history and their own
@@ -221,6 +229,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
       publishTarget,
       organizationManager,
+      permissions,
       linkedinOrgConfigured,
       anthropicModel,
       publishMode: getPublishMode()

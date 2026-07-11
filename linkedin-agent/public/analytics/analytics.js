@@ -66,7 +66,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!data.user || !data.user.role) return null;
-        return data.user.role;
+        return { role: data.user.role, permissions: data.permissions || [] };
       })
       .catch(function () { return null; });
   }
@@ -408,9 +408,9 @@
       $('denied').style.display = '';
       return;
     }
-    role = r;
+    role = r.role;
     $('app').style.display = '';
-    if (role === 'owner' || role === 'editor') {
+    if (r.permissions.indexOf('sync_analytics') !== -1) {
       $('btn-sync').style.display = '';
       $('btn-narrative').style.display = '';
       $('btn-sync').addEventListener('click', runSync);

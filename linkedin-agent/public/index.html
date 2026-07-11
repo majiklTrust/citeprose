@@ -1032,7 +1032,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.2.35</div>
+                <div className="header-subtitle">v2.2.41</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1072,7 +1072,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.2.35 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.2.41 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1140,7 +1140,7 @@
               {status.linkedinConnected && (
                 <div className="stat-meta">
                   Publishing as: {status.publishTarget === 'organization' ? 'Org page' : 'Personal'}
-                  {status.user?.role === 'owner' && status.organizationManager !== 'disabled' && (
+                  {status.permissions?.includes('manage_linkedin') && status.organizationManager !== 'disabled' && (
                     <button
                       className="btn-link text-link-blue"
                       style={{ marginLeft: '0.4rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
@@ -1160,7 +1160,7 @@
                       }}
                     >⇄ switch</button>
                   )}
-                  {status.user?.role === 'owner' && status.organizationManager !== 'disabled' && (
+                  {status.permissions?.includes('manage_linkedin') && status.organizationManager !== 'disabled' && (
                     <span> · <a href="/app/linkedin/" className="text-link-blue">Manage →</a></span>
                   )}
                 </div>

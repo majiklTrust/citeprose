@@ -279,6 +279,36 @@ router.post("/me/variants/:id/publish", async (req, res) => {
 // (decision 2026-07-09). The dropdown lists these; the generator
 // service enforces the same rule, so the UI filter is convenience
 // and the service is the gate.
+// Eligible enrollment candidates: workspace memberships with no
+// advocacy_members row (disable deletes the row, so re-enrollment
+// candidates reappear here). Purpose-scoped under manage_advocacy
+// with a minimal projection; the enable service remains the gate.
+router.get("/eligible-members", requirePermission("manage_advocacy"), async (req, res) => {
+  try {
+    const rows = await withTenant(req.tenant.id, async () => {
+      const { currentClient } = await import("../db/with-tenant.js");
+      const { rows } = await currentClient().query(
+        // memberships has NO RLS (the tenant resolver reads it
+        // before any tenant context exists), so this query MUST
+        // filter by tenant_id explicitly. Without it, every
+        // tenant's members leak through. The advocacy_members join
+        // is RLS-bound but only narrows enrollment, not tenancy.
+        `SELECT m.auth_sub, m.role::text AS role
+           FROM memberships m
+           LEFT JOIN advocacy_members am ON am.auth_sub = m.auth_sub
+          WHERE m.tenant_id = current_tenant_id()
+            AND am.auth_sub IS NULL
+          ORDER BY m.role, m.auth_sub`
+      );
+      return rows;
+    });
+    res.json({ members: rows });
+  } catch (err) {
+    platformLog("error", "advocacy_eligible_members_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to list eligible members" });
+  }
+});
+
 router.get("/eligible-posts", requirePermission("manage_advocacy"), async (req, res) => {
   try {
     const rows = await withTenant(req.tenant.id, async () => {

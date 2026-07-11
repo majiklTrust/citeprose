@@ -125,6 +125,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let tokenStatus = { valid: false };
     let anthropicModel = null;
     let tenantRole = null;
+    let organizationManager = "enabled";
 
     if (req.user && req.user.sub) {
       // Try to resolve the tenant from the session user. If the
@@ -171,6 +172,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             const p = await getAgentState("paused");
             paused = p === "true";
             corroboration = (await getAgentState("corroboration")) || "enabled";
+            organizationManager = ((await getAgentState("organization_manager")) === "disabled") ? "disabled" : "enabled";
             try { researchStats = await getArticleStats(); } catch { /* monitor not ready */ }
             // Cadence and LinkedIn token status are tenant-scoped
             // (each tenant has their own post history and their own
@@ -218,6 +220,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
       publishTarget,
+      organizationManager,
       linkedinOrgConfigured,
       anthropicModel,
       publishMode: getPublishMode()

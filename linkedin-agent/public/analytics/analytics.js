@@ -239,7 +239,7 @@
     if (d.funnel.members.length > 0) {
       html += '<div class="section-note" style="margin-top:0.7rem">'
         + d.funnel.members.map(function (m) {
-            return esc(m.sub.slice(0, 22) + ': ' + m.published + '/' + m.generated + ' published'
+            return esc((m.name || m.sub.slice(0, 22)) + ': ' + m.published + '/' + m.generated + ' published'
               + (m.editRate === null ? '' : ', edits ' + m.editRate + '%')
               + (m.avgDecisionHours === null ? '' : ', avg decision ' + m.avgDecisionHours + 'h'));
           }).join('<br>')
@@ -288,10 +288,29 @@
     el.innerHTML = html;
   }
 
+  
+  // Fail-open guard: if no API response answers the access check
+  // within 5 seconds (network failure, server down), reveal the
+  // page; each card then reports its own errors honestly.
+  setTimeout(function () {
+    if (!window.__omWall) document.body.classList.remove('om-checking');
+  }, 5000);
+
   function getJson(path) {
     return fetch(API + path, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       .then(function (res) {
-        return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
+        return res.json().then(function (body) {       if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+        if (!window.__omWall) {
+          window.__omWall = true;
+          var wall = document.getElementById('om-wall');
+          if (wall) { wall.hidden = false; wall.className = 'auth-wall shown'; }
+        }
+      } else if (document.body.classList.contains('om-checking')) {
+        // First non-gated response: the access check has answered,
+        // reveal the page (mirrors platform-admin's main-content).
+        document.body.classList.remove('om-checking');
+      }
+      return { ok: res.ok, status: res.status, body: body }; });
       });
   }
 

@@ -165,6 +165,15 @@ export async function getAdvocacyInsights() {
        FROM advocacy_variants`
   );
   const funnel = computeFunnel(rows);
+  // Burden reduction (Step 0): the owner reads names, not auth
+  // subs. Enrich the per-member lines from the members table.
+  const { rows: nameRows } = await c.query(
+    "SELECT auth_sub, member_name FROM advocacy_members"
+  );
+  const nameBySub = new Map(nameRows.map((r) => [r.auth_sub, r.member_name]));
+  for (const m of funnel.members) {
+    m.name = nameBySub.get(m.sub) || null;
+  }
   const uptake = computeUptake(rows);
   const reach = computeActivatedReach(rows);
 

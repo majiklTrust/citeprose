@@ -38,12 +38,17 @@ import {
   hasLinkedInRefreshToken, hasLinkedInOrgUrn, storeCredential
 } from "../tenant/credential-store.js";
 
+import { requireOrganizationManager } from "../services/organization-manager.js";
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
 router.use(requireAuth);
 router.use(resolveTenant);
+// Organization Manager gate (DDL 32): LinkedIn connection
+// management is part of the gated capability set per the
+// 2026-07-11 decision (/app/linkedin access controlled).
+router.use(requireOrganizationManager);
 
 async function safeGet(fn) {
   try { return await fn(); } catch { return null; }

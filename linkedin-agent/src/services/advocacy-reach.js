@@ -18,6 +18,7 @@
 
 import { platformLog } from "./platform-log.js";
 
+import { isOrganizationManagerEnabled } from "./organization-manager.js";
 export const ORG_FOLLOWERS_STATE_KEY = "org_follower_count";
 export const ORG_FOLLOWERS_AT_STATE_KEY = "org_follower_count_retrieved_at";
 
@@ -166,6 +167,15 @@ export async function runReachRefreshBatch() {
   const { withTenant } = await import("../db/with-tenant.js");
   const total = { tenants: tenants.length, snapshots: 0, failures: 0 };
   for (const tenant of tenants) {
+    // Organization Manager gate: skip tenants with the capability
+    // set disabled (read failure counts as enabled by design).
+    let omEnabled = true;
+    try {
+      const { withTenant } = await import("../db/with-tenant.js");
+      omEnabled = await withTenant(tenant.id, () => isOrganizationManagerEnabled());
+    } catch {}
+    if (!omEnabled) continue;
+
     try {
       const s = await withTenant(tenant.id, () => refreshTenantReach());
       total.snapshots += s.snapshots;

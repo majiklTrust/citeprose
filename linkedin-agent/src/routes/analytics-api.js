@@ -29,12 +29,19 @@ import { generateAnalyticsNarrative, clampWindowDays } from "../services/analyti
 import { createActionToken } from "../services/prompt-actions.js";
 import { LI_ERROR_CODES } from "../services/linkedin-errors.js";
 
+import { requireOrganizationManager } from "../services/organization-manager.js";
+
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
 router.use(requireAuth);
 router.use(resolveTenant);
+// Organization Manager gate (DDL 32): every capability route in
+// this router is entitlement-controlled per tenant. Mounted AFTER
+// resolveTenant so req.tenant exists (the 2.2.30 gate ran before
+// resolution and was a no-op).
+router.use(requireOrganizationManager);
 
 function db() {
   const c = currentClient();

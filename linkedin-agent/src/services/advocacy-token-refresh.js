@@ -17,6 +17,7 @@
 import { platformLog } from "./platform-log.js";
 import { refreshTenantToken } from "./linkedin-token.js";
 
+import { isOrganizationManagerEnabled } from "./organization-manager.js";
 // Member-flavored deps for the shared refresh core. getState reads
 // degrade to null (unknown bookmark, the core's establish-
 // bookkeeping path); log entries carry the member sub.
@@ -92,6 +93,15 @@ export async function runMemberTokenRefreshBatch() {
   const { withTenant } = await import("../db/with-tenant.js");
   const total = { refreshed: 0, failed: 0, skipped: 0, reauthRequired: 0 };
   for (const tenant of tenants) {
+    // Organization Manager gate: skip tenants with the capability
+    // set disabled (read failure counts as enabled by design).
+    let omEnabled = true;
+    try {
+      const { withTenant } = await import("../db/with-tenant.js");
+      omEnabled = await withTenant(tenant.id, () => isOrganizationManagerEnabled());
+    } catch {}
+    if (!omEnabled) continue;
+
     try {
       const s = await withTenant(tenant.id, () => refreshTenantMembers());
       total.refreshed += s.refreshed;

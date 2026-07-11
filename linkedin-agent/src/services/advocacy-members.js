@@ -73,7 +73,7 @@ export async function listMembers() {
     `SELECT auth_sub, enabled_by, enabled_at, consent_granted_at, consent_text_version,
             mode, auto_opted_in_at, connected, disconnected_at,
             connections_size, connections_size_at,
-            member_name, member_headline, voice_notes
+            member_name, member_headline, voice_notes, voice_notes_updated_at
        FROM advocacy_members
       ORDER BY enabled_at ASC`
   );
@@ -209,7 +209,7 @@ export async function setVoiceNotes(authSub, notes) {
   const c = await client();
   const r = await c.query(
     `UPDATE advocacy_members
-        SET voice_notes = $2, updated_at = now()
+        SET voice_notes = $2, voice_notes_updated_at = now(), updated_at = now()
       WHERE auth_sub = $1`,
     [sub, clean.length > 0 ? clean : null]
   );

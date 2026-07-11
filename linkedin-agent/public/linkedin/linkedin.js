@@ -29,6 +29,14 @@
     return isNaN(d.getTime()) ? 'not bookmarked' : d.toLocaleString();
   }
 
+  
+  // Fail-open guard: if no API response answers the access check
+  // within 5 seconds (network failure, server down), reveal the
+  // page; each card then reports its own errors honestly.
+  setTimeout(function () {
+    if (!window.__omWall) document.body.classList.remove('om-checking');
+  }, 5000);
+
   function getJson(path, opts) {
     var o = opts || {};
     o.credentials = 'include';
@@ -36,7 +44,18 @@
     o.headers['Accept'] = 'application/json';
     return fetch(API + path, o).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-        return { ok: res.ok, status: res.status, body: body };
+              if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+        if (!window.__omWall) {
+          window.__omWall = true;
+          var wall = document.getElementById('om-wall');
+          if (wall) { wall.hidden = false; wall.className = 'auth-wall shown'; }
+        }
+      } else if (document.body.classList.contains('om-checking')) {
+        // First non-gated response: the access check has answered,
+        // reveal the page (mirrors platform-admin's main-content).
+        document.body.classList.remove('om-checking');
+      }
+      return { ok: res.ok, status: res.status, body: body };
       });
     });
   }
@@ -52,17 +71,20 @@
     el.className = '';
     el.innerHTML =
       '<div class="row"><span class="k">LinkedIn</span><span class="v">' + pill(conn.linkedinConnected, 'connected', 'not connected') + '</span></div>' +
-      '<div class="row"><span class="k">Refresh token on file</span><span class="v">' + pill(conn.hasRefreshToken, 'yes', 'no') + '</span></div>' +
+      '<div class="row"><span class="k">Refresh Token on File</span><span class="v">' + pill(conn.hasRefreshToken, 'yes', 'no') + '</span></div>' +
       '<div class="row"><span class="k">Organization page</span><span class="v">' + pill(conn.orgConfigured, 'configured', 'not configured') + '</span></div>' +
       '<div class="row"><span class="k">Person URN</span><span class="v" title="' + esc(conn.personUrn) + '">' + esc(conn.personUrn || 'not stored') + '</span></div>' +
       '<div class="row"><span class="k">Org URN</span><span class="v" title="' + esc(conn.orgUrn) + '">' + esc(conn.orgUrn || 'not stored') + '</span></div>' +
-      '<div class="row"><span class="k">Access token expiry</span><span class="v">' + esc(whenEpoch(conn.accessTokenExpiresAt)) + '</span></div>' +
-      '<div class="row"><span class="k">Refresh token expiry</span><span class="v">' + esc(whenEpoch(conn.refreshTokenExpiresAt)) + '</span></div>';
+      '<div class="row"><span class="k">Access Token Expiry</span><span class="v">' + esc(whenEpoch(conn.accessTokenExpiresAt)) + '</span></div>' +
+      '<div class="row"><span class="k">Refresh Token Expiry</span><span class="v">' + esc(whenEpoch(conn.refreshTokenExpiresAt)) + '</span></div>';
 
     $('target-personal').className = 'toggle-btn' + (conn.publishTarget === 'personal' ? ' active' : '');
     $('target-organization').className = 'toggle-btn' + (conn.publishTarget === 'organization' ? ' active' : '');
     $('target-organization').disabled = !conn.orgConfigured;
     $('target-organization').title = conn.orgConfigured ? '' : 'Connect an organization page first';
+    $('target-current').textContent = conn.publishTarget
+      ? 'Current setting: new drafts will publish to the ' + (conn.publishTarget === 'organization' ? 'Organization Page.' : 'Personal profile.')
+      : 'Current setting: not chosen yet; new drafts cannot resolve a destination until one is selected.';
 
     var ac = conn.appConfig || {};
     var acBody = $('appconfig-body');

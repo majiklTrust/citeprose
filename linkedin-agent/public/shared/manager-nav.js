@@ -35,7 +35,9 @@
     return div.innerHTML;
   }
 
-  function renderNav(role) {
+  var OM_PAGES = ['/app/analytics', '/app/linkedin', '/app/advocacy'];
+
+  function renderNav(role, omDisabled) {
     var container = document.getElementById('manager-nav');
     if (!container) return;
 
@@ -44,6 +46,7 @@
 
     pages.forEach(function (page) {
       if (page.roles.indexOf(role) === -1) return;
+      if (omDisabled && OM_PAGES.indexOf(page.path) !== -1) return;
 
       var isActive = currentPath === page.path;
       if (isActive) {
@@ -62,7 +65,7 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role);
+        renderNav(data.user.role, data.organizationManager === 'disabled');
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

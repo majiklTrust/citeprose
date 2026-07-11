@@ -42,9 +42,27 @@
     .loading { text-align: center; padding: 2rem; color: #999; }
     .access-denied { text-align: center; padding: 3rem; }
     .org-candidate { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.85rem; }
+  
+    /* Organization Manager access gate (self-contained, mirrors
+       /app/platform-admin): content is hidden until the first API
+       response answers the access check. */
+    .auth-wall { display: none; text-align: center; padding: 4rem 1rem; }
+    .auth-wall h2 { color: #d32f2f; }
+    .auth-wall p { color: #616161; margin-top: 0.5rem; }
+    .auth-wall.shown { display: block; }
+    .om-checking-note { display: none; }
+    body.om-checking .om-checking-note { display: block; text-align: center; padding: 4rem 1rem; color: #616161; }
+    body.om-checking > *:not(.auth-wall):not(.om-checking-note) { display: none; }
+    .auth-wall.shown + .om-checking-note { display: none; }
   </style>
 </head>
-<body>
+<body class="om-checking">
+  <div id="om-wall" class="auth-wall" hidden>
+    <h2>Access Denied</h2>
+    <p>Organization Manager is disabled for this workspace.</p>
+  </div>
+  <div class="om-checking-note">Checking access...</div>
+
   <div class="container">
     <div id="loading" class="loading">Checking access...</div>
 
@@ -73,7 +91,7 @@
       </div>
 
       <div class="section">
-        <h2>App credentials</h2>
+        <h2>App Credentials</h2>
         <div class="section-note">
           Per-workspace LinkedIn app configuration (developer app client id and secret, and the OAuth redirect URI).
           When set here, they override the platform defaults for this workspace only. Client id and secret are an
@@ -88,21 +106,22 @@
         <label for="app-redirect-uri">Redirect URI (plain text; empty clears the workspace override)</label>
         <input type="text" id="app-redirect-uri" autocomplete="off" spellcheck="false" placeholder="https://your-host/auth/linkedin/callback">
         <div style="margin-top:0.9rem">
-          <button id="btn-set-appconfig" class="btn btn-primary">Store app credentials</button>
+          <button id="btn-set-appconfig" class="btn btn-primary">Store App Credentials</button>
         </div>
       </div>
 
       <div class="section">
         <h2>Publish as</h2>
-        <div class="section-note">Selects which stored identity authors posts. Per-post overrides still win over this setting. Organization requires a connected org page.</div>
+        <div class="section-note">Sets where NEW drafts will publish, stamped into each post at the moment it is created. Personal profile: the post appears under the connected person's own LinkedIn profile, outside the organization analytics and advocacy loop; use it for founder-voice commentary. Organization Page: the post appears on the company page, feeds the Analytics metrics, and becomes eligible for member amplification; use it for brand content (requires a connected org page). Changing this never retargets posts already in the queue; every post keeps the Org or Per badge it was created with. Per-post overrides still win over this setting.</div>
+        <div id="target-current" class="section-note"></div>
         <div class="toggle-wrap">
           <button id="target-personal" class="toggle-btn">Personal profile</button>
-          <button id="target-organization" class="toggle-btn">Organization page</button>
+          <button id="target-organization" class="toggle-btn">Organization Page</button>
         </div>
       </div>
 
       <div class="section">
-        <h2>Organization page</h2>
+        <h2>Organization Page</h2>
         <div class="section-note">Discovery lists the organizations the connected member administers, using the token already on file. This is linking, not authentication.</div>
         <div id="org-body" class="empty">Loading...</div>
         <div style="margin-top:0.9rem">
@@ -112,22 +131,22 @@
       </div>
 
       <div class="section">
-        <h2>Set tokens manually</h2>
+        <h2>Set Tokens Manually</h2>
         <div class="section-note">
           For externally obtained token pairs. Both tokens are required and stored atomically; a partial pair stores nothing.
           Expiry seconds are optional: supplied, the refresher honors them; omitted, the next refresher sweep rotates the pair and establishes real expiries.
           Note that refresh never changes scopes; to change scopes use Reconnect above.
         </div>
-        <label for="tok-access">Access token</label>
+        <label for="tok-access">Access Token</label>
         <input type="password" id="tok-access" autocomplete="off" spellcheck="false">
-        <label for="tok-refresh">Refresh token</label>
+        <label for="tok-refresh">Refresh Token</label>
         <input type="password" id="tok-refresh" autocomplete="off" spellcheck="false">
         <label for="tok-expires">expires_in (seconds, optional)</label>
         <input type="number" id="tok-expires" min="1" placeholder="e.g. 5184000">
         <label for="tok-refresh-expires">refresh_token_expires_in (seconds, optional)</label>
         <input type="number" id="tok-refresh-expires" min="1" placeholder="e.g. 31536000">
         <div style="margin-top:0.9rem">
-          <button id="btn-set-tokens" class="btn btn-primary">Store token pair</button>
+          <button id="btn-set-tokens" class="btn btn-primary">Store Token Pair</button>
         </div>
       </div>
     </div>

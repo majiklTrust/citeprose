@@ -27,12 +27,19 @@ import { createActionToken } from "../services/prompt-actions.js";
 import { runOutputFilter } from "../services/output-filter.js";
 import { sanitizeLongText } from "../services/advocacy-generator.js";
 
+import { requireOrganizationManager } from "../services/organization-manager.js";
+
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
 router.use(requireAuth);
 router.use(resolveTenant);
+// Organization Manager gate (DDL 32): every capability route in
+// this router is entitlement-controlled per tenant. Mounted AFTER
+// resolveTenant so req.tenant exists (the 2.2.30 gate ran before
+// resolution and was a no-op).
+router.use(requireOrganizationManager);
 
 // ── Member self surface ───────────────────────────────────────
 
@@ -133,13 +140,15 @@ router.get("/me/variants", async (req, res) => {
     const rows = await withTenant(req.tenant.id, async () => {
       const { currentClient } = await import("../db/with-tenant.js");
       const { rows } = await currentClient().query(
-        `SELECT id, source_post_id, content, hashtags, status, member_edited,
-                quality, created_at, resolved_at, published_at,
-                reach_at_publish, reported_impressions, reported_reactions,
-                reported_comments, reported_at
-           FROM advocacy_variants
-          WHERE member_sub = $1
-          ORDER BY created_at DESC
+        `SELECT v.id, v.source_post_id, v.content, v.hashtags, v.status, v.member_edited,
+                v.quality, v.created_at, v.resolved_at, v.published_at,
+                v.reach_at_publish, v.reported_impressions, v.reported_reactions,
+                v.reported_comments, v.reported_at,
+                p.title AS source_post_title
+           FROM advocacy_variants v
+           LEFT JOIN posts p ON p.id = v.source_post_id
+          WHERE v.member_sub = $1
+          ORDER BY v.created_at DESC
           LIMIT 50`,
         [req.user.sub]
       );

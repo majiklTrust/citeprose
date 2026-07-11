@@ -33,6 +33,7 @@ import {
 import { resolvePollSchedule } from "../config/poll-schedule.js";
 import { platformLog } from "./platform-log.js";
 
+import { isOrganizationManagerEnabled } from "./organization-manager.js";
 async function client() {
   const { currentClient } = await import("../db/with-tenant.js");
   const c = currentClient();
@@ -243,6 +244,15 @@ export async function runAnalyticsSyncBatch() {
   const { withTenant } = await import("../db/with-tenant.js");
   const summary = { tenants: tenants.length, ok: 0, failed: 0 };
   for (const tenant of tenants) {
+    // Organization Manager gate: skip tenants with the capability
+    // set disabled (read failure counts as enabled by design).
+    let omEnabled = true;
+    try {
+      const { withTenant } = await import("../db/with-tenant.js");
+      omEnabled = await withTenant(tenant.id, () => isOrganizationManagerEnabled());
+    } catch {}
+    if (!omEnabled) continue;
+
     try {
       const r = await withTenant(tenant.id, () => syncTenantAnalytics());
       if (r.status === "ok" || r.status === "disabled" || r.status === "not_connected" || r.status === "org_not_configured") summary.ok++;

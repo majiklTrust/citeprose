@@ -45,9 +45,27 @@
     .empty { color: #999; font-style: italic; }
     .loading { text-align: center; padding: 2rem; color: #999; }
     .access-denied { text-align: center; padding: 3rem; }
+  
+    /* Organization Manager access gate (self-contained, mirrors
+       /app/platform-admin): content is hidden until the first API
+       response answers the access check. */
+    .auth-wall { display: none; text-align: center; padding: 4rem 1rem; }
+    .auth-wall h2 { color: #d32f2f; }
+    .auth-wall p { color: #616161; margin-top: 0.5rem; }
+    .auth-wall.shown { display: block; }
+    .om-checking-note { display: none; }
+    body.om-checking .om-checking-note { display: block; text-align: center; padding: 4rem 1rem; color: #616161; }
+    body.om-checking > *:not(.auth-wall):not(.om-checking-note) { display: none; }
+    .auth-wall.shown + .om-checking-note { display: none; }
   </style>
 </head>
-<body>
+<body class="om-checking">
+  <div id="om-wall" class="auth-wall" hidden>
+    <h2>Access Denied</h2>
+    <p>Organization Manager is disabled for this workspace.</p>
+  </div>
+  <div class="om-checking-note">Checking access...</div>
+
   <div class="container">
     <div id="loading" class="loading">Checking access...</div>
 

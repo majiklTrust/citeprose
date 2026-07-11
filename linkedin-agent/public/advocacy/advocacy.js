@@ -54,6 +54,14 @@
     });
   }
 
+  
+  // Fail-open guard: if no API response answers the access check
+  // within 5 seconds (network failure, server down), reveal the
+  // page; each card then reports its own errors honestly.
+  setTimeout(function () {
+    if (!window.__omWall) document.body.classList.remove('om-checking');
+  }, 5000);
+
   function getJson(path, opts) {
     var o = opts || {};
     o.credentials = 'include';
@@ -61,7 +69,18 @@
     o.headers['Accept'] = 'application/json';
     return fetch(API + path, o).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-        return { ok: res.ok, status: res.status, body: body };
+              if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+        if (!window.__omWall) {
+          window.__omWall = true;
+          var wall = document.getElementById('om-wall');
+          if (wall) { wall.hidden = false; wall.className = 'auth-wall shown'; }
+        }
+      } else if (document.body.classList.contains('om-checking')) {
+        // First non-gated response: the access check has answered,
+        // reveal the page (mirrors platform-admin's main-content).
+        document.body.classList.remove('om-checking');
+      }
+      return { ok: res.ok, status: res.status, body: body };
       });
     });
   }
@@ -166,7 +185,10 @@
       box.style.cssText = 'border:1px solid #e0e0e0;border-radius:6px;padding:0.8rem;margin-bottom:0.8rem';
       var meta = document.createElement('div');
       meta.className = 'hint';
-      meta.textContent = 'Variant #' + v.id + (v.source_post_id ? ' from post ' + v.source_post_id : '') + ', ' + when(v.created_at);
+      meta.textContent = 'Variant #' + v.id
+        + (v.source_post_title ? ' from "' + v.source_post_title + '"'
+           : (v.source_post_id ? ' from post ' + v.source_post_id : ''))
+        + ', ' + when(v.created_at);
       var ta = document.createElement('textarea');
       ta.style.cssText = 'width:100%;min-height:110px;margin:0.5rem 0;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font:inherit;font-size:0.84rem';
       ta.value = v.content;
@@ -199,14 +221,16 @@
       var h = document.createElement('div');
       h.className = 'hint';
       h.style.marginTop = '0.6rem';
-      h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status; }).join(', ');
+      h.textContent = 'Recent: ' + recent.map(function (v) { return '#' + v.id + ' ' + v.status + (v.source_post_title ? ' (' + v.source_post_title + ')' : ''); }).join(', ');
       el.appendChild(h);
       recent.filter(function (v) { return v.status === 'published'; }).forEach(function (v) {
         var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:0.5rem;padding:0.6rem;border:1px dashed #ccc;border-radius:6px;font-size:0.8rem';
         var lbl = document.createElement('div');
         lbl.className = 'hint';
-        lbl.textContent = 'Report performance for #' + v.id + ' (your numbers from LinkedIn, stored as self-reported'
+        lbl.textContent = 'Report performance for #' + v.id
+          + (v.source_post_title ? ' of "' + v.source_post_title + '"' : '')
+          + ' (your numbers from LinkedIn, stored as self-reported'
           + (v.reported_at ? '; last saved ' + when(v.reported_at) : '') + ')';
         wrap.appendChild(lbl);
         var inputs = {};
@@ -274,14 +298,15 @@
       el.textContent = 'No members enabled yet.';
       return;
     }
-    var html = '<table><thead><tr><th>Member</th><th>Connected</th><th>Mode</th><th>Consent</th><th>Connections</th><th></th></tr></thead><tbody>';
+    var html = '<table><thead><tr><th>Member</th><th>Connected</th><th>Mode</th><th>Consent</th><th>Connections</th><th>Voice note</th><th></th></tr></thead><tbody>';
     members.forEach(function (m) {
       html += '<tr>'
-        + '<td title="' + esc(m.auth_sub) + '">' + esc(m.auth_sub) + '</td>'
+        + '<td title="' + esc(m.auth_sub) + '">' + esc(m.member_name || m.auth_sub) + '</td>'
         + '<td>' + pill(m.connected, 'yes', 'no') + '</td>'
         + '<td>' + esc(m.mode) + '</td>'
         + '<td>' + esc(m.consent_granted_at ? when(m.consent_granted_at) : 'none') + '</td>'
         + '<td>' + esc(m.connections_size === null ? '' : Number(m.connections_size).toLocaleString()) + '</td>'
+        + '<td>' + esc(m.voice_notes ? 'saved ' + when(m.voice_notes_updated_at) : 'none') + '</td>'
         + '<td><button class="btn btn-danger" data-sub="' + esc(m.auth_sub) + '">Disable</button></td>'
         + '</tr>';
     });
@@ -293,9 +318,33 @@
     });
   }
 
+  function populateVoiceSelect(members) {
+    var sel = $('voice-sub');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = members.length ? 'Select a member' : 'No members enabled yet';
+    sel.appendChild(blank);
+    members.forEach(function (m) {
+      var opt = document.createElement('option');
+      opt.value = m.auth_sub;
+      opt.textContent = (m.member_name || m.auth_sub)
+        + (m.voice_notes ? ' (note saved ' + when(m.voice_notes_updated_at) + ')' : ' (no note)');
+      opt.setAttribute('data-notes', m.voice_notes || '');
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
+    sel.onchange = function () {
+      var o = sel.options[sel.selectedIndex];
+      $('voice-notes').value = o ? (o.getAttribute('data-notes') || '') : '';
+    };
+  }
+
   function loadMembers() {
     return getJson('/api/advocacy/members').then(function (r) {
-      if (r.ok) renderMembers(r.body.members);
+      if (r.ok) { renderMembers(r.body.members); populateVoiceSelect(r.body.members || []); }
       else { $('members-body').className = 'empty'; $('members-body').textContent = 'Failed to load members.'; }
     });
   }
@@ -383,7 +432,7 @@
         $('btn-voice').addEventListener('click', function () {
           clearMessage();
           var sub = $('voice-sub').value.trim();
-          if (!sub) { showMessage('Enter the member auth sub for voice notes.', 'warn'); return; }
+          if (!sub) { showMessage('Select a member for voice notes.', 'warn'); return; }
           getJson('/api/advocacy/members/voice-notes', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sub: sub, voiceNotes: $('voice-notes').value })

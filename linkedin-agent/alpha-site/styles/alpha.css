@@ -514,3 +514,247 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ================================================================
+   Marketing redesign (2.2.26): hero proof, loop strip, skeptic
+   block, workflow grid, fast path, disclosure layers, screenshot
+   placeholders. Shared tokens come from /app/styles/app.css.
+   ================================================================ */
+
+.hero-proof {
+  list-style: none;
+  margin: 2.2rem auto 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  max-width: 860px;
+  text-align: left;
+}
+.hero-proof-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.hero-proof-kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: 0.35rem;
+}
+
+.loop-strip {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  padding: 1.4rem 0;
+}
+.loop {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 0;
+  margin: 0;
+  padding: 0;
+}
+.loop-stage {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  padding: 0.3rem 0.9rem;
+}
+.loop-stage + .loop-stage::before {
+  content: "\203A";
+  color: var(--text-muted);
+  margin-right: 1.1rem;
+}
+.loop-note {
+  text-align: center;
+  color: var(--text-secondary);
+  max-width: 640px;
+  margin: 0.9rem auto 0;
+  font-size: 0.92rem;
+}
+
+.skeptic {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 1.4rem 1.6rem;
+  margin: 2.2rem 0 2.6rem;
+}
+.skeptic-q {
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  margin: 0 0 0.8rem;
+}
+.skeptic-a p {
+  color: var(--text-secondary);
+  margin: 0 0 0.8rem;
+  line-height: 1.6;
+}
+.skeptic-a p:last-child { margin-bottom: 0; }
+
+.workflow-grid { grid-template-columns: repeat(2, 1fr); }
+
+.fastpath {
+  margin-top: 2.4rem;
+}
+.fastpath-title, .layers-title {
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin: 0 0 1.2rem;
+}
+.layers-title { margin-top: 2.8rem; }
+
+.shot {
+  margin: 1.1rem 0 0.4rem;
+}
+.shot-frame {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  border-radius: 10px;
+}
+.shot-bg { fill: var(--bg-secondary); stroke: var(--border); }
+.shot-bar { fill: var(--bg-card); }
+.shot-dot { fill: var(--text-muted); }
+.shot-label {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 18px;
+}
+.shot figcaption {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.45rem;
+  max-width: 560px;
+}
+
+.layer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  margin: 0 0 0.9rem;
+}
+.layer-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.2rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.layer-summary::-webkit-details-marker { display: none; }
+.layer-summary::after {
+  content: "+";
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+.layer[open] > .layer-summary::after { content: "\2212"; }
+.layer-summary:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+.layer-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+}
+.layer-body {
+  padding: 0 1.2rem 1.2rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.layer-steps {
+  margin: 0.8rem 0 0;
+  padding-left: 1.2rem;
+}
+.layer-steps li { margin-bottom: 0.45rem; }
+
+@media (max-width: 760px) {
+  .hero-proof { grid-template-columns: 1fr; }
+  .workflow-grid { grid-template-columns: 1fr; }
+}
+
+/* 2.2.27: brand logo, click paths, full feature list */
+.brand-logo {
+  display: block;
+  width: 26px;
+  height: auto;
+  filter: drop-shadow(0 0 6px var(--glow-amber));
+}
+.shot-pathline {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--accent-cyan);
+}
+.featlist-heading {
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin: 2.8rem 0 0.4rem;
+}
+.featlist-lede {
+  color: var(--text-secondary);
+  margin: 0 0 1.4rem;
+  max-width: 720px;
+}
+.featlist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.2rem;
+}
+.featlist-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.3rem;
+}
+.featlist-title {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin: 0 0 0.8rem;
+}
+.featlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.featlist li {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  padding: 0.45rem 0 0.45rem 1.1rem;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.featlist li:last-child { border-bottom: none; }
+.featlist li::before {
+  content: "\25AA";
+  position: absolute;
+  left: 0;
+  color: var(--accent-cyan);
+}
+@media (max-width: 900px) {
+  .featlist-grid { grid-template-columns: 1fr; }
+}

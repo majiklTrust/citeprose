@@ -178,9 +178,19 @@ body.page-linkedin .org-candidate { display: flex; justify-content: space-betwee
    (the Analytics model). Scoped to the page-classed bodies so
    nothing leaks to pages with their own style blocks.
    ================================================================= */
-body[class*="page-"] *, body[class*="page-"] *::before, body[class*="page-"] *::after { box-sizing: border-box; }
+/* The original universal reset, lost by the 2.2.41.4 parser and
+   restored in full here: box model AND the margin/padding zeroing
+   every page was authored against. */
+body[class*="page-"] *, body[class*="page-"] *::before, body[class*="page-"] *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body[class*="page-"] .section h2 { margin-top: 0; }
 body[class*="page-"] select { display: block; width: 100%; max-width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; background: #fff; }
 body[class*="page-"] input[type=text], body[class*="page-"] input[type=password], body[class*="page-"] input[type=number] { max-width: 100%; }
 body[class*="page-"] .row { gap: 1rem; }
 body.page-advocacy .report-grid td:last-child { padding-right: 0; }
+
+/* Denied-block decorative styles (2.2.41.9): the structural
+   display:none attributes on #app/#denied stay in markup because
+   the page scripts toggle them as state; these are the purely
+   decorative bits. */
+body[class*="page-"] .denied-note { margin-top: 0.75rem; color: #666; }
+body[class*="page-"] .denied-link { margin-top: 1rem; }

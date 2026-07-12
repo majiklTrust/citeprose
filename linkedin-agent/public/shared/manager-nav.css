@@ -42,3 +42,145 @@
   margin-right: 0.5rem;
   color: #ccc;
 }
+
+/* =================================================================
+   Manager page styles (consolidated 2.2.41.4). Shared base first,
+   then exact per-page rules scoped by body class, preserving every
+   original value so consolidation changes zero pixels. Bump the
+   ?v= query on the stylesheet links whenever this file changes.
+   ================================================================= */
+
+/* -- Shared base (identical across all manager pages) -- */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 2rem; }
+h1 { margin-bottom: 0.5rem; }
+.subtitle { font-size: 0.78rem; color: #888; font-weight: 400; margin-top: 0.2rem; }
+.section { background: #fff; border-radius: 8px; padding: 0.75rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.section-note { font-size: 0.75rem; color: #999; margin-bottom: 1rem; }
+.btn-primary { background: #0073b1; color: #fff; }
+.btn-primary:hover { background: #005a8d; }
+.btn-secondary { background: #e0e0e0; color: #333; }
+.btn-secondary:hover { background: #ccc; }
+.msg { padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.85rem; }
+.msg-error { background: #ffebee; color: #c62828; }
+.msg-warn { background: #fff3e0; color: #e65100; }
+.msg-success { background: #e8f5e9; color: #2e7d32; }
+.loading { text-align: center; padding: 2rem; color: #999; }
+.access-denied { text-align: center; padding: 3rem; }
+.auth-wall { display: none; text-align: center; padding: 4rem 1rem; }
+.auth-wall h2 { color: #d32f2f; }
+.auth-wall p { color: #616161; margin-top: 0.5rem; }
+.auth-wall.shown { display: block; }
+.om-checking-note { display: none; }
+body.om-checking .om-checking-note { display: block; text-align: center; padding: 4rem 1rem; color: #616161; }
+body.om-checking > *:not(.auth-wall):not(.om-checking-note) { display: none; }
+.auth-wall.shown + .om-checking-note { display: none; }
+
+/* -- analytics page -- */
+body.page-analytics .container { max-width: 1000px; margin: 0 auto; }
+body.page-analytics .section h2 { margin-bottom: 0.35rem; font-size: 1.1rem; }
+body.page-analytics .btn { padding: 0.4rem 0.85rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+body.page-analytics .btn-primary:disabled { background: #9dbdd1; cursor: default; }
+body.page-analytics select { padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; }
+body.page-analytics .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+body.page-analytics .toolbar label { font-weight: 600; font-size: 0.85rem; color: #555; }
+body.page-analytics .msg code { font-size: 0.72rem; background: rgba(0,0,0,0.06); padding: 0.05rem 0.3rem; border-radius: 3px; }
+body.page-analytics table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+body.page-analytics th { text-align: left; color: #666; font-weight: 600; padding: 0.4rem 0.5rem; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+body.page-analytics td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+body.page-analytics td.num, body.page-analytics th.num { text-align: right; font-variant-numeric: tabular-nums; }
+body.page-analytics .post-title { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.page-analytics .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+body.page-analytics .badge-pending { background: #fff3e0; color: #e65100; }
+body.page-analytics .badge-topic { background: #e3f2fd; color: #1565c0; }
+body.page-analytics .badge-computed { background: #ede7f6; color: #5e35b1; }
+body.page-analytics .empty { color: #999; font-style: italic; padding: 1rem 0; }
+body.page-analytics .heatmap { display: grid; grid-template-columns: 3.2rem repeat(24, 1fr); gap: 2px; font-size: 0.62rem; }
+body.page-analytics .hm-label { color: #888; display: flex; align-items: center; }
+body.page-analytics .hm-hour { color: #aaa; text-align: center; }
+body.page-analytics .hm-cell { height: 1.15rem; border-radius: 2px; background: #f0f0f0; }
+body.page-analytics .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; }
+body.page-analytics .demo-col h3 { font-size: 0.85rem; color: #555; margin-bottom: 0.5rem; text-transform: capitalize; }
+body.page-analytics .demo-row { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid #f5f5f5; }
+body.page-analytics .demo-entity { color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 0.5rem; }
+body.page-analytics .demo-count { color: #333; font-weight: 600; font-variant-numeric: tabular-nums; }
+body.page-analytics .narrative-box { white-space: pre-wrap; font-size: 0.88rem; line-height: 1.55; background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
+body.page-analytics .narrative-meta { font-size: 0.72rem; color: #999; margin-top: 0.5rem; }
+body.page-analytics .retrieved-note { font-size: 0.7rem; color: #aaa; }
+body.page-analytics .section div[id$="-body"] { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+body.page-analytics .section div[id$="-body"] > table { min-width: 640px; width: 100%; }
+
+/* -- advocacy page -- */
+body.page-advocacy .container { max-width: 860px; margin: 0 auto; }
+body.page-advocacy .section h2 { margin-bottom: 0.35rem; font-size: 1.05rem; }
+body.page-advocacy .btn { padding: 0.45rem 0.9rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+body.page-advocacy .btn-danger { background: #ffebee; color: #c62828; }
+body.page-advocacy .row { display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.86rem; }
+body.page-advocacy .row .k { color: #666; }
+body.page-advocacy .row .v { color: #222; white-space: nowrap; }
+body.page-advocacy .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+body.page-advocacy .pill-on { background: #e8f5e9; color: #2e7d32; }
+body.page-advocacy .pill-off { background: #ffebee; color: #c62828; }
+body.page-advocacy .pill-mode { background: #e3f2fd; color: #1565c0; }
+body.page-advocacy .toggle-wrap { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+body.page-advocacy .toggle-btn { flex: 1; padding: 0.55rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; cursor: pointer; font-size: 0.85rem; }
+body.page-advocacy .toggle-btn.active { background: #0073b1; color: #fff; border-color: #0073b1; font-weight: 600; }
+body.page-advocacy .toggle-btn:disabled { opacity: 0.5; cursor: default; }
+body.page-advocacy table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+body.page-advocacy th { text-align: left; color: #666; font-weight: 600; padding: 0.4rem 0.5rem; border-bottom: 2px solid #e0e0e0; }
+body.page-advocacy td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #f0f0f0; }
+body.page-advocacy label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.7rem 0 0.25rem; }
+body.page-advocacy input[type=text] { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; font-family: monospace; }
+body.page-advocacy .hint { font-size: 0.72rem; color: #999; margin-top: 0.2rem; }
+body.page-advocacy .report-title { font-size: 0.82rem; font-weight: 400; color: #000; margin-bottom: 0.3rem; }
+body.page-advocacy .report-title-lead { font-weight: 700; }
+body.page-advocacy .empty { color: #999; font-style: italic; }
+body.page-advocacy .section div[id$="-body"] { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+body.page-advocacy .section div[id$="-body"] > table { min-width: 640px; width: 100%; }
+
+body.page-advocacy .partner-note { display: inline-block; margin-top: 0.4rem; padding: 0.35rem 0.7rem; background: #fff3e0; border: 1px solid #ffb74d; border-left: 3px solid #e65100; border-radius: 4px; color: #e65100; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.01em; }
+body.page-advocacy .variant-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.8rem; margin-bottom: 0.8rem; }
+body.page-advocacy .variant-edit { width: 100%; min-height: 110px; margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font: inherit; font-size: 0.84rem; }
+body.page-advocacy .report-box { margin-top: 0.5rem; padding: 0.6rem; border: 1px dashed #ccc; border-radius: 6px; font-size: 0.8rem; }
+body.page-advocacy .report-grid { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 0.3rem; }
+body.page-advocacy .report-grid th { text-align: left; font-size: 0.72rem; color: #666; font-weight: 600; padding: 0.15rem 0.4rem 0.15rem 0; border: none; }
+body.page-advocacy .report-grid td { padding: 0 0.4rem 0 0; border: none; }
+body.page-advocacy .report-input { width: 100%; padding: 0.35rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.8rem; }
+body.page-advocacy .report-save { margin-top: 0.4rem; }
+body.page-advocacy .variant-publish { margin-top: 0.5rem; }
+
+/* -- linkedin page -- */
+body.page-linkedin .container { max-width: 760px; margin: 0 auto; }
+body.page-linkedin .section h2 { margin-bottom: 0.35rem; font-size: 1.05rem; }
+body.page-linkedin .btn { padding: 0.45rem 0.9rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+body.page-linkedin .btn-primary:disabled { background: #9dbdd1; cursor: default; }
+body.page-linkedin .row { display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.86rem; }
+body.page-linkedin .row .k { color: #666; }
+body.page-linkedin .row .v { font-variant-numeric: tabular-nums; color: #222; white-space: nowrap; }
+body.page-linkedin .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+body.page-linkedin .pill-on { background: #e8f5e9; color: #2e7d32; }
+body.page-linkedin .pill-off { background: #ffebee; color: #c62828; }
+body.page-linkedin .toggle-wrap { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+body.page-linkedin .toggle-btn { flex: 1; padding: 0.55rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; cursor: pointer; font-size: 0.85rem; }
+body.page-linkedin .toggle-btn.active { background: #0073b1; color: #fff; border-color: #0073b1; font-weight: 600; }
+body.page-linkedin .toggle-btn:disabled { opacity: 0.5; cursor: default; }
+body.page-linkedin label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.7rem 0 0.25rem; }
+body.page-linkedin input[type=text], body.page-linkedin input[type=password], body.page-linkedin input[type=number] { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; font-family: monospace; }
+body.page-linkedin .hint { font-size: 0.72rem; color: #999; margin-top: 0.2rem; }
+body.page-linkedin .empty { color: #999; font-style: italic; }
+body.page-linkedin .org-candidate { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.85rem; }
+
+/* =================================================================
+   Optics alignment layer (2.2.41.7). One strategy for every
+   manager page: border-box everywhere so padding never pushes a
+   100%-width control past its container; form controls sized to
+   their container; headings flush to the card padding; read-only
+   value rows show full values and scroll only on true overflow
+   (the Analytics model). Scoped to the page-classed bodies so
+   nothing leaks to pages with their own style blocks.
+   ================================================================= */
+body[class*="page-"] *, body[class*="page-"] *::before, body[class*="page-"] *::after { box-sizing: border-box; }
+body[class*="page-"] .section h2 { margin-top: 0; }
+body[class*="page-"] select { display: block; width: 100%; max-width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; background: #fff; }
+body[class*="page-"] input[type=text], body[class*="page-"] input[type=password], body[class*="page-"] input[type=number] { max-width: 100%; }
+body[class*="page-"] .row { gap: 1rem; }
+body.page-advocacy .report-grid td:last-child { padding-right: 0; }

@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "2.2.4-1.2",
+  "version": "2.2.4-1.8",
   "config": {
-    "cssversion": "41.0",
+    "cssversion": "45.0",
     "appname": "Market Intelligence"
   },
   "description": "Autonomous AI agent for Market Intelligence content creation",
@@ -13,8 +13,9 @@
   },
   "scripts": {
     "000_": "",
+    "pages": "node scripts/build-pages.mjs",
     "timesync": "sudo ntpdate -u pool.ntp.org",
-    "cssversion": "node cssversion.js && npm run build",
+    "cssversion": "node cssversion.js && npm run build && npm run pages",
     "build": "echo && echo \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* running build: build_alpha build_admin build_html build_js \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* && npm run build_alpha && npm run build_admin && npm run build_html && npm run build_js && echo installed version $npm_package_name-$npm_package_version && V=$(npm pkg get version --workspaces=false | tr -d '\"') && echo $V >project.version && echo package version is $(cat project.version)",
     "build_alpha": "CSSVERSION=$(node -p \"require('./package.json').config.cssversion\") && sed \"s/{{CSSVERSION}}/$CSSVERSION/\" ***REMOVED***/site_templates/index.html >***REMOVED***/index.html",
     "build_admin": "CSSVERSION=$(node -p \"require('./package.json').config.cssversion\") && sed \"s/{{CSSVERSION}}/$CSSVERSION/\" public_templates/platform-admin/index.html >public/platform-admin/index.html",
@@ -31,7 +32,7 @@
     "dev": "npm run getvars && NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001,http://172.16.11.101:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
     "300_": "",
     "kill3001": "lsof -ti:3001 | xargs kill -9",
-    "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    "secret": "node -e \"console.log(require('crypto').randomBytes(128).toString('hex'))\"",
     "refresh": "npm audit fix ; npm ci --omit=dev 2>&1",
     "350_": "",
     "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",

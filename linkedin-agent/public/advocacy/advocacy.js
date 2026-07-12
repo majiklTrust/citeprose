@@ -182,7 +182,7 @@
     el.innerHTML = '';
     pending.forEach(function (v) {
       var box = document.createElement('div');
-      box.style.cssText = 'border:1px solid #e0e0e0;border-radius:6px;padding:0.8rem;margin-bottom:0.8rem';
+      box.className = 'variant-card';
       var meta = document.createElement('div');
       meta.className = 'hint';
       meta.textContent = 'Variant #' + v.id
@@ -190,7 +190,7 @@
            : (v.source_post_id ? ' from post ' + v.source_post_id : ''))
         + ', ' + when(v.created_at);
       var ta = document.createElement('textarea');
-      ta.style.cssText = 'width:100%;min-height:110px;margin:0.5rem 0;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font:inherit;font-size:0.84rem';
+      ta.className = 'variant-edit';
       ta.value = v.content;
       var approve = document.createElement('button');
       approve.className = 'btn btn-primary';
@@ -220,27 +220,37 @@
     if (recent.length > 0) {
       recent.filter(function (v) { return v.status === 'published'; }).forEach(function (v) {
         var wrap = document.createElement('div');
-        wrap.style.cssText = 'margin-top:0.5rem;padding:0.6rem;border:1px dashed #ccc;border-radius:6px;font-size:0.8rem';
+        wrap.className = 'report-box';
         var lbl = document.createElement('div');
         lbl.className = 'report-title';
-        lbl.textContent = 'Report performance for #' + v.id
-          + (v.source_post_title ? ' of "' + v.source_post_title + '"' : '')
+        var lead = document.createElement('span');
+        lead.className = 'report-title-lead';
+        lead.textContent = 'Report performance on Variant #' + v.id + ':';
+        lbl.appendChild(lead);
+        lbl.appendChild(document.createTextNode(
+          (v.source_post_title ? ' "' + v.source_post_title + '"' : '')
           + ' (your numbers from LinkedIn, stored as self-reported'
-          + (v.reported_at ? '; last saved ' + when(v.reported_at) : '') + ')';
+          + (v.reported_at ? '; last saved ' + when(v.reported_at) : '') + ')'));
         wrap.appendChild(lbl);
         var inputs = {};
+        var grid = document.createElement('table');
+        grid.className = 'report-grid';
+        var head = grid.createTHead().insertRow();
+        var row = grid.createTBody().insertRow();
         ['impressions', 'reactions', 'comments'].forEach(function (f) {
+          var th = document.createElement('th');
+          th.textContent = f.charAt(0).toUpperCase() + f.slice(1);
+          head.appendChild(th);
           var inp = document.createElement('input');
           inp.type = 'text';
-          inp.placeholder = f;
           inp.value = v['reported_' + f] === null || v['reported_' + f] === undefined ? '' : String(v['reported_' + f]);
-          inp.style.cssText = 'width:31%;margin-right:2%;padding:0.35rem;border:1px solid #ccc;border-radius:4px;font-size:0.8rem';
+          inp.className = 'report-input';
           inputs[f] = inp;
-          wrap.appendChild(inp);
+          row.insertCell().appendChild(inp);
         });
+        wrap.appendChild(grid);
         var save = document.createElement('button');
-        save.className = 'btn btn-secondary';
-        save.style.marginTop = '0.4rem';
+        save.className = 'btn btn-secondary report-save';
         save.textContent = 'Save Report';
         save.addEventListener('click', function () {
           save.disabled = true;
@@ -263,7 +273,7 @@
       recent.filter(function (v) { return v.status === 'approved'; }).forEach(function (v) {
         var pub = document.createElement('button');
         pub.className = 'btn btn-primary';
-        pub.style.marginTop = '0.5rem';
+        pub.className = pub.className + ' variant-publish';
         pub.textContent = 'Publish approved variant #' + v.id;
         pub.addEventListener('click', function () {
           pub.disabled = true;

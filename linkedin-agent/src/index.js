@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.2.41
+// v2.2.4-1.1
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -376,7 +376,13 @@ export function createApp(ctx) {
       }
     }
 
-    if (!validateOAuthState(state)) {
+    const stateVerdict = validateOAuthState(state);
+    // The origin page rides the validated state; its label keeps
+    // the result pages understandable at a glance.
+    const backTo = (stateVerdict && stateVerdict.returnTo) || "/app";
+    const backLabel = backTo === "/app/linkedin/" ? "Back to LinkedIn Settings" : "Back to Dashboard";
+    const backLink = `<a href="${backTo}">${backLabel}</a>`;
+    if (!stateVerdict) {
       return res.status(403).send(`
         <h2>Authorization Failed</h2>
         <p>Invalid or expired OAuth state. Please try again.</p>
@@ -388,7 +394,7 @@ export function createApp(ctx) {
       return res.send(`
         <h2>LinkedIn Authorization Failed</h2>
         <p>${escapeHtml(String(error))}: ${escapeHtml(String(req.query.error_description || ""))}</p>
-        <a href="/app">Back to Dashboard</a>
+        ${backLink}
       `);
     }
 
@@ -440,7 +446,7 @@ export function createApp(ctx) {
       return res.status(403).send(`
         <h2>No Workspace Found</h2>
         <p>Your account is not associated with a workspace. Contact your administrator.</p>
-        <a href="/app">Back to Dashboard</a>
+        ${backLink}
       `);
     }
 
@@ -538,10 +544,10 @@ export function createApp(ctx) {
           <p>Credentials saved to your workspace.</p>
           ${discoveredOrg ? '<p><strong>Organization page connected:</strong> discovery found exactly one administered org.</p>' : ''}
           <p><strong>Token expires in:</strong> ${Math.floor(tokens.expiresIn / 86400)} days</p>
-          <p>Redirecting to dashboard...</p>
+          <p>Returning to ${backTo === "/app/linkedin/" ? "LinkedIn settings" : "the dashboard"}...</p>
           <br>
-          <a href="/app">Go to Dashboard</a>
-          <script>setTimeout(function() { window.location.href = "/app"; }, 1500);</script>
+          <a href="${backTo}">${backLabel}</a>
+          <script>setTimeout(function() { window.location.href = ${JSON.stringify(backTo)}; }, 1500);</script>
         `);
       });
     } catch (err) {
@@ -549,13 +555,17 @@ export function createApp(ctx) {
       res.status(500).send(`
         <h2>Token Exchange Failed</h2>
         <p>An error occurred during authentication. Check the activity log.</p>
-        <a href="/app">Back to Dashboard</a>
+        ${backLink}
       `);
     }
   });
 
   instance.get("/auth/linkedin", async (req, res) => {
-    const state = generateOAuthState();
+    // Return-to preservation: the page that initiated the connect
+    // is where the flow lands afterward. The value is allowlisted
+    // inside generateOAuthState; anything unexpected collapses to
+    // the dashboard.
+    const state = generateOAuthState(req.query.returnTo);
     // Per-tenant app credentials (TD-1): resolve the signed-in
     // user's tenant exactly the way the callback does, so the auth
     // URL is built with THAT tenant's client id when one is
@@ -975,7 +985,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.2.41
+║           LinkedIn AI Content Agent  2.2.4-1.1
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

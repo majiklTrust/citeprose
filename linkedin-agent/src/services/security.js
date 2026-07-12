@@ -18,22 +18,37 @@ export function escapeHtml(str) {
 const pendingStates = new Map();
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-export function generateOAuthState() {
-  const state = crypto.randomBytes(32).toString("hex");
-  pendingStates.set(state, Date.now());
+// Post-flow return targets are ALLOWLISTED local paths only. Any
+// other value (absolute URLs, protocol-relative //host, traversal)
+// collapses to the dashboard, so the OAuth flow can never become
+// an open redirect.
+const RETURN_TO_ALLOWLIST = ["/app", "/app/", "/app/linkedin/", "/app/advocacy/", "/app/analytics/"];
 
-  for (const [key, ts] of pendingStates) {
-    if (Date.now() - ts > STATE_TTL_MS) pendingStates.delete(key);
+export function sanitizeReturnTo(value) {
+  const v = String(value || "");
+  return RETURN_TO_ALLOWLIST.includes(v) ? v : "/app";
+}
+
+export function generateOAuthState(returnTo) {
+  const state = crypto.randomBytes(32).toString("hex");
+  pendingStates.set(state, { ts: Date.now(), returnTo: sanitizeReturnTo(returnTo) });
+
+  for (const [key, entry] of pendingStates) {
+    if (Date.now() - entry.ts > STATE_TTL_MS) pendingStates.delete(key);
   }
 
   return state;
 }
 
+// Returns false for an invalid or expired state; on success returns
+// a truthy record carrying the sanitized return target, so existing
+// boolean call sites keep working unchanged.
 export function validateOAuthState(state) {
   if (!state || !pendingStates.has(state)) return false;
-  const ts = pendingStates.get(state);
+  const entry = pendingStates.get(state);
   pendingStates.delete(state);
-  return (Date.now() - ts) <= STATE_TTL_MS;
+  if ((Date.now() - entry.ts) > STATE_TTL_MS) return false;
+  return { ok: true, returnTo: entry.returnTo || "/app" };
 }
 
 // ── Error Handling ───────────────────────────────────────────

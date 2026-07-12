@@ -21,8 +21,8 @@
   var currentPath = window.location.pathname.replace(/\/+$/, '');
 
   var pages = [
-    { path: '/app/analytics', label: 'Analytics', perm: 'view_analytics' },
     { path: '/app/linkedin', label: 'LinkedIn', perm: 'manage_linkedin' },
+    { path: '/app/analytics', label: 'Analytics', perm: 'view_analytics' },
     { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },

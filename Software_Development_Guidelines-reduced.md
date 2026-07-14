@@ -35,7 +35,7 @@ LIVE APPLICATION
 - The live URL is alpha.***REMOVED***.
 
 ## TDD FRAMEWORK
-  1. FUNCTIONAL (base runner, no suffix)
+  1. FUNCTIONAL (base runner, no suffix and -functional runner)
  
   A functional test verifies that a feature performs its intended
   business function, observed through the same interface the business

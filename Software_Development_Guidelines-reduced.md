@@ -1,38 +1,45 @@
 # Software_Development_Guidelines-reduced.md
 
 ## CLAUDE RESPONSE MUST-HAVES
-Respond to me using concise language. Choose generalizations over verbose details when emitting descriptions and summaries. Conclude response sections with succinct point or actionable next steps.
-Do not mix talking points together. Stay focused on a single thought process and follow it through to completion.
-If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
-When performing code analysis expand your view beyond the single threaded use case, to include variants of the same use case for multiple conditions. This will help find hidden or other edge cases.
-Be sure to lean on function names and code anchors rather than line numbers alone to mitigate drift.
+
+- Respond to me using concise language. Choose generalizations over verbose details when emitting descriptions and summaries. Conclude - response sections with succinct point or actionable next steps.
+- Do not mix talking points together. Stay focused on a single thought process and follow it through to completion.
+- If technical a explanation is critical, then show larger portions of the code for the context. Put the code in a panel or text area - that highlight any critical parts in context. Add the file path and line numbers on a header above the panel. Make a clear - delineation between the functional description is complete and the technical is displayed. Use ◄── arrows to identify your highlights.
+- When performing code analysis expand your view beyond the single threaded use case, to include variants of the same use case for - multiple conditions. This will help find hidden or other edge cases.
+- Be sure to lean on function names and code anchors rather than line numbers alone to mitigate drift.
 
 ## MANDATORY AI "SOFT SKILLS"
+
 - Do not over explain your reasoning.
 - Do not emit code with hard coded variables; keep a running list of variables that are hard coded.
-- Zip deliveries everytime unless instructed differently. Include changed files only, linkedin-agent/ rooted paths, no package.json, package-lock.json, generated files (src/index.js, public/index.html).
-- Zip files are to extract to the path: ../linkedin-agent/.
 - Hardcoded values are a delivery defect, not a footnote, not just flagging.
 
-## SYSTEM FACTS
-- Code generation will be installed first in a local devenv on the devtest environment.
+## PROJECT TECHNIAL
+
+- The is a webapp is a ReactJS UX and Node.js tiered routing, service, and other software design layers. The persisteny backend is a PostgreSQL OLTP database.
+- Scripts (`.js`/`.css` and web-based code files) have a target legth of 600 lines. Use multiple files instead of limiting functionality. Always identify, then communicate downstream impacts plus adjacent opportunities to consolidate code file before splitting an oversided file.
+- I own the versioning strategy. You are responsible for delivering versioned `.zip` files. Version numbering will folllow major/minor/patch numbering, e.g., `0.0.0`. Every delivery should increment the third integer by `1`, e.g., if the version is `0.0.0`, then next version is `0.0.1` and the archive will be named `LinkedIn_Agent-0.0.1.zip`, then `LinkedIn_Agent-0.0.2.zip`.
+- Keep the project directory structure in the `.zip` archive, include only changed files, and the `.zip` archive will extract to path: `../linkedin-agent/`.
+- Zip deliveries everytime unless instructed differently. Include changed files only,` linkedin-agent/` rooted paths, no `package.json`, `package-lock.json`, generated files (`src/index.js`, `public/index.html`). Do not send individual files or CHANGES.md unless requested.
+- Code is installed and run local devenv in a devtest environment.
 - Follow a test-driven-development (TDD) lifecycle and dev-test process for the build phase. The TDD Framework is defined in a TDD FRAMEWORK section.
-- Use Zero Trust cybersecurity principles.
-- developed and tested locally on an Ubuntu virtual machine image container.
+- Deployment support is for the live site. If you are ever unsure of which environment a prompt is for, then you are to ask a question and no make an assumption.
  
 ## CODE GENERATION RULES
+
 - Apply Zero Trust cybersecurity principles everywhere, in every node layer and the UX.
 - Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
-- DO NOT name functions as property or constants. Use getter and setter functions/methods that follow conventional naming standards, e.g., a function to get SOME_PROPERTY would be named getSomePropery().
+- DO NOT name functions as property or constants. Use getter and setter functions/methods that follow conventional naming standards, e.g., a function to get `SOME_PROPERTY` would be named `getSomePropery()`.
 - Offer an alternative if a more architecturally principled, resilient, or if a change would result in a more simple end-user workflow or better human end-user experience. Justify the change using succint and targetted language for the reasons why.
 - 600-line file cap on new files. Keep architecture best practices for distributed computing a priority.
-- Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly
+- Template files (`src_templates/`, `public_templates/`) are the source of truth; never edit generated files directly
  
  
-LIVE APPLICATION
+## LIVE APPLICATION
+
 - The data layer is a Postgresql OLTP database that is local to the application server.
-- The live URL is ***REMOVED***.
+- The live URL is `***REMOVED***`.
 
 ## TDD FRAMEWORK
 

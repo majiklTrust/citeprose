@@ -1,9 +1,12 @@
-TESTING (TDD) FRAMEWORK: THREE TIERS PER FEATURE
+# Software_TDD_Framework.md
 
-  Each feature is tested by three suites. Two tiers run the code and
-  observe behavior through the real interface; they differ only in the
-  input they supply. The third tier does not run the code; it inspects
-  the source.
+## TESTING (TDD) FRAMEWORK: THREE TIERS PER FEATURE
+
+  Each feature is tested by 3 suites. Tier-1 and Tier-2 run the code
+  and observe behavior through the real interface under test; the tests
+  differ only in the input they supply. The third tier does not run the 
+  code; it assumes the role of a cyber-threat actor and inspects the
+  source.
 
   1. FUNCTIONAL (base runner, no suffix and -functional runner)
 
@@ -39,28 +42,7 @@ TESTING (TDD) FRAMEWORK: THREE TIERS PER FEATURE
     token limits are read from .env when present, falling back to the
     code's own sources and defaults in the code's own order.
 
-  2. ADVERSARIAL (-adversarial runner)
-
-  An adversarial test verifies that a feature resists hostile,
-  malicious, or malformed input and abuse, observed through the same
-  real interface used by the Functional tier. It supplies attacks and
-  invalid input, then asserts that the system rejects, contains, or
-  safely degrades rather than misbehaving. It answers: does the
-  feature resist misuse?
-
-    Method: executes the code through its real interface, the same as
-      Functional, but with hostile input.
-    Asserts: rejection, containment, safe failure, and preserved
-      isolation between tenants and users.
-    Excludes: valid-path behavior, which belongs to the Functional
-      tier, and source inspection, which belongs to the Design tier.
-
-    Example: a forged callback state is rejected, a prompt-injection
-    payload embedded in ingested feed content does not alter the
-    generated post's instructions, and a request for another tenant's
-    topic is denied.
-
-  3. DESIGN (-design runner)
+  2. DESIGN (-design runner)
 
   A design test verifies that the source conforms to the intended
   design and structure by inspecting the code statically rather than
@@ -86,3 +68,24 @@ TESTING (TDD) FRAMEWORK: THREE TIERS PER FEATURE
     generation service exports the agreed named functions and no
     default export, encryption uses AES-256-GCM with a derived key,
     and no secret is hardcoded in source.
+
+  3. ADVERSARIAL (-adversarial runner)
+
+  An adversarial test verifies that a feature resists hostile,
+  malicious, or malformed input and abuse, observed through the same
+  real interface used by the Functional tier. It supplies attacks and
+  invalid input, then asserts that the system rejects, contains, or
+  safely degrades rather than misbehaving. It answers: does the
+  feature resist misuse?
+
+    Method: executes the code through its real interface, the same as
+      Functional, but with hostile input.
+    Asserts: rejection, containment, safe failure, and preserved
+      isolation between tenants and users.
+    Excludes: valid-path behavior, which belongs to the Functional
+      tier, and source inspection, which belongs to the Design tier.
+
+    Example: a forged callback state is rejected, a prompt-injection
+    payload embedded in ingested feed content does not alter the
+    generated post's instructions, and a request for another tenant's
+    topic is denied.

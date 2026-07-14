@@ -2,13 +2,12 @@
 
 ## TESTING (TDD) FRAMEWORK: THREE TIERS PER FEATURE
 
-  Each feature is tested by 3 suites. Tier-1 and Tier-2 run the code
-  and observe behavior through the real interface under test; the tests
-  differ only in the input they supply. The third tier does not run the 
-  code; it assumes the role of a cyber-threat actor and inspects the
-  source.
+  Each feature is tested by three suites. Tier-1 and Tier-2 run the
+  code and observe behavior through the real interface; they differ
+  only in the input they supply. The third tier does not run the
+  code; it inspects the source.
 
-  1. FUNCTIONAL (base runner, no suffix and -functional runner)
+  1. FUNCTIONAL (base runner, no suffix; -functional runner)
 
   A functional test verifies that a feature performs its intended
   business function, observed through the same interface the business

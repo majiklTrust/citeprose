@@ -25,40 +25,67 @@ Be sure to lean on function names and code anchors rather than line numbers alon
 - Apply enterprise architecture design patterns and best practices for distributed computing.
 - Make intelligent recommendations for improvements.
 - DO NOT name functions as property or constants. Use getter and setter functions/methods that follow conventional naming standards, e.g., a function to get SOME_PROPERTY would be named getSomePropery().
-- Offer an alternative if a more architecturally sound, resilient, or if a practical changes would result in a better experience.
+- Offer an alternative if a more architecturally principled, resilient, or if a change would result in a more simple end-user workflow or better human end-user experience. Justify the change using succint and targetted language for the reasons why.
 - 600-line file cap on new files. Keep architecture best practices for distributed computing a priority.
 - Template files (src_templates/, public_templates/) are the source of truth; never edit generated files directly
  
  
 LIVE APPLICATION
-- The data layer is a Postgresql OLTP database.
-- The live URL is alpha.***REMOVED***.
+- The data layer is a Postgresql OLTP database that is local to the application server.
+- The live URL is ***REMOVED***.
 
 ## TDD FRAMEWORK
-  1. FUNCTIONAL (base runner, no suffix)
- 
+
+  Each feature is tested by three suites. Tier-1 and Tier-2 run the
+  code and observe behavior through the real interface; they differ
+  only in the input they supply. The third tier does not run the
+  code; it inspects the source.
+
+  1. FUNCTIONAL (base runner, no suffix; -functional runner)
+
   A functional test verifies that a feature performs its intended
   business function, observed through the same interface the business
   or end user actually uses, using representative valid input. It
   treats the implementation as a black box: it supplies input, then
   asserts on observable output and side effects. It answers one
   question: does the feature do what it is supposed to do?
- 
-  2. ADVERSARIAL (-adversarial runner)
- 
-  An adversarial test verifies that a feature resists hostile,
-  malicious, or malformed input and abuse, observed through the same
-  real interface used by the Functional tier. It supplies attacks and
-  invalid input, then asserts that the system rejects, contains, or
-  safely degrades rather than misbehaving. It answers: does the
-  feature protect against threats and resist misuse?
- 
-  3. DESIGN (-design runner)
- 
+
+    Method: executes the code through its real interface (HTTP
+      endpoint, exported function, or CLI).
+    Asserts: correct observable results and side effects for valid,
+      representative business cases.
+    Excludes: hostile input, which belongs to the Adversarial tier,
+      and inspection of source structure, which belongs to the Design
+      tier.
+
+    Configuration values: a functional test must resolve any
+    configuration value the same way the running code resolves it, in
+    the same order of precedence. Prefer the .env property value when
+    it is available. When the .env value is absent, fall back exactly
+    as the code falls back, for example to a database lookup, and use
+    a hardcoded literal only as a last resort, and only where the code
+    itself uses that same hardcoded default. The test must never
+    assert against a value the code would not actually resolve at
+    runtime.
+
+    Example: given a user-chosen topic, the agent ingests current
+    content from the configured external feeds, performs research, and
+    returns a business-appropriate social media post through the
+    generation interface. The feed endpoints, model identifier, and
+    token limits are read from .env when present, falling back to the
+    code's own sources and defaults in the code's own order.
+
+  2. DESIGN (-design runner)
+
   A design test verifies that the source conforms to the intended
   design and structure by inspecting the code statically rather than
   executing it. It answers: was it built the way we agreed?
- 
+
+    Method: reads source files and asserts static properties. It never
+      runs the feature.
+    Excludes: any runtime behavior, which belongs to the Functional
+      and Adversarial tiers.
+
     The Design tier covers two facets, both asserted by static
     inspection:
       Architectural facet: the high-level structure, including
@@ -69,5 +96,30 @@ LIVE APPLICATION
         including interface contracts and signatures, configuration in
         place of hardcoded values, naming and file conventions, and
         required security patterns.
- 
- 
+
+    Example: the authentication layer imports only Node built-ins, the
+    generation service exports the agreed named functions and no
+    default export, encryption uses AES-256-GCM with a derived key,
+    and no secret is hardcoded in source.
+
+  3. ADVERSARIAL (-adversarial runner)
+
+  An adversarial test verifies that a feature resists hostile,
+  malicious, or malformed input and abuse, observed through the same
+  real interface used by the Functional tier. It supplies attacks and
+  invalid input, then asserts that the system rejects, contains, or
+  safely degrades rather than misbehaving. It answers: does the
+  feature protect against threats and resist misuse?
+
+    Method: executes the code through its real interface, the same as
+      Functional, but with hostile input.
+    Asserts: rejection, containment, safe failure, and preserved
+      isolation between tenants and users.
+    Excludes: valid-path behavior, which belongs to the Functional
+      tier, and source inspection, which belongs to the Design tier.
+
+    Example: a forged callback state is rejected, a prompt-injection
+    payload embedded in ingested feed content does not alter the
+    generated post's instructions, and a request for another tenant's
+    topic is denied.
+  

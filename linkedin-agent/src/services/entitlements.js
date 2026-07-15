@@ -102,7 +102,7 @@ export function requireEntitlement(capability) {
       // The failure handler must never depend on another module
       // loading: log best-effort, deny unconditionally.
       try {
-        const { platformLog } = await import("./database.js");
+        const { platformLog } = await import("./platform-log.js");
         platformLog("error", "entitlement_gate_error", { error: err.message });
       } catch { console.error("[entitlements] gate error:", err.message); }
       return res.status(403).json({ error: "Access denied", code: "ENTITLEMENT_CHECK_FAILED" });
@@ -198,7 +198,7 @@ export function suspendedWriteGuard() {
       next();
     } catch (err) {
       try {
-        const { platformLog } = await import("./database.js");
+        const { platformLog } = await import("./platform-log.js");
         platformLog("error", "suspended_guard_error", { error: err.message });
       } catch { console.error("[entitlements] suspended guard error:", err.message); }
       return res.status(403).json({ error: "Access denied", code: "SUBSCRIPTION_CHECK_FAILED" });

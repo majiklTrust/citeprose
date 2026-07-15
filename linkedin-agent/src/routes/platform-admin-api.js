@@ -683,7 +683,7 @@ export default function createPlatformAdminRoutes() {
       }
       const { grantComp } = await import("../services/entitlements.js");
       const row = await grantComp(tenantId, tier);
-      const { platformLog } = await import("../services/database.js");
+      const { platformLog } = await import("../services/platform-log.js");
       platformLog("info", "comp_entitlement_granted", { tenantId, tier, by: req.user.sub });
       res.json(row);
     } catch (err) {
@@ -700,7 +700,7 @@ export default function createPlatformAdminRoutes() {
       const { revokeComp } = await import("../services/entitlements.js");
       const ok = await revokeComp(tenantId);
       if (!ok) return res.status(404).json({ error: "No complimentary subscription for that tenant" });
-      const { platformLog } = await import("../services/database.js");
+      const { platformLog } = await import("../services/platform-log.js");
       platformLog("info", "comp_entitlement_revoked", { tenantId, by: req.user.sub });
       res.json({ tenantId, state: "suspended" });
     } catch (err) {

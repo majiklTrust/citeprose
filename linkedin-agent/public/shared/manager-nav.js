@@ -53,7 +53,12 @@
       } else if (page.roles.indexOf(role) === -1) return;
       // Payments (2.3.4): OM links need the operator flag AND the
       // paid capability; either alone hides them.
-      var omEntitled = (capabilities || []).indexOf('organization_manager') !== -1;
+      // AUDIT F4 (2.4.2): capabilities === null signals a server
+      // that predates the subscription field (mixed-version
+      // install). Hiding paid links on missing evidence strands a
+      // paying user; the server gates enforce regardless, so the
+      // nav fails visible, not closed.
+      var omEntitled = capabilities === null || (capabilities || []).indexOf('organization_manager') !== -1;
       if ((omDisabled || !omEntitled) && OM_PAGES.indexOf(page.path) !== -1) return;
 
       var isActive = currentPath === page.path;
@@ -73,7 +78,7 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], (data.subscription && data.subscription.capabilities) || []);
+        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], data.subscription ? (data.subscription.capabilities || []) : null);
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

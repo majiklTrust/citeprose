@@ -190,7 +190,13 @@ router.get("/api/status", optionalAuth, async (req, res) => {
           try {
             const { subscriptionStatus } = await import("../services/entitlements.js");
             subscription = await subscriptionStatus(tenant.id, user ? user.sub : null);
-          } catch { /* fail-closed default stands */ }
+          } catch {
+            // AUDIT F2 (2.4.2): a transient read failure must NEVER
+            // paint the paywall over a paying tenant's dashboard.
+            // "unknown" renders the dashboard; the server gates stay
+            // fail-closed regardless of what the UI shows.
+            subscription = { state: "unknown", readOnly: false, capabilities: [] };
+          }
           await withTenant(tenant.id, async () => {
             // Cadence and LinkedIn token status are tenant-scoped
             // (each tenant has their own post history and their own

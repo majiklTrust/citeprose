@@ -69,7 +69,8 @@ export function createApp(ctx) {
     withTenant, findTenantByAuthIdentity, storeCredential,
     setAgentState,
     invalidateTokenCache,
-    createPlatformAdminRoutes
+    createPlatformAdminRoutes,
+    createBillingRoutes
   } = ctx;
 
   // Server-side owner gate for the /app/admin page. Fail closed:
@@ -597,8 +598,13 @@ export function createApp(ctx) {
       const authedUser = req.user || null;
       const { isPlatformAdmin } = await import("./tenant/platform-db.js");
       if (!(authedUser && isPlatformAdmin(authedUser.sub))) {
+        // AUDIT F8 (2.4.2): the session user carries authMethod,
+        // not a provider field; the wrong key made bearer users'
+        // tenants unresolvable and silently skipped this gate.
+        const gateProvider = authedUser && authedUser.authMethod === "bearer"
+          ? (req.authProvider || "auth0") : "auth0";
         const tenantForGate = authedUser
-          ? await (await import("./tenant/platform-db.js")).findTenantByAuthIdentity(authedUser.provider || "auth0", authedUser.sub)
+          ? await (await import("./tenant/platform-db.js")).findTenantByAuthIdentity(gateProvider, authedUser.sub)
           : null;
         if (tenantForGate) {
           const { getSubscription, evaluateAccess } = await import("./services/entitlements.js");
@@ -787,6 +793,11 @@ export function createApp(ctx) {
   // Platform admin API — super admin only, cross-tenant operations
   instance.use("/api/platform-admin", createPlatformAdminRoutes());
 
+  // Payments (2.3.5, corrected 2.3.9): billing mounts here inside
+  // createApp, where instance exists. The suspended write guard
+  // exempts this path so a suspended owner can always reactivate.
+  instance.use("/api/billing", createBillingRoutes());
+
   // Topics API routes — mounted at /api/topics. Blanket middleware
   // requires manage_own_topics (blocks viewers). Per-handler checks
   // enforce manage_topics for global operations.
@@ -891,7 +902,6 @@ export async function buildAppForTests() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
-  instance.use("/api/billing", createBillingRoutes());
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -921,6 +931,7 @@ export async function buildAppForTests() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createBillingRoutes,
     adminPageGate: createAdminPageGate()
   });
 }
@@ -998,7 +1009,6 @@ export async function start() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
-  instance.use("/api/billing", createBillingRoutes());
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1039,6 +1049,7 @@ export async function start() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createBillingRoutes,
     adminPageGate: createAdminPageGate()
   });
 

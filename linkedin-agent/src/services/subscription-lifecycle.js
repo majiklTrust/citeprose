@@ -78,62 +78,86 @@ export function transition(sub, event, now = new Date()) {
 
 // Applies a normalized event: replay-safe, race-guarded, audited.
 export async function applyEvent(event, providerName) {
-  const query = await db();
-  const { getSubscription } = await import("./entitlements.js");
-  const { platformLog } = await import("./database.js");
+  // AUDIT F7 (2.4.2): the read, the transition, and BOTH writes
+  // are one transaction with the subscription row locked. Before
+  // this, an audit-insert failure AFTER the state update meant the
+  // provider retried an event whose ref was never recorded, and a
+  // renewal could apply twice. Now the whole unit lands or none of
+  // it does, and a duplicate-ref violation rolls back to the same
+  // answer a replay gets.
+  const { pool } = await import("../db/pool.js");
+  const { platformLog } = await import("./platform-log.js");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  // Replay protection: a seen provider ref records nothing twice.
-  if (event.providerEventRef) {
-    const { rows } = await query(
-      `SELECT 1 FROM payment_events WHERE provider_event_ref = $1`, [event.providerEventRef]);
-    if (rows.length > 0) return { duplicate: true };
-  }
+    if (event.providerEventRef) {
+      const { rows } = await client.query(
+        `SELECT 1 FROM payment_events WHERE provider_event_ref = $1`, [event.providerEventRef]);
+      if (rows.length > 0) { await client.query("ROLLBACK"); return { duplicate: true }; }
+    }
 
-  const sub = await getSubscription(event.tenantId);
-  const verdict = transition(sub, event);
-  if (verdict.invalid) {
-    await query(
-      `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, detail, occurred_at)
-       VALUES ($1, $2, $3, $4, $5, NULL, $6, $7)`,
+    // Row lock: concurrent events for one tenant serialize here.
+    const { rows: subRows } = await client.query(
+      `SELECT tenant_id, tier, state, comp, pending_tier, period_start, period_end
+         FROM subscriptions WHERE tenant_id = $1 FOR UPDATE`,
+      [event.tenantId]);
+    const sub = subRows[0] || null;
+
+    const verdict = transition(sub, event);
+    if (verdict.invalid) {
+      await client.query(
+        `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, detail, occurred_at)
+         VALUES ($1, $2, $3, $4, $5, NULL, $6, $7)`,
+        [event.tenantId, providerName, event.providerEventRef, event.type,
+         sub ? sub.state : "none", `refused: ${verdict.invalid}`, event.occurredAt]);
+      await client.query("COMMIT");
+      platformLog("warn", "payment_event_refused", { tenantId: event.tenantId, type: event.type, reason: verdict.invalid });
+      return { refused: verdict.invalid };
+    }
+
+    const n = verdict.next;
+    let changed;
+    if (!sub) {
+      const { rowCount } = await client.query(
+        `INSERT INTO subscriptions (tenant_id, tier, state, comp, pending_tier, period_start, period_end, provider)
+         VALUES ($1, $2, $3, false, NULL, $4, $5, $6)
+         ON CONFLICT (tenant_id) DO NOTHING`,
+        [event.tenantId, n.tier, n.state, n.period_start, n.period_end, providerName]);
+      changed = rowCount === 1;
+    } else {
+      const { rowCount } = await client.query(
+        `UPDATE subscriptions
+            SET tier = $2, state = $3, pending_tier = $4, period_start = $5, period_end = $6,
+                provider = COALESCE($7, provider), updated_at = now()
+          WHERE tenant_id = $1 AND state = $8`,
+        [event.tenantId, n.tier, n.state, n.pending_tier, n.period_start, n.period_end, providerName, sub.state]);
+      changed = rowCount === 1;
+    }
+    if (!changed) {
+      await client.query("ROLLBACK");
+      platformLog("warn", "payment_event_raced", { tenantId: event.tenantId, type: event.type });
+      return { raced: true };
+    }
+    await client.query(
+      `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, tier, occurred_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [event.tenantId, providerName, event.providerEventRef, event.type,
-       sub ? sub.state : "none", `refused: ${verdict.invalid}`, event.occurredAt]);
-    platformLog("warn", "payment_event_refused", { tenantId: event.tenantId, type: event.type, reason: verdict.invalid });
-    return { refused: verdict.invalid };
+       sub ? sub.state : "none", n.state, n.tier, event.occurredAt]);
+    await client.query("COMMIT");
+    platformLog("info", "subscription_transition", {
+      tenantId: event.tenantId, from: sub ? sub.state : "none", to: n.state, tier: n.tier, type: event.type
+    });
+    return { ok: true, state: n.state, tier: n.tier };
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch { /* connection already gone */ }
+    // A unique violation on the ref means a concurrent duplicate
+    // won the race: same outcome as a replay.
+    if (err && err.code === "23505") return { duplicate: true };
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const n = verdict.next;
-  let changed;
-  if (!sub) {
-    const { rowCount } = await query(
-      `INSERT INTO subscriptions (tenant_id, tier, state, comp, pending_tier, period_start, period_end, provider)
-       VALUES ($1, $2, $3, false, NULL, $4, $5, $6)
-       ON CONFLICT (tenant_id) DO NOTHING`,
-      [event.tenantId, n.tier, n.state, n.period_start, n.period_end, providerName]);
-    changed = rowCount === 1;
-  } else {
-    // Race guard: the transition lands only if the state we
-    // adjudicated against is still the state on disk.
-    const { rowCount } = await query(
-      `UPDATE subscriptions
-          SET tier = $2, state = $3, pending_tier = $4, period_start = $5, period_end = $6,
-              provider = COALESCE($7, provider), updated_at = now()
-        WHERE tenant_id = $1 AND state = $8`,
-      [event.tenantId, n.tier, n.state, n.pending_tier, n.period_start, n.period_end, providerName, sub.state]);
-    changed = rowCount === 1;
-  }
-  if (!changed) {
-    platformLog("warn", "payment_event_raced", { tenantId: event.tenantId, type: event.type });
-    return { raced: true };
-  }
-  await query(
-    `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, tier, occurred_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [event.tenantId, providerName, event.providerEventRef, event.type,
-     sub ? sub.state : "none", n.state, n.tier, event.occurredAt]);
-  platformLog("info", "subscription_transition", {
-    tenantId: event.tenantId, from: sub ? sub.state : "none", to: n.state, tier: n.tier, type: event.type
-  });
-  return { ok: true, state: n.state, tier: n.tier };
 }
 
 // Clock sweep for the local line: paid periods that lapsed past
@@ -143,24 +167,31 @@ export async function sweepLapsedPeriods() {
   const query = await db();
   const lagHours = Number(process.env.PAYMENTS_RENEWAL_LAG_HOURS);
   const lag = Number.isFinite(lagHours) && lagHours >= 0 ? lagHours : 24;
-  const { rows } = await query(
-    `UPDATE subscriptions
-        SET state = 'past_due', updated_at = now()
-      WHERE comp = false
-        AND state IN ('trialing', 'active')
-        AND period_end IS NOT NULL
-        AND period_end < now() - ($1 || ' hours')::interval
-      RETURNING tenant_id, tier`,
-    [String(lag)]);
-  if (rows.length > 0) {
-    const { platformLog } = await import("./database.js");
-    for (const r of rows) {
-      await query(
-        `INSERT INTO payment_events (tenant_id, provider, event_type, prev_state, next_state, tier, detail)
-         VALUES ($1, 'platform', 'period_lapsed', 'active', 'past_due', $2, 'renewal lag exceeded')`,
-        [r.tenant_id, r.tier]);
-      platformLog("warn", "subscription_period_lapsed", { tenantId: r.tenant_id });
+  // AUDIT F6 (2.4.2): one UPDATE per source state so the audit
+  // trail records the true prev_state; a lapsed trial is not a
+  // lapsed active subscription, and the history must say which.
+  let total = 0;
+  for (const fromState of ["trialing", "active"]) {
+    const { rows } = await query(
+      `UPDATE subscriptions
+          SET state = 'past_due', updated_at = now()
+        WHERE comp = false
+          AND state = $2
+          AND period_end IS NOT NULL
+          AND period_end < now() - ($1 || ' hours')::interval
+        RETURNING tenant_id, tier`,
+      [String(lag), fromState]);
+    if (rows.length > 0) {
+      const { platformLog } = await import("./platform-log.js");
+      for (const r of rows) {
+        await query(
+          `INSERT INTO payment_events (tenant_id, provider, event_type, prev_state, next_state, tier, detail)
+           VALUES ($1, 'platform', 'period_lapsed', $3, 'past_due', $2, 'renewal lag exceeded')`,
+          [r.tenant_id, r.tier, fromState]);
+        platformLog("warn", "subscription_period_lapsed", { tenantId: r.tenant_id, from: fromState });
+      }
+      total += rows.length;
     }
   }
-  return rows.length;
+  return total;
 }

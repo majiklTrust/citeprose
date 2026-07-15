@@ -10,7 +10,10 @@
 
 import express from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
-import { createTenantResolver, requirePermission } from "../tenant/middleware.js";
+// AUDIT 2.3.8: these two lived at a path that does not exist
+// (tenant/middleware.js); the server could not mount /api/billing.
+import { createTenantResolver } from "../tenant/resolver.js";
+import { requirePermission } from "../tenant/permissions.js";
 import { TIERS } from "../config/entitlements.js";
 
 export default function createBillingRoutes() {
@@ -57,7 +60,7 @@ export default function createBillingRoutes() {
       await query(
         `UPDATE subscriptions SET pending_tier = $2, updated_at = now() WHERE tenant_id = $1`,
         [req.tenant.id, tier]);
-      const { platformLog } = await import("../services/database.js");
+      const { platformLog } = await import("../services/platform-log.js");
       platformLog("info", "billing_tier_change_requested", { tenantId: req.tenant.id, from: sub.tier, to: tier, by: req.user.sub });
       res.json({ ok: true, currentTier: sub.tier, pendingTier: tier,
                  effective: "next renewal" });

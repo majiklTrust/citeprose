@@ -1038,7 +1038,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.3.6</div>
+                <div className="header-subtitle">v2.3.9</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1070,7 +1070,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.3.6</div>
+                <div className="header-subtitle">v2.3.9</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1096,6 +1096,12 @@
 
       return (
         <div className="app-container">
+            {status.subscription && status.subscription.state === 'past_due' && (
+              <div className="card" style={{ background: '#fffbe8', border: '2px solid #8a6d00', color: '#8a6d00', fontWeight: 700, padding: '0.75rem', marginBottom: '1rem' }}>
+                A payment for this workspace did not go through. Everything keeps
+                working while the charge retries; update billing to avoid a pause.
+              </div>
+            )}
             {status.subscription && status.subscription.readOnly && (
               <div className="card" style={{ background: '#fff8f2', border: '2px solid #e65100', color: '#e65100', fontWeight: 700, padding: '0.75rem', marginBottom: '1rem' }}>
                 This workspace is read-only: the subscription is suspended.
@@ -1116,7 +1122,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.3.6 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.3.9 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

@@ -345,6 +345,15 @@ async function runTickForAllTenants() {
     console.error("[scheduler] payment lapse sweep failed:", err.message);
   }
 
+  // Self-awareness (2.4.1): platform log retention, platform-level,
+  // once per cron fire.
+  try {
+    const { prunePlatformLog } = await import("./platform-log.js");
+    await prunePlatformLog();
+  } catch (err) {
+    console.error("[scheduler] platform log prune failed:", err.message);
+  }
+
   // Payments (2.3.1.1): lazy import per the module-loads-DB-free
   // discipline; automated processing halts outside good standing.
   const { isTenantProcessingAllowed } = await import("./entitlements.js");

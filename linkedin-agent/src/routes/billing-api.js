@@ -10,8 +10,8 @@
 
 import express from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
-// AUDIT 2.3.8: these two lived at a path that does not exist
-// (tenant/middleware.js); the server could not mount /api/billing.
+// 2.4.7: these two bindings live in separate modules; there is no
+// tenant/middleware.js. Import shape matches every other router.
 import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { TIERS } from "../config/entitlements.js";

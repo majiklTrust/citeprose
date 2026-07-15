@@ -120,6 +120,73 @@ function setCachedModels(optgroups) {
 
 const QUERY_REGISTRY = {
 
+  // ── Operational self-awareness (2.4.1) ──────────────────────
+  "platform-events-recent": {
+    label: "Platform Events (Recent)",
+    description: "Latest persisted platform events, newest first.",
+    capability: "Watch the platform think: every persisted event with level, detail, and tenant.",
+    sql: `SELECT created_at, level, event, tenant_id, detail
+          FROM platform_log ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "platform-events-by-tenant": {
+    label: "Platform Events (By Tenant)",
+    description: "Persisted events attributed to one tenant, newest first.",
+    capability: "Audit one workspace's trail end to end.",
+    sql: `SELECT created_at, level, event, detail
+          FROM platform_log WHERE tenant_id = $1::uuid
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "platform-event-metrics": {
+    label: "Usage Metrics (Event Counts)",
+    description: "Event volume by type and level over the last N days.",
+    capability: "Usage metrics from the event stream: what runs, how often, and how loudly.",
+    sql: `SELECT event, level, count(*)::bigint AS occurrences,
+                 min(created_at) AS first_seen, max(created_at) AS last_seen
+          FROM platform_log
+          WHERE created_at > now() - ($1 || ' days')::interval
+          GROUP BY event, level ORDER BY occurrences DESC LIMIT 100`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "prompt-vault-audit": {
+    label: "Prompt Vault Access Audit",
+    description: "Every persisted prompt_* security event, newest first.",
+    capability: "The prompt-security audit trail the vault phases were designed to feed.",
+    sql: `SELECT created_at, level, event, tenant_id, detail
+          FROM platform_log WHERE event LIKE 'prompt\_%'
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "payments-audit": {
+    label: "Payments Audit Trail",
+    description: "Lifecycle transitions and refusals from payment_events.",
+    capability: "Every subscription transition and refused provider event, in order.",
+    sql: `SELECT p.recorded_at, t.slug, p.provider, p.event_type,
+                 p.prev_state, p.next_state, p.tier, p.detail
+          FROM payment_events p JOIN tenants t ON t.id = p.tenant_id
+          ORDER BY p.recorded_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
   "list-tenants": {
     label: "List All Tenants",
     description: "Shows all tenants with status, slug, and creation date.",

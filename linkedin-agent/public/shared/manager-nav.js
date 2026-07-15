@@ -37,7 +37,7 @@
 
   var OM_PAGES = ['/app/analytics', '/app/linkedin', '/app/advocacy'];
 
-  function renderNav(role, omDisabled, permissions) {
+  function renderNav(role, omDisabled, permissions, capabilities) {
     var container = document.getElementById('manager-nav');
     if (!container) return;
 
@@ -50,7 +50,10 @@
         // matrix, the single source of truth (never role names).
         if ((permissions || []).indexOf(page.perm) === -1) return;
       } else if (page.roles.indexOf(role) === -1) return;
-      if (omDisabled && OM_PAGES.indexOf(page.path) !== -1) return;
+      // Payments (2.3.4): OM links need the operator flag AND the
+      // paid capability; either alone hides them.
+      var omEntitled = (capabilities || []).indexOf('organization_manager') !== -1;
+      if ((omDisabled || !omEntitled) && OM_PAGES.indexOf(page.path) !== -1) return;
 
       var isActive = currentPath === page.path;
       if (isActive) {
@@ -69,7 +72,7 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || []);
+        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], (data.subscription && data.subscription.capabilities) || []);
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

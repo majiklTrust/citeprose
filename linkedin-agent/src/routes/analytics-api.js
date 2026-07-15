@@ -18,6 +18,7 @@
 // can never be confused with the session 401.
 // =================================================================
 
+import { suspendedWriteGuard, requireEntitlement } from "../services/entitlements.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -37,11 +38,20 @@ const resolveTenant = createTenantResolver();
 
 router.use(requireAuth);
 router.use(resolveTenant);
+
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
 // Organization Manager gate (DDL 32): every capability route in
 // this router is entitlement-controlled per tenant. Mounted AFTER
 // resolveTenant so req.tenant exists (the 2.2.30 gate ran before
 // resolution and was a no-op).
 router.use(requireOrganizationManager);
+
+// Payments (2.3.4): Organization Manager is now BOTH paid and
+// operator-enabled. The entitlement (business tier and above) and
+// the agent_state flag must each allow; neither can grant alone.
+router.use(requireEntitlement("organization_manager"));
 
 function db() {
   const c = currentClient();

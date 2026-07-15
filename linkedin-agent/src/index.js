@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.3.3
+// v2.3.4
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -584,6 +584,36 @@ export function createApp(ctx) {
   });
 
   instance.get("/auth/linkedin", async (req, res) => {
+    // Payments (2.3.4), ruling (3): Connect to LinkedIn is denied
+    // outside good standing. Platform admins bypass per (6).
+    try {
+      const authedUser = req.user || null;
+      const { isPlatformAdmin } = await import("./tenant/platform-db.js");
+      if (!(authedUser && isPlatformAdmin(authedUser.sub))) {
+        const tenantForGate = authedUser
+          ? await (await import("./tenant/platform-db.js")).findTenantByAuthIdentity(authedUser.provider || "auth0", authedUser.sub)
+          : null;
+        if (tenantForGate) {
+          const { getSubscription, evaluateAccess } = await import("./services/entitlements.js");
+          const verdict = evaluateAccess(await getSubscription(tenantForGate.id), null);
+          if (!verdict.allowed) {
+            return res.status(402).send(`
+              <h2>Subscription Required</h2>
+              <p>Connecting LinkedIn requires an active subscription for this workspace.</p>
+              <a href="/app">Back to Dashboard</a>
+            `);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[payments] connect gate failed:", err.message);
+      return res.status(403).send(`
+        <h2>Access Denied</h2>
+        <p>The subscription check could not complete. Try again.</p>
+        <a href="/app">Back to Dashboard</a>
+      `);
+    }
+
     // Return-to preservation: the page that initiated the connect
     // is where the flow lands afterward. The value is allowlisted
     // inside generateOAuthState; anything unexpected collapses to
@@ -1008,7 +1038,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.3.3
+║           LinkedIn AI Content Agent  2.3.4
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

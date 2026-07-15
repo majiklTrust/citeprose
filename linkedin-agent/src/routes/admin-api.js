@@ -14,6 +14,7 @@
 //   - Permission check: only owners have manage_users
 // ═══════════════════════════════════════════════════════════════
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -55,6 +56,10 @@ export function createAdminPageGate(overrides = {}) {
 // ── Middleware chain for all admin routes ─────────────────────
 router.use(requireAuth);
 router.use(resolveTenant);
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
+
 router.use(requireNoDevBypass());
 router.use(requirePermission("manage_users"));
 

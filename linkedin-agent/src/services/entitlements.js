@@ -81,8 +81,10 @@ export async function isTenantProcessingAllowed(tenantId) {
 export function requireEntitlement(capability) {
   return async function entitlementGate(req, res, next) {
     try {
-      const { isPlatformAdmin } = await import("../tenant/platform-db.js");
-      if (req.user && isPlatformAdmin(req.user.sub)) return next();
+      if (req.user) {
+        const { isPlatformAdmin } = await import("../tenant/platform-db.js");
+        if (isPlatformAdmin(req.user.sub)) return next();
+      }
       if (!req.tenant || !req.tenant.id) {
         return res.status(403).json({ error: "Access denied", code: "NO_TENANT" });
       }
@@ -97,8 +99,12 @@ export function requireEntitlement(capability) {
       }
       next();
     } catch (err) {
-      const { platformLog } = await import("./database.js");
-      platformLog("error", "entitlement_gate_error", { error: err.message });
+      // The failure handler must never depend on another module
+      // loading: log best-effort, deny unconditionally.
+      try {
+        const { platformLog } = await import("./database.js");
+        platformLog("error", "entitlement_gate_error", { error: err.message });
+      } catch { console.error("[entitlements] gate error:", err.message); }
       return res.status(403).json({ error: "Access denied", code: "ENTITLEMENT_CHECK_FAILED" });
     }
   };
@@ -139,4 +145,63 @@ export async function listSubscriptions() {
       ORDER BY t.slug`
   );
   return rows;
+}
+
+// Status-payload summary for the front end: state, the read-only
+// signal, and the entitled capability list. Platform admins see a
+// synthetic all-capability pass so their surfaces never wall.
+export async function subscriptionStatus(tenantId, userSub) {
+  const { isPlatformAdmin } = await import("../tenant/platform-db.js");
+  if (userSub && isPlatformAdmin(userSub)) {
+    return { state: "platform_admin", readOnly: false,
+      capabilities: ["organization_manager", "ads_manager", "image_studio"] };
+  }
+  const sub = await getSubscription(tenantId);
+  const general = evaluateAccess(sub, null);
+  if (!general.allowed) {
+    return { state: general.state, readOnly: general.readOnly === true, capabilities: [] };
+  }
+  return { state: sub.state, readOnly: false, capabilities: tierCapabilities(sub.tier) };
+}
+
+// Suspension semantics, ruling (3): read-only dashboard. Mounted
+// per tenant router AFTER resolveTenant. GET/HEAD/OPTIONS pass;
+// every mutating verb is denied while the tenant is outside good
+// standing, EXCEPT the billing surface (/api/billing/*), which
+// stays alive so the owner can always reach reactivation, never
+// a lock with the key inside. Platform admins bypass per (6).
+const READ_METHODS = ["GET", "HEAD", "OPTIONS"];
+
+export function suspendedWriteGuard() {
+  return async function suspendedGate(req, res, next) {
+    try {
+      if (READ_METHODS.includes(req.method)) return next();
+      if (req.baseUrl === "/api/billing" || (req.baseUrl && req.baseUrl.startsWith("/api/billing/"))) return next();
+      // Bypass lookup only when a user exists to bypass: keeps the
+      // structural checks import-free.
+      if (req.user) {
+        const { isPlatformAdmin } = await import("../tenant/platform-db.js");
+        if (isPlatformAdmin(req.user.sub)) return next();
+      }
+      if (!req.tenant || !req.tenant.id) {
+        return res.status(403).json({ error: "Access denied", code: "NO_TENANT" });
+      }
+      const sub = await getSubscription(req.tenant.id);
+      const verdict = evaluateAccess(sub, null);
+      if (!verdict.allowed) {
+        return res.status(402).json({
+          error: "This workspace is read-only until its subscription is active.",
+          code: "SUBSCRIPTION_READ_ONLY",
+          state: verdict.state
+        });
+      }
+      next();
+    } catch (err) {
+      try {
+        const { platformLog } = await import("./database.js");
+        platformLog("error", "suspended_guard_error", { error: err.message });
+      } catch { console.error("[entitlements] suspended guard error:", err.message); }
+      return res.status(403).json({ error: "Access denied", code: "SUBSCRIPTION_CHECK_FAILED" });
+    }
+  };
 }

@@ -12,6 +12,7 @@
 // The resolver is inserted immediately after requireAuth so
 // req.tenant is present before any handler executes.
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import {
   getPostStats,
@@ -126,6 +127,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let anthropicModel = null;
     let tenantRole = null;
     let organizationManager = "enabled";
+    let subscription = { state: "none", readOnly: false, capabilities: [] };
     let permissions = [];
 
     if (req.user && req.user.sub) {
@@ -182,6 +184,14 @@ router.get("/api/status", optionalAuth, async (req, res) => {
               permissions = permRows.map((r) => r.permission);
             }
             try { researchStats = await getArticleStats(); } catch { /* monitor not ready */ }
+          });
+          // Payments (2.3.4): platform-level read, outside the
+          // tenant context on purpose (subscriptions carry no RLS).
+          try {
+            const { subscriptionStatus } = await import("../services/entitlements.js");
+            subscription = await subscriptionStatus(tenant.id, user ? user.sub : null);
+          } catch { /* fail-closed default stands */ }
+          await withTenant(tenant.id, async () => {
             // Cadence and LinkedIn token status are tenant-scoped
             // (each tenant has their own post history and their own
             // LinkedIn credentials). Populate them inside the tenant
@@ -229,6 +239,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
       publishTarget,
       organizationManager,
+      subscription,
       permissions,
       linkedinOrgConfigured,
       anthropicModel,
@@ -248,6 +259,10 @@ router.get("/api/status", optionalAuth, async (req, res) => {
 
 router.use(requireAuth);
 router.use(resolveTenant);
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
+
 
 // ── Posts ─────────────────────────────────────────────────────
 

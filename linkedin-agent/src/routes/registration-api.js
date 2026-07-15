@@ -16,6 +16,7 @@
 // Rate limiting on validate-key prevents oracle attacks.
 // ═══════════════════════════════════════════════════════════════
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -79,7 +80,7 @@ function safeError(res, status, message) {
 const { requireAuth, optionalAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
-router.post("/invite", requireAuth, resolveTenant, async (req, res) => {
+router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async (req, res) => {
   try {
     // Platform admin check
     if (!isPlatformAdmin(req.user.sub)) {

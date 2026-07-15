@@ -1026,13 +1026,51 @@
       // This is a legitimate state — new sign-ups exist before
       // tenant provisioning. Backlog: dedicated /no-tenant route
       // would give a stable URL for tenant-provisioning emails.
+      // ── Payments Paywall (2.3.4, ruling 3) ──────────────────
+      // A signed-in member of a workspace with no subscription
+      // sees the tiers, not the dashboard. Suspended workspaces
+      // fall through to the dashboard read-only (banner below;
+      // the server denies every mutating verb regardless).
+      if (status.user && status.user.role && status.subscription
+          && status.subscription.state === 'none') {
+        return (
+          <div className="app-container">
+            <div className="header">
+              <div>
+                <div className="header-title">Market Intelligence</div>
+                <div className="header-subtitle">v2.3.4</div>
+              </div>
+              <div className="header-controls-wide">
+                <a href="/" className="btn btn-ghost btn-nav">Home</a>
+                <div className="user-info">
+                  <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
+                  <a href="/auth/logout" className="logout-btn">Logout</a>
+                </div>
+              </div>
+            </div>
+            <div className="card" style={{ maxWidth: '640px', margin: '2rem auto', textAlign: 'center' }}>
+              <h2 style={{ marginBottom: '0.5rem' }}>Choose a plan to activate this workspace</h2>
+              <p style={{ color: '#666', marginBottom: '1rem' }}>
+                Individual covers the core research-to-publish loop.
+                Business adds the Organization Manager. Business Premium
+                adds the Ads Manager and Image Studio as they arrive.
+              </p>
+              <p style={{ color: '#666' }}>
+                Checkout opens here when billing goes live. Your workspace
+                stays intact; nothing has been removed.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
       if (status.user && status.stats === null) {
         return (
           <div className="app-container">
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.3.3</div>
+                <div className="header-subtitle">v2.3.4</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1058,6 +1096,12 @@
 
       return (
         <div className="app-container">
+            {status.subscription && status.subscription.readOnly && (
+              <div className="card" style={{ background: '#fff8f2', border: '2px solid #e65100', color: '#e65100', fontWeight: 700, padding: '0.75rem', marginBottom: '1rem' }}>
+                This workspace is read-only: the subscription is suspended.
+                Viewing works; changes and publishing are paused until reactivation.
+              </div>
+            )}
           {/* Dev Mode Banner */}
           {status && !status.authRequired && (
             <div className="dev-banner">
@@ -1072,7 +1116,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.3.3 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.3.4 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

@@ -299,7 +299,7 @@
   function getJson(path) {
     return fetch(API + path, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       .then(function (res) {
-        return res.json().then(function (body) {       if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+        return res.json().then(function (body) {       if (body && ((res.status === 403 && body.code === 'ORGANIZATION_MANAGER_DISABLED') || (res.status === 402 && body.code === 'ENTITLEMENT_REQUIRED'))) {
         if (!window.__omWall) {
           window.__omWall = true;
           var wall = document.getElementById('om-wall');

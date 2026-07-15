@@ -21,6 +21,7 @@
 //                     arbitrary organization)
 // =================================================================
 
+import { suspendedWriteGuard, requireEntitlement } from "../services/entitlements.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -45,10 +46,19 @@ const resolveTenant = createTenantResolver();
 
 router.use(requireAuth);
 router.use(resolveTenant);
+
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
 // Organization Manager gate (DDL 32): LinkedIn connection
 // management is part of the gated capability set per the
 // 2026-07-11 decision (/app/linkedin access controlled).
 router.use(requireOrganizationManager);
+
+// Payments (2.3.4): Organization Manager is now BOTH paid and
+// operator-enabled. The entitlement (business tier and above) and
+// the agent_state flag must each allow; neither can grant alone.
+router.use(requireEntitlement("organization_manager"));
 
 async function safeGet(fn) {
   try { return await fn(); } catch { return null; }

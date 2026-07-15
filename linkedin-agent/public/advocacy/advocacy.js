@@ -69,7 +69,7 @@
     o.headers['Accept'] = 'application/json';
     return fetch(API + path, o).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-              if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+              if (body && ((res.status === 403 && body.code === 'ORGANIZATION_MANAGER_DISABLED') || (res.status === 402 && body.code === 'ENTITLEMENT_REQUIRED'))) {
         if (!window.__omWall) {
           window.__omWall = true;
           var wall = document.getElementById('om-wall');

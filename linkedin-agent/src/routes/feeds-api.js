@@ -24,6 +24,7 @@
 //   • No feed URLs or content leaked outside tenant scope
 // ═══════════════════════════════════════════════════════════════
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import Parser from "rss-parser";
@@ -50,6 +51,10 @@ const resolveTenant = createTenantResolver();
 // ── Blanket middleware — same gate as topics ──────────────────
 router.use(requireAuth);
 router.use(resolveTenant);
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
+
 router.use(requirePermission("manage_own_topics"));
 
 // ══════════════════════════════════════════════════════════════

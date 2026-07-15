@@ -49,6 +49,10 @@ async function defaultStoreKey(providerId, plaintext) {
   const { storeCredential, llmCredentialKeyFor } = await import("../tenant/credential-store.js");
   return storeCredential(llmCredentialKeyFor(providerId), plaintext);
 }
+async function defaultDeleteKey(providerId) {
+  const { deleteCredential, llmCredentialKeyFor } = await import("../tenant/credential-store.js");
+  return deleteCredential(llmCredentialKeyFor(providerId));
+}
 
 export function createAiConfigRoutes(overrides = {}) {
   const d = {
@@ -58,6 +62,7 @@ export function createAiConfigRoutes(overrides = {}) {
     getProvider: overrides.getProvider || getProvider,
     getModelProfile: overrides.getModelProfile || getModelProfile,
     validateKey: overrides.validateKey || validateProviderKey,
+    deleteKey: overrides.deleteKey || defaultDeleteKey,
     resolveSelection: overrides.resolveSelection || resolveTenantLlmSelection,
     withTenant: overrides.withTenant || defaultWithTenant,
     getState: overrides.getState || defaultGetState,
@@ -84,6 +89,20 @@ export function createAiConfigRoutes(overrides = {}) {
   });
 
   // ── Read the choices and the current selection ──────────────
+  // Payments (2.3.5), ruling 2026-07-14: vendor management is an
+  // owner-only capability, explicit (manage_llm_vendor) rather
+  // than inherited through the parent chain's manage_users.
+  router.use(async (req, res, next) => {
+    try {
+      const { hasPermission } = await import("../tenant/platform-db.js");
+      const role = req.tenant && req.tenant.role;
+      if (role && await hasPermission(role, "manage_llm_vendor")) return next();
+      return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
+    } catch {
+      return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
+    }
+  });
+
   router.get("/ai-config", async (req, res) => {
     try {
       const providers = d.listProviders(d.env)
@@ -194,6 +213,33 @@ export function createAiConfigRoutes(overrides = {}) {
     } catch (err) {
       d.log("error", "ai_config_update_failed", { error: err.message });
       res.status(500).json({ error: "Failed to update AI configuration" });
+    }
+  });
+
+  // ── Remove the vendor selection (2.3.5) ─────────────────────
+  // Clears the selection states so resolution falls back to the
+  // platform default chain; removeKey=true also deletes the
+  // stored credential for the removed provider. Honest outcome
+  // either way: the response names what remains.
+  router.delete("/ai-config", async (req, res) => {
+    try {
+      const removeKey = req.query.removeKey === "true";
+      let removedProvider = null;
+      await d.withTenant(req.tenant.id, async () => {
+        const raw = await d.getState("llm_provider");
+        removedProvider = (typeof raw === "string" && raw.trim()) || null;
+        await d.setState("llm_provider", "");
+        await d.setState("llm_model", "");
+        if (removeKey && removedProvider) {
+          await d.deleteKey(removedProvider);
+        }
+      });
+      d.log("info", "ai_config_removed", { provider: removedProvider, keyRemoved: removeKey && !!removedProvider });
+      res.json({ ok: true, removedProvider, keyRemoved: removeKey && !!removedProvider,
+                 nowUsing: "platform default (anthropic chain) if configured" });
+    } catch (err) {
+      d.log("error", "ai_config_remove_failed", { error: err.message });
+      res.status(500).json({ error: "Failed to remove the vendor selection" });
     }
   });
 

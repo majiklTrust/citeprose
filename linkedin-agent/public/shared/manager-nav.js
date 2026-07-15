@@ -26,6 +26,7 @@
     { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
+    { path: '/app/billing', label: 'Billing', perm: 'manage_billing' },
     { path: '/app/admin', label: 'Manage', roles: ['owner'] }
   ];
 

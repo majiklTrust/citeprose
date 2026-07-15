@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.3.4
+// v2.3.5
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -190,6 +190,7 @@ export function createApp(ctx) {
   // roles; the data behind it is permission-gated at the API layer
   // (view_analytics / sync_analytics), matching the feeds pattern.
   instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+  instance.use("/app/billing", express.static(path.join(__dirname, "../public/billing"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // LinkedIn connection settings page (owner controls; the APIs it
   // calls are manage_linkedin-gated, the shell itself is static).
@@ -883,6 +884,8 @@ export async function buildAppForTests() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createBillingRoutes } = await import("./routes/billing-api.js");
+  instance.use("/api/billing", createBillingRoutes());
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -988,6 +991,8 @@ export async function start() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createBillingRoutes } = await import("./routes/billing-api.js");
+  instance.use("/api/billing", createBillingRoutes());
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1038,7 +1043,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.3.4
+║           LinkedIn AI Content Agent  2.3.5
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

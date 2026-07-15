@@ -314,3 +314,25 @@ export async function hasLlmApiKey(providerId) {
 export async function storeCredential(key, plaintext) {
   return storeEncrypted(key, plaintext);
 }
+
+// Payments Step 4 (2.3.5): credential removal, the operation the
+// vendor lifecycle lacked while selection was fixed at
+// configuration time. Tenant-scoped by RLS AND the explicit
+// current_tenant_id() predicate, same belt-and-suspenders as the
+// writes above.
+export async function deleteCredential(key) {
+  const tenantId = currentTenantId();
+  if (!tenantId) {
+    throw new Error("credential store called outside tenant context");
+  }
+  const client = currentClient();
+  if (!client) {
+    throw new Error("No database client in tenant context");
+  }
+  const result = await client.query(
+    `DELETE FROM credentials
+      WHERE tenant_id = current_tenant_id() AND key = $1`,
+    [key]
+  );
+  return result.rowCount > 0;
+}

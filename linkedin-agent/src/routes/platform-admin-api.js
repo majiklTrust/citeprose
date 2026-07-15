@@ -658,6 +658,56 @@ export default function createPlatformAdminRoutes() {
   router.use(requireAuth);
   router.use(requirePlatformAdmin);
 
+  // ── Payments (2.3.1.1): complimentary entitlements ──────────
+  // The deliberate, auditable, processor-free grant. Router-level
+  // gates above already enforce platform admin.
+
+  router.get("/subscriptions", async (req, res) => {
+    try {
+      const { listSubscriptions } = await import("../services/entitlements.js");
+      res.json({ subscriptions: await listSubscriptions() });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to list subscriptions" });
+    }
+  });
+
+  router.post("/comp", async (req, res) => {
+    try {
+      const { tenantId, tier } = req.body || {};
+      const { TIERS } = await import("../config/entitlements.js");
+      if (!tenantId || !/^[0-9a-f-]{36}$/.test(String(tenantId))) {
+        return res.status(400).json({ error: "A valid tenant id is required" });
+      }
+      if (!TIERS.includes(tier)) {
+        return res.status(400).json({ error: "Choose a valid tier" });
+      }
+      const { grantComp } = await import("../services/entitlements.js");
+      const row = await grantComp(tenantId, tier);
+      const { platformLog } = await import("../services/database.js");
+      platformLog("info", "comp_entitlement_granted", { tenantId, tier, by: req.user.sub });
+      res.json(row);
+    } catch (err) {
+      res.status(500).json({ error: "Comp grant failed" });
+    }
+  });
+
+  router.delete("/comp/:tenantId", async (req, res) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      if (!/^[0-9a-f-]{36}$/.test(tenantId)) {
+        return res.status(400).json({ error: "A valid tenant id is required" });
+      }
+      const { revokeComp } = await import("../services/entitlements.js");
+      const ok = await revokeComp(tenantId);
+      if (!ok) return res.status(404).json({ error: "No complimentary subscription for that tenant" });
+      const { platformLog } = await import("../services/database.js");
+      platformLog("info", "comp_entitlement_revoked", { tenantId, by: req.user.sub });
+      res.json({ tenantId, state: "suspended" });
+    } catch (err) {
+      res.status(500).json({ error: "Comp revoke failed" });
+    }
+  });
+
   // ── GET /queries — list available queries ────────────────
   // Returns query metadata only — SQL is never exposed.
 

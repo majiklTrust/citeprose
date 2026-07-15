@@ -457,4 +457,52 @@
     el.className = "genre-result visible " + (ok ? "ok" : "err");
     el.textContent = msg;
   }
+
+  // ── Payments (2.3.1.1): complimentary entitlements card ─────
+  function loadSubscriptions() {
+    var body = document.getElementById("payments-body");
+    if (!body) return;
+    fetch(API + "/api/platform-admin/subscriptions", { credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var rows = data.subscriptions || [];
+        var html = rows.length === 0 ? '<div class="hint">No subscriptions yet.</div>'
+          : '<table><thead><tr><th>Tenant</th><th>Tier</th><th>State</th><th>Comp</th></tr></thead><tbody>'
+            + rows.map(function (s) {
+                return '<tr><td>' + esc(s.slug) + '</td><td>' + esc(s.tier) + '</td><td>'
+                  + esc(s.state) + '</td><td>' + (s.comp ? 'yes' : '') + '</td></tr>';
+              }).join('') + '</tbody></table>';
+        body.innerHTML = html;
+      })
+      .catch(function () { body.textContent = 'Failed to load subscriptions.'; });
+  }
+
+  window.paymentsGrantComp = function () {
+    var sel = document.getElementById("comp-tenant");
+    var tier = document.getElementById("comp-tier").value;
+    var msg = document.getElementById("payments-msg");
+    fetch(API + "/api/platform-admin/comp", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId: sel.value, tier: tier })
+    }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+      .then(function (out) {
+        msg.textContent = out.ok ? 'Granted ' + out.b.tier + ' (comp) to the tenant.' : (out.b.error || 'Grant failed.');
+        loadSubscriptions();
+      });
+  };
+
+  (function initPayments() {
+    var sel = document.getElementById("comp-tenant");
+    if (!sel) return;
+    fetch(API + "/api/platform-admin/tenants", { credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        sel.innerHTML = (data.tenants || []).map(function (t) {
+          return '<option value="' + esc(t.id) + '">' + esc(t.name || t.slug) + '</option>';
+        }).join('');
+      });
+    document.getElementById("comp-grant").addEventListener("click", window.paymentsGrantComp);
+    loadSubscriptions();
+  })();
 })();

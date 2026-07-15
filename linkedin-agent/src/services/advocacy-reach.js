@@ -166,7 +166,16 @@ export async function runReachRefreshBatch() {
   }
   const { withTenant } = await import("../db/with-tenant.js");
   const total = { tenants: tenants.length, snapshots: 0, failures: 0 };
+  // Payments (2.3.1.1): lazy import per the module-loads-DB-free
+  // discipline; automated processing halts outside good standing.
+  const { isTenantProcessingAllowed } = await import("./entitlements.js");
   for (const tenant of tenants) {
+    // Payments (2.3.1.1): automated processing halts for tenants
+    // outside good standing. Fail-closed: a read failure skips.
+    if (!(await isTenantProcessingAllowed(tenant.id))) {
+      console.log(`[advocacy_reach] tenant ${tenant.slug || tenant.id} skipped: subscription not in good standing`);
+      continue;
+    }
     // Organization Manager gate: skip tenants with the capability
     // set disabled (read failure counts as enabled by design).
     let omEnabled = true;

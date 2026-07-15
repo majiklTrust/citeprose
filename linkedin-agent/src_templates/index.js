@@ -131,6 +131,29 @@ export function createApp(ctx) {
     credentials: true,
   }));
 
+  // Payments (2.3.3): the provider webhook needs the RAW body for
+  // signature verification, so it mounts BEFORE the json parser.
+  // Verification is the provider's job and fails closed; only a
+  // signed, well-formed, normalized event reaches the state
+  // machine. Replays are absorbed by the audit table's unique ref.
+  instance.post("/api/payments/webhook", express.raw({ type: "*/*", limit: "16kb" }), async (req, res) => {
+    try {
+      const { getPaymentsProvider } = await import("./payments/provider.js");
+      const provider = await getPaymentsProvider();
+      const event = provider.parseWebhook(req.headers, req.body);
+      if (!event) return res.status(401).json({ error: "Webhook rejected" });
+      const { applyEvent } = await import("./services/subscription-lifecycle.js");
+      const out = await applyEvent(event, provider.name);
+      if (out.duplicate) return res.status(200).json({ ok: true, duplicate: true });
+      if (out.refused) return res.status(422).json({ error: "Event refused" });
+      if (out.raced) return res.status(409).json({ error: "State changed; retry" });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[payments] webhook failed:", err.message);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
   instance.use(express.json({ limit: "16kb" }));
 
   // Static file surfaces

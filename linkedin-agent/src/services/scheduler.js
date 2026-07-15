@@ -335,6 +335,16 @@ async function runTickForAllTenants() {
     return;
   }
 
+  // Payments (2.3.3): platform-level lapse sweep runs once per
+  // cron fire, before the tenant loop, so a lapsed period is
+  // already past_due when the entitlement checks below read it.
+  try {
+    const { sweepLapsedPeriods } = await import("./subscription-lifecycle.js");
+    await sweepLapsedPeriods();
+  } catch (err) {
+    console.error("[scheduler] payment lapse sweep failed:", err.message);
+  }
+
   // Payments (2.3.1.1): lazy import per the module-loads-DB-free
   // discipline; automated processing halts outside good standing.
   const { isTenantProcessingAllowed } = await import("./entitlements.js");

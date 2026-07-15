@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.3.5
+// v2.3.6
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -142,6 +142,12 @@ export function createApp(ctx) {
       const provider = await getPaymentsProvider();
       const event = provider.parseWebhook(req.headers, req.body);
       if (!event) return res.status(401).json({ error: "Webhook rejected" });
+      // Verified but not lifecycle-relevant (2.3.6): answer 200 so
+      // the processor stops retrying; log the reason for the audit.
+      if (event.ignored) {
+        console.log(`[payments] webhook ignored: ${event.reason}`);
+        return res.json({ ok: true, ignored: true });
+      }
       const { applyEvent } = await import("./services/subscription-lifecycle.js");
       const out = await applyEvent(event, provider.name);
       if (out.duplicate) return res.status(200).json({ ok: true, duplicate: true });
@@ -1043,7 +1049,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.3.5
+║           LinkedIn AI Content Agent  2.3.6
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

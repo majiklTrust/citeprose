@@ -24,5 +24,9 @@ export async function getPaymentsProvider() {
     const { localProvider } = await import("./providers/local.js");
     return localProvider;
   }
+  if (name === "stripe") {
+    const { stripeProvider } = await import("./providers/stripe.js");
+    return stripeProvider;
+  }
   throw new Error(`Unknown payments provider: ${name}`);
 }

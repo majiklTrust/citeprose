@@ -150,6 +150,21 @@
       </div>
     </div>
   </div>
+  <div class="section" id="payments-section">
+    <h2>Payments: Complimentary Entitlements</h2>
+    <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier; revoking suspends it.</p>
+    <div class="row">
+      <select id="comp-tenant"></select>
+      <select id="comp-tier">
+        <option value="individual">individual</option>
+        <option value="business">business</option>
+        <option value="business_premium">business_premium</option>
+      </select>
+      <button class="btn btn-primary" id="comp-grant">Grant Comp</button>
+    </div>
+    <div id="payments-msg" class="hint"></div>
+    <div id="payments-body">Loading...</div>
+  </div>
   <script src="platform-admin.js?v=66.0"></script>
 </body>
 </html>

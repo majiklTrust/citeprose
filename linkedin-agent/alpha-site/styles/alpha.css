@@ -193,13 +193,15 @@
 }
 
 .header-user-info {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  /* 2.4.15: in flow, not absolute. The header is flex with
+     space-between, so brand | user-info | nav share the row and
+     can squeeze but never overlap, at any width. */
   display: flex;
   align-items: center;
   gap: 0.75rem;
   white-space: nowrap;
+  margin: 0 1rem;
+  min-width: 0;
 }
 
 .header-user-info[hidden] {
@@ -489,6 +491,10 @@
 .alpha-banner-text span { color: var(--text-secondary); }
 
 /* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .header-user-info .user-name { display: none; }
+}
 
 @media (max-width: 768px) {
   .site-container { padding: 0 1.25rem; }
@@ -781,4 +787,38 @@
     transition: color 180ms ease;
   }
   .hero-mobile-nav a:hover { color: var(--text-primary); }
+}
+
+
+
+
+/* 2.4.14: real screenshots wear the browser-window chrome the
+   placeholders introduced. Centered, column-capped, theme-framed. */
+.shot-window {
+  max-width: 560px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+.shot-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+.shot-window-bar span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.shot-img {
+  display: block;
+  width: 100%;
+  height: auto;
 }

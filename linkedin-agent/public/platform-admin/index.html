@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- The document itself must revalidate so the browser always sees
        the current ?v= on its subresources. Subresources below are
-       cache-busted by 46.0; this meta keeps the bootstrap
+       cache-busted by 66.0; this meta keeps the bootstrap
        HTML from being served stale by heuristic/CDN caching, without
        depending on the global no-cache toggle in the server. -->
   <meta http-equiv="Cache-Control" content="no-cache">
@@ -150,22 +150,6 @@
       </div>
     </div>
   </div>
-  <div class="section" id="payments-section">
-    <h2>Payments: Complimentary Entitlements</h2>
-    <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier; revoking suspends it.</p>
-    <div class="row">
-      <select id="comp-tenant"></select>
-      <select id="comp-tier">
-        <option value="individual">individual</option>
-        <option value="business">business</option>
-        <option value="business_premium">business_premium</option>
-      </select>
-      <button class="btn btn-primary" id="comp-grant">Grant Comp</button>
-    </div>
-    <div id="payments-msg" class="hint"></div>
-    <div id="payments-body">Loading...</div>
-  </div>
-
-  <script src="platform-admin.js?v=46.1"></script>
+  <script src="platform-admin.js?v=66.0"></script>
 </body>
 </html>

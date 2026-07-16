@@ -26,9 +26,9 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Shared tokens and base styles from the dashboard -->
-  <link rel="stylesheet" href="/app/styles/app.css?v=48.0">
+  <link rel="stylesheet" href="/app/styles/app.css?v=66.0">
   <!-- Marketing-specific components and scoped overrides -->
-  <link rel="stylesheet" href="/styles/alpha.css?v=48.0">
+  <link rel="stylesheet" href="/styles/alpha.css?v=66.0">
 </head>
 <body>
   <div class="ambient-glow" aria-hidden="true"></div>
@@ -48,6 +48,7 @@
       <nav class="site-nav" aria-label="Primary">
         <a class="nav-link" href="#features">Features</a>
         <a class="nav-link" href="#how-it-works">How it Works</a>
+        <a class="nav-link" href="about.html">About</a>
           <a
             class="js-auth-cta btn btn-primary btn-lg"
             href="/auth/login"
@@ -70,7 +71,13 @@
   <main id="main">
     <section class="hero">
       <div class="site-container hero-inner">
-        <p class="hero-eyebrow">Research to published, on your approval</p>
+        <nav class="hero-mobile-nav" aria-label="Sections">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it Works</a>
+          <a href="about.html">About</a>
+        </nav>
+        <p class="hero-eyebrow">Research to published<br/> &rarr;on your approval</p>
+        <p class="hero-footnote">&middot; Invitation only</p>
         <h1 class="hero-title">Your next post is<br>already researched.</h1>
         <p class="hero-lede">
           Market Intelligence watches the topics you choose across sources you
@@ -99,7 +106,6 @@
             Open a reviewed queue of researched drafts instead of an empty editor.
           </li>
         </ul>
-        <p class="hero-footnote">Private alpha &middot; Invitation only</p>
       </div>
     </section>
 
@@ -259,16 +265,12 @@
                   brief a colleague.
                 </p>
                 <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Topic Manager: Add Topic">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Topic Manager: Add Topic</text>
-                </svg>
-                <figcaption>Screenshot to add: the Add Topic form in the Topic Manager with a topic name filled in (file: /assets/screenshots/topics-add.png)<span class="shot-pathline">Click path: Dashboard &gt; Topics &gt; Add Topic</span></figcaption>
-              </figure>
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/topics-add.png?v=66.0" alt="Topic Manager with the Add Topic dialog open, naming a new subject" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Topics &gt; Add Topic</span></figcaption>
+                </figure>
               </div>
             </li>
             <li class="step">
@@ -281,16 +283,12 @@
                   first; it becomes the raw material for your draft.
                 </p>
                 <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Feeds Manager: research gathering from connected sources">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Feeds Manager: research gathering</text>
-                </svg>
-                <figcaption>Screenshot to add: recent items gathered from your connected sources in the Feeds Manager (file: /assets/screenshots/research-gathering.png)<span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
-              </figure>
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/research-gathering.png?v=66.0" alt="Research view showing gathered articles collecting under the chosen topic" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
+                </figure>
               </div>
             </li>
             <li class="step">
@@ -303,16 +301,12 @@
                   it in your review queue.
                 </p>
                 <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Generate with AI: New Post">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Generate with AI: New Post</text>
-                </svg>
-                <figcaption>Screenshot to add: the New Post action generating a draft from gathered research (file: /assets/screenshots/generate-new-post.png)<span class="shot-pathline">Click path: Dashboard &gt; New Post &gt; Generate with AI</span></figcaption>
-              </figure>
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/generate-new-post.png?v=66.0" alt="New Post action generating a drafted LinkedIn post from the gathered research" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; New Post &gt; Generate with AI</span></figcaption>
+                </figure>
               </div>
             </li>
             <li class="step">
@@ -325,16 +319,12 @@
                   research to published, on your approval.
                 </p>
                 <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Review queue: edit and approve">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Review queue: edit and approve</text>
-                </svg>
-                <figcaption>Screenshot to add: a drafted post open in review with edit and approve controls visible (file: /assets/screenshots/draft-review-approve.png)<span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit or Approve</span></figcaption>
-              </figure>
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/draft-review-approve.png?v=66.0" alt="Review queue with a draft open for editing and the approve control visible" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit or Approve</span></figcaption>
+                </figure>
               </div>
             </li>
           </ol>
@@ -467,9 +457,8 @@
     <div class="site-container footer-inner">
       <p class="footer-copy">&copy; 2026 majiklTrust, Market Intelligence, LLC</p>
       <nav class="footer-nav" aria-label="Footer">
+        <a href="about.html">Contact &amp; About</a>
         <a href="privacy-policy.html">Privacy</a>
-        <a href="#">Terms</a>
-        <a href="#">Contact</a>
       </nav>
     </div>
   </footer>

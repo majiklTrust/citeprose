@@ -758,3 +758,27 @@
 @media (max-width: 900px) {
   .featlist-grid { grid-template-columns: 1fr; }
 }
+
+
+/* 2.4.12: on mobile the header section links vanish; this strip
+   restores them inside the hero, above the eyebrow. Desktop never
+   sees it. Brand and Visit Dashboard behavior unchanged. */
+.hero-mobile-nav { display: none; }
+
+@media (max-width: 768px) {
+  .hero-mobile-nav {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .hero-mobile-nav a {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: color 180ms ease;
+  }
+  .hero-mobile-nav a:hover { color: var(--text-primary); }
+}

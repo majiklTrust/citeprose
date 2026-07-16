@@ -26,9 +26,9 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Shared tokens and base styles from the dashboard -->
-  <link rel="stylesheet" href="/app/styles/app.css?v=47.0">
+  <link rel="stylesheet" href="/app/styles/app.css?v=48.0">
   <!-- Marketing-specific components and scoped overrides -->
-  <link rel="stylesheet" href="/styles/alpha.css?v=47.0">
+  <link rel="stylesheet" href="/styles/alpha.css?v=48.0">
 </head>
 <body>
   <div class="ambient-glow" aria-hidden="true"></div>
@@ -48,6 +48,7 @@
       <nav class="site-nav" aria-label="Primary">
         <a class="nav-link" href="#features">Features</a>
         <a class="nav-link" href="#how-it-works">How it Works</a>
+        <a class="nav-link" href="about.html">About</a>
           <a
             class="js-auth-cta btn btn-primary btn-lg"
             href="/auth/login"
@@ -70,6 +71,11 @@
   <main id="main">
     <section class="hero">
       <div class="site-container hero-inner">
+        <nav class="hero-mobile-nav" aria-label="Sections">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it Works</a>
+          <a href="about.html">About</a>
+        </nav>
         <p class="hero-eyebrow">Research to published, on your approval</p>
         <h1 class="hero-title">Your next post is<br>already researched.</h1>
         <p class="hero-lede">
@@ -467,9 +473,8 @@
     <div class="site-container footer-inner">
       <p class="footer-copy">&copy; 2026 majiklTrust, Market Intelligence, LLC</p>
       <nav class="footer-nav" aria-label="Footer">
-        <a href="privacy-policy.html">Privacy</a>
-        <a href="#">Terms</a>
         <a href="about.html">Contact &amp; About</a>
+        <a href="privacy-policy.html">Privacy</a>
       </nav>
     </div>
   </footer>

@@ -1,0 +1,89 @@
+# robots.txt for www.***REMOVED***
+# Scope: hide ONLY the single ghost page from compliant crawlers. The rest of the
+# site stays crawlable and indexable as normal.
+#
+# Place this file at the site root so it is served at https://www.***REMOVED***/robots.txt
+#
+# ============================================================================
+# READ THIS FIRST: path-disclosure tradeoff
+# ============================================================================
+# robots.txt is world-readable. Anyone can open https://www.***REMOVED***/robots.txt
+# and see every path listed below. Scrapers routinely harvest robots.txt to
+# discover "interesting" paths. That means naming your ghost page here publicly
+# advertises its exact URL, which partially works against keeping it secret.
+#
+# Two ways to handle it, pick one:
+#
+#   OPTION A (this file, as requested): name the page path below. Simple, and it
+#   keeps the rest of the site indexable, but it reveals the page path in robots.txt.
+#
+#   OPTION B (leak-free, recommended if the URL must stay secret): do NOT list the
+#   page here at all. Delete the Disallow lines below so this file allows everything,
+#   and rely on the page's own noindex meta tag plus an X-Robots-Tag: noindex header
+#   served on just that one path. Crawlers that fetch the page are told not to index
+#   it, and the secret path never appears in robots.txt. See ghost-mode-server-config.md
+#   for how to scope the X-Robots-Tag header to a single path.
+#
+# ============================================================================
+# Set the real deployed path once, then keep it consistent everywhere.
+# Replace /majikl-stripe-site.html below with the actual path this page is served at.
+# The path is case-sensitive and must start with a leading slash.
+# ============================================================================
+
+# All compliant crawlers and search engines: hide only the one page.
+User-agent: *
+Disallow: /majikl-stripe-site.html
+
+# Explicit records for AI training and answer-engine crawlers.
+# Some of these honor only their own named token, so they are listed separately.
+# Each one is scoped to the same single page; the rest of the site is left allowed.
+
+User-agent: GPTBot
+Disallow: /majikl-stripe-site.html
+
+User-agent: OAI-SearchBot
+Disallow: /majikl-stripe-site.html
+
+User-agent: ChatGPT-User
+Disallow: /majikl-stripe-site.html
+
+User-agent: ClaudeBot
+Disallow: /majikl-stripe-site.html
+
+User-agent: Claude-Web
+Disallow: /majikl-stripe-site.html
+
+User-agent: anthropic-ai
+Disallow: /majikl-stripe-site.html
+
+User-agent: PerplexityBot
+Disallow: /majikl-stripe-site.html
+
+User-agent: Perplexity-User
+Disallow: /majikl-stripe-site.html
+
+User-agent: Google-Extended
+Disallow: /majikl-stripe-site.html
+
+User-agent: Applebot-Extended
+Disallow: /majikl-stripe-site.html
+
+User-agent: CCBot
+Disallow: /majikl-stripe-site.html
+
+User-agent: Bytespider
+Disallow: /majikl-stripe-site.html
+
+User-agent: Amazonbot
+Disallow: /majikl-stripe-site.html
+
+User-agent: meta-externalagent
+Disallow: /majikl-stripe-site.html
+
+User-agent: cohere-ai
+Disallow: /majikl-stripe-site.html
+
+User-agent: Diffbot
+Disallow: /majikl-stripe-site.html
+
+# Note: no sitemap is published on purpose, and this page must never be added to one.

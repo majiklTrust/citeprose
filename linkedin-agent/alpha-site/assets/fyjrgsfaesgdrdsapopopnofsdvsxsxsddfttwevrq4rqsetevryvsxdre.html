@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>majiklTrust Market Intelligence | LinkedIn Content Lifecycle Platform</title>
+<meta name="description" content="majiklTrust Market Intelligence is a B2B SaaS platform that runs the full LinkedIn content lifecycle: market intelligence monitoring, AI content generation, human approval, publishing, analytics, and employee advocacy.">
+<style>
+  :root{
+    --accent:#1f3a5f;
+    --accent-dark:#152a45;
+    --accent-soft:#eaf0f7;
+    --ink:#1a2230;
+    --muted:#54607a;
+    --line:#dde3ec;
+    --bg:#ffffff;
+    --panel:#f7f9fc;
+    --ok:#2e7d54;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.6;
+    font-size:17px;
+  }
+  a{color:var(--accent);}
+  h1,h2,h3{line-height:1.25;color:var(--ink);font-weight:700;}
+  h2{font-size:1.7rem;margin-top:0;}
+  h3{font-size:1.15rem;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+  header.site{
+    position:sticky;top:0;z-index:20;
+    background:rgba(255,255,255,0.97);
+    border-bottom:1px solid var(--line);
+    backdrop-filter:saturate(180%) blur(6px);
+  }
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:1.15rem;color:var(--ink);text-decoration:none;letter-spacing:.2px;}
+  .mark{
+    width:34px;height:34px;border-radius:8px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--accent),#3a6ea5);
+    color:#fff;display:grid;place-items:center;font-weight:800;font-size:.95rem;
+  }
+  nav.main{display:flex;gap:20px;flex-wrap:wrap;}
+  nav.main a{color:var(--muted);text-decoration:none;font-size:.95rem;font-weight:600;}
+  nav.main a:hover{color:var(--accent);}
+  .hero{background:linear-gradient(180deg,var(--accent-soft),#ffffff);padding:64px 0 52px;border-bottom:1px solid var(--line);}
+  .hero .eyebrow{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem;margin-bottom:10px;}
+  .hero h1{font-size:2.5rem;margin:0 0 16px;max-width:20ch;}
+  .hero p.lede{font-size:1.2rem;color:var(--muted);max-width:62ch;margin:0 0 26px;}
+  .cta-row{display:flex;gap:14px;flex-wrap:wrap;}
+  .btn{display:inline-block;padding:12px 22px;border-radius:9px;font-weight:700;text-decoration:none;font-size:1rem;border:1px solid transparent;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-dark);}
+  .btn-ghost{background:#fff;color:var(--accent);border-color:var(--line);}
+  .btn-ghost:hover{border-color:var(--accent);}
+  section.block{padding:56px 0;border-bottom:1px solid var(--line);}
+  section.block .lead{color:var(--muted);max-width:70ch;font-size:1.06rem;}
+  .grid{display:grid;gap:22px;margin-top:30px;}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr);}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;}
+  .card h3{margin:0 0 8px;}
+  .card p{margin:0;color:var(--muted);font-size:.98rem;}
+  .pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:30px;align-items:stretch;}
+  .plan{border:1px solid var(--line);border-radius:14px;padding:24px 20px;display:flex;flex-direction:column;background:#fff;}
+  .plan.featured{border-color:var(--accent);box-shadow:0 6px 24px rgba(31,58,95,.10);}
+  .plan .name{font-weight:800;font-size:1.1rem;margin-bottom:6px;}
+  .plan .price{font-size:1.7rem;font-weight:800;color:var(--accent);line-height:1.1;}
+  .plan .price span{font-size:.9rem;font-weight:600;color:var(--muted);}
+  .plan .cur{font-size:.8rem;color:var(--muted);margin:4px 0 14px;}
+  .plan .desc{color:var(--muted);font-size:.95rem;flex:1 0 auto;}
+  .plan .tag{display:inline-block;align-self:flex-start;background:var(--accent-soft);color:var(--accent);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;margin-bottom:12px;}
+  .policy{max-width:78ch;}
+  .policy p{color:var(--muted);}
+  .policy h3{margin-top:26px;color:var(--ink);}
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px;}
+  .contact-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;}
+  .contact-card .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:4px;}
+  .contact-card .val{font-size:1.05rem;font-weight:600;word-break:break-word;}
+  .contact-card address{font-style:normal;color:var(--ink);font-weight:600;}
+  .note{background:#fff7e6;border:1px solid #f0d79a;border-radius:8px;padding:10px 14px;font-size:.86rem;color:#7a5a12;margin-top:10px;}
+  footer.site{background:var(--accent-dark);color:#cbd6e6;padding:40px 0;}
+  footer.site .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+  footer.site strong{color:#fff;}
+  footer.site a{color:#e6eef8;}
+  footer.site .legal{max-width:52ch;font-size:.92rem;}
+  .skip{position:absolute;left:-9999px;}
+  .skip:focus{position:static;display:inline-block;padding:8px;background:#fff;}
+  @media (max-width:900px){
+    .grid.cols-3{grid-template-columns:1fr;}
+    .pricing-grid{grid-template-columns:1fr 1fr;}
+  }
+  @media (max-width:640px){
+    body{font-size:16px;}
+    .hero h1{font-size:2rem;}
+    .pricing-grid{grid-template-columns:1fr;}
+    .contact-grid{grid-template-columns:1fr;}
+    nav.main{width:100%;gap:14px;}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#services">Skip to main content</a>
+
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="#top"><span class="mark" aria-hidden="true">mT</span>majiklTrust Market Intelligence</a>
+    <nav class="main" aria-label="Primary">
+      <a href="#services">Services</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#refunds">Refunds</a>
+      <a href="#cancellation">Cancellation</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">B2B SaaS for LinkedIn Content Operations</p>
+      <h1>Run your entire LinkedIn content lifecycle in one platform.</h1>
+      <p class="lede">majiklTrust Market Intelligence is a subscription software platform that monitors market intelligence, drafts source-grounded thought-leadership content with AI, routes it through human approval, publishes to LinkedIn, and measures the results. It is built for organizations that want a governed, auditable path from market signal to published post.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#pricing">View plans and pricing</a>
+        <a class="btn btn-ghost" href="#contact">Contact us</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="services">
+    <div class="wrap">
+      <h2>What we do</h2>
+      <p class="lead">majiklTrust Market Intelligence is delivered as a hosted, multi-tenant software service. Each customer works inside an isolated workspace where credentials and data are separated at the database level. There is no physical product and nothing is shipped. Customers pay a recurring subscription for access to the following capabilities.</p>
+
+      <div class="grid cols-3">
+        <div class="card">
+          <h3>Market intelligence monitoring</h3>
+          <p>The platform continuously monitors curated news and RSS sources relevant to your industry, sanitizing and screening incoming content before it is ever used.</p>
+        </div>
+        <div class="card">
+          <h3>AI content generation</h3>
+          <p>It researches topics and drafts LinkedIn posts grounded in cited primary sources, with fidelity checks so that figures in a post match the values in the underlying source.</p>
+        </div>
+        <div class="card">
+          <h3>Human approval workflow</h3>
+          <p>Role-based approval queues for owners, editors, and viewers mean nothing publishes without a person signing off. Every draft, edit, and approval is tracked.</p>
+        </div>
+        <div class="card">
+          <h3>Scheduling and history</h3>
+          <p>A workspace dashboard holds drafts, scheduled posts, and full publishing history, so teams can plan ahead and review everything that has gone out.</p>
+        </div>
+        <div class="card">
+          <h3>LinkedIn publishing</h3>
+          <p>Publish to LinkedIn organization pages and personal profiles from a single dashboard, with a deliberate exactly-once publishing design that avoids duplicate posts.</p>
+        </div>
+        <div class="card">
+          <h3>Analytics</h3>
+          <p>Post performance metrics are pulled back from LinkedIn into a curated analytics view, so you can see how published content performed against your goals.</p>
+        </div>
+        <div class="card">
+          <h3>Employee advocacy</h3>
+          <p>Team members connect their own LinkedIn profiles and receive personalized variants of company content in a self-scoped queue to approve, edit, or decline, with optional opt-in automation.</p>
+        </div>
+        <div class="card">
+          <h3>Organic to paid bridge</h3>
+          <p>High-performing organic posts can be bridged into paid campaigns. The platform never spends autonomously; a person always creates and authorizes any paid campaign.</p>
+        </div>
+        <div class="card">
+          <h3>Security and tenant isolation</h3>
+          <p>Strict multi-tenant isolation, encrypted credentials, and a fail-closed design keep each customer's data, tokens, and content separated and protected.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="pricing">
+    <div class="wrap">
+      <h2>Plans and pricing</h2>
+      <p class="lead">All plans are recurring monthly subscriptions billed in ***REMOVED*** Dollars (USD). Each tier includes everything in the tier below it. Prices shown are per workspace, per month.</p>
+
+      <div class="pricing-grid">
+        <div class="plan">
+          <span class="tag">Individual</span>
+          <div class="price">$250 <span>/ month</span></div>
+          <div class="cur">USD, billed monthly</div>
+          <p class="desc">A dashboard for keeping drafts, scheduling, and publishing history, AI text content generation, and social media posting capabilities.</p>
+        </div>
+        <div class="plan">
+          <span class="tag">Business</span>
+          <div class="price">$1,000 <span>/ month</span></div>
+          <div class="cur">USD, billed monthly</div>
+          <p class="desc">Everything in Individual, plus organizational capabilities added to the dashboard for team-based content operations.</p>
+        </div>
+        <div class="plan featured">
+          <span class="tag">Business Plus</span>
+          <div class="price">$2,500 <span>/ month</span></div>
+          <div class="cur">USD, billed monthly</div>
+          <p class="desc">Everything in Business, plus organizational Analytics and Employee Advocacy capabilities.</p>
+        </div>
+        <div class="plan">
+          <span class="tag">Business Premium</span>
+          <div class="price">$5,000 <span>/ month</span></div>
+          <div class="cur">USD, billed monthly</div>
+          <p class="desc">Everything in Business Plus, plus image and video rendering capabilities.</p>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:24px;">Accepted currency: USD. To start a plan or ask about a custom arrangement, contact us at <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>.</p>
+    </div>
+  </section>
+
+  <section class="block" id="refunds">
+    <div class="wrap policy">
+      <h2>Refund and dispute policy</h2>
+      <p>We want you to be satisfied with majiklTrust Market Intelligence. Because we sell access to a digital software service and not physical goods, the following refund and dispute terms apply.</p>
+
+      <h3>Refund window</h3>
+      <p>You may request a full refund of your most recent subscription payment within 14 days of that charge by emailing <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email address on your account. Approved refunds are returned to the original payment method. After the 14-day window has passed, subscription payments are non-refundable, and you may cancel at any time to stop future renewals as described in the cancellation policy below.</p>
+
+      <h3>How to request a refund</h3>
+      <p>Send your workspace name and the date of the charge to <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>. We will confirm receipt and process eligible refunds promptly.</p>
+
+      <h3>Disputes and chargebacks</h3>
+      <p>If you believe you were charged in error or see a charge you do not recognize, please contact us first at <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> so we can resolve it quickly. We review every dispute in good faith and will correct genuine billing errors. Contacting us directly is usually faster than filing a payment dispute, and it allows us to investigate the specific charge on your account.</p>
+    </div>
+  </section>
+
+  <section class="block" id="cancellation">
+    <div class="wrap policy">
+      <h2>Cancellation policy</h2>
+      <p>majiklTrust Market Intelligence is sold as a recurring monthly subscription. The following terms govern cancellation.</p>
+
+      <h3>Cancel at any time</h3>
+      <p>You may cancel your subscription at any time by emailing <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email address on your account. There is no cancellation fee and no long-term commitment beyond the current billing period.</p>
+
+      <h3>What happens when you cancel</h3>
+      <p>When you cancel, your subscription remains active through the end of the billing period you have already paid for, and it will not renew after that. You keep access to your workspace until the paid period ends. You will not be billed again once the cancellation takes effect. Refunds for the current period, if any, are governed by the refund policy above.</p>
+
+      <h3>Non-renewal</h3>
+      <p>Subscriptions renew automatically each month until you cancel. Cancelling stops the automatic renewal so that no further charges are made to your payment method.</p>
+    </div>
+  </section>
+
+  <section class="block" id="contact">
+    <div class="wrap">
+      <h2>Contact us</h2>
+      <p class="lead">Our team is here to help with sales questions, account support, billing, refunds, and cancellations. Email is the fastest way to reach us.</p>
+
+      <div class="contact-grid">
+        <div class="contact-card">
+          <div class="label">Customer service email</div>
+          <div class="val"><a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a></div>
+        </div>
+        <div class="contact-card">
+          <div class="label">Mailing address</div>
+          <address>
+            majiklTrust Market Intelligence<br/>
+            ***REMOVED***<br/>
+            ***REMOVED***<br/>
+            ***REMOVED***
+          </address>
+        </div>
+        <div class="contact-card">
+          <div class="label">Company on LinkedIn</div>
+          <div class="val"><a href="https://www.linkedin.com/company/112304009/" target="_blank" rel="noopener">linkedin.com/company/112304009</a></div>
+        </div>
+        <div class="contact-card">
+          <div class="label">Founder on LinkedIn</div>
+          <div class="val"><a href="***REMOVED***" target="_blank" rel="noopener">***REMOVED***</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="legal">
+      <strong>majiklTrust Market Intelligence</strong><br/>
+      ***REMOVED***<br/>
+      ***REMOVED***<br/>
+      ***REMOVED***<br/>
+      &copy; 2026 majiklTrust Market Intelligence, LLC. All rights reserved.
+    </div>
+    <div class="legal">
+      Website: <a href="https://www.***REMOVED***" target="_blank" rel="noopener">www.***REMOVED***</a><br/>
+      Support: <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a><br/>
+      A digital software service. No physical goods are sold or shipped.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -8,6 +8,13 @@
 - When performing code analysis expand your view beyond the single threaded use case, to include variants of the same use case for - multiple conditions. This will help find hidden or other edge cases.
 - Be sure to lean on function names and code anchors rather than line numbers alone to mitigate drift.
 
+## APPLICATION ENVIRONMENTS
+
+- The "live" environment is a full-featured hosted on AWS at URL `***REMOVED***`. Static web content stored on S3, served through CloudFront. Use Cloudflare for DNS with CNAME flattening with a canonical redirect to resolve `www.`, `app0.`, and `***REMOVED***` all the same.
+- The "devenv" environment is a full-featured local development, devtest, environment that goes through Auth0 for authentication.
+- The "override" environment is a full-featured local development environment that has `DEV_BYPASS_ORIGINS` and `DEV_BYPASS_SUB` set.
+- The "alpha" environment is a full-featured hosted on AWS at URL `***REMOVED***`. Static web content stored on S3, served through CloudFront.
+
 ## MANDATORY AI "SOFT SKILLS"
 
 - Do not over explain your reasoning.
@@ -17,6 +24,7 @@
 ## PROJECT TECHNIAL
 
 - The is a webapp is a ReactJS UX and Node.js tiered routing, service, and other software design layers. The persisteny backend is a PostgreSQL OLTP database.
+- The data layer is a Postgresql OLTP database that is local to the application server in all environments.
 - Scripts (`.js`/`.css` and web-based code files) have a target legth of 600 lines. Use multiple files instead of limiting functionality. Always identify, then communicate downstream impacts plus adjacent opportunities to consolidate code file before splitting an oversided file.
 - I own the versioning strategy. You are responsible for delivering versioned `.zip` files. Version numbering will folllow major/minor/patch numbering, e.g., `0.0.0`. Every delivery should increment the third integer by `1`, e.g., if the version is `0.0.0`, then next version is `0.0.1` and the archive will be named `LinkedIn_Agent-0.0.1.zip`, then `LinkedIn_Agent-0.0.2.zip`.
 - Keep the project directory structure in the `.zip` archive, include only changed files, and the `.zip` archive will extract to path: `../linkedin-agent/`.
@@ -34,12 +42,6 @@
 - Offer an alternative if a more architecturally principled, resilient, or if a change would result in a more simple end-user workflow or better human end-user experience. Justify the change using succint and targetted language for the reasons why.
 - 600-line file cap on new files. Keep architecture best practices for distributed computing a priority.
 - Template files (`src_templates/`, `public_templates/`) are the source of truth; never edit generated files directly
- 
- 
-## LIVE APPLICATION
-
-- The data layer is a Postgresql OLTP database that is local to the application server.
-- The live URL is `***REMOVED***`.
 
 ## TDD FRAMEWORK
 

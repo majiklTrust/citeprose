@@ -198,6 +198,7 @@ export function getCatchallFeedList() {
   return CATCHALL_FEEDS.map(f => ({
     name: f.name,
     url: f.url,
-    tier: f.tier
+    tier: f.tier,
+    refresh: f.refresh
   }));
 }

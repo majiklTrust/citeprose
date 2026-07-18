@@ -28,13 +28,14 @@
 import Parser from "rss-parser";
 import { isSafeUrl } from "./security.js";
 import { getMaxAgeDays } from "../config/research.js";
+import { getFeedValidationTimeoutMs } from "../config/feeds.js";
 import { platformLog } from "./platform-log.js";
 
-const parser = new Parser({ timeout: 15000 });
+const parser = new Parser({ timeout: getFeedValidationTimeoutMs() });
 
 // ── Configuration ────────────────────────────────────────────
 
-const VALIDATION_TIMEOUT_MS = 15000;
+const VALIDATION_TIMEOUT_MS = getFeedValidationTimeoutMs();
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 const XML_CONTENT_TYPES = new Set([

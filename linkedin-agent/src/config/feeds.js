@@ -2,6 +2,22 @@
 // RSS Feed Configuration — Curated sources for each topic area
 // ═══════════════════════════════════════════════════════════════
 
+// Feed fetch timeout getters. Env-overridable, sane defaults,
+// never NaN. Discovery covers the feeds-api RSS probe; validation
+// covers the feed-validator health check.
+function timeoutFromEnv(name, fallback) {
+  const n = parseInt(process.env[name] || String(fallback), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export function getFeedDiscoveryTimeoutMs() {
+  return timeoutFromEnv("FEED_DISCOVERY_TIMEOUT_MS", 10000);
+}
+
+export function getFeedValidationTimeoutMs() {
+  return timeoutFromEnv("FEED_VALIDATION_TIMEOUT_MS", 15000);
+}
+
 export const FEEDS = [
   // ── Cybersecurity Incidents & Threat Intel ─────────────────
   {

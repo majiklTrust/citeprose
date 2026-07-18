@@ -31,6 +31,37 @@ const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 // alternative endpoint.
 const ANTHROPIC_API_URL = "https://api.anthropic.com";
 
+// Response-size caps for the AI calls made by the feed discovery
+// and topic assistance surfaces, and the page size for the
+// platform-admin live model listing. Env-overridable with the
+// hardcoded floor as the zero-configuration default, matching
+// the posts-window.js pattern: invalid or unset input always
+// falls back to a sane value, never NaN.
+function intFromEnv(name, fallback) {
+  const n = parseInt(process.env[name] || String(fallback), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export function getFeedDiscoveryMaxTokens() {
+  return intFromEnv("FEED_DISCOVERY_MAX_TOKENS", 2000);
+}
+
+export function getFeedDiscoveryRetryMaxTokens() {
+  return intFromEnv("FEED_DISCOVERY_RETRY_MAX_TOKENS", 1500);
+}
+
+export function getTopicSearchTemplateMaxTokens() {
+  return intFromEnv("TOPIC_SEARCH_TEMPLATE_MAX_TOKENS", 600);
+}
+
+export function getTopicSuggestionMaxTokens() {
+  return intFromEnv("TOPIC_SUGGESTION_MAX_TOKENS", 1500);
+}
+
+export function getModelListingPageLimit() {
+  return intFromEnv("MODEL_LISTING_PAGE_LIMIT", 100);
+}
+
 /**
  * Returns the Anthropic model string for the current tenant.
  *

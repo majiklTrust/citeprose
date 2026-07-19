@@ -16,7 +16,9 @@
 // owner-set, default 0). The cycle window is the tenant's current
 // subscription period_start; with no subscription row it falls back
 // to a rolling window (PAYMENTS_CYCLE_DAYS, default 30). Spend is
-// the sum of images.cost_estimate_usd in that window, RLS-scoped to
+// the per-image charge in that window, RLS-scoped to the tenant:
+// the reconciled actual cost when known, else the pre-spend the gate
+// charged (2.5.21: a zero actual never counts as free spend), summed
 // the tenant. All DB reads use the ambient tenant client, so the
 // gate MUST run inside withTenant (the route guarantees that).
 // ═══════════════════════════════════════════════════════════════
@@ -64,11 +66,11 @@ async function defaultGetCycleSpendUsd(env = process.env) {
   const start = sub.rows.length > 0 ? sub.rows[0].period_start : null;
   let r;
   if (start) {
-    r = await c.query("SELECT COALESCE(SUM(cost_estimate_usd), 0) AS spent FROM images WHERE created_at >= $1", [start]);
+    r = await c.query("SELECT COALESCE(SUM(COALESCE(NULLIF(cost_estimate_usd, 0), pre_spend_estimate_usd, 0)), 0) AS spent FROM images WHERE created_at >= $1", [start]);
   } else {
     // No subscription row: rolling fallback window.
     r = await c.query(
-      "SELECT COALESCE(SUM(cost_estimate_usd), 0) AS spent FROM images WHERE created_at >= now() - make_interval(days => $1)",
+      "SELECT COALESCE(SUM(COALESCE(NULLIF(cost_estimate_usd, 0), pre_spend_estimate_usd, 0)), 0) AS spent FROM images WHERE created_at >= now() - make_interval(days => $1)",
       [cycleDays(env)]
     );
   }

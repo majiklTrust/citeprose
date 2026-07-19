@@ -168,9 +168,32 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
   try {
     // Lens and aspect validate fail-closed BEFORE any tenant work or
     // spend: a typo is a 400, never a silent unstyled render.
+    const VALID_SOURCE_KINDS = new Set(["post", "topic", "blank", "brief"]);
+    if (b.sourceKind != null && !VALID_SOURCE_KINDS.has(b.sourceKind)) {
+      return res.status(400).json({ error: "Unknown sourceKind", code: "INVALID_INPUT" });
+    }
     const lens = b.lensId != null ? requireLens(b.lensId) : null;
     const preset = b.aspect != null ? resolveAspectPreset(b.aspect) : null;
     const out = await withTenant(req.tenant.id, async () => {
+      // Grounding provenance, bigint-safe and fail-closed (2.5.21):
+      // pg serializes BIGINT ids as strings, so strict integer checks
+      // silently dropped the panel's post id and shipped source_kind
+      // 'post' with a null id. toIntOrNull coerces; a post-kind
+      // request without a resolvable, tenant-visible post refuses
+      // BEFORE any spend.
+      let sourcePostId = toIntOrNull(b.sourcePostId);
+      let sourceTopicId = toIntOrNull(b.sourceTopicId);
+      if (b.sourceKind === "post") {
+        if (!sourcePostId) {
+          throw imageError(IMAGE_ERROR_CODES.INVALID_INPUT, "sourceKind post requires a valid sourcePostId");
+        }
+        const post = await getPost(sourcePostId);   // RLS: not this tenant's means not found
+        if (!post) {
+          throw imageError(IMAGE_ERROR_CODES.POST_NOT_FOUND, "Source post not found in this workspace", { sourcePostId });
+        }
+        if (sourceTopicId === null) sourceTopicId = toIntOrNull(post.topic_num_id);
+      }
+
       const palette = await getAgentState("image_brand_palette");
       const composed = applyLens(b.prompt, {
         lens,
@@ -189,8 +212,8 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
           lensId: composed.lensId,
           grounding: {
             sourceKind: b.sourceKind,
-            sourcePostId: Number.isInteger(b.sourcePostId) ? b.sourcePostId : null,
-            sourceTopicId: Number.isInteger(b.sourceTopicId) ? b.sourceTopicId : null
+            sourcePostId,
+            sourceTopicId
           },
           purpose: "studio_generate"
         },
@@ -203,8 +226,8 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
         model: rendered.model,
         prompt: composed.prompt,
         sourceKind: b.sourceKind,
-        sourcePostId: Number.isInteger(b.sourcePostId) ? b.sourcePostId : null,
-        sourceTopicId: Number.isInteger(b.sourceTopicId) ? b.sourceTopicId : null,
+        sourcePostId,
+        sourceTopicId,
         humanName: typeof b.humanName === "string" ? b.humanName : null,
         lensId: composed.lensId,
         aspect: preset ? preset.id : null,

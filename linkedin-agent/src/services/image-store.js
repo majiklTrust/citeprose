@@ -122,8 +122,19 @@ export async function storeImage(input, deps = {}) {
     throw storeError(STORE_ERROR_CODES.INVALID_INPUT, "storeImage requires createdBy (the acting user)");
   }
   // Validate input BEFORE any DB work: bad input fails fast with no round-trip.
-  const bytes = decodeBase64(input.image.b64);
+  let bytes = decodeBase64(input.image.b64);
   const mime = typeof input.image.mime === "string" ? input.image.mime : "image/png";
+  // Strip embedded provenance metadata (C2PA, XMP, EXIF) before the
+  // bytes are hashed or stored (2.5.21). Availability wins on a parse
+  // failure: a paid render is kept with a loud warning rather than
+  // lost, and the warning is observable in the platform log.
+  try {
+    const { stripImageMetadata } = await import("../image/strip-metadata.js");
+    bytes = stripImageMetadata(bytes, mime).bytes;
+  } catch (err) {
+    const { platformLog } = await import("./platform-log.js");
+    platformLog("warn", "image_metadata_strip_failed", { error: err.message, mime });
+  }
   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
 
   const c = await ambientClient(deps);

@@ -130,11 +130,15 @@
       .then(function (res) { if (!res.ok) throw res; return res.json(); })
       .then(function (m) {
         var parts = [];
-        var src = m.sourceKind === 'post' ? ('Grounded in post #' + m.sourcePostId)
+        // A typed-prompt image is branded as the Studio's own work,
+        // with a superscript copyright mark. Grounded images keep
+        // their factual origin line.
+        var branded = m.sourceKind !== 'post' && m.sourceKind !== 'brief' && m.sourceKind !== 'topic';
+        var src = m.sourceKind === 'post' ? (m.sourcePostId ? ('Grounded in post #' + m.sourcePostId) : 'Grounded in a post')
           : m.sourceKind === 'brief' ? 'From an edited brief'
           : m.sourceKind === 'topic' ? ('From topic #' + m.sourceTopicId)
-          : 'From a free prompt';
-        parts.push(src + '.');
+          : null;
+        if (src) parts.push(src + '.');
         if (m.lensId) parts.push('Lens: ' + m.lensId + '.');
         if (m.aspect) parts.push('Shape: ' + m.aspect + '.');
         parts.push('Rendered by ' + m.provider + ' / ' + m.model + '.');
@@ -146,7 +150,18 @@
           if (m.outputTokens) cost += ', ' + m.outputTokens + ' output tokens';
           parts.push(cost + '.');
         }
-        $('st-meta').textContent = parts.join(' ');
+        var el = $('st-meta');
+        el.textContent = '';
+        if (branded) {
+          // DOM-built, never innerHTML: no fetched value can become markup.
+          el.appendChild(document.createTextNode('From majiklTrust'));
+          var sup = document.createElement('sup');
+          sup.textContent = '\u00A9';
+          el.appendChild(sup);
+          el.appendChild(document.createTextNode(', Image Studio. ' + parts.join(' ')));
+        } else {
+          el.textContent = parts.join(' ');
+        }
       })
       .catch(function () { /* provenance is additive; the image still shows */ });
   }

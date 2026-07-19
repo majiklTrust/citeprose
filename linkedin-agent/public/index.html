@@ -492,7 +492,7 @@
           const res = await fetch(API + '/api/image-studio/generate', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id })
+            body: JSON.stringify({ prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'square' })
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(messageFor(res.status, data));
@@ -1185,7 +1185,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.20</div>
+                <div className="header-subtitle">v2.5.22</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1217,7 +1217,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.20</div>
+                <div className="header-subtitle">v2.5.22</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1269,7 +1269,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.5.20 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.22 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

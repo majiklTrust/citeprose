@@ -9,8 +9,7 @@
 // Gate order at the router boundary:
 //   requireAuth        -> a session is required
 //   resolveTenant      -> req.tenant is set for RLS
-//   requireEntitlement("image_studio") -> business_premium today;
-//   business_plus inclusion is an open ruling (config/entitlements.js)
+//   requireEntitlement("image_studio") -> business_premium capability
 //   suspendedWriteGuard() -> mutating verbs are read-only when the
 //                         subscription is not in good standing
 //   Cache-Control no-store -> tenant image bytes and metadata are
@@ -113,7 +112,23 @@ function toIntOrNull(v) {
 // only, so it survives a suspended (read-only) subscription.
 router.get("/budget", async (req, res) => {
   try {
-    const status = await withTenant(req.tenant.id, () => getBudgetStatus());
+    const status = await withTenant(req.tenant.id, async () => {
+      const base = await getBudgetStatus();
+      // Provider-onboarding honesty (Phase 5): the page can tell the
+      // person WHY generation is not ready instead of failing later.
+      // Cheap reads; never throws the probe.
+      let provisioned = false;
+      let keyed = false;
+      try {
+        const provider = await getAgentState("image_provider");
+        provisioned = typeof provider === "string" && provider.trim() !== "";
+        if (provisioned) {
+          const { hasLlmApiKey } = await import("../tenant/credential-store.js");
+          keyed = await hasLlmApiKey(provider.trim());
+        }
+      } catch { /* readiness stays false; the render gates enforce regardless */ }
+      return { ...base, provisioned, keyed };
+    });
     return res.status(200).json(status);
   } catch (err) {
     platformLog("warn", "image_budget_status_failed", { code: err && err.code });
@@ -218,6 +233,44 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
 
 // GET /api/image-studio/:id/serve - stream the stored bytes. RLS
 // scopes the read to the tenant, so a cross-tenant id is a 404.
+// GET /api/image-studio/:id/meta - provenance and cost for one image
+// (Phase 5 surfacing). Everything here is the tenant's own record:
+// where the image came from (post, brief, topic, blank), the lens and
+// shape that styled it, the vendor and model that rendered it, the
+// human-approved brief, and the money: the pre-spend the budget gate
+// charged, the reconciled actual cost, and the token usage behind it.
+router.get("/:id/meta", async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid image id", code: "INVALID_INPUT" });
+  try {
+    const meta = await withTenant(req.tenant.id, () => getImageMeta(id));
+    return res.status(200).json({
+      id: meta.id,
+      sourceKind: meta.source_kind,
+      sourcePostId: meta.source_post_id,
+      sourceTopicId: meta.source_topic_id,
+      humanName: meta.human_name,
+      brief: meta.brief,
+      lensId: meta.lens_id,
+      aspect: meta.aspect,
+      provider: meta.provider,
+      model: meta.model,
+      mime: meta.mime,
+      byteSize: meta.byte_size,
+      storageBackend: meta.storage_backend,
+      verifiedMetricRef: meta.verified_metric_ref,
+      costEstimateUsd: meta.cost_estimate_usd,
+      preSpendEstimateUsd: meta.pre_spend_estimate_usd,
+      inputTokens: meta.input_tokens,
+      outputTokens: meta.output_tokens,
+      createdBy: meta.created_by,
+      createdAt: meta.created_at
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
 router.get("/:id/serve", async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid image id", code: "INVALID_INPUT" });

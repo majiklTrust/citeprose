@@ -52,6 +52,20 @@
   // ── Budget line ─────────────────────────────────────────────
   function renderBudget(status) {
     var el = $('st-budget');
+    var note = $('st-ready-note');
+    if (note) {
+      // Provider-onboarding honesty: say WHY generation is not ready
+      // instead of letting the button fail later.
+      if (status && status.provisioned === false) {
+        note.textContent = 'Image generation is not ready: an owner needs to choose an Image Model on the Manage page.';
+        note.style.display = '';
+      } else if (status && status.provisioned === true && status.keyed === false) {
+        note.textContent = 'Image generation is not ready: no API key is stored for the selected image vendor. An owner can add one on the Manage page (AI Model Provider).';
+        note.style.display = '';
+      } else {
+        note.style.display = 'none';
+      }
+    }
     if (!status || !status.enabled) {
       el.textContent = 'Image budget: not set (generation disabled). An owner can set it in Admin.';
       return;
@@ -110,6 +124,33 @@
       .catch(function () { showMessage('Failed to load the library', 'error'); });
   }
 
+  // ── Provenance + cost (Phase 5 surfacing) ───────────────────
+  function loadProvenance(id) {
+    fetch(API + '/api/image-studio/' + id + '/meta', { credentials: 'include' })
+      .then(function (res) { if (!res.ok) throw res; return res.json(); })
+      .then(function (m) {
+        var parts = [];
+        var src = m.sourceKind === 'post' ? ('Grounded in post #' + m.sourcePostId)
+          : m.sourceKind === 'brief' ? 'From an edited brief'
+          : m.sourceKind === 'topic' ? ('From topic #' + m.sourceTopicId)
+          : 'From a free prompt';
+        parts.push(src + '.');
+        if (m.lensId) parts.push('Lens: ' + m.lensId + '.');
+        if (m.aspect) parts.push('Shape: ' + m.aspect + '.');
+        parts.push('Rendered by ' + m.provider + ' / ' + m.model + '.');
+        if (m.costEstimateUsd !== null && m.costEstimateUsd !== undefined) {
+          var cost = 'Cost: $' + Number(m.costEstimateUsd).toFixed(4);
+          if (m.preSpendEstimateUsd !== null && m.preSpendEstimateUsd !== undefined) {
+            cost += ' actual, $' + Number(m.preSpendEstimateUsd).toFixed(4) + ' charged at the gate';
+          }
+          if (m.outputTokens) cost += ', ' + m.outputTokens + ' output tokens';
+          parts.push(cost + '.');
+        }
+        $('st-meta').textContent = parts.join(' ');
+      })
+      .catch(function () { /* provenance is additive; the image still shows */ });
+  }
+
   // ── Selection + result panel ────────────────────────────────
   function select(id, meta) {
     selectedId = id;
@@ -118,9 +159,8 @@
     var url = API + '/api/image-studio/' + id + '/serve';
     $('st-preview').src = url;
     $('st-download').href = url;
-    $('st-meta').textContent = meta
-      ? ((meta.lens_id ? ('Lens: ' + meta.lens_id + '. ') : '') + (meta.aspect ? ('Shape: ' + meta.aspect + '.') : ''))
-      : '';
+    $('st-meta').textContent = '';
+    loadProvenance(id);
     var nodes = document.querySelectorAll('.st-lib-item');
     for (var i = 0; i < nodes.length; i++) nodes[i].classList.remove('selected');
     loadLibrary();

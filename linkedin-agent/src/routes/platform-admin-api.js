@@ -41,9 +41,6 @@ import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
 import { storePromptGenre } from "../services/prompt-vault.js";
-import { getProvider, resolveBaseUrl } from "../llm/registry.js";
-import { getModelListingPageLimit } from "../config/ai.js";
-import { getCatchallFeedList } from "../tenant/seed-defaults.js";
 
 const router = Router();
 
@@ -121,17 +118,6 @@ function setCachedModels(optgroups) {
 // To add a query, add one object. The frontend picks it up
 // automatically from GET /queries.
 
-// The reseed card's row set is generated from the tenant seeding
-// module so the catchall feed list has exactly one source of
-// truth. Values are trusted module constants, not user input; the
-// only bind parameter remains the tenant UUID.
-function buildReseedCatchallSql() {
-  const rows = getCatchallFeedList()
-    .map((f) => `($1, '${f.url}', '${f.name.replace(/'/g, "''")}', '${f.tier}', ${f.refresh}, true)`)
-    .join(",\n            ");
-  return `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES\n            ${rows}\n          ON CONFLICT (tenant_id, url) DO NOTHING`;
-}
-
 const QUERY_REGISTRY = {
 
   // ── Operational self-awareness (2.4.1) ──────────────────────
@@ -188,6 +174,38 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "image-studio-activity": {
+    label: "Image Studio Activity",
+    description: "Recent Image Studio events across all tenants, newest first: renders, refinements, attachments, budget refusals, storage switches.",
+    capability: "Watch the image pipeline operate end to end.",
+    sql: `SELECT created_at, tenant_id, level, event, detail
+          FROM platform_log WHERE event LIKE 'image\\_%'
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "image-cost-report": {
+    label: "Image Cost Report (Estimate v. Actual)",
+    description: "Per tenant and model over the window: renders, images, the pre-spend the budget gate charged, and the reconciled actual cost from token usage.",
+    capability: "Reconcile what the gate charged against what the vendor billed.",
+    sql: `SELECT tenant_id, detail->>'model' AS model,
+                 COUNT(*) AS renders,
+                 SUM((detail->>'imageCount')::int) AS images,
+                 ROUND(SUM((detail->>'preSpendUsd')::numeric), 4) AS pre_spend_usd,
+                 ROUND(SUM((detail->>'costEstimateUsd')::numeric), 4) AS actual_cost_usd,
+                 SUM((detail->'usage'->>'outputTokens')::bigint) AS output_tokens
+          FROM platform_log
+          WHERE event = 'image_response_orchestrated'
+            AND created_at >= now() - ($1 || ' days')::interval
+          GROUP BY tenant_id, detail->>'model'
+          ORDER BY actual_cost_usd DESC NULLS LAST LIMIT 200`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
   "payments-audit": {
     label: "Payments Audit Trail",
     description: "Lifecycle transitions and refusals from payment_events.",
@@ -376,7 +394,18 @@ const QUERY_REGISTRY = {
     label: "Reseed Catchall Feeds",
     description: "Re-inserts default catchall feeds for a tenant. Idempotent — skips existing URLs.",
     capability: "Restore the default catchall feed set for a tenant without touching existing feeds.",
-    sql: buildReseedCatchallSql(),
+    sql: `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES
+            ($1, 'https://www.technologyreview.com/feed/', 'MIT Technology Review', 'primary', 240, true),
+            ($1, 'https://www.wired.com/feed/rss', 'Wired', 'secondary', 120, true),
+            ($1, 'https://feeds.arstechnica.com/arstechnica/index', 'Ars Technica', 'primary', 120, true),
+            ($1, 'https://www.theverge.com/rss/index.xml', 'The Verge', 'secondary', 120, true),
+            ($1, 'https://www.zdnet.com/news/rss.xml', 'ZDNet', 'secondary', 120, true),
+            ($1, 'https://www.fastcompany.com/latest/rss', 'Fast Company', 'secondary', 180, true),
+            ($1, 'https://feeds.bbci.co.uk/news/technology/rss.xml', 'BBC Technology', 'primary', 180, true),
+            ($1, 'https://feeds.npr.org/1019/rss.xml', 'NPR Technology', 'primary', 240, true),
+            ($1, 'https://www.nature.com/nature.rss', 'Nature News', 'primary', 360, true),
+            ($1, 'https://www.statnews.com/feed/', 'STAT News', 'primary', 240, true)
+          ON CONFLICT (tenant_id, url) DO NOTHING`,
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: false
@@ -833,13 +862,7 @@ export default function createPlatformAdminRoutes() {
     }
 
     try {
-      // Vendor URL comes from the LLM registry profile, the single
-      // sanctioned home for provider endpoints; the page limit is a
-      // config getter. No vendor literals in the route layer.
-      const anthropicProfile = getProvider("anthropic");
-      const modelsUrl = resolveBaseUrl(anthropicProfile, process.env)
-        + anthropicProfile.modelsPath + `?limit=${getModelListingPageLimit()}`;
-      const resp = await fetch(modelsUrl, {
+      const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01"

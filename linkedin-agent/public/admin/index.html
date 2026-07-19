@@ -90,6 +90,25 @@
       </div>
 
       <div class="section">
+        <h2>Image Model</h2>
+        <p class="ai-hint">The vendor and model that render images for this workspace. The selection is validated against the image registry before it is saved.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-model-provider">Image provider</label>
+            <select id="img-model-provider"></select>
+          </div>
+          <div>
+            <label for="img-model-select">Image model</label>
+            <select id="img-model-select"></select>
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-model-save-btn">Save</button>
+          </div>
+          <div id="img-model-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>Image Render Budget</h2>
         <p class="ai-hint">Set the maximum you will spend on AI image generation per billing cycle. Generation is denied once the cycle spend reaches this cap, and a budget of 0 disables image generation entirely.</p>
         <div class="ai-form">

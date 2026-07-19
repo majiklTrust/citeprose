@@ -480,6 +480,82 @@
       });
   }
 
+  // ── Image model selection ───────────────────────────────────
+
+  var _imgModelCatalog = [];
+
+  function renderImageModelOptions(providerId, selectedModel) {
+    var entry = null;
+    for (var i = 0; i < _imgModelCatalog.length; i++) {
+      if (_imgModelCatalog[i].id === providerId) { entry = _imgModelCatalog[i]; break; }
+    }
+    var sel = $('img-model-select');
+    sel.innerHTML = '';
+    ((entry && entry.models) || []).forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.label || m.id;
+      if (selectedModel && selectedModel === m.id) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+
+  function loadImageModel() {
+    fetch(API + '/api/admin/image-model', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the image model selection');
+        return res.json();
+      })
+      .then(function (data) {
+        _imgModelCatalog = data.providers || [];
+        var current = data.current || {};
+        var fallback = data.registryDefault || {};
+        var provider = current.provider || fallback.provider || '';
+        var psel = $('img-model-provider');
+        psel.innerHTML = '';
+        _imgModelCatalog.forEach(function (p) {
+          var o = document.createElement('option');
+          o.value = p.id;
+          o.textContent = p.label || p.id;
+          if (p.id === provider) o.selected = true;
+          psel.appendChild(o);
+        });
+        renderImageModelOptions(psel.value, current.model || fallback.model);
+        $('img-model-current').textContent = current.provider
+          ? ('Current: ' + current.provider + ' / ' + (current.model || '(default)'))
+          : 'Current: not configured yet (image generation refuses until saved)';
+      })
+      .catch(function () {
+        $('img-model-current').innerHTML = '<span class="msg msg-error">Failed to load the image model selection</span>';
+      });
+  }
+
+  function saveImageModel() {
+    var provider = $('img-model-provider').value;
+    var model = $('img-model-select').value;
+    $('img-model-save-btn').disabled = true;
+    $('img-model-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-model', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider, model: model })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image model saved', 'success');
+        $('img-model-current').textContent = 'Current: ' + data.provider + ' / ' + data.model;
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-model-save-btn').disabled = false;
+        $('img-model-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Image storage backend ───────────────────────────────────
 
   function renderImageStorage(backend) {
@@ -698,6 +774,7 @@
     loadImageBudget();
     loadImagePalette();
     loadImageStorage();
+    loadImageModel();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -720,6 +797,8 @@
     $('img-budget-save-btn').addEventListener('click', saveImageBudget);
     $('img-palette-save-btn').addEventListener('click', saveImagePalette);
     $('img-storage-save-btn').addEventListener('click', saveImageStorage);
+    $('img-model-save-btn').addEventListener('click', saveImageModel);
+    $('img-model-provider').addEventListener('change', function () { renderImageModelOptions(this.value, null); });
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

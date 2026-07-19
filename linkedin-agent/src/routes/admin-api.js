@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
+import { listProviders, listModels, getImageModelProfile, defaultModelId } from "../image/registry.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -382,6 +383,55 @@ router.put("/image-storage", async (req, res) => {
   } catch (err) {
     platformLog("error", "image_storage_set_failed", { error: err.message });
     res.status(500).json({ error: "Failed to set the image storage backend" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Image model selection (owner chain). The write path 40.2 always
+// anticipated: the selection is validated against the application
+// image registry BEFORE it is written, closing the NOT_PROVISIONED
+// dead end where registered defaults were unread and no surface
+// could set the keys. The reader stays fail-closed by design:
+// provisioning is an explicit owner act, never a silent default.
+// ══════════════════════════════════════════════════════════════
+router.get("/image-model", async (req, res) => {
+  try {
+    const providers = listProviders(process.env).map((p) => ({
+      id: p.id, label: p.label,
+      models: listModels(p.id)
+    }));
+    const current = await withTenant(req.tenant.id, async () => ({
+      provider: (await getAgentState("image_provider")) || null,
+      model: (await getAgentState("image_model")) || null
+    }));
+    res.json({ providers, current, registryDefault: { provider: "openai", model: defaultModelId("openai") } });
+  } catch (err) {
+    platformLog("error", "image_model_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the image model selection" });
+  }
+});
+
+router.put("/image-model", async (req, res) => {
+  const provider = (req.body || {}).provider;
+  const model = (req.body || {}).model;
+  if (typeof provider !== "string" || provider === "" || typeof model !== "string" || model === "") {
+    return res.status(400).json({ error: "Provider and model are required." });
+  }
+  try {
+    getImageModelProfile(provider, model, process.env);   // registry validation, fail-closed
+  } catch {
+    return res.status(400).json({ error: "The selected provider or model is not recognized by the image registry." });
+  }
+  try {
+    await withTenant(req.tenant.id, async () => {
+      await setAgentState("image_provider", provider);
+      await setAgentState("image_model", model);
+    });
+    platformLog("info", "image_model_set", { provider, model });
+    res.json({ provider, model });
+  } catch (err) {
+    platformLog("error", "image_model_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to save the image model selection" });
   }
 });
 

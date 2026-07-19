@@ -205,3 +205,39 @@ export async function deleteImage(imageId, deps = {}) {
   const r = await c.query("DELETE FROM images WHERE id = $1 RETURNING id", [imageId]);
   return { deleted: r.rows.length > 0, id: r.rows.length > 0 ? r.rows[0].id : null };
 }
+
+// ── Tenant-shared library (Phase 4) ────────────────────────────
+// Metadata-only listing of the tenant's stored images, newest first.
+// RLS scopes rows to the ambient tenant; only status = 'stored' rows
+// appear (pending and failed rows are pipeline internals, not library
+// content). Bytes are never returned here; the serve endpoint streams
+// them. Limits are clamped defensively so a hostile limit or offset
+// can shape the page but never the load.
+const LIBRARY_MAX_LIMIT = 50;
+const LIBRARY_DEFAULT_LIMIT = 20;
+const LIBRARY_MAX_OFFSET = 100000;
+
+function clampInt(v, min, max, fallback) {
+  let n = null;
+  if (typeof v === "number" && Number.isInteger(v)) n = v;
+  else if (typeof v === "string" && /^\d+$/.test(v.trim())) n = parseInt(v.trim(), 10);
+  if (n === null || n < min) return fallback;
+  return n > max ? max : n;
+}
+
+export async function listImages(opts = {}, deps = {}) {
+  const c = await ambientClient(deps);
+  const limit = clampInt(opts.limit, 1, LIBRARY_MAX_LIMIT, LIBRARY_DEFAULT_LIMIT);
+  const offset = clampInt(opts.offset, 0, LIBRARY_MAX_OFFSET, 0);
+  const r = await c.query(
+    `SELECT id, source_kind, source_post_id, source_topic_id, human_name, lens_id,
+            provider, model, aspect, width, height, mime, byte_size, storage_backend,
+            status, cost_estimate_usd, created_by, created_at
+     FROM images
+     WHERE status = 'stored'
+     ORDER BY created_at DESC, id DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  return r.rows;
+}

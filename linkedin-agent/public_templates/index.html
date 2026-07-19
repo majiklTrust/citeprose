@@ -71,6 +71,10 @@
     .image-studio-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; }
     .image-studio-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
     .image-studio-preview { display: block; max-width: 100%; margin-top: 0.6rem; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .image-studio-lib { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+    .image-studio-lib-item { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 2px solid #e2e8f0; cursor: pointer; }
+    .image-studio-lib-item.selected { border-color: #1e40af; }
+    .image-studio-lib-note { font-size: 0.78rem; color: #64748b; }
   </style>
 
   <script type="text/babel">
@@ -461,6 +465,9 @@
       const [imageId, setImageId] = useState(null);
       const [attached, setAttached] = useState(false);
       const [error, setError] = useState(null);
+      const [libOpen, setLibOpen] = useState(false);
+      const [library, setLibrary] = useState(null);
+      const [libError, setLibError] = useState(null);
 
       useEffect(() => {
         setImageId(null); setAttached(false); setError(null);
@@ -510,6 +517,30 @@
         finally { setBusy(false); }
       }
 
+      // From Library: pick an already-stored tenant image. Selecting an
+      // item feeds the SAME imageId the preview and attach flow already
+      // use, so there is one attach path, not two that can drift.
+      async function toggleLibrary() {
+        const opening = !libOpen;
+        setLibOpen(opening);
+        if (opening && library === null) {
+          try {
+            const res = await fetch(API + '/api/image-studio/library?limit=12', { credentials: 'include' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(messageFor(res.status, data));
+            setLibrary(data.images || []);
+          } catch (e) {
+            setLibError((e && e.message) || 'Library failed to load.');
+            setLibrary([]);
+          }
+        }
+      }
+      function selectFromLibrary(item) {
+        setImageId(item.id);
+        setAttached(false);
+        setError(null);
+      }
+
       return (
         <div className="image-studio-panel">
           <div className="image-studio-head">Generate with AI</div>
@@ -521,6 +552,9 @@
               disabled={busy || !prompt.trim()} onClick={generate}>
               {busy ? 'Working...' : (imageId ? 'Regenerate' : 'Generate')}
             </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={toggleLibrary}>
+              {libOpen ? 'Hide Library' : 'From Library'}
+            </button>
             {imageId && !attached && (
               <button type="button" className="btn btn-approve" disabled={busy} onClick={attach}>
                 Attach to post
@@ -528,6 +562,21 @@
             )}
             {attached && <span className="image-studio-ok">AI image attached</span>}
           </div>
+          {libOpen && (
+            <div className="image-studio-lib">
+              {library === null && <span className="image-studio-lib-note">Loading library...</span>}
+              {Array.isArray(library) && library.length === 0 && !libError && <span className="image-studio-lib-note">No images in the library yet.</span>}
+              {Array.isArray(library) && library.map((item) => (
+                <img key={item.id}
+                  className={'image-studio-lib-item' + (imageId === item.id ? ' selected' : '')}
+                  src={API + '/api/image-studio/' + item.id + '/serve'}
+                  alt={item.human_name || ('Image ' + item.id)}
+                  title={(item.human_name || 'Untitled') + (item.lens_id ? (' (' + item.lens_id + ')') : '')}
+                  onClick={() => selectFromLibrary(item)} />
+              ))}
+              {libError && <div className="image-studio-error">{libError}</div>}
+            </div>
+          )}
           {imageId && (
             <img className="image-studio-preview"
               src={API + '/api/image-studio/' + imageId + '/serve'}

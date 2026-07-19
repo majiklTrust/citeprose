@@ -38,7 +38,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { render } from "../image/client.js";
 import { makeBudgetGate, getBudgetStatus } from "../services/image-budget.js";
-import { storeImage, readImageBytes, getImageMeta } from "../services/image-store.js";
+import { storeImage, readImageBytes, getImageMeta, listImages } from "../services/image-store.js";
 import { deriveImageBrief } from "../image/image-brief.js";
 import { lockBrief } from "../image/image-fidelity.js";
 import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
@@ -124,6 +124,22 @@ router.get("/budget", async (req, res) => {
 // (read-only) subscription like /budget does.
 router.get("/lenses", (req, res) => {
   return res.status(200).json({ lenses: listLenses(), aspects: listAspectPresets() });
+});
+
+// GET /api/image-studio/library - the tenant-shared library: stored
+// images, newest first, metadata only (bytes stream via /serve). RLS
+// scopes rows to the tenant; the store clamps limit and offset, so
+// hostile paging values shape the page, never the load. Read-only,
+// so it survives a suspended subscription like /budget and /lenses.
+router.get("/library", async (req, res) => {
+  try {
+    const images = await withTenant(req.tenant.id, () =>
+      listImages({ limit: req.query.limit, offset: req.query.offset }));
+    return res.status(200).json({ images });
+  } catch (err) {
+    platformLog("warn", "image_library_failed", { code: err && err.code });
+    return sendError(res, err);
+  }
 });
 
 // POST /api/image-studio/generate - render one image and store it.

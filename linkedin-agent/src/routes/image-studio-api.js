@@ -39,6 +39,10 @@ import { platformLog } from "../services/platform-log.js";
 import { render } from "../image/client.js";
 import { makeBudgetGate, getBudgetStatus } from "../services/image-budget.js";
 import { storeImage, readImageBytes, getImageMeta } from "../services/image-store.js";
+import { deriveImageBrief } from "../image/image-brief.js";
+import { lockBrief } from "../image/image-fidelity.js";
+import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
+import { getPost } from "../services/database.js";
 
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
@@ -65,6 +69,7 @@ function statusForCode(code) {
     case "BUDGET_EXCEEDED": return 402;
     case "NO_TENANT_CONTEXT": return 403;
     case "IMAGE_NOT_FOUND": return 404;
+    case "POST_NOT_FOUND": return 404;
     case "NOT_PROVISIONED":
     case "MISSING_CREDENTIAL":
     case "UNKNOWN_PROVIDER":
@@ -187,6 +192,99 @@ router.post("/:id/attach", requirePermission("edit_post"), async (req, res) => {
     platformLog("info", "image_attached", { imageId: id, postId });
     return res.status(200).json({ attached: true, imageId: id, postId });
   } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// POST /api/image-studio/brief - derive an image brief from a post
+// (preview). Grounds in the post's content and the research
+// (news_context) that produced it, through the text seam. Returns the
+// brief text for the human to review or edit before spending on an
+// image. Owner+editor.
+router.post("/brief", requirePermission("preview_post"), async (req, res) => {
+  const postId = parseId((req.body || {}).postId);
+  if (!postId) return res.status(400).json({ error: "Invalid post id", code: "INVALID_INPUT" });
+  try {
+    const out = await withTenant(req.tenant.id, async () => {
+      const post = await getPost(postId);
+      if (!post) { const pe = new Error("Post not found"); pe.code = "POST_NOT_FOUND"; throw pe; }
+      return deriveImageBrief({
+        topic: post.topic_id,                 // topic slug/name for the brief
+        postContent: post.content,
+        research: post.news_context || "",    // the research that grounded the post
+        sourceKind: "post",
+        sourcePostId: postId,
+        sourceTopicId: Number.isInteger(post.topic_num_id) ? post.topic_num_id : null
+      });
+    });
+    return res.status(200).json({ brief: out.prompt, grounding: out.grounding, usage: out.usage });
+  } catch (err) {
+    platformLog("warn", "image_brief_failed", { code: err && err.code });
+    return sendError(res, err);
+  }
+});
+
+// POST /api/image-studio/generate-from-brief - lock a brief against
+// verified metrics, then render and store. The grounding topic is
+// resolved from the post authoritatively (not client-trusted), so the
+// fidelity lock reads the right tenant metrics. A fabricated statistic
+// is rejected here, BEFORE any spend, as a 422. Owner+editor.
+router.post("/generate-from-brief", requirePermission("preview_post"), async (req, res) => {
+  const b = req.body || {};
+  const brief = typeof b.brief === "string" ? b.brief.trim() : "";
+  const postId = parseId(b.postId);
+  if (!brief) return res.status(400).json({ error: "A brief is required", code: "INVALID_INPUT" });
+  try {
+    const out = await withTenant(req.tenant.id, async () => {
+      let topicRef = null;
+      let sourcePostId = null;
+      if (postId) {
+        const post = await getPost(postId);
+        if (!post) { const pe = new Error("Post not found"); pe.code = "POST_NOT_FOUND"; throw pe; }
+        topicRef = Number.isInteger(post.topic_num_id) ? post.topic_num_id : null;
+        sourcePostId = postId;
+      }
+      // FIDELITY LOCK: reject fabricated stats before spending on an image.
+      const verdict = await lockBrief(brief, { topicRef });
+      if (!verdict.ok) {
+        throw imageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
+          "Brief contains unverified numbers",
+          { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens });
+      }
+      const rendered = await render(
+        {
+          prompt: brief,
+          size: b.size, quality: b.quality, count: b.count, aspect: b.aspect,
+          grounding: { sourceKind: postId ? "post" : "brief", sourcePostId, sourceTopicId: topicRef },
+          purpose: "generate_from_brief"
+        },
+        { budgetGate: makeBudgetGate() }
+      );
+      const image = rendered.images[0];
+      const stored = await storeImage({
+        image,
+        provider: rendered.provider,
+        model: rendered.model,
+        prompt: brief,
+        sourceKind: postId ? "post" : "brief",
+        sourcePostId,
+        sourceTopicId: topicRef,
+        costEstimateUsd: rendered.costEstimateUsd,
+        createdBy: req.user.sub
+      });
+      return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };
+    });
+    platformLog("info", "image_generated_from_brief", { imageId: out.stored.id, backend: out.stored.storageBackend });
+    return res.status(201).json({
+      id: out.stored.id,
+      mime: out.stored.mime,
+      byteSize: out.stored.byteSize,
+      storageBackend: out.stored.storageBackend,
+      usage: out.usage,
+      costEstimateUsd: out.costEstimateUsd
+    });
+  } catch (err) {
+    platformLog("warn", "image_generate_from_brief_failed", { code: err && err.code });
     return sendError(res, err);
   }
 });

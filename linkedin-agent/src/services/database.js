@@ -184,7 +184,7 @@ export async function getPost(id) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url, p.genre
+            p.image_url, p.genre, p.generated_image_id
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.id = $1`,

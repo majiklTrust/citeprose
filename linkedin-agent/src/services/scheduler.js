@@ -219,8 +219,29 @@ export async function executePost(postId) {
     throw new Error(`Post blocked by output filter: ${filterResult.reason}`);
   }
 
+  // Resolve an attached generated image to bytes. A stored image has
+  // no public URL and must be read from the image store, not fetched
+  // through the publisher's SSRF-guarded URL path. If the operator
+  // attached an image on purpose but it cannot be read, fail the
+  // publish loudly rather than silently posting the text without it.
+  let imageBytes = null;
+  if (post.generated_image_id) {
+    try {
+      const { readImageBytes } = await import("./image-store.js");
+      const img = await readImageBytes(post.generated_image_id);
+      imageBytes = { buffer: img.bytes, contentType: img.mime };
+    } catch (err) {
+      await logActivity("error", "post_image_read_failed", {
+        postId, imageId: post.generated_image_id, error: err.message
+      });
+      throw new Error(
+        `Attached image ${post.generated_image_id} could not be read: ${err.message}`
+      );
+    }
+  }
+
   try {
-    const result = await publishPost(post.content, post.hashtags, post.image_url, post.publish_target || null);
+    const result = await publishPost(post.content, post.hashtags, post.image_url, post.publish_target || null, imageBytes);
 
     await updatePostStatus(postId, "posted", {
       linkedinId: result.postId,

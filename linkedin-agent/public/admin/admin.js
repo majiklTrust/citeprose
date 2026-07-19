@@ -480,6 +480,50 @@
       });
   }
 
+  // ── Image storage backend ───────────────────────────────────
+
+  function renderImageStorage(backend) {
+    $('img-storage-current').textContent = 'Current: ' + (backend === 's3' ? 'S3 object storage' : 'Database (built in)');
+    $('img-storage-select').value = backend === 's3' ? 's3' : 'db';
+  }
+
+  function loadImageStorage() {
+    fetch(API + '/api/admin/image-storage', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the image storage backend');
+        return res.json();
+      })
+      .then(function (data) { renderImageStorage(data.backend); })
+      .catch(function () {
+        $('img-storage-current').innerHTML = '<span class="msg msg-error">Failed to load the image storage backend</span>';
+      });
+  }
+
+  function saveImageStorage() {
+    var backend = $('img-storage-select').value;
+    $('img-storage-save-btn').disabled = true;
+    $('img-storage-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-storage', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backend: backend })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image storage backend saved', 'success');
+        renderImageStorage(data.backend);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-storage-save-btn').disabled = false;
+        $('img-storage-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Tenant Registration (platform admin only) ───────────────
 
   function buildRegistrationSection() {
@@ -653,6 +697,7 @@
     loadAiConfig();
     loadImageBudget();
     loadImagePalette();
+    loadImageStorage();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -674,6 +719,7 @@
     $('ai-save-btn').addEventListener('click', saveAiConfig);
     $('img-budget-save-btn').addEventListener('click', saveImageBudget);
     $('img-palette-save-btn').addEventListener('click', saveImagePalette);
+    $('img-storage-save-btn').addEventListener('click', saveImageStorage);
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

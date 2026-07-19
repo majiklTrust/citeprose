@@ -333,4 +333,56 @@ router.put("/image-palette", async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════
+// Image storage backend switch (owner only, same blanket chain)
+// ══════════════════════════════════════════════════════════════
+// Tenant default backend for NEW images (agent_state
+// image_storage_backend, registered in 40.2: db | s3). Existing
+// images keep their recorded backend, so switching is always safe
+// for old data. Switching TO s3 is fail-closed: the server must
+// actually resolve a configured object store (config present AND the
+// SDK installed) before the preference is stored, so an owner cannot
+// strand new images on an unreachable backend.
+router.get("/image-storage", async (req, res) => {
+  try {
+    const backend = await withTenant(req.tenant.id, async () => {
+      return (await getAgentState("image_storage_backend")) || "db";
+    });
+    res.json({ backend });
+  } catch (err) {
+    platformLog("error", "image_storage_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the image storage backend" });
+  }
+});
+
+router.put("/image-storage", async (req, res) => {
+  const backend = (req.body || {}).backend;
+  if (backend !== "db" && backend !== "s3") {
+    return res.status(400).json({ error: "Backend must be db or s3." });
+  }
+  try {
+    if (backend === "s3") {
+      let available = false;
+      try {
+        const { resolveObjectStore } = await import("../storage/object-store.js");
+        available = (await resolveObjectStore()) !== null;
+      } catch (err) {
+        platformLog("warn", "image_storage_s3_unavailable", { error: err.message });
+        available = false;
+      }
+      if (!available) {
+        return res.status(409).json({
+          error: "S3 storage is not available on this server (missing configuration or SDK). New images stay on the db backend."
+        });
+      }
+    }
+    await withTenant(req.tenant.id, () => setAgentState("image_storage_backend", backend));
+    platformLog("info", "image_storage_set", { backend });
+    res.json({ backend });
+  } catch (err) {
+    platformLog("error", "image_storage_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set the image storage backend" });
+  }
+});
+
 export default router;

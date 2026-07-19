@@ -9,7 +9,9 @@
 //   db  (default) : bytes live in image_bytes (bytea). Fully wired.
 //   s3            : object lives in an S3 bucket; image_s3 records
 //                   the location (never credentials). The actual
-//                   PUT/GET goes through an INJECTED s3 client, so
+//                   PUT/GET goes through the object-store PORT (an
+//                   injected client wins; else the configured
+//                   src/storage adapter resolves lazily), so
 //                   this module adds NO new npm dependency. With no
 //                   client wired the s3 path is fail-closed
 //                   (STORAGE_BACKEND_UNAVAILABLE); full S3 wiring is
@@ -86,13 +88,26 @@ function decodeBase64(b64) {
   return buf;
 }
 
-function requireS3(deps) {
-  const s3 = deps && deps.s3Client;
-  if (!s3 || typeof s3.put !== "function" || typeof s3.get !== "function") {
-    throw storeError(STORE_ERROR_CODES.STORAGE_BACKEND_UNAVAILABLE,
-      "S3 storage backend is selected but no S3 client is wired; set the tenant backend to db or wire S3");
+async function resolveS3Client(deps) {
+  // Injection wins (tests, alternative clients). Otherwise resolve
+  // the configured object-store PORT lazily: unconfigured servers
+  // return null there and this stays the same typed, fail-closed
+  // refusal it has been since 2.5.2. The SDK loads only on a
+  // configured server the first time an s3-backed image moves.
+  const injected = deps && deps.s3Client;
+  if (injected && typeof injected.put === "function" && typeof injected.get === "function") {
+    return injected;
   }
-  return s3;
+  try {
+    const { resolveObjectStore } = await import("../storage/object-store.js");
+    const resolved = await resolveObjectStore();
+    if (resolved) return resolved;
+  } catch (err) {
+    throw storeError(STORE_ERROR_CODES.STORAGE_BACKEND_UNAVAILABLE,
+      "S3 storage backend is selected but unavailable: " + err.message, { code: err.code });
+  }
+  throw storeError(STORE_ERROR_CODES.STORAGE_BACKEND_UNAVAILABLE,
+    "S3 storage backend is selected but not configured; set IMAGE_S3_BUCKET and IMAGE_S3_REGION or set the tenant backend to db");
 }
 
 // Persist one rendered image: the master row, then the backend
@@ -142,7 +157,7 @@ export async function storeImage(input, deps = {}) {
       [imageId, bytes, sha256]
     );
   } else {
-    const s3 = requireS3(deps);
+    const s3 = await resolveS3Client(deps);
     const objectKey = `tenants/${input.tenantSlug || "t"}/images/${imageId}`;
     const put = await s3.put({ key: objectKey, body: bytes, contentType: mime });
     await c.query(
@@ -173,7 +188,7 @@ export async function readImageBytes(imageId, deps = {}) {
     }
     return { bytes: r.rows[0].bytes, mime, backend };
   }
-  const s3 = requireS3(deps);
+  const s3 = await resolveS3Client(deps);
   const loc = await c.query("SELECT bucket, object_key FROM image_s3 WHERE image_id = $1", [imageId]);
   if (loc.rows.length === 0) {
     throw storeError(STORE_ERROR_CODES.IMAGE_NOT_FOUND, "S3 location missing for an s3-backed image", { imageId });
@@ -202,8 +217,29 @@ export async function getImageMeta(imageId, deps = {}) {
 // their generated_image_id (ON DELETE SET NULL from 40.1).
 export async function deleteImage(imageId, deps = {}) {
   const c = await ambientClient(deps);
+  // Capture the S3 location BEFORE the delete cascades it away, so an
+  // s3-backed image can have its object removed too instead of
+  // orphaning bucket data. Removal is best-effort AFTER the DB delete
+  // commits the intent: a bucket hiccup logs a warning and leaves an
+  // orphan to sweep later, but never resurrects the deleted image.
+  const loc = await c.query(
+    `SELECT s.bucket, s.object_key FROM image_s3 s
+     JOIN images i ON i.id = s.image_id AND i.tenant_id = s.tenant_id
+     WHERE s.image_id = $1 AND i.storage_backend = 's3'`, [imageId]);
   const r = await c.query("DELETE FROM images WHERE id = $1 RETURNING id", [imageId]);
-  return { deleted: r.rows.length > 0, id: r.rows.length > 0 ? r.rows[0].id : null };
+  const deleted = r.rows.length > 0;
+  if (deleted && loc.rows.length > 0) {
+    try {
+      const s3 = await resolveS3Client(deps);
+      if (typeof s3.remove === "function") {
+        await s3.remove({ bucket: loc.rows[0].bucket, key: loc.rows[0].object_key });
+      }
+    } catch (err) {
+      const { platformLog } = await import("./platform-log.js");
+      platformLog("warn", "image_s3_object_orphaned", { imageId, error: err.message });
+    }
+  }
+  return { deleted, id: deleted ? r.rows[0].id : null };
 }
 
 // ── Tenant-shared library (Phase 4) ────────────────────────────

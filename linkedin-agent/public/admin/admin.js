@@ -367,6 +367,67 @@
       });
   }
 
+  // ── Image render budget ─────────────────────────────────────
+
+  function renderImageBudget(status) {
+    var el = $('img-budget-current');
+    if (!status || typeof status !== 'object') { el.textContent = ''; return; }
+    if (!status.enabled) {
+      el.textContent = 'Current: generation disabled (budget not set)';
+      $('img-budget-input').value = '';
+      return;
+    }
+    var budget = Number(status.budgetUsd || 0);
+    var spent = Number(status.spentUsd || 0);
+    var remaining = Number(status.remainingUsd || 0);
+    el.textContent = 'Current: $' + budget.toFixed(2) + ' per cycle (spent $' +
+      spent.toFixed(2) + ', remaining $' + remaining.toFixed(2) + ')';
+    $('img-budget-input').value = String(budget);
+  }
+
+  function loadImageBudget() {
+    fetch(API + '/api/admin/image-budget', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load image budget');
+        return res.json();
+      })
+      .then(function (data) { renderImageBudget(data); })
+      .catch(function () {
+        $('img-budget-current').innerHTML = '<span class="msg msg-error">Failed to load image budget</span>';
+      });
+  }
+
+  function saveImageBudget() {
+    var raw = $('img-budget-input').value.trim();
+    if (raw === '') { showMessage('Enter a budget amount in dollars', 'error'); return; }
+    var dollars = Number(raw);
+    if (!isFinite(dollars) || dollars < 0 || dollars > 1000000) {
+      showMessage('Budget must be a dollar amount between 0 and 1,000,000', 'error');
+      return;
+    }
+    $('img-budget-save-btn').disabled = true;
+    $('img-budget-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-budget', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dollars: dollars })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image budget saved', 'success');
+        renderImageBudget(data);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-budget-save-btn').disabled = false;
+        $('img-budget-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Tenant Registration (platform admin only) ───────────────
 
   function buildRegistrationSection() {
@@ -538,6 +599,7 @@
     loadMembers();
     loadInvites();
     loadAiConfig();
+    loadImageBudget();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -557,6 +619,7 @@
     });
     $('ai-verify-btn').addEventListener('click', verifyAiKey);
     $('ai-save-btn').addEventListener('click', saveAiConfig);
+    $('img-budget-save-btn').addEventListener('click', saveImageBudget);
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

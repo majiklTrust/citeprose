@@ -128,3 +128,23 @@ export function makeBudgetGate(deps = {}) {
     });
   };
 }
+
+// ── Owner budget input validation ──────────────────────────────
+// Convert an owner-supplied DOLLAR figure to integer CENTS for
+// storage in agent_state.image_render_budget_cents, or return null
+// if the input is not an acceptable, non-negative, in-range amount.
+// Zero is valid and means "disabled" (the gate fails closed on a
+// zero cap). Kept in the budget domain module, beside the gate that
+// consumes the stored cents, so validation and consumption cannot
+// drift apart. Pure: no I/O, no tenant context.
+export const MAX_BUDGET_DOLLARS = 1000000; // fat-finger / integer-column guard
+
+export function dollarsToCents(dollars) {
+  if (typeof dollars !== "number" && typeof dollars !== "string") return null;
+  if (typeof dollars === "string" && dollars.trim() === "") return null; // no silent 0 from empty
+  const n = typeof dollars === "number" ? dollars : Number(dollars.trim());
+  if (!Number.isFinite(n)) return null;
+  if (n < 0 || n > MAX_BUDGET_DOLLARS) return null;
+  const cents = Math.round(n * 100);
+  return Number.isInteger(cents) && cents >= 0 ? cents : null;
+}

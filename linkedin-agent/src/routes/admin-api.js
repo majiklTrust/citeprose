@@ -27,6 +27,8 @@ import {
   revokeInvite
 } from "../tenant/invite-store.js";
 import { createAiConfigRoutes } from "./admin-ai-api.js";
+import { getBudgetStatus, dollarsToCents, MAX_BUDGET_DOLLARS } from "../services/image-budget.js";
+import { setAgentState } from "../services/database.js";
 
 const router = Router();
 
@@ -238,6 +240,49 @@ router.delete("/members/:id", async (req, res) => {
   } catch (err) {
     platformLog("error", "member_remove_failed", { error: err.message });
     res.status(500).json({ error: "Failed to remove member" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Image render budget (owner only, inherits the blanket chain above:
+// auth -> tenant -> suspended-write -> no-dev-bypass -> manage_users)
+// ══════════════════════════════════════════════════════════════
+// The per-cycle spend cap for AI image generation. Stored as integer
+// CENTS in agent_state.image_render_budget_cents, which the render
+// budget gate reads (fail-closed: an unset or zero cap denies all
+// generation). The owner sets a DOLLAR amount here; dollarsToCents
+// (in the budget domain module, beside the gate that reads the stored
+// cents) validates and rounds so float dollars cannot drift the value.
+
+// Read the current budget status (cap, spent, remaining) for the UI.
+router.get("/image-budget", async (req, res) => {
+  try {
+    const status = await withTenant(req.tenant.id, () => getBudgetStatus());
+    res.json(status);
+  } catch (err) {
+    platformLog("error", "image_budget_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read image budget" });
+  }
+});
+
+// Set the per-cycle image render budget (dollars in, cents stored).
+router.put("/image-budget", async (req, res) => {
+  const cents = dollarsToCents((req.body || {}).dollars);
+  if (cents === null) {
+    return res.status(400).json({
+      error: `Budget must be a dollar amount between 0 and ${MAX_BUDGET_DOLLARS}.`
+    });
+  }
+  try {
+    const status = await withTenant(req.tenant.id, async () => {
+      await setAgentState("image_render_budget_cents", String(cents));
+      return getBudgetStatus();
+    });
+    platformLog("info", "image_budget_set", { cents });
+    res.json(status);
+  } catch (err) {
+    platformLog("error", "image_budget_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set image budget" });
   }
 });
 

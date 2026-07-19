@@ -90,6 +90,21 @@
       </div>
 
       <div class="section">
+        <h2>Image Render Budget</h2>
+        <p class="ai-hint">Set the maximum you will spend on AI image generation per billing cycle. Generation is denied once the cycle spend reaches this cap, and a budget of 0 disables image generation entirely.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-budget-input">Budget (USD per cycle)</label>
+            <input type="number" id="img-budget-input" min="0" step="1" placeholder="0">
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-budget-save-btn">Save</button>
+          </div>
+          <div id="img-budget-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>Invite User</h2>
         <div class="invite-form">
           <input type="email" id="invite-email" placeholder="Email address">

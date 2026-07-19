@@ -5,91 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/app/favicon.png">
   <link rel="stylesheet" href="/app/shared/manager-nav.css?v={{CSSVERSION}}">
+  <link rel="stylesheet" href="/app/image-studio/studio.css?v={{CSSVERSION}}">
   <title>Image Studio: LinkedIn Agent</title>
-  <style>
-    /* Page-local styles; shared chrome comes from manager-nav.css */
-    .st-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
-    .st-panel { border: 1px solid #dbe4f0; border-radius: 8px; background: #f8fbff; padding: 1rem 1.1rem; }
-    .st-panel h2 { margin: 0 0 0.6rem; font-size: 1.02rem; }
-    .st-label { display: block; font-size: 0.8rem; font-weight: 600; margin: 0.55rem 0 0.2rem; }
-    .st-prompt { width: 100%; box-sizing: border-box; font-size: 0.86rem; border: 1px solid #cbd5e1; border-radius: 5px; padding: 0.45rem 0.55rem; resize: vertical; }
-    .st-select { width: 100%; box-sizing: border-box; font-size: 0.86rem; border: 1px solid #cbd5e1; border-radius: 5px; padding: 0.4rem 0.45rem; background: #fff; }
-    .st-actions { display: flex; align-items: center; gap: 0.55rem; margin-top: 0.75rem; }
-    .st-budget { font-size: 0.78rem; color: #475569; margin-top: 0.55rem; }
-    .st-preview { display: block; max-width: 100%; border-radius: 8px; border: 1px solid #e2e8f0; }
-    .st-empty { font-size: 0.82rem; color: #64748b; }
-    .st-lib { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
-    .st-lib-item { width: 92px; height: 92px; object-fit: cover; border-radius: 7px; border: 2px solid #e2e8f0; cursor: pointer; }
-    .st-lib-item.selected { border-color: #1e40af; }
-    .st-refine-row { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
-    .st-refine-row input { flex: 1; font-size: 0.86rem; border: 1px solid #cbd5e1; border-radius: 5px; padding: 0.45rem 0.55rem; }
-    .st-meta { font-size: 0.76rem; color: #64748b; margin-top: 0.45rem; word-break: break-word; }
-    .st-error { font-size: 0.82rem; color: #c62828; background: #ffebee; border-radius: 5px; padding: 0.45rem 0.65rem; margin-top: 0.6rem; }
-    @media (max-width: 860px) { .st-grid { grid-template-columns: 1fr; } }
-  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 </head>
-<body class="page-image-studio om-checking">
-  <div class="om-checking-note">Checking access...</div>
-
-  <div class="container">
-    <div id="loading" class="loading">Checking access...</div>
-
-    <div id="denied" class="access-denied" style="display:none">
-      <h1>Access denied</h1>
-      <p class="denied-note" id="denied-note">You need to be signed in to a workspace to use the Image Studio.</p>
-      <p class="denied-link"><a href="/app">Back to dashboard</a></p>
-    </div>
-
-    <div id="app" style="display:none">
-      <div id="manager-nav"></div>
-      <h1>Image Studio</h1>
-      <div class="subtitle">Research-grounded visuals for this workspace: generate, refine, and reuse</div>
-      <div style="height:1.1rem"></div>
-
-      <div id="message"></div>
-
-      <div class="st-grid">
-        <div class="st-panel">
-          <h2>Create</h2>
-          <label class="st-label" for="st-prompt">Describe the image</label>
-          <textarea id="st-prompt" class="st-prompt" rows="3" placeholder="A resilient supply network weathering a storm"></textarea>
-          <label class="st-label" for="st-lens">Story lens</label>
-          <select id="st-lens" class="st-select"><option value="">No lens</option></select>
-          <label class="st-label" for="st-aspect">Shape</label>
-          <select id="st-aspect" class="st-select"><option value="">Default (square)</option></select>
-          <div class="st-actions">
-            <button class="btn btn-primary" id="st-generate-btn">Generate</button>
-          </div>
-          <div class="st-budget" id="st-budget"></div>
-          <div class="st-error" id="st-ready-note" style="display:none"></div>
-        </div>
-
-        <div class="st-panel">
-          <h2>Result</h2>
-          <div id="st-result-empty" class="st-empty">Generate an image, or pick one from the library below.</div>
-          <div id="st-result" style="display:none">
-            <img id="st-preview" class="st-preview" alt="Selected image">
-            <div class="st-meta" id="st-meta"></div>
-            <div class="st-refine-row">
-              <input type="text" id="st-refine-input" maxlength="500" placeholder="Refine: warmer light, less clutter">
-              <button class="btn btn-approve" id="st-refine-btn">Refine</button>
-            </div>
-            <div class="st-actions">
-              <a class="btn btn-ghost" id="st-download" download>Download</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="st-panel" style="margin-top:1.2rem">
-        <h2>Library</h2>
-        <div id="st-library-empty" class="st-empty" style="display:none">No images in the library yet.</div>
-        <div class="st-lib" id="st-library"></div>
-      </div>
-    </div>
+<body>
+  <div class="wrap">
+    <div id="manager-nav"></div>
+    <div id="root"></div>
   </div>
-
-  <script src="/app/shared/manager-nav.js"></script>
-  <script src="/app/image-studio/studio.js?v={{CSSVERSION}}"></script>
+  <script src="/app/shared/manager-nav.js?v={{CSSVERSION}}"></script>
+  <script type="text/babel" data-presets="react" src="/app/image-studio/studio.js?v={{CSSVERSION}}"></script>
 </body>
 </html>

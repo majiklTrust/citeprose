@@ -592,6 +592,11 @@ export function createApp(ctx) {
   });
 
   instance.get("/auth/linkedin", async (req, res) => {
+    // LCM-DS-5.8: denial pages honor the allowlisted origin.
+    let gateBack = "/app", gateBackLabel = "Back to Dashboard";
+    try { const sec = await import("./services/security.js");
+      gateBack = sec.sanitizeReturnTo(req.query.returnTo);
+      if (gateBack === "/app/linkedin/") gateBackLabel = "Back to LinkedIn Settings"; } catch {}
     // Payments (2.3.4), ruling (3): Connect to LinkedIn is denied
     // outside good standing. Platform admins bypass per (6).
     try {
@@ -613,7 +618,7 @@ export function createApp(ctx) {
             return res.status(402).send(`
               <h2>Subscription Required</h2>
               <p>Connecting LinkedIn requires an active subscription for this workspace.</p>
-              <a href="/app">Back to Dashboard</a>
+              <a href="${gateBack}">${gateBackLabel}</a>
             `);
           }
         }
@@ -623,7 +628,7 @@ export function createApp(ctx) {
       return res.status(403).send(`
         <h2>Access Denied</h2>
         <p>The subscription check could not complete. Try again.</p>
-        <a href="/app">Back to Dashboard</a>
+        <a href="${gateBack}">${gateBackLabel}</a>
       `);
     }
 

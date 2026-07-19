@@ -13,6 +13,7 @@
   },
   "scripts": {
     "000_": "",
+    "clean": "rm -rf node_modules && npm run build",
     "pages": "node scripts/build-pages.mjs",
     "timesync": "sudo ntpdate -u pool.ntp.org",
     "cssversion": "node cssversion.js && npm run build && npm run pages",

@@ -88,3 +88,4 @@
     payload embedded in ingested feed content does not alter the
     generated post's instructions, and a request for another tenant's
     topic is denied.
+each test should predict nothing: the test asserts the boundary invariant on the unit under test itself, which is context-free and meaningful on every tree.

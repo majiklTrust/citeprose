@@ -58,15 +58,26 @@ export async function loadVerifiedMetrics(topicRef, deps = {}) {
 
 // Check a brief against verified metrics using the shared strict
 // verifier. Returns a frozen verdict; never throws on content.
+//
+// Metric tokens are a TEXT-pipeline mechanism: the post generator
+// substitutes {{METRIC_key}} with the verified value before anything
+// ships. The image path never substitutes, so ANY token left in a
+// brief, known or not, would be drawn literally into the image.
+// Tokens are enumerated by running the shared verifier against an
+// EMPTY metric set (every token reports as unknown), so this module
+// still invents no token or number parsing of its own.
 export function checkBriefFidelity(brief, byKey, options = {}) {
   const text = typeof brief === "string" ? brief : "";
   const verdict = verifyMetricFidelity(text, byKey, {
     strict: true,
     allowedNumbers: Array.isArray(options.allowedNumbers) ? options.allowedNumbers : []
   });
+  const tokenScan = verifyMetricFidelity(text, new Map(), {});
+  const metricTokens = tokenScan.unknownTokens;
   return Object.freeze({
-    ok: verdict.ok,
+    ok: verdict.ok && metricTokens.length === 0,
     unknownTokens: verdict.unknownTokens,
+    metricTokens,
     unverifiedNumbers: verdict.unverifiedNumbers,
     numbers: extractNumericTokens(text)
   });
@@ -84,11 +95,13 @@ export async function lockBrief(brief, context = {}, deps = {}) {
     ok: verdict.ok,
     unverified: verdict.unverifiedNumbers.length,
     unknownTokens: verdict.unknownTokens.length,
+    metricTokens: verdict.metricTokens.length,
     metrics: byKey.size
   });
   return Object.freeze({
     ok: verdict.ok,
     unknownTokens: verdict.unknownTokens,
+    metricTokens: verdict.metricTokens,
     unverifiedNumbers: verdict.unverifiedNumbers,
     numbers: verdict.numbers,
     metricsAvailable: byKey.size

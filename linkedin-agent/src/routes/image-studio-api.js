@@ -89,6 +89,20 @@ function sendError(res, err) {
 }
 function parseId(v) { const n = parseInt(v, 10); return Number.isInteger(n) && n > 0 ? n : null; }
 
+// Coerce a DB-sourced id to a positive integer. pg returns BIGINT
+// columns as STRINGS (pool.js sets no int8 parser), so a strict
+// Number.isInteger test on a row value silently fails. Mirrors the
+// number-or-digit-string handling of requireTopicRef in the metric
+// store, the codebase's own idiom for exactly this.
+function toIntOrNull(v) {
+  if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+  if (typeof v === "string" && /^\d+$/.test(v.trim())) {
+    const n = parseInt(v.trim(), 10);
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+
 // GET /api/image-studio/budget - remaining budget for the UI. Read
 // only, so it survives a suspended (read-only) subscription.
 router.get("/budget", async (req, res) => {
@@ -207,14 +221,14 @@ router.post("/brief", requirePermission("preview_post"), async (req, res) => {
   try {
     const out = await withTenant(req.tenant.id, async () => {
       const post = await getPost(postId);
-      if (!post) { const pe = new Error("Post not found"); pe.code = "POST_NOT_FOUND"; throw pe; }
+      if (!post) throw imageError(IMAGE_ERROR_CODES.POST_NOT_FOUND, "Post not found");
       return deriveImageBrief({
         topic: post.topic_id,                 // topic slug/name for the brief
         postContent: post.content,
         research: post.news_context || "",    // the research that grounded the post
         sourceKind: "post",
         sourcePostId: postId,
-        sourceTopicId: Number.isInteger(post.topic_num_id) ? post.topic_num_id : null
+        sourceTopicId: toIntOrNull(post.topic_num_id)
       });
     });
     return res.status(200).json({ brief: out.prompt, grounding: out.grounding, usage: out.usage });
@@ -240,16 +254,16 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
       let sourcePostId = null;
       if (postId) {
         const post = await getPost(postId);
-        if (!post) { const pe = new Error("Post not found"); pe.code = "POST_NOT_FOUND"; throw pe; }
-        topicRef = Number.isInteger(post.topic_num_id) ? post.topic_num_id : null;
+        if (!post) throw imageError(IMAGE_ERROR_CODES.POST_NOT_FOUND, "Post not found");
+        topicRef = toIntOrNull(post.topic_num_id);
         sourcePostId = postId;
       }
       // FIDELITY LOCK: reject fabricated stats before spending on an image.
       const verdict = await lockBrief(brief, { topicRef });
       if (!verdict.ok) {
         throw imageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
-          "Brief contains unverified numbers",
-          { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens });
+          "Brief contains unverified numbers or metric tokens",
+          { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens, metricTokens: verdict.metricTokens });
       }
       const rendered = await render(
         {

@@ -66,6 +66,9 @@
     .composer-fidelity-keys { font-size: 0.72rem; font-weight: 400; color: #4d7c5a; margin-top: 0.2rem; word-break: break-word; }
     .image-studio-panel { margin-top: 0.7rem; border: 1px solid #dbe4f0; border-radius: 6px; background: #f8fbff; padding: 0.7rem 0.8rem; }
     .image-studio-head { font-size: 0.82rem; font-weight: 700; color: #1e40af; margin-bottom: 0.5rem; }
+    .image-studio-lens-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .image-studio-lens-label { font-size: 0.78rem; color: #475569; }
+    .image-studio-lens { font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.3rem 0.4rem; background: #fff; }
     .image-studio-prompt { width: 100%; box-sizing: border-box; font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.4rem 0.5rem; resize: vertical; }
     .image-studio-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
     .image-studio-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; }
@@ -467,6 +470,15 @@
       const [error, setError] = useState(null);
       const [libOpen, setLibOpen] = useState(false);
       const [library, setLibrary] = useState(null);
+      // Story Lens (2.5.25): editorial_photo by default, catalog-fed.
+      const [lens, setLens] = useState('editorial_photo');
+      const [lensCatalog, setLensCatalog] = useState([{ id: 'editorial_photo', name: 'Editorial Photo' }]);
+      useEffect(() => {
+        fetch(API + '/api/image-studio/lenses', { credentials: 'include' })
+          .then(res => { if (!res.ok) throw res; return res.json(); })
+          .then(cat => { if (Array.isArray(cat.lenses) && cat.lenses.length) setLensCatalog(cat.lenses); })
+          .catch(() => { /* the seeded default still works; the server validates */ });
+      }, []);
       const [libError, setLibError] = useState(null);
 
       useEffect(() => {
@@ -489,10 +501,12 @@
         if (!post || !prompt.trim()) return;
         setError(null); setBusy(true); setImageId(null); setAttached(false);
         try {
+          const genBody = { prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'square' };
+          if (lens) genBody.lensId = lens;
           const res = await fetch(API + '/api/image-studio/generate', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'square' })
+            body: JSON.stringify(genBody)
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(messageFor(res.status, data));
@@ -544,6 +558,14 @@
       return (
         <div className="image-studio-panel">
           <div className="image-studio-head">Generate with AI</div>
+          <div className="image-studio-lens-row">
+            <label className="image-studio-lens-label" htmlFor="image-studio-lens">Story Lens</label>
+            <select id="image-studio-lens" className="image-studio-lens" value={lens} disabled={busy}
+              onChange={e => setLens(e.target.value)}>
+              {lensCatalog.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              <option value="">No lens</option>
+            </select>
+          </div>
           <textarea className="image-studio-prompt" rows="2" value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Describe the image to generate" />
@@ -1185,7 +1207,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.24</div>
+                <div className="header-subtitle">v2.5.25</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1217,7 +1239,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.24</div>
+                <div className="header-subtitle">v2.5.25</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1269,7 +1291,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.5.24 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.25 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

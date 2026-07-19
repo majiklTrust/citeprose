@@ -9,7 +9,8 @@
 // Gate order at the router boundary:
 //   requireAuth        -> a session is required
 //   resolveTenant      -> req.tenant is set for RLS
-//   requireEntitlement("image_studio") -> business_premium capability
+//   requireEntitlement("image_studio") -> business_premium today;
+//   business_plus inclusion is an open ruling (config/entitlements.js)
 //   suspendedWriteGuard() -> mutating verbs are read-only when the
 //                         subscription is not in good standing
 //   Cache-Control no-store -> tenant image bytes and metadata are

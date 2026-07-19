@@ -8,11 +8,15 @@
 // those features are born entitlement-gated when they ship.
 // =================================================================
 
-export const TIERS = ["individual", "business", "business_premium"];
+export const TIERS = ["individual", "business", "business_plus", "business_premium"];
 
 const MATRIX = {
   individual: [],
   business: ["organization_manager"],
+  // business_plus (2.5.20): organization_manager is ruled; whether
+  // ads_manager or image_studio join it is an OPEN RULING. Under-
+  // grant until ruled: never mint entitlement from a guess.
+  business_plus: ["organization_manager"],
   business_premium: ["organization_manager", "ads_manager", "image_studio"]
 };
 

@@ -10,7 +10,8 @@
 //
 // ACTIVATION CHECKLIST (when the Stripe account unlocks):
 //   1. Create the three prices (individual, business,
-//      business_premium) with metadata.tier set accordingly.
+//      business_plus, business_premium) with metadata.tier set
+//      accordingly (one price per tier, four total).
 //   2. Checkout sessions must carry metadata.tenant_id (and
 //      metadata.trial = "true" where the grace period applies);
 //      subscriptions created from them should copy both so

@@ -23,7 +23,7 @@
 //     handled by this module and none belong in application config.
 // ═══════════════════════════════════════════════════════════════
 
-import { objectStoreError, OBJECT_STORE_ERROR_CODES } from "./object-store.js";
+import { objectStoreError, isObjectStoreError, OBJECT_STORE_ERROR_CODES } from "./object-store.js";
 
 function stripQuotes(etag) {
   if (typeof etag !== "string") return null;
@@ -67,7 +67,18 @@ export async function createS3ObjectStore(config, deps = {}) {
     throw objectStoreError(OBJECT_STORE_ERROR_CODES.NOT_CONFIGURED,
       "Object storage requires a bucket and region");
   }
-  const sdk = await (deps.loadSdk || defaultLoadSdk)();
+  // The boundary guarantee: a loader failure surfaces as a typed
+  // SDK_UNAVAILABLE no matter WHICH loader failed. defaultLoadSdk
+  // wraps its own import miss, but an injected loader's throw would
+  // otherwise escape untyped across the port boundary.
+  let sdk;
+  try {
+    sdk = await (deps.loadSdk || defaultLoadSdk)();
+  } catch (err) {
+    if (isObjectStoreError(err)) throw err;
+    throw objectStoreError(OBJECT_STORE_ERROR_CODES.SDK_UNAVAILABLE,
+      "the SDK loader failed; the s3 backend is unavailable", { cause: err && err.message });
+  }
   const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } = sdk;
 
   const clientConfig = {

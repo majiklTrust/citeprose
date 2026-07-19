@@ -13,7 +13,7 @@
 // an unsupported value is a typed denial, never a silent coercion.
 // ═══════════════════════════════════════════════════════════════
 
-import { PROVIDERS, MODELS, IMAGE_LIMITS } from "./model-profiles.js";
+import { PROVIDERS, MODELS, IMAGE_LIMITS, ASPECT_PRESETS } from "./model-profiles.js";
 import { imageError, IMAGE_ERROR_CODES } from "./errors.js";
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
@@ -192,4 +192,22 @@ export function estimateActualCostUsd(profile, usage) {
   const usd = (inputTokens / 1e6) * profile.pricing.inputPerMTokUsd
     + (outputTokens / 1e6) * profile.pricing.outputPerMTokUsd;
   return Math.round(usd * 1e6) / 1e6;
+}
+
+// ── Aspect presets (Phase 3) ───────────────────────────────────
+// Resolve a UX aspect preset id to its wire size and composition
+// guidance. Fail-closed: an unknown preset is a typed error, never a
+// silent default, so a typo cannot render the wrong shape.
+export function resolveAspectPreset(aspectId) {
+  const found = ASPECT_PRESETS.find((p) => p.id === aspectId);
+  if (!found) {
+    throw imageError(IMAGE_ERROR_CODES.UNSUPPORTED_ASPECT,
+      `Unknown aspect preset "${aspectId}"`,
+      { aspectId, supported: ASPECT_PRESETS.map((p) => p.id) });
+  }
+  return found;
+}
+
+export function listAspectPresets() {
+  return ASPECT_PRESETS.map((p) => ({ id: p.id, label: p.label, size: p.size }));
 }

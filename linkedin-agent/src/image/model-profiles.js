@@ -45,6 +45,42 @@ export const IMAGE_LIMITS = Object.freeze({
   defaultMaxCountCap: 4
 });
 
+// ── Aspect presets (Phase 3, storytelling) ─────────────────────
+// UX-facing shape presets mapped to wire sizes the provider accepts.
+// This module is the ONLY home for such literals. RULE: preset labels
+// and guidance contain NO digits, so post-fidelity-lock composition
+// can never introduce an unverified number into a prompt. The
+// linkedin_feed preset renders the landscape size with safe-band
+// composition guidance; pixel-exact cropping to the feed ratio is
+// deliberately deferred (no image library in the dependency set;
+// planned as a client-side crop in the Phase 4 Studio page).
+export const ASPECT_PRESETS = Object.freeze([
+  Object.freeze({
+    id: "square",
+    label: "Square",
+    size: "1024x1024",
+    guidance: null
+  }),
+  Object.freeze({
+    id: "portrait",
+    label: "Portrait",
+    size: "1024x1536",
+    guidance: null
+  }),
+  Object.freeze({
+    id: "landscape",
+    label: "Landscape",
+    size: "1536x1024",
+    guidance: null
+  }),
+  Object.freeze({
+    id: "linkedin_feed",
+    label: "LinkedIn Feed",
+    size: "1536x1024",
+    guidance: "Compose for a wide feed banner: keep the key subject inside the central horizontal band, since the outer left and right edges may be trimmed when the image is cropped for the LinkedIn feed."
+  })
+]);
+
 export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "openai",

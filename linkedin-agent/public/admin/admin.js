@@ -428,6 +428,58 @@
       });
   }
 
+  // ── Brand palette (AI images) ───────────────────────────────
+
+  function renderImagePalette(palette) {
+    var el = $('img-palette-current');
+    if (!palette) {
+      el.textContent = 'Current: no palette set';
+      $('img-palette-input').value = '';
+      return;
+    }
+    el.textContent = 'Current: ' + palette;
+    $('img-palette-input').value = palette;
+  }
+
+  function loadImagePalette() {
+    fetch(API + '/api/admin/image-palette', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the brand palette');
+        return res.json();
+      })
+      .then(function (data) { renderImagePalette(data.palette); })
+      .catch(function () {
+        $('img-palette-current').innerHTML = '<span class="msg msg-error">Failed to load the brand palette</span>';
+      });
+  }
+
+  function saveImagePalette() {
+    var raw = $('img-palette-input').value;
+    if (raw.length > 240) { showMessage('Palette must be 240 characters or fewer', 'error'); return; }
+    if (/[{}]/.test(raw)) { showMessage('Palette cannot contain braces', 'error'); return; }
+    $('img-palette-save-btn').disabled = true;
+    $('img-palette-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-palette', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ palette: raw.trim() })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Brand palette saved', 'success');
+        renderImagePalette(data.palette);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-palette-save-btn').disabled = false;
+        $('img-palette-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Tenant Registration (platform admin only) ───────────────
 
   function buildRegistrationSection() {
@@ -600,6 +652,7 @@
     loadInvites();
     loadAiConfig();
     loadImageBudget();
+    loadImagePalette();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -620,6 +673,7 @@
     $('ai-verify-btn').addEventListener('click', verifyAiKey);
     $('ai-save-btn').addEventListener('click', saveAiConfig);
     $('img-budget-save-btn').addEventListener('click', saveImageBudget);
+    $('img-palette-save-btn').addEventListener('click', saveImagePalette);
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

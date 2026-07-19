@@ -28,7 +28,7 @@ import {
 } from "../tenant/invite-store.js";
 import { createAiConfigRoutes } from "./admin-ai-api.js";
 import { getBudgetStatus, dollarsToCents, MAX_BUDGET_DOLLARS } from "../services/image-budget.js";
-import { setAgentState } from "../services/database.js";
+import { setAgentState, getAgentState } from "../services/database.js";
 
 const router = Router();
 
@@ -283,6 +283,53 @@ router.put("/image-budget", async (req, res) => {
   } catch (err) {
     platformLog("error", "image_budget_set_failed", { error: err.message });
     res.status(500).json({ error: "Failed to set image budget" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Brand palette for AI images (owner only, same blanket chain)
+// ══════════════════════════════════════════════════════════════
+// Free-text tenant palette (e.g. "deep navy, warm amber, off-white")
+// stored in agent_state.image_brand_palette and appended to image
+// prompts at composition time. Validated here at the write AND
+// sanitized defensively at composition (image-lenses.sanitizePalette):
+// template braces are rejected so a palette can never smuggle a
+// {{METRIC_...}} token into a post-fidelity-lock prompt.
+const PALETTE_MAX = 240;
+function validPalette(v) {
+  if (typeof v !== "string") return null;
+  if (v.length > PALETTE_MAX) return null;
+  if (/[{}]/.test(v)) return null;                       // token smuggling
+  if (/[\u0000-\u001f\u007f]/.test(v)) return null;      // control chars
+  return v.trim();                                       // "" clears the palette
+}
+
+router.get("/image-palette", async (req, res) => {
+  try {
+    const palette = await withTenant(req.tenant.id, async () => {
+      return (await getAgentState("image_brand_palette")) || "";
+    });
+    res.json({ palette });
+  } catch (err) {
+    platformLog("error", "image_palette_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the brand palette" });
+  }
+});
+
+router.put("/image-palette", async (req, res) => {
+  const palette = validPalette((req.body || {}).palette);
+  if (palette === null) {
+    return res.status(400).json({
+      error: `Palette must be plain text up to ${PALETTE_MAX} characters, without braces or control characters.`
+    });
+  }
+  try {
+    await withTenant(req.tenant.id, () => setAgentState("image_brand_palette", palette));
+    platformLog("info", "image_palette_set", { chars: palette.length });
+    res.json({ palette });
+  } catch (err) {
+    platformLog("error", "image_palette_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set the brand palette" });
   }
 });
 

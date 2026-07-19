@@ -42,7 +42,9 @@ import { storeImage, readImageBytes, getImageMeta } from "../services/image-stor
 import { deriveImageBrief } from "../image/image-brief.js";
 import { lockBrief } from "../image/image-fidelity.js";
 import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
-import { getPost } from "../services/database.js";
+import { requireLens, applyLens, listLenses } from "../image/image-lenses.js";
+import { resolveAspectPreset, listAspectPresets } from "../image/registry.js";
+import { getPost, getAgentState } from "../services/database.js";
 
 const router = Router();
 const { requireAuth } = createAuthMiddleware(platformLog);
@@ -62,6 +64,8 @@ function statusForCode(code) {
   switch (code) {
     case "INVALID_INPUT":
     case "INVALID_REQUEST":
+    case "UNKNOWN_LENS":
+    case "UNSUPPORTED_ASPECT":
     case "UNSUPPORTED_SIZE":
     case "UNSUPPORTED_QUALITY": return 400;
     case "BUDGET_REQUIRED":
@@ -115,6 +119,13 @@ router.get("/budget", async (req, res) => {
   }
 });
 
+// GET /api/image-studio/lenses - the Story Lens and aspect-preset
+// catalog for pickers. Read-only data; survives a suspended
+// (read-only) subscription like /budget does.
+router.get("/lenses", (req, res) => {
+  return res.status(200).json({ lenses: listLenses(), aspects: listAspectPresets() });
+});
+
 // POST /api/image-studio/generate - render one image and store it.
 // The budget gate is the real per-cycle gate, injected into render,
 // which clears it before any spend. Returns the stored image id and
@@ -122,16 +133,27 @@ router.get("/budget", async (req, res) => {
 router.post("/generate", requirePermission("preview_post"), async (req, res) => {
   const b = req.body || {};
   try {
+    // Lens and aspect validate fail-closed BEFORE any tenant work or
+    // spend: a typo is a 400, never a silent unstyled render.
+    const lens = b.lensId != null ? requireLens(b.lensId) : null;
+    const preset = b.aspect != null ? resolveAspectPreset(b.aspect) : null;
     const out = await withTenant(req.tenant.id, async () => {
+      const palette = await getAgentState("image_brand_palette");
+      const composed = applyLens(b.prompt, {
+        lens,
+        palette,
+        aspectGuidance: preset ? preset.guidance : null,
+        negativePrompt: b.negativePrompt
+      });
       const rendered = await render(
         {
-          prompt: b.prompt,
-          negativePrompt: b.negativePrompt,
-          size: b.size,
+          prompt: composed.prompt,
+          negativePrompt: composed.negativePrompt,
+          size: b.size || (preset ? preset.size : undefined), // explicit size wins over the preset
           quality: b.quality,
           count: b.count,
-          aspect: b.aspect,
-          lensId: b.lensId,
+          aspect: preset ? preset.id : null,
+          lensId: composed.lensId,
           grounding: {
             sourceKind: b.sourceKind,
             sourcePostId: Number.isInteger(b.sourcePostId) ? b.sourcePostId : null,
@@ -146,13 +168,13 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
         image,
         provider: rendered.provider,
         model: rendered.model,
-        prompt: b.prompt,
+        prompt: composed.prompt,
         sourceKind: b.sourceKind,
         sourcePostId: Number.isInteger(b.sourcePostId) ? b.sourcePostId : null,
         sourceTopicId: Number.isInteger(b.sourceTopicId) ? b.sourceTopicId : null,
         humanName: typeof b.humanName === "string" ? b.humanName : null,
-        lensId: typeof b.lensId === "string" ? b.lensId : null,
-        aspect: typeof b.aspect === "string" ? b.aspect : null,
+        lensId: composed.lensId,
+        aspect: preset ? preset.id : null,
         costEstimateUsd: rendered.costEstimateUsd,
         createdBy: req.user.sub
       });
@@ -249,6 +271,9 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
   const postId = parseId(b.postId);
   if (!brief) return res.status(400).json({ error: "A brief is required", code: "INVALID_INPUT" });
   try {
+    // Lens and aspect validate fail-closed before any tenant work.
+    const lens = b.lensId != null ? requireLens(b.lensId) : null;
+    const preset = b.aspect != null ? resolveAspectPreset(b.aspect) : null;
     const out = await withTenant(req.tenant.id, async () => {
       let topicRef = null;
       let sourcePostId = null;
@@ -258,17 +283,30 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
         topicRef = toIntOrNull(post.topic_num_id);
         sourcePostId = postId;
       }
-      // FIDELITY LOCK: reject fabricated stats before spending on an image.
+      // FIDELITY LOCK: reject fabricated stats before spending on an
+      // image. The lock checks the RAW brief; lens composition runs
+      // AFTER it, and lens data is digit-free by rule, so styling can
+      // never introduce an unverified number past the lock.
       const verdict = await lockBrief(brief, { topicRef });
       if (!verdict.ok) {
         throw imageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
           "Brief contains unverified numbers or metric tokens",
           { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens, metricTokens: verdict.metricTokens });
       }
+      const palette = await getAgentState("image_brand_palette");
+      const composed = applyLens(brief, {
+        lens,
+        palette,
+        aspectGuidance: preset ? preset.guidance : null
+      });
       const rendered = await render(
         {
-          prompt: brief,
-          size: b.size, quality: b.quality, count: b.count, aspect: b.aspect,
+          prompt: composed.prompt,
+          negativePrompt: composed.negativePrompt,
+          size: b.size || (preset ? preset.size : undefined), // explicit size wins over the preset
+          quality: b.quality, count: b.count,
+          aspect: preset ? preset.id : null,
+          lensId: composed.lensId,
           grounding: { sourceKind: postId ? "post" : "brief", sourcePostId, sourceTopicId: topicRef },
           purpose: "generate_from_brief"
         },
@@ -279,10 +317,13 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
         image,
         provider: rendered.provider,
         model: rendered.model,
-        prompt: brief,
+        brief,                       // the human-approved text, as approved
+        prompt: composed.prompt,     // the final styled prompt actually rendered
         sourceKind: postId ? "post" : "brief",
         sourcePostId,
         sourceTopicId: topicRef,
+        lensId: composed.lensId,
+        aspect: preset ? preset.id : null,
         costEstimateUsd: rendered.costEstimateUsd,
         createdBy: req.user.sub
       });

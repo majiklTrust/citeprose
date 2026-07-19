@@ -186,8 +186,8 @@ export async function readImageBytes(imageId, deps = {}) {
 export async function getImageMeta(imageId, deps = {}) {
   const c = await ambientClient(deps);
   const r = await c.query(
-    `SELECT id, source_kind, source_post_id, source_topic_id, human_name, lens_id,
-            provider, model, aspect, width, height, mime, byte_size, storage_backend,
+    `SELECT id, source_kind, source_post_id, source_topic_id, human_name, brief, lens_id,
+            provider, model, prompt, aspect, width, height, mime, byte_size, storage_backend,
             status, cost_estimate_usd, verified_metric_ref, created_by, created_at
      FROM images WHERE id = $1`,
     [imageId]

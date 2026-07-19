@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v2.5.12
+// v2.5.13
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -198,6 +198,10 @@ export function createApp(ctx) {
   // roles; the data behind it is permission-gated at the API layer
   // (view_analytics / sync_analytics), matching the feeds pattern.
   instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+
+  // Image Studio page (Phase 4). Static shell; every capability on it
+  // is gated at the API layer (entitlement, permissions, budget).
+  instance.use("/app/image-studio", express.static(path.join(__dirname, "../public/image-studio"), { index: "index.html", setHeaders: staticCacheHeaders }));
   instance.use("/app/billing", express.static(path.join(__dirname, "../public/billing"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // LinkedIn connection settings page (owner controls; the APIs it
@@ -1070,7 +1074,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  2.5.12
+║           LinkedIn AI Content Agent  2.5.13
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

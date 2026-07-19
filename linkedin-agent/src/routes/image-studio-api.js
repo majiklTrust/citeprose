@@ -42,7 +42,7 @@ import { storeImage, readImageBytes, getImageMeta, listImages } from "../service
 import { deriveImageBrief } from "../image/image-brief.js";
 import { lockBrief } from "../image/image-fidelity.js";
 import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
-import { requireLens, applyLens, listLenses } from "../image/image-lenses.js";
+import { requireLens, applyLens, listLenses, LENSES } from "../image/image-lenses.js";
 import { resolveAspectPreset, listAspectPresets } from "../image/registry.js";
 import { getPost, getAgentState } from "../services/database.js";
 
@@ -356,6 +356,125 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
     });
   } catch (err) {
     platformLog("warn", "image_generate_from_brief_failed", { code: err && err.code });
+    return sendError(res, err);
+  }
+});
+
+// POST /api/image-studio/:id/refine - refine-by-conversation. Takes a
+// stored image and a plain-language instruction ("warmer light, less
+// clutter") and renders a NEW image (a new budget-gated spend); the
+// original is untouched, so refinement is iteration, not mutation.
+//
+// Lock semantics, precise by design: every piece of HUMAN text is
+// fidelity-locked exactly once, and system-composed styling is never
+// re-locked. If the image has a stored brief, the lock checks
+// brief + instruction together and the stored lens re-applies to that
+// combined text. If only a styled prompt exists (raw-prompt images),
+// the lock checks the NEW instruction alone, because the styled
+// prompt already carries owner palette text whose color codes could
+// false-reject a re-lock, and the instruction appends to the prompt
+// without re-styling (the styling is already baked in).
+//
+// Stored lens and aspect are PROVENANCE, not user input, so unknown
+// values (older rows) degrade tolerantly to null with a log instead
+// of failing the refine the user asked for.
+const REFINE_MAX_CHARS = 500;
+router.post("/:id/refine", requirePermission("preview_post"), async (req, res) => {
+  const id = parseId(req.params.id);
+  const instruction = typeof (req.body || {}).instruction === "string" ? req.body.instruction.trim() : "";
+  if (!id) return res.status(400).json({ error: "Invalid image id", code: "INVALID_INPUT" });
+  if (!instruction || instruction.length > REFINE_MAX_CHARS) {
+    return res.status(400).json({ error: `A refinement instruction of 1 to ${REFINE_MAX_CHARS} characters is required`, code: "INVALID_INPUT" });
+  }
+  try {
+    const out = await withTenant(req.tenant.id, async () => {
+      const meta = await getImageMeta(id); // throws IMAGE_NOT_FOUND (404) if not this tenant's
+      const topicRef = toIntOrNull(meta.source_topic_id);
+
+      let lens = null;
+      if (meta.lens_id) {
+        lens = LENSES.find((l) => l.id === meta.lens_id) || null;
+        if (!lens) platformLog("warn", "image_refine_unknown_lens", { imageId: id, lensId: meta.lens_id });
+      }
+      let preset = null;
+      if (meta.aspect) {
+        try { preset = resolveAspectPreset(meta.aspect); }
+        catch { platformLog("warn", "image_refine_unknown_aspect", { imageId: id, aspect: meta.aspect }); }
+      }
+
+      let finalPrompt;
+      let negativePrompt = null;
+      let newBrief = null;
+      let lensId = meta.lens_id || null;
+      if (typeof meta.brief === "string" && meta.brief.trim() !== "") {
+        const combined = `${meta.brief.trim()} Refinement: ${instruction}`;
+        const verdict = await lockBrief(combined, { topicRef });        // human text, locked once
+        if (!verdict.ok) {
+          throw imageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
+            "Refined brief contains unverified numbers or metric tokens",
+            { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens, metricTokens: verdict.metricTokens });
+        }
+        const palette = await getAgentState("image_brand_palette");
+        const composed = applyLens(combined, { lens, palette, aspectGuidance: preset ? preset.guidance : null });
+        finalPrompt = composed.prompt;
+        negativePrompt = composed.negativePrompt;
+        newBrief = combined;
+        lensId = composed.lensId || lensId;
+      } else {
+        const verdict = await lockBrief(instruction, { topicRef });     // only the NEW human text
+        if (!verdict.ok) {
+          throw imageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
+            "Refinement contains unverified numbers or metric tokens",
+            { unverifiedNumbers: verdict.unverifiedNumbers, unknownTokens: verdict.unknownTokens, metricTokens: verdict.metricTokens });
+        }
+        finalPrompt = `${meta.prompt} Refinement: ${instruction}`;      // styling already baked in; no re-style
+      }
+
+      const rendered = await render(
+        {
+          prompt: finalPrompt,
+          negativePrompt,
+          size: preset ? preset.size : undefined,
+          aspect: preset ? preset.id : null,
+          lensId,
+          grounding: {
+            sourceKind: meta.source_kind,
+            sourcePostId: toIntOrNull(meta.source_post_id),
+            sourceTopicId: topicRef
+          },
+          purpose: "image_refine"
+        },
+        { budgetGate: makeBudgetGate() }
+      );
+      const image = rendered.images[0];
+      const stored = await storeImage({
+        image,
+        provider: rendered.provider,
+        model: rendered.model,
+        brief: newBrief,
+        prompt: finalPrompt,
+        sourceKind: meta.source_kind,
+        sourcePostId: toIntOrNull(meta.source_post_id),
+        sourceTopicId: topicRef,
+        humanName: meta.human_name || null,
+        lensId,
+        aspect: preset ? preset.id : (meta.aspect || null),
+        costEstimateUsd: rendered.costEstimateUsd,
+        createdBy: req.user.sub
+      });
+      return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };
+    });
+    platformLog("info", "image_refined", { fromImageId: id, imageId: out.stored.id });
+    return res.status(201).json({
+      id: out.stored.id,
+      mime: out.stored.mime,
+      byteSize: out.stored.byteSize,
+      storageBackend: out.stored.storageBackend,
+      usage: out.usage,
+      costEstimateUsd: out.costEstimateUsd
+    });
+  } catch (err) {
+    platformLog("warn", "image_refine_failed", { code: err && err.code });
     return sendError(res, err);
   }
 });

@@ -107,7 +107,13 @@ export function parseWireResponse(raw, resolved) {
     images,
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
-    totalTokens: usage.total_tokens
+    totalTokens: usage.total_tokens,
+    // Three-category cost split (text vs image input), when the
+    // vendor reports it. Absent details degrade to the aggregate.
+    inputTextTokens: usage.input_tokens_details && typeof usage.input_tokens_details === "object"
+      ? usage.input_tokens_details.text_tokens : undefined,
+    inputImageTokens: usage.input_tokens_details && typeof usage.input_tokens_details === "object"
+      ? usage.input_tokens_details.image_tokens : undefined
   });
 }
 

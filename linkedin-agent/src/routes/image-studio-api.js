@@ -75,6 +75,7 @@ function statusForCode(code) {
     case "IMAGE_NOT_FOUND": return 404;
     case "POST_NOT_FOUND": return 404;
     case "NOT_PROVISIONED":
+    case "PRICING_UNAVAILABLE":
     case "MISSING_CREDENTIAL":
     case "UNKNOWN_PROVIDER":
     case "UNKNOWN_MODEL": return 409;
@@ -192,6 +193,9 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
         lensId: composed.lensId,
         aspect: preset ? preset.id : null,
         costEstimateUsd: rendered.costEstimateUsd,
+        inputTokens: rendered.usage ? rendered.usage.inputTokens : null,
+        outputTokens: rendered.usage ? rendered.usage.outputTokens : null,
+        preSpendEstimateUsd: rendered.preSpendEstimateUsd,
         createdBy: req.user.sub
       });
       return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };
@@ -341,6 +345,9 @@ router.post("/generate-from-brief", requirePermission("preview_post"), async (re
         lensId: composed.lensId,
         aspect: preset ? preset.id : null,
         costEstimateUsd: rendered.costEstimateUsd,
+        inputTokens: rendered.usage ? rendered.usage.inputTokens : null,
+        outputTokens: rendered.usage ? rendered.usage.outputTokens : null,
+        preSpendEstimateUsd: rendered.preSpendEstimateUsd,
         createdBy: req.user.sub
       });
       return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };
@@ -460,6 +467,9 @@ router.post("/:id/refine", requirePermission("preview_post"), async (req, res) =
         lensId,
         aspect: preset ? preset.id : (meta.aspect || null),
         costEstimateUsd: rendered.costEstimateUsd,
+        inputTokens: rendered.usage ? rendered.usage.inputTokens : null,
+        outputTokens: rendered.usage ? rendered.usage.outputTokens : null,
+        preSpendEstimateUsd: rendered.preSpendEstimateUsd,
         createdBy: req.user.sub
       });
       return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };

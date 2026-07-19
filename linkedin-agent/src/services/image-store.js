@@ -134,9 +134,10 @@ export async function storeImage(input, deps = {}) {
     `INSERT INTO images
        (tenant_id, source_kind, source_post_id, source_topic_id, human_name, brief,
         lens_id, provider, model, prompt, seed, aspect, width, height, mime, byte_size,
-        storage_backend, status, cost_estimate_usd, verified_metric_ref, created_by)
+        storage_backend, status, cost_estimate_usd, verified_metric_ref, created_by,
+        input_tokens, output_tokens, pre_spend_estimate_usd)
      VALUES (current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-             $14, $15, $16, 'pending', $17, $18, $19)
+             $14, $15, $16, 'pending', $17, $18, $19, $20, $21, $22)
      RETURNING id`,
     [
       input.sourceKind || "blank", input.sourcePostId ?? null, input.sourceTopicId ?? null,
@@ -144,7 +145,10 @@ export async function storeImage(input, deps = {}) {
       input.provider, input.model, input.prompt, input.seed ?? null, input.aspect ?? null,
       input.image.width ?? null, input.image.height ?? null, mime, bytes.length,
       backend, Number.isFinite(input.costEstimateUsd) ? input.costEstimateUsd : 0,
-      input.verifiedMetricRef ?? null, input.createdBy
+      input.verifiedMetricRef ?? null, input.createdBy,
+      Number.isInteger(input.inputTokens) ? input.inputTokens : null,
+      Number.isInteger(input.outputTokens) ? input.outputTokens : null,
+      Number.isFinite(input.preSpendEstimateUsd) ? input.preSpendEstimateUsd : null
     ]
   );
   const imageId = ins.rows[0].id;
@@ -203,7 +207,8 @@ export async function getImageMeta(imageId, deps = {}) {
   const r = await c.query(
     `SELECT id, source_kind, source_post_id, source_topic_id, human_name, brief, lens_id,
             provider, model, prompt, aspect, width, height, mime, byte_size, storage_backend,
-            status, cost_estimate_usd, verified_metric_ref, created_by, created_at
+            status, cost_estimate_usd, verified_metric_ref, created_by, created_at,
+            input_tokens, output_tokens, pre_spend_estimate_usd
      FROM images WHERE id = $1`,
     [imageId]
   );

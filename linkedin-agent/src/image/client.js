@@ -33,8 +33,7 @@
 
 import {
   getProvider, getImageModelProfile, resolveBaseUrl, getAllowedHosts,
-  resolveTimeoutMs, resolveMaxCountCap, resolveRenderShape, defaultModelId,
-  estimatePreSpendCostUsd, estimateActualCostUsd
+  resolveTimeoutMs, resolveMaxCountCap, resolveRenderShape, defaultModelId
 } from "./registry.js";
 import { buildRenderRequest, describeRenderRequest } from "./canonical.js";
 import { imageError, IMAGE_ERROR_CODES, isImageError, normalizeVendorHttpError } from "./errors.js";
@@ -70,7 +69,10 @@ function resolveDeps(deps = {}) {
     log: deps.log || platformLog,
     // No default: a render must clear an explicit budget gate. An
     // absent gate is a fail-closed refusal, never a silent spend.
-    budgetGate: typeof deps.budgetGate === "function" ? deps.budgetGate : null
+    budgetGate: typeof deps.budgetGate === "function" ? deps.budgetGate : null,
+    // Injectable pricing (tests, alternatives); default resolves the
+    // versioned platform tables lazily.
+    pricing: deps.pricing || null
   };
 }
 
@@ -189,10 +191,23 @@ export async function render(input, deps = {}) {
 
     // Reserve the conservative pre-spend cost and CLEAR the budget
     // gate BEFORE any spend. A missing gate is a fail-closed refusal.
-    const preSpendUsd = estimatePreSpendCostUsd(selection.profile, canonReq.count);
+    // Gate presence is validated BEFORE any pricing work: an
+    // unusable call refuses without touching the database.
     if (!d.budgetGate) {
       throw imageError(IMAGE_ERROR_CODES.BUDGET_REQUIRED,
-        "Render budget gate is not wired; refusing to spend");
+        "render() requires a budgetGate; refusing to spend ungated");
+    }
+    // EXACT pre-spend from the versioned platform price tables, keyed
+    // by the resolved shape. FAIL-CLOSED: an unpriced (model, size,
+    // quality) refuses the render; a zero estimate would walk through
+    // the budget gate, so null never degrades to zero.
+    const pricing = d.pricing || await import("../services/image-pricing.js");
+    const preSpendUsd = await pricing.resolvePreSpendUsd(
+      selection.provider, selection.model, shape.size, shape.quality, canonReq.count);
+    if (preSpendUsd === null) {
+      throw imageError(IMAGE_ERROR_CODES.PRICING_UNAVAILABLE,
+        `No price row for ${selection.provider}/${selection.model} at ${shape.size}/${shape.quality}; seed 41-image-model-pricing.sql`,
+        { provider: selection.provider, model: selection.model, size: shape.size, quality: shape.quality });
     }
     await d.budgetGate(preSpendUsd);
 
@@ -232,7 +247,8 @@ export async function render(input, deps = {}) {
 
     const response = adapter.parseWireResponse(raw, wire.resolved);
     const durationMs = Date.now() - startedMs;
-    const costEstimateUsd = estimateActualCostUsd(selection.profile, response.usage);
+    const rates = await pricing.resolveModelRates(selection.provider, selection.model);
+    const costEstimateUsd = pricing.computeActualCostUsd(rates, response.usage);
 
     d.log("info", "image_response_orchestrated", {
       provider: selection.provider, model: selection.model, purpose, cycleId,

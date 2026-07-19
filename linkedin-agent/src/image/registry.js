@@ -172,27 +172,11 @@ export function resolveMaxCountCap(env = process.env) {
   return positiveIntFromEnv(env, IMAGE_LIMITS.maxCountCapEnv, IMAGE_LIMITS.defaultMaxCountCap);
 }
 
-// Conservative PRE-spend estimate for the budget gate: token cost
-// is unknown until after the call, so reserve the profile's per-
-// image ceiling times the image count. The gate reconciles against
-// the actual cost after the render.
-export function estimatePreSpendCostUsd(profile, count) {
-  const n = Number.isInteger(count) && count > 0 ? count : 1;
-  const ceiling = profile && Number.isFinite(profile.preSpendCeilingUsd) ? profile.preSpendCeilingUsd : 0;
-  return Math.round(ceiling * n * 1e6) / 1e6;
-}
+// The pre-spend and actual-cost estimators moved to
+// src/services/image-pricing.js in the cost workstream: rates are
+// versioned platform DATA (41-image-model-pricing.sql), not module
+// constants, and the render pipeline refuses to spend unpriced.
 
-// ACTUAL post-render cost from token usage, when the model prices
-// by tokens and usage is complete. Returns null otherwise.
-export function estimateActualCostUsd(profile, usage) {
-  if (!profile || !profile.pricing || !usage) return null;
-  const { inputTokens, outputTokens } = usage;
-  if (!Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) return null;
-  if (inputTokens < 0 || outputTokens < 0) return null;
-  const usd = (inputTokens / 1e6) * profile.pricing.inputPerMTokUsd
-    + (outputTokens / 1e6) * profile.pricing.outputPerMTokUsd;
-  return Math.round(usd * 1e6) / 1e6;
-}
 
 // ── Aspect presets (Phase 3) ───────────────────────────────────
 // Resolve a UX aspect preset id to its wire size and composition

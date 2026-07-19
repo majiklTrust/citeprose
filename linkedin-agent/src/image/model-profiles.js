@@ -3,7 +3,9 @@
 // ═══════════════════════════════════════════════════════════════
 // The ONE module in src/image allowed to carry literals. Base
 // URLs, wire model ids, auth schemes, image paths, capability
-// profiles, and pricing are operator-owned configuration: adding
+//   (pricing)            rates + exact per-image pre-spend moved to
+//                       the versioned platform tables in
+//                       41-image-model-pricing.sql (cost workstream)
 // a vendor or a model is an edit HERE (plus an env var for custom
 // endpoints), never an adapter or the orchestrator.
 //
@@ -27,11 +29,7 @@
 //   alwaysBase64        true when the model always returns b64 and
 //                       rejects a response_format field
 //   defaultSize/Quality/OutputFormat  used when the caller omits one
-//   pricing             token pricing (USD per million) for the
-//                       ACTUAL post-render cost from usage
-//   preSpendCeilingUsd  a conservative per-image ceiling used for
 //                       the pre-spend budget check (we cannot know
-//                       token cost until after the call, so the gate
 //                       reserves the worst case and reconciles after)
 // ═══════════════════════════════════════════════════════════════
 
@@ -109,9 +107,8 @@ export const PROVIDERS = Object.freeze([
       alwaysBase64: true,
       defaultSize: "1024x1024",
       defaultQuality: "auto",
-      defaultOutputFormat: "png",
-      pricing: Object.freeze({ inputPerMTokUsd: 5, outputPerMTokUsd: 40 }),
-      preSpendCeilingUsd: 0.25
+      defaultOutputFormat: "png"
+      // Hardcoded rate constants were removed in the cost workstream.
     })
   })
 ]);
@@ -121,7 +118,19 @@ export const PROVIDERS = Object.freeze([
 export const MODELS = Object.freeze([
   Object.freeze({
     provider: "openai",
+    id: "gpt-image-1.5",
+    label: "GPT Image 1.5"
+  }),
+  Object.freeze({
+    provider: "openai",
+    id: "gpt-image-1-mini",
+    label: "GPT Image 1 Mini"
+  }),
+  Object.freeze({
+    provider: "openai",
+    // RETIREMENT CLOCK: OpenAI retires gpt-image-1 on 2026-10-23.
+    // Tenants should migrate to gpt-image-1.5 before that date.
     id: "gpt-image-1",
-    label: "GPT Image 1"
+    label: "GPT Image 1 (retires Oct 2026)"
   })
 ]);

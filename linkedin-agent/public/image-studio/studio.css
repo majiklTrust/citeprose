@@ -78,6 +78,7 @@ body{background:radial-gradient(1200px 700px at 70% -10%,#12202a 0%,var(--bg) 55
 .gallery-head .lead{font-size:13px;font-weight:600}
 .gallery-head .lead span{color:var(--ink-faint);font-weight:400;font-size:12px}
 .gallery-head .spacer{flex:1}
+.model-note{font-size:10.5px;letter-spacing:.4px;color:var(--ink-faint);white-space:nowrap}
 .gen-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(180deg,var(--accent),var(--accent-deep));color:#06231f;font-weight:700;font-size:13px;border:0;border-radius:10px;padding:9px 16px;cursor:pointer;transition:.15s}
 .gen-btn:hover{filter:brightness(1.08)}
 .gen-btn:disabled{opacity:.55;cursor:default}

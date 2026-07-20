@@ -290,6 +290,9 @@ function StudioApp() {
           <div className="gallery-head">
             <div className="lead">Library <span>&middot; every render this workspace keeps</span></div>
             <div className="spacer"></div>
+            {status && status.provider && status.model && (
+              <div className="model-note" title="The image model that renders here">{status.provider + ' / ' + status.model}</div>
+            )}
             <button className="gen-btn" disabled={busy} onClick={generate}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18" /></svg>
               {busy ? 'Working...' : 'Generate'}

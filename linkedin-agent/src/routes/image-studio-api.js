@@ -119,15 +119,20 @@ router.get("/budget", async (req, res) => {
       // Cheap reads; never throws the probe.
       let provisioned = false;
       let keyed = false;
+      let provider = null;
+      let model = null;
       try {
-        const provider = await getAgentState("image_provider");
-        provisioned = typeof provider === "string" && provider.trim() !== "";
+        const rawProvider = await getAgentState("image_provider");
+        provisioned = typeof rawProvider === "string" && rawProvider.trim() !== "";
         if (provisioned) {
+          provider = rawProvider.trim();
+          const rawModel = await getAgentState("image_model");
+          model = typeof rawModel === "string" && rawModel.trim() !== "" ? rawModel.trim() : null;
           const { hasLlmApiKey } = await import("../tenant/credential-store.js");
-          keyed = await hasLlmApiKey(provider.trim());
+          keyed = await hasLlmApiKey(provider);
         }
       } catch { /* readiness stays false; the render gates enforce regardless */ }
-      return { ...base, provisioned, keyed };
+      return { ...base, provisioned, keyed, provider, model };
     });
     return res.status(200).json(status);
   } catch (err) {

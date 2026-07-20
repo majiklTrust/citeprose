@@ -44,6 +44,7 @@
     .composer-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
     .composer-genre-desc { font-size: 0.76rem; color: #777; }
     .composer-genre-reason { font-size: 0.72rem; color: #b45309; font-style: italic; }
+    .composer-model-note { font-size: 0.72rem; letter-spacing: 0.3px; color: #64748b; text-align: center; margin-top: 0.4rem; }
     .composer-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
     .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
     .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
@@ -218,6 +219,13 @@
       const [genresLoading, setGenresLoading] = useState(false);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
+      const [composerModel, setComposerModel] = useState(null);
+      useEffect(() => {
+        fetch(API + '/api/compose/model-info', { credentials: 'include' })
+          .then(res => { if (!res.ok) throw res; return res.json(); })
+          .then(d => { if (d.provider && d.model) setComposerModel(d.provider + ' / ' + d.model); })
+          .catch(() => { /* label is additive; the button works without it */ });
+      }, []);
       const abortRef = React.useRef(null);
       const cancelKindRef = React.useRef(null);
       const mountedRef = React.useRef(true);
@@ -445,9 +453,14 @@
                 <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
               </div>
             ) : (
-              <button className="btn btn-primary btn-full" onClick={selectedGenre === '' ? handleNewPost : handleGenerate} disabled={genresLoading}>
-                {selectedGenre === '' ? 'New Post' : 'Generate with AI'}
-              </button>
+              <React.Fragment>
+                <button className="btn btn-primary btn-full" onClick={selectedGenre === '' ? handleNewPost : handleGenerate} disabled={genresLoading}>
+                  {selectedGenre === '' ? 'New Post' : 'Generate with AI'}
+                </button>
+                {selectedGenre !== '' && composerModel && (
+                  <div className="composer-model-note" title="The text model that drafts this post">{composerModel}</div>
+                )}
+              </React.Fragment>
             )}
           </div>
         </div>
@@ -1207,7 +1220,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.25</div>
+                <div className="header-subtitle">v2.5.26</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1239,7 +1252,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.25</div>
+                <div className="header-subtitle">v2.5.26</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1291,7 +1304,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.5.25 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.26 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

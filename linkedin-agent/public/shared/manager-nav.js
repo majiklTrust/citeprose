@@ -78,7 +78,15 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], data.subscription ? (data.subscription.capabilities || []) : null);
+        // 2.4.23 F2/F4 coherence: the server fails OPEN on an unknown
+        // subscription state (pages stay reachable), so the nav must
+        // fail VISIBLE on the same state. unknown -> null -> the F4
+        // fail-visible path, identical to a missing block.
+        var navCaps = null;
+        if (data.subscription && data.subscription.state !== 'unknown') {
+          navCaps = data.subscription.capabilities || [];
+        }
+        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], navCaps);
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

@@ -15,6 +15,9 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { TIERS } from "../config/entitlements.js";
+import { getCheckoutLinksForTenant } from "../payments/checkout-links.js";
+import { getPaymentsProviderName } from "../payments/provider.js";
+import { getFreshCheckoutAllowed, getTierChangeEnabled, getReactivationTier } from "../services/billing-policy.js";
 
 export default function createBillingRoutes() {
   const router = express.Router();
@@ -31,9 +34,10 @@ export default function createBillingRoutes() {
       const { getSubscription } = await import("../services/entitlements.js");
       const { tierCapabilities } = await import("../config/entitlements.js");
       const sub = await getSubscription(req.tenant.id);
+      const userEmail = req.user && req.user.email ? req.user.email : null;
       if (!sub) {
         return res.json({ state: "none", tiers: TIERS,
-          checkout: getCheckoutLinks(req.tenant.id, req.user && req.user.email ? req.user.email : null) });
+          checkout: getCheckoutLinksForTenant(req.tenant.id, userEmail, TIERS) });
       }
       // 2.4.25: subscribe links appear ONLY where a fresh checkout is
       // legitimate (no subscription, or a cancelled one). An active,
@@ -41,12 +45,11 @@ export default function createBillingRoutes() {
       // to a second concurrent Stripe subscription: the app would
       // refuse the duplicate checkout event, but Stripe would still
       // be billing it. Suspended reactivation has its own route.
-      const freshCheckoutOk = sub.state === "cancelled";
       res.json({
-        checkout: freshCheckoutOk
-          ? getCheckoutLinks(req.tenant.id, req.user && req.user.email ? req.user.email : null)
+        checkout: getFreshCheckoutAllowed(sub.state)
+          ? getCheckoutLinksForTenant(req.tenant.id, userEmail, TIERS)
           : null,
-        tierChangeEnabled: (process.env.PAYMENTS_PROVIDER || "local").trim() !== "stripe",
+        tierChangeEnabled: getTierChangeEnabled(getPaymentsProviderName(), sub.comp === true),
         state: sub.state, tier: sub.tier, comp: sub.comp === true,
         pendingTier: sub.pending_tier || null,
         periodStart: sub.period_start, periodEnd: sub.period_end,
@@ -64,7 +67,7 @@ export default function createBillingRoutes() {
       // the app's tier while Stripe keeps invoicing the original price:
       // entitlement and revenue diverge. Refused until the customer
       // portal (or checkout-based upgrade) exists.
-      if ((process.env.PAYMENTS_PROVIDER || "local").trim() === "stripe") {
+      if (!getTierChangeEnabled(getPaymentsProviderName(), false)) {
         return res.status(409).json({
           error: "Tier changes for live subscriptions are handled through support until self-serve upgrades ship.",
           code: "TIER_CHANGE_UNAVAILABLE"
@@ -94,41 +97,7 @@ export default function createBillingRoutes() {
   });
 
   // ── Reactivation: honest until checkout exists ───────────────
-  // ═════════════════════════════════════════════════════════════
-// Stripe Payment Links (2.4.24). Dashboard-created, env-carried,
-// zero SDK. The server appends client_reference_id (the tenant)
-// so the adapter's tenant chain resolves it from the checkout
-// event; the LINK's own metadata must carry tier (and trial
-// where the grace period applies): the adapter reads only event
-// metadata, never product metadata. Fail-closed: no env, no link.
-// ═════════════════════════════════════════════════════════════
-function getPaymentLinkForTier(tier) {
-  const map = {
-    individual: process.env.STRIPE_PAYMENT_LINK_INDIVIDUAL,
-    business: process.env.STRIPE_PAYMENT_LINK_BUSINESS,
-    business_plus: process.env.STRIPE_PAYMENT_LINK_BUSINESS_PLUS,
-    business_premium: process.env.STRIPE_PAYMENT_LINK_BUSINESS_PREMIUM
-  };
-  const raw = map[tier];
-  if (!raw || typeof raw !== "string" || !raw.startsWith("https://")) return null;
-  return raw;
-}
-
-function getCheckoutLinks(tenantId, email) {
-  if ((process.env.PAYMENTS_PROVIDER || "local").trim() !== "stripe") return null;
-  const links = {};
-  for (const tier of TIERS) {
-    const base = getPaymentLinkForTier(tier);
-    if (!base) continue;
-    let url = base + (base.includes("?") ? "&" : "?")
-      + "client_reference_id=" + encodeURIComponent(tenantId);
-    if (email) url += "&prefilled_email=" + encodeURIComponent(email);
-    links[tier] = url;
-  }
-  return Object.keys(links).length > 0 ? links : null;
-}
-
-router.post("/reactivate", async (req, res) => {
+  router.post("/reactivate", async (req, res) => {
     try {
       const { getSubscription } = await import("../services/entitlements.js");
       const sub = await getSubscription(req.tenant.id);
@@ -138,9 +107,12 @@ router.post("/reactivate", async (req, res) => {
       // 2.4.24: checkout is live via Payment Links. Reactivation is
       // a fresh checkout on the tenant's current tier; fail-closed
       // to the honest 409 when links are not configured.
-      const checkoutUrl = getCheckoutLinks(req.tenant.id,
-        req.user && req.user.email ? req.user.email : null);
-      const url = checkoutUrl ? checkoutUrl[sub.tier] || null : null;
+      const reactivationTier = getReactivationTier(sub);
+      const links = reactivationTier
+        ? getCheckoutLinksForTenant(req.tenant.id,
+            req.user && req.user.email ? req.user.email : null, [reactivationTier])
+        : null;
+      const url = links ? links[reactivationTier] || null : null;
       if (url) return res.json({ ok: true, checkoutUrl: url });
       return res.status(409).json({
         error: "Checkout is not yet available. Reactivation opens when billing goes live.",

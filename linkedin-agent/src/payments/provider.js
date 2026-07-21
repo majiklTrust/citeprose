@@ -18,8 +18,15 @@ export const EVENT_TYPES = [
   "subscription_cancelled"
 ];
 
+// The single source of the active provider name. Every consumer
+// (routes, policy, adapters) resolves through here: no inline env
+// parsing anywhere else.
+export function getPaymentsProviderName() {
+  return (process.env.PAYMENTS_PROVIDER || "local").trim();
+}
+
 export async function getPaymentsProvider() {
-  const name = (process.env.PAYMENTS_PROVIDER || "local").trim();
+  const name = getPaymentsProviderName();
   if (name === "local") {
     const { localProvider } = await import("./providers/local.js");
     return localProvider;

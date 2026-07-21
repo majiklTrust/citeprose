@@ -63,10 +63,14 @@
 
     if (!sub.comp) {
       html += '<div class="row">';
-      html += '<select id="tier-select">' + (sub.tiers || []).map(function (t) {
-        return '<option value="' + esc(t) + '"' + (t === sub.tier ? ' selected' : '') + '>' + esc(t) + '</option>';
-      }).join('') + '</select>';
-      html += '<button class="btn btn-primary" id="tier-change">Change tier at next renewal</button>';
+      if (sub.tierChangeEnabled !== false) {
+        html += '<select id="tier-select">' + (sub.tiers || []).map(function (t) {
+          return '<option value="' + esc(t) + '"' + (t === sub.tier ? ' selected' : '') + '>' + esc(t) + '</option>';
+        }).join('') + '</select>';
+        html += '<button class="btn btn-primary" id="tier-change">Change tier at next renewal</button>';
+      } else {
+        html += '<p class="hint">Tier changes for live subscriptions are handled through support until self-serve upgrades ship.</p>';
+      }
       if (sub.state === 'suspended') html += '<button class="btn" id="reactivate">Reactivate</button>';
       if (sub.checkout) {
         html += '<div class="subscribe-links"><h3>Subscribe</h3>';

@@ -35,8 +35,18 @@ export default function createBillingRoutes() {
         return res.json({ state: "none", tiers: TIERS,
           checkout: getCheckoutLinks(req.tenant.id, req.user && req.user.email ? req.user.email : null) });
       }
+      // 2.4.25: subscribe links appear ONLY where a fresh checkout is
+      // legitimate (no subscription, or a cancelled one). An active,
+      // trialing, past_due, or suspended tenant must never see a path
+      // to a second concurrent Stripe subscription: the app would
+      // refuse the duplicate checkout event, but Stripe would still
+      // be billing it. Suspended reactivation has its own route.
+      const freshCheckoutOk = sub.state === "cancelled";
       res.json({
-        checkout: getCheckoutLinks(req.tenant.id, req.user && req.user.email ? req.user.email : null),
+        checkout: freshCheckoutOk
+          ? getCheckoutLinks(req.tenant.id, req.user && req.user.email ? req.user.email : null)
+          : null,
+        tierChangeEnabled: (process.env.PAYMENTS_PROVIDER || "local").trim() !== "stripe",
         state: sub.state, tier: sub.tier, comp: sub.comp === true,
         pendingTier: sub.pending_tier || null,
         periodStart: sub.period_start, periodEnd: sub.period_end,
@@ -50,6 +60,16 @@ export default function createBillingRoutes() {
   // ── Tier change: next cycle, per ruling (4) ──────────────────
   router.post("/change-tier", async (req, res) => {
     try {
+      // 2.4.25: under the live Stripe provider, pending_tier would flip
+      // the app's tier while Stripe keeps invoicing the original price:
+      // entitlement and revenue diverge. Refused until the customer
+      // portal (or checkout-based upgrade) exists.
+      if ((process.env.PAYMENTS_PROVIDER || "local").trim() === "stripe") {
+        return res.status(409).json({
+          error: "Tier changes for live subscriptions are handled through support until self-serve upgrades ship.",
+          code: "TIER_CHANGE_UNAVAILABLE"
+        });
+      }
       const tier = req.body && req.body.tier;
       if (!TIERS.includes(tier)) return res.status(400).json({ error: "Choose a valid tier" });
       const { getSubscription } = await import("../services/entitlements.js");

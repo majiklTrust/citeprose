@@ -68,6 +68,14 @@
       }).join('') + '</select>';
       html += '<button class="btn btn-primary" id="tier-change">Change tier at next renewal</button>';
       if (sub.state === 'suspended') html += '<button class="btn" id="reactivate">Reactivate</button>';
+      if (sub.checkout) {
+        html += '<div class="subscribe-links"><h3>Subscribe</h3>';
+        Object.keys(sub.checkout).forEach(function (t) {
+          html += '<a class="btn btn-primary subscribe-btn" href="' + sub.checkout[t] + '">'
+            + t + '</a> ';
+        });
+        html += '<p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
+      }
       html += '</div>';
     } else {
       html += '<div class="section-note">Complimentary subscriptions are managed by the platform operator.</div>';
@@ -85,6 +93,7 @@
     var re = $('reactivate');
     if (re) re.addEventListener('click', function () {
       sendJson('POST', '/api/billing/reactivate').then(function (r) {
+        if (r.ok && r.body.checkoutUrl) { window.location.href = r.body.checkoutUrl; return; }
         showMessage(r.body.error || (r.ok ? 'Reactivated.' : 'Reactivation failed.'), r.ok ? 'success' : 'error');
       });
     });

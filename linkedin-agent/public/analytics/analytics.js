@@ -299,10 +299,17 @@
   function getJson(path) {
     return fetch(API + path, { credentials: 'include', headers: { 'Accept': 'application/json' } })
       .then(function (res) {
-        return res.json().then(function (body) {       if (res.status === 403 && body && body.code === 'ORGANIZATION_MANAGER_DISABLED') {
+        return res.json().then(function (body) {       if (body && ((res.status === 403 && body.code === 'ORGANIZATION_MANAGER_DISABLED') || (res.status === 402 && body.code === 'ENTITLEMENT_REQUIRED'))) {
         if (!window.__omWall) {
           window.__omWall = true;
           var wall = document.getElementById('om-wall');
+          // AUDIT F5 (2.4.2): an entitlement denial reading
+          // "disabled by the operator" sends the user hunting for
+          // a setting that does not exist. Name the real gate.
+          if (wall && res.status === 402) {
+            var note = wall.querySelector('p');
+            if (note) note.textContent = 'This feature is part of the Business plan and above. The workspace owner can review plans on the Billing page.';
+          }
           if (wall) { wall.hidden = false; wall.className = 'auth-wall shown'; }
         }
       } else if (document.body.classList.contains('om-checking')) {

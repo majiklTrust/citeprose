@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Billing - {{APPLICATION}}</title>
+  <link rel="stylesheet" href="/app/shared/manager-nav.css?v={{CSSVERSION}}">
+</head>
+<body class="page-billing">
+  <div id="om-wall" class="auth-wall" hidden>
+    <h1>Access denied</h1>
+    <p>Billing is available to the workspace owner.</p>
+    <p class="denied-link"><a href="/app">Back to dashboard</a></p>
+  </div>
+  <div id="denied" class="access-denied" style="display:none">
+    <h1>Access denied</h1>
+    <p class="denied-note">Billing is available to the workspace owner.</p>
+    <p class="denied-link"><a href="/app">Back to dashboard</a></p>
+  </div>
+  <div id="app" style="display:none">
+    <div class="page-header">
+      <h1>Billing</h1>
+      <div id="manager-nav"></div>
+    </div>
+    <div id="message"></div>
+
+    <div class="section" id="subscription-section">
+      <h2>Subscription</h2>
+      <div class="section-note">Tier changes take effect at the next renewal. The current cycle is never interrupted.</div>
+      <div id="subscription-body">Loading...</div>
+    </div>
+
+    <div class="section" id="vendor-section">
+      <h2>AI Vendor</h2>
+      <div class="section-note">The language model behind content generation. Keys are validated with the vendor before anything is stored, and stored encrypted per workspace. This platform never purchases vendor service on your behalf.</div>
+      <div id="vendor-body">Loading...</div>
+    </div>
+  </div>
+  <script src="/app/shared/manager-nav.js?v={{CSSVERSION}}"></script>
+  <script src="billing.js?v={{CSSVERSION}}"></script>
+</body>
+</html>

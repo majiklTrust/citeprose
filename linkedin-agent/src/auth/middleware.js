@@ -21,14 +21,15 @@
 import { isAuthEnabled, getProviders, getJwksMap, getIssuers, getSnapshotByIssuer } from "./index.js";
 import { verifyToken } from "./jwt-verifier.js";
 import { readSession, shouldRefreshSession, refreshSession, SESSION_COOKIE_NAME, MS_PER_MINUTE, SESSION_MAX_AGE_MS, setSessionLogger } from "./session.js";
-import { platformLog } from "../services/platform-log.js";
 
-// session.js is a foundational crypto module that imports only Node
-// built-ins, so it cannot import the logger itself. The middleware is
-// the auth orchestration layer and already depends on both, so it
-// injects the real logger here at load; session lifecycle debug events
-// then flow through platformLog exactly as before.
-setSessionLogger(platformLog);
+// Layering rule (design test 3.3.2.10-D): the auth layer imports no
+// business modules. The logger is therefore never imported here; it
+// arrives through createAuthMiddleware(logFn) from each caller, and
+// the factory forwards its crash-isolated safeLog wrapper to
+// session.js (a foundational crypto module that imports only Node
+// built-ins, invokes its logger unguarded, and cannot import or
+// defend a logger itself). Callers already pass the platform logger,
+// so session lifecycle debug events keep flowing to the same sink.
 
 // ── Error Responses ──────────────────────────────────────────
 // Generic messages — never leak token details or internal state.
@@ -96,10 +97,14 @@ function isDevBypass(req) {
  * DEV_BYPASS_SUB should be the auth_sub of a real membership
  * row (e.g. "auth0|0123456789"). The tenant
  * resolver uses it to look up the workspace.
+ *
+ * log is the caller's safe logging wrapper (optional). It carries
+ * the production-suppression warn so this security signal reaches
+ * the platform log without this layer importing the logger.
  */
-function syntheticDevUser() {
+function syntheticDevUser(log) {
   if (process.env.NODE_ENV === "production") {
-    platformLog("warn", "synthetic_user_suppressed_in_prod", {})
+    if (log) log("warn", "synthetic_user_suppressed_in_prod", {});
     return null;
   }
   const sub = process.env.DEV_BYPASS_SUB;
@@ -180,6 +185,17 @@ export function createAuthMiddleware(logFn) {
     }
   }
 
+  // Wire the session lifecycle logger. session.js invokes its
+  // logger bare (no try/catch, no promise handling), so it must
+  // only ever receive a function that cannot throw or reject.
+  // Inject safeLog, the crash-isolated wrapper, never the raw
+  // logFn: a caller passing an async tenant-scoped logger (the
+  // documented logActivity pattern) would otherwise turn every
+  // pre-tenant session_created event into an unhandled rejection.
+  // Gate on logFn presence: a factory call without a logger must
+  // not replace live wiring with a wrapper around nothing.
+  if (typeof logFn === "function") setSessionLogger(safeLog);
+
   /**
    * requireAuth — blocks requests without a valid token or session.
    * Attaches req.user (decoded JWT payload or session user) on success.
@@ -192,7 +208,7 @@ export function createAuthMiddleware(logFn) {
     // resolver can find the workspace. Without it, tenant-scoped
     // routes return 403 because req.user is null.
     if (!isAuthEnabled()) {
-      req.user = syntheticDevUser();
+      req.user = syntheticDevUser(safeLog);
       req.authSkipped = true;
       req.devBypass = !!req.user;
       return next();
@@ -203,7 +219,7 @@ export function createAuthMiddleware(logFn) {
     // but enforcement is disabled for matching origins. Synthetic
     // user injected from DEV_BYPASS_SUB when available.
     if (isDevBypass(req)) {
-      req.user = syntheticDevUser();
+      req.user = syntheticDevUser(safeLog);
       req.authSkipped = true;
       req.devBypass = true;
       return next();
@@ -218,7 +234,7 @@ export function createAuthMiddleware(logFn) {
         // Check server-side expiry using issuedAt + SESSION_MAX_AGE_MS
         const sessionDeadline = (session.issuedAt || 0) + SESSION_MAX_AGE_MS;
         if (typeof session.issuedAt === 'number' && Date.now() > sessionDeadline) {
-          platformLog("debug", "session_expired", {
+          safeLog("debug", "session_expired", {
             sub: session.user.sub,
             expiredAgoMinutes: Math.round((Date.now() - sessionDeadline) / MS_PER_MINUTE)
           });
@@ -340,7 +356,7 @@ export function createAuthMiddleware(logFn) {
   async function optionalAuth(req, res, next) {
     // No providers — inject synthetic user if available
     if (!isAuthEnabled()) {
-      req.user = syntheticDevUser();
+      req.user = syntheticDevUser(safeLog);
       req.authSkipped = true;
       req.devBypass = !!req.user;
       return next();
@@ -348,7 +364,7 @@ export function createAuthMiddleware(logFn) {
 
     // Dev bypass — inject synthetic user if available
     if (isDevBypass(req)) {
-      req.user = syntheticDevUser();
+      req.user = syntheticDevUser(safeLog);
       req.authSkipped = true;
       req.devBypass = true;
       return next();
@@ -361,7 +377,7 @@ export function createAuthMiddleware(logFn) {
         // Check server-side expiry using issuedAt + SESSION_MAX_AGE_MS
         const sessionDeadline = (session.issuedAt || 0) + SESSION_MAX_AGE_MS;
         if (typeof session.issuedAt === 'number' && Date.now() > sessionDeadline) {
-          platformLog("debug", "session_expired", {
+          safeLog("debug", "session_expired", {
             sub: session.user.sub,
             expiredAgoMinutes: Math.round((Date.now() - sessionDeadline) / MS_PER_MINUTE)
           });

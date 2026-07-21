@@ -69,7 +69,8 @@ export function createApp(ctx) {
     withTenant, findTenantByAuthIdentity, storeCredential,
     setAgentState,
     invalidateTokenCache,
-    createPlatformAdminRoutes
+    createPlatformAdminRoutes,
+    createBillingRoutes
   } = ctx;
 
   // Server-side owner gate for the /app/admin page. Fail closed:
@@ -131,6 +132,35 @@ export function createApp(ctx) {
     credentials: true,
   }));
 
+  // Payments (2.3.3): the provider webhook needs the RAW body for
+  // signature verification, so it mounts BEFORE the json parser.
+  // Verification is the provider's job and fails closed; only a
+  // signed, well-formed, normalized event reaches the state
+  // machine. Replays are absorbed by the audit table's unique ref.
+  instance.post("/api/payments/webhook", express.raw({ type: "*/*", limit: "16kb" }), async (req, res) => {
+    try {
+      const { getPaymentsProvider } = await import("./payments/provider.js");
+      const provider = await getPaymentsProvider();
+      const event = provider.parseWebhook(req.headers, req.body);
+      if (!event) return res.status(401).json({ error: "Webhook rejected" });
+      // Verified but not lifecycle-relevant (2.3.6): answer 200 so
+      // the processor stops retrying; log the reason for the audit.
+      if (event.ignored) {
+        console.log(`[payments] webhook ignored: ${event.reason}`);
+        return res.json({ ok: true, ignored: true });
+      }
+      const { applyEvent } = await import("./services/subscription-lifecycle.js");
+      const out = await applyEvent(event, provider.name);
+      if (out.duplicate) return res.status(200).json({ ok: true, duplicate: true });
+      if (out.refused) return res.status(422).json({ error: "Event refused" });
+      if (out.raced) return res.status(409).json({ error: "State changed; retry" });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[payments] webhook failed:", err.message);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
   instance.use(express.json({ limit: "16kb" }));
 
   // Static file surfaces
@@ -167,6 +197,7 @@ export function createApp(ctx) {
   // roles; the data behind it is permission-gated at the API layer
   // (view_analytics / sync_analytics), matching the feeds pattern.
   instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+  instance.use("/app/billing", express.static(path.join(__dirname, "../public/billing"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // LinkedIn connection settings page (owner controls; the APIs it
   // calls are manage_linkedin-gated, the shell itself is static).
@@ -561,6 +592,46 @@ export function createApp(ctx) {
   });
 
   instance.get("/auth/linkedin", async (req, res) => {
+    // LCM-DS-5.8: denial pages honor the allowlisted origin.
+    let gateBack = "/app", gateBackLabel = "Back to Dashboard";
+    try { const sec = await import("./services/security.js");
+      gateBack = sec.sanitizeReturnTo(req.query.returnTo);
+      if (gateBack === "/app/linkedin/") gateBackLabel = "Back to LinkedIn Settings"; } catch {}
+    // Payments (2.3.4), ruling (3): Connect to LinkedIn is denied
+    // outside good standing. Platform admins bypass per (6).
+    try {
+      const authedUser = req.user || null;
+      const { isPlatformAdmin } = await import("./tenant/platform-db.js");
+      if (!(authedUser && isPlatformAdmin(authedUser.sub))) {
+        // AUDIT F8 (2.4.2): the session user carries authMethod,
+        // not a provider field; the wrong key made bearer users'
+        // tenants unresolvable and silently skipped this gate.
+        const gateProvider = authedUser && authedUser.authMethod === "bearer"
+          ? (req.authProvider || "auth0") : "auth0";
+        const tenantForGate = authedUser
+          ? await (await import("./tenant/platform-db.js")).findTenantByAuthIdentity(gateProvider, authedUser.sub)
+          : null;
+        if (tenantForGate) {
+          const { getSubscription, evaluateAccess } = await import("./services/entitlements.js");
+          const verdict = evaluateAccess(await getSubscription(tenantForGate.id), null);
+          if (!verdict.allowed) {
+            return res.status(402).send(`
+              <h2>Subscription Required</h2>
+              <p>Connecting LinkedIn requires an active subscription for this workspace.</p>
+              <a href="${gateBack}">${gateBackLabel}</a>
+            `);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[payments] connect gate failed:", err.message);
+      return res.status(403).send(`
+        <h2>Access Denied</h2>
+        <p>The subscription check could not complete. Try again.</p>
+        <a href="${gateBack}">${gateBackLabel}</a>
+      `);
+    }
+
     // Return-to preservation: the page that initiated the connect
     // is where the flow lands afterward. The value is allowlisted
     // inside generateOAuthState; anything unexpected collapses to
@@ -727,6 +798,11 @@ export function createApp(ctx) {
   // Platform admin API — super admin only, cross-tenant operations
   instance.use("/api/platform-admin", createPlatformAdminRoutes());
 
+  // Payments (2.3.5, corrected 2.3.9): billing mounts here inside
+  // createApp, where instance exists. The suspended write guard
+  // exempts this path so a suspended owner can always reactivate.
+  instance.use("/api/billing", createBillingRoutes());
+
   // Topics API routes — mounted at /api/topics. Blanket middleware
   // requires manage_own_topics (blocks viewers). Per-handler checks
   // enforce manage_topics for global operations.
@@ -830,6 +906,7 @@ export async function buildAppForTests() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createBillingRoutes } = await import("./routes/billing-api.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -859,6 +936,7 @@ export async function buildAppForTests() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createBillingRoutes,
     adminPageGate: createAdminPageGate()
   });
 }
@@ -935,6 +1013,7 @@ export async function start() {
   const { withTenant }                   = await import("./db/with-tenant.js");
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
+  const { default: createBillingRoutes } = await import("./routes/billing-api.js");
   const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -975,6 +1054,7 @@ export async function start() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createBillingRoutes,
     adminPageGate: createAdminPageGate()
   });
 

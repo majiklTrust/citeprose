@@ -30,7 +30,7 @@ for (const name of fs.readdirSync(SRC)) {
   const outDir = path.join("public", m[1]);
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "index.html"), s);
-  console.log(`built public/${m[1]}/index.html from ${name}`);
+  console.log(`build-pages.mjs generated public/${m[1]}/index.html from ${name}`);
   built++;
 }
 if (built === 0) console.log("no page templates found (nothing to build)");

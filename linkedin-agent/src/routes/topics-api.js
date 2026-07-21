@@ -10,6 +10,7 @@
 // is enforced per-handler based on topic ownership.
 // ═══════════════════════════════════════════════════════════════
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAuthMiddleware } from "../auth/middleware.js";
@@ -20,7 +21,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
-import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getAnthropicModel, callAnthropic, getTopicSearchTemplateMaxTokens, getTopicSuggestionMaxTokens } from "../config/ai.js";
 import { validateSearchTemplates, parseSuggestedTemplates } from "../services/search-queries.js";
 import { frameUntrustedContent } from "../services/prompt-framing.js";
 import {
@@ -40,6 +41,10 @@ const resolveTenant = createTenantResolver();
 // ── Blanket middleware — blocks viewers ───────────────────────
 router.use(requireAuth);
 router.use(resolveTenant);
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
+
 router.use(requirePermission("manage_own_topics"));
 
 // ── Helper: check if user can manage all topics ──────────────
@@ -180,7 +185,7 @@ router.post("/:id/suggest-templates", async (req, res) => {
 
     const response = await callAnthropic(client, {
       model,
-      max_tokens: 600,
+      max_tokens: getTopicSearchTemplateMaxTokens(),
       messages: [{
         role: "user",
         content: `You are a research librarian configuring web searches for an AI news researcher. Based on the topic below, write 3 to 5 search query templates that would surface concrete, citable material (incident reports, regulatory actions, case studies, surveys with numbers) rather than generic explainers.
@@ -358,7 +363,7 @@ router.post("/generate", async (req, res) => {
 
     const response = await callAnthropic(client, {
       model,
-      max_tokens: 1500,
+      max_tokens: getTopicSuggestionMaxTokens(),
       messages: [{
         role: "user",
         content: `You are a content strategy expert. Given a LinkedIn content topic, generate specific, actionable suggestions.

@@ -26,6 +26,7 @@
     { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
+    { path: '/app/billing', label: 'Billing', perm: 'manage_billing' },
     { path: '/app/admin', label: 'Manage', roles: ['owner'] }
   ];
 
@@ -37,7 +38,7 @@
 
   var OM_PAGES = ['/app/analytics', '/app/linkedin', '/app/advocacy'];
 
-  function renderNav(role, omDisabled, permissions) {
+  function renderNav(role, omDisabled, permissions, capabilities) {
     var container = document.getElementById('manager-nav');
     if (!container) return;
 
@@ -50,7 +51,15 @@
         // matrix, the single source of truth (never role names).
         if ((permissions || []).indexOf(page.perm) === -1) return;
       } else if (page.roles.indexOf(role) === -1) return;
-      if (omDisabled && OM_PAGES.indexOf(page.path) !== -1) return;
+      // Payments (2.3.4): OM links need the operator flag AND the
+      // paid capability; either alone hides them.
+      // AUDIT F4 (2.4.2): capabilities === null signals a server
+      // that predates the subscription field (mixed-version
+      // install). Hiding paid links on missing evidence strands a
+      // paying user; the server gates enforce regardless, so the
+      // nav fails visible, not closed.
+      var omEntitled = capabilities === null || (capabilities || []).indexOf('organization_manager') !== -1;
+      if ((omDisabled || !omEntitled) && OM_PAGES.indexOf(page.path) !== -1) return;
 
       var isActive = currentPath === page.path;
       if (isActive) {
@@ -69,7 +78,15 @@
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if (data.user && data.user.role) {
-        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || []);
+        // 2.4.23 F2/F4 coherence: the server fails OPEN on an unknown
+        // subscription state (pages stay reachable), so the nav must
+        // fail VISIBLE on the same state. unknown -> null -> the F4
+        // fail-visible path, identical to a missing block.
+        var navCaps = null;
+        if (data.subscription && data.subscription.state !== 'unknown') {
+          navCaps = data.subscription.capabilities || [];
+        }
+        renderNav(data.user.role, data.organizationManager === 'disabled', data.permissions || [], navCaps);
       }
     })
     .catch(function () { /* silent — page handles its own access check */ });

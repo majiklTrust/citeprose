@@ -16,6 +16,7 @@
 // research, verification, and injection-defense prompts stay invariant.
 // ═══════════════════════════════════════════════════════════════
 
+import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -38,6 +39,10 @@ const resolveTenant = createTenantResolver();
 // Authenticated + tenant-scoped for every Composer route.
 router.use(requireAuth);
 router.use(resolveTenant);
+// Payments (2.3.4), ruling (3): outside good standing the tenant
+// is read-only. Mutating verbs deny here; billing stays exempt.
+router.use(suspendedWriteGuard());
+
 
 // Zero Trust: every Composer response carries tenant-derived data
 // (drafts, verbatim metric values, citations, genre metadata). None of

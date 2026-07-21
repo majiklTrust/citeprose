@@ -623,7 +623,16 @@ async function runPollForAllTenants() {
     return;
   }
 
+  // Payments (2.3.1.1): lazy import per the module-loads-DB-free
+  // discipline; automated processing halts outside good standing.
+  const { isTenantProcessingAllowed } = await import("./entitlements.js");
   for (const tenant of tenants) {
+    // Payments (2.3.1.1): automated processing halts for tenants
+    // outside good standing. Fail-closed: a read failure skips.
+    if (!(await isTenantProcessingAllowed(tenant.id))) {
+      console.log(`[news_monitor] tenant ${tenant.slug || tenant.id} skipped: subscription not in good standing`);
+      continue;
+    }
     try {
       await withTenant(tenant.id, async () => {
         await pollAllFeeds();

@@ -27,6 +27,8 @@
 // arrives via deps.
 // =================================================================
 
+import { getAdvocacyMaxHashtags } from "../config/advocacy.js";
+
 export const VARIANT_GATES = Object.freeze(["sanitize", "injection_framing", "output_filter", "quality"]);
 const SOURCE_CONTENT_CAP = 5000;
 const LLM_MAX_OUTPUT_TOKENS = 1200;
@@ -44,7 +46,7 @@ export function sanitizeLongText(raw, cap = SOURCE_CONTENT_CAP) {
 export function mapPostHashtags(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.filter((h) => typeof h === "string" && h.trim().length > 0)
-    .map((h) => h.trim()).slice(0, 12);
+    .map((h) => h.trim()).slice(0, getAdvocacyMaxHashtags());
 }
 
 // -- Single-variant core (fully deps-injectable) -----------------

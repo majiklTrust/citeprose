@@ -41,6 +41,9 @@ import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
 import { storePromptGenre } from "../services/prompt-vault.js";
+import { getProvider, resolveBaseUrl } from "../llm/registry.js";
+import { getModelListingPageLimit } from "../config/ai.js";
+import { getCatchallFeedList } from "../tenant/seed-defaults.js";
 
 const router = Router();
 
@@ -118,7 +121,85 @@ function setCachedModels(optgroups) {
 // To add a query, add one object. The frontend picks it up
 // automatically from GET /queries.
 
+// The reseed card's row set is generated from the tenant seeding
+// module so the catchall feed list has exactly one source of
+// truth. Values are trusted module constants, not user input; the
+// only bind parameter remains the tenant UUID.
+function buildReseedCatchallSql() {
+  const rows = getCatchallFeedList()
+    .map((f) => `($1, '${f.url}', '${f.name.replace(/'/g, "''")}', '${f.tier}', ${f.refresh}, true)`)
+    .join(",\n            ");
+  return `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES\n            ${rows}\n          ON CONFLICT (tenant_id, url) DO NOTHING`;
+}
+
 const QUERY_REGISTRY = {
+
+  // ── Operational self-awareness (2.4.1) ──────────────────────
+  "platform-events-recent": {
+    label: "Platform Events (Recent)",
+    description: "Latest persisted platform events, newest first.",
+    capability: "Watch the platform think: every persisted event with level, detail, and tenant.",
+    sql: `SELECT created_at, level, event, tenant_id, detail
+          FROM platform_log ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "platform-events-by-tenant": {
+    label: "Platform Events (By Tenant)",
+    description: "Persisted events attributed to one tenant, newest first.",
+    capability: "Audit one workspace's trail end to end.",
+    sql: `SELECT created_at, level, event, detail
+          FROM platform_log WHERE tenant_id = $1::uuid
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "platform-event-metrics": {
+    label: "Usage Metrics (Event Counts)",
+    description: "Event volume by type and level over the last N days.",
+    capability: "Usage metrics from the event stream: what runs, how often, and how loudly.",
+    sql: `SELECT event, level, count(*)::bigint AS occurrences,
+                 min(created_at) AS first_seen, max(created_at) AS last_seen
+          FROM platform_log
+          WHERE created_at > now() - ($1 || ' days')::interval
+          GROUP BY event, level ORDER BY occurrences DESC LIMIT 100`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "prompt-vault-audit": {
+    label: "Prompt Vault Access Audit",
+    description: "Every persisted prompt_* security event, newest first.",
+    capability: "The prompt-security audit trail the vault phases were designed to feed.",
+    sql: `SELECT created_at, level, event, tenant_id, detail
+          FROM platform_log WHERE event LIKE 'prompt\_%'
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "payments-audit": {
+    label: "Payments Audit Trail",
+    description: "Lifecycle transitions and refusals from payment_events.",
+    capability: "Every subscription transition and refused provider event, in order.",
+    sql: `SELECT p.recorded_at, t.slug, p.provider, p.event_type,
+                 p.prev_state, p.next_state, p.tier, p.detail
+          FROM payment_events p JOIN tenants t ON t.id = p.tenant_id
+          ORDER BY p.recorded_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
 
   "list-tenants": {
     label: "List All Tenants",
@@ -295,18 +376,7 @@ const QUERY_REGISTRY = {
     label: "Reseed Catchall Feeds",
     description: "Re-inserts default catchall feeds for a tenant. Idempotent — skips existing URLs.",
     capability: "Restore the default catchall feed set for a tenant without touching existing feeds.",
-    sql: `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES
-            ($1, 'https://www.technologyreview.com/feed/', 'MIT Technology Review', 'primary', 240, true),
-            ($1, 'https://www.wired.com/feed/rss', 'Wired', 'secondary', 120, true),
-            ($1, 'https://feeds.arstechnica.com/arstechnica/index', 'Ars Technica', 'primary', 120, true),
-            ($1, 'https://www.theverge.com/rss/index.xml', 'The Verge', 'secondary', 120, true),
-            ($1, 'https://www.zdnet.com/news/rss.xml', 'ZDNet', 'secondary', 120, true),
-            ($1, 'https://www.fastcompany.com/latest/rss', 'Fast Company', 'secondary', 180, true),
-            ($1, 'https://feeds.bbci.co.uk/news/technology/rss.xml', 'BBC Technology', 'primary', 180, true),
-            ($1, 'https://feeds.npr.org/1019/rss.xml', 'NPR Technology', 'primary', 240, true),
-            ($1, 'https://www.nature.com/nature.rss', 'Nature News', 'primary', 360, true),
-            ($1, 'https://www.statnews.com/feed/', 'STAT News', 'primary', 240, true)
-          ON CONFLICT (tenant_id, url) DO NOTHING`,
+    sql: buildReseedCatchallSql(),
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: false
@@ -658,6 +728,56 @@ export default function createPlatformAdminRoutes() {
   router.use(requireAuth);
   router.use(requirePlatformAdmin);
 
+  // ── Payments (2.3.1.1): complimentary entitlements ──────────
+  // The deliberate, auditable, processor-free grant. Router-level
+  // gates above already enforce platform admin.
+
+  router.get("/subscriptions", async (req, res) => {
+    try {
+      const { listSubscriptions } = await import("../services/entitlements.js");
+      res.json({ subscriptions: await listSubscriptions() });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to list subscriptions" });
+    }
+  });
+
+  router.post("/comp", async (req, res) => {
+    try {
+      const { tenantId, tier } = req.body || {};
+      const { TIERS } = await import("../config/entitlements.js");
+      if (!tenantId || !/^[0-9a-f-]{36}$/.test(String(tenantId))) {
+        return res.status(400).json({ error: "A valid tenant id is required" });
+      }
+      if (!TIERS.includes(tier)) {
+        return res.status(400).json({ error: "Choose a valid tier" });
+      }
+      const { grantComp } = await import("../services/entitlements.js");
+      const row = await grantComp(tenantId, tier);
+      const { platformLog } = await import("../services/platform-log.js");
+      platformLog("info", "comp_entitlement_granted", { tenantId, tier, by: req.user.sub });
+      res.json(row);
+    } catch (err) {
+      res.status(500).json({ error: "Comp grant failed" });
+    }
+  });
+
+  router.delete("/comp/:tenantId", async (req, res) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      if (!/^[0-9a-f-]{36}$/.test(tenantId)) {
+        return res.status(400).json({ error: "A valid tenant id is required" });
+      }
+      const { revokeComp } = await import("../services/entitlements.js");
+      const ok = await revokeComp(tenantId);
+      if (!ok) return res.status(404).json({ error: "No complimentary subscription for that tenant" });
+      const { platformLog } = await import("../services/platform-log.js");
+      platformLog("info", "comp_entitlement_revoked", { tenantId, by: req.user.sub });
+      res.json({ tenantId, state: "suspended" });
+    } catch (err) {
+      res.status(500).json({ error: "Comp revoke failed" });
+    }
+  });
+
   // ── GET /queries — list available queries ────────────────
   // Returns query metadata only — SQL is never exposed.
 
@@ -713,7 +833,13 @@ export default function createPlatformAdminRoutes() {
     }
 
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+      // Vendor URL comes from the LLM registry profile, the single
+      // sanctioned home for provider endpoints; the page limit is a
+      // config getter. No vendor literals in the route layer.
+      const anthropicProfile = getProvider("anthropic");
+      const modelsUrl = resolveBaseUrl(anthropicProfile, process.env)
+        + anthropicProfile.modelsPath + `?limit=${getModelListingPageLimit()}`;
+      const resp = await fetch(modelsUrl, {
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01"

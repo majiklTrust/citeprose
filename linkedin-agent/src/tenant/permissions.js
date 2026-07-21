@@ -45,7 +45,11 @@ export function requirePermission(permission) {
         return res.status(403).json({ error: "Permission denied" });
       }
       next();
-    } catch {
+    } catch (err) {
+      // The refusal semantics below are deliberate and stay; the
+      // error itself must not vanish: which database failure denied
+      // this request matters to whoever debugs it.
+      console.error("[permissions] permission check failed:", err.message);
       // hasPermission threw — database failure, not a policy decision.
       // Return 500 so the caller knows it's a server error, not a
       // deliberate denial. Do not expose the internal error message.

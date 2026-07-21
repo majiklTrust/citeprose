@@ -77,7 +77,10 @@ export async function getAnthropicModel() {
       return dbValue.trim();
     }
   } catch {
-    // DB read failed — fall through silently
+    // KNOWN CONFLATION (audit 2.4.27): a real DB failure and the
+    // routine no-tenant-context case fall through to env identically,
+    // so a DB outage silently serves the deployment default model.
+    // Routine frequency forbids logging here.
   }
 
   // Level 2: deployment-level env override

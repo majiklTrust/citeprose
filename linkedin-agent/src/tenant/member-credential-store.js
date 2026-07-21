@@ -99,6 +99,11 @@ export async function hasMemberCredential(authSub, key) {
     await fetchMemberCredential(authSub, key);
     return true;
   } catch {
+    // KNOWN CONFLATION (audit 2.4.27): absence and infrastructure
+    // failure both answer false here. Absence is the common path,
+    // so logging would flood; separating them needs typed not-found
+    // errors from the fetch layer (backlogged). Until then a DB
+    // outage reads as "not connected" on this probe.
     return false;
   }
 }

@@ -91,7 +91,9 @@ export async function getFeedsManagerVersion() {
       if (parsed === 1 || parsed === 2) return parsed;
     }
   } catch {
-    // Outside withTenant or DB error — fall through to .env
+    // KNOWN CONFLATION (audit 2.4.27): the intended case (called
+    // outside withTenant) and a real DB failure both fall through
+    // to .env identically. Routine frequency forbids logging here.
   }
   const envVal = parseInt(process.env.FEEDS_MANAGER_VERSION, 10);
   return (envVal === 1 || envVal === 2) ? envVal : DEFAULT_FEEDS_MANAGER_VERSION;

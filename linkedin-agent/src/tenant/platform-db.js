@@ -171,8 +171,13 @@ function getAdminSubs() {
   let plaintext;
   try {
     plaintext = decryptPlatformSecret(cipher.trim());
-  } catch {
-    return null; // fail closed on undecryptable value
+  } catch (err) {
+    // Fail closed on an undecryptable value, and SAY SO: a present
+    // but undecryptable PLATFORM_ADMIN_SUBS silently disables every
+    // platform admin, which is an operator emergency, not a quiet
+    // default. Logged once per distinct cipher via the cache guard.
+    console.error("[platform-db] PLATFORM_ADMIN_SUBS is present but undecryptable, platform admin is DISABLED:", err.message);
+    return null;
   }
   const list = plaintext.split(",").map((s) => s.trim()).filter(Boolean);
   cachedAdminSubsCipher = cipher;

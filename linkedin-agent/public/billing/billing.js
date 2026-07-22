@@ -12,6 +12,19 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // Shared by every state that may start a checkout (none, and
+  // cancelled through the snapshot's server-side gating). Renders
+  // nothing when the server sent no links: fail-closed inherit.
+  function buildSubscribeHtml(checkout) {
+    if (!checkout) return '';
+    var html = '<div class="subscribe-links"><h3>Subscribe</h3>';
+    Object.keys(checkout).forEach(function (t) {
+      html += '<a class="btn btn-primary subscribe-btn" href="' + checkout[t] + '">' + t + '</a> ';
+    });
+    html += '<p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
+    return html;
+  }
+
   function esc(str) {
     var div = document.createElement('div');
     div.textContent = str || '';
@@ -51,7 +64,11 @@
   function renderSubscription(sub) {
     var body = $('subscription-body');
     if (sub.state === 'none') {
-      body.innerHTML = '<div class="empty">No subscription yet. Plans open with checkout; the platform operator can also provision access.</div>';
+      // 2.4.32: the primary purchase persona lives HERE. The early
+      // return previously made the subscribe buttons unreachable in
+      // exactly this state.
+      body.innerHTML = '<div class="empty">No subscription yet. Plans open with checkout; the platform operator can also provision access.</div>'
+        + buildSubscribeHtml(sub.checkout);
       return;
     }
     var html = '<table><tbody>';
@@ -72,14 +89,7 @@
         html += '<p class="hint">Tier changes for live subscriptions are handled through support until self-serve upgrades ship.</p>';
       }
       if (sub.state === 'suspended') html += '<button class="btn" id="reactivate">Reactivate</button>';
-      if (sub.checkout) {
-        html += '<div class="subscribe-links"><h3>Subscribe</h3>';
-        Object.keys(sub.checkout).forEach(function (t) {
-          html += '<a class="btn btn-primary subscribe-btn" href="' + sub.checkout[t] + '">'
-            + t + '</a> ';
-        });
-        html += '<p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
-      }
+      html += buildSubscribeHtml(sub.checkout);
       html += '</div>';
     } else {
       html += '<div class="section-note">Complimentary subscriptions are managed by the platform operator.</div>';

@@ -211,9 +211,11 @@
         $('step-form').style.display = 'none';
         $('success').style.display = 'block';
         $('success-slug').textContent = data.slug;
-        // Workspace established: hand off to Billing (auth will
-        // interpose its login on the way when needed).
-        setTimeout(function () { window.location.href = '/app/billing/'; }, 1500);
+        // Land on /app, whose unauthenticated state presents the
+        // Login CTA. After sign-in the resolver claims the owner
+        // invite and the paywall walks them to Billing. No session
+        // is minted here: auth stays with Auth0.
+        setTimeout(function () { window.location.href = '/app'; }, 2500);
       })
       .catch(function (err) {
         showMessage(err.message || 'Registration failed', 'error');

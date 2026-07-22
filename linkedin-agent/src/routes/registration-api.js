@@ -138,7 +138,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
     const emailBody = [
       `Welcome to ${appName} - your workspace is ready to for you.`,
       ``,
-      `The ${appName} platform uses AI-powered research to help you create credible, professional content for LinkedIn and other business channels.`,
+      `The ${appName} platform uses AI-powered research to help you create credible, professional content for social media and other brand marketing channels.`,
       `To get started, click the link below.`,
       ``,
       `What you'll need:`,
@@ -171,7 +171,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
     second: "2-digit",
     hour12: true
   })
-} UTC): ${registerUrl}.`,
+} UTC): ${registerUrl}`,
       ``,
       ``,
       `If you have any questions or did not expect this invitation, please contact your account administrator.`,
@@ -372,7 +372,11 @@ router.post("/complete", async (req, res) => {
       // Same guard the card path runs: the key must verify against
       // the CHOSEN vendor before any tenant is born from it.
       try {
-        const keyCheck = await validateProviderKey(providerId, api_key.trim());
+        // Ruling (2.4.29): custom endpoints cannot be verified from
+        // here and are exempt; every registry vendor still verifies.
+        const keyCheck = providerId === "custom"
+          ? { valid: true }
+          : await validateProviderKey(providerId, api_key.trim());
         if (!keyCheck.valid) return safeError(res, 401, "Invalid API key for the selected provider");
       } catch (err) {
         if (err && err.code === "UNKNOWN_PROVIDER") return safeError(res, 400, "Unknown provider");

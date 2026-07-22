@@ -174,7 +174,8 @@
     var orgName = $('reg-org').value.trim();
     var apiKey = $('reg-key') ? $('reg-key').value.trim() : '';
     var modelSelect = $('reg-model');
-    var modelId = modelSelect ? modelSelect.value : '';
+    var customModel = document.getElementById('reg-model-custom');
+    var modelId = customModel ? customModel.value.trim() : modelSelect ? modelSelect.value : '';
 
     if (!orgName || orgName.length < 2) {
       showMessage('Organization name is required (min 2 characters)', 'error');
@@ -210,6 +211,9 @@
         $('step-form').style.display = 'none';
         $('success').style.display = 'block';
         $('success-slug').textContent = data.slug;
+        // Workspace established: hand off to Billing (auth will
+        // interpose its login on the way when needed).
+        setTimeout(function () { window.location.href = '/app/billing/'; }, 1500);
       })
       .catch(function (err) {
         showMessage(err.message || 'Registration failed', 'error');
@@ -219,6 +223,43 @@
   }
 
   // ── Bind events ────────────────────────────────────────────
+
+  // Per-vendor key help. Custom has no target and needs no
+  // verification: the model becomes free entry and Create is
+  // enabled directly.
+  var KEY_URLS = {
+    anthropic: 'https://console.anthropic.com/settings/keys',
+    openai: 'https://platform.openai.com/api-keys',
+    grok: 'https://console.x.ai/'
+  };
+  function applyVendorUx() {
+    var v = $('reg-provider').value;
+    var link = $('key-help-link');
+    if (KEY_URLS[v]) { link.href = KEY_URLS[v]; link.style.display = ''; }
+    else { link.removeAttribute('href'); link.style.display = 'none'; }
+    var isCustom = v === 'custom';
+    $('verify-actions').style.display = isCustom ? 'none' : '';
+    if (isCustom) {
+      $('model-section').classList.add('visible');
+      var sel = $('reg-model');
+      if (!document.getElementById('reg-model-custom')) {
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = 'reg-model-custom';
+        inp.placeholder = 'Model identifier for your endpoint';
+        sel.parentNode.insertBefore(inp, sel);
+      }
+      sel.style.display = 'none';
+      $('register-btn').disabled = false;
+    } else {
+      var custom = document.getElementById('reg-model-custom');
+      if (custom) custom.remove();
+      $('reg-model').style.display = '';
+      $('model-section').classList.remove('visible');
+    }
+  }
+  $('reg-provider').addEventListener('change', applyVendorUx);
+  applyVendorUx();
 
   $('verify-btn').addEventListener('click', verifyKey);
   $('reg-key').addEventListener('keydown', function (e) {

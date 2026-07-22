@@ -78,8 +78,18 @@
           Anthropic API Key
           <span id="key-status"></span>
         </label>
-        <input type="password" id="reg-key" placeholder="sk-ant-...">
-        <div class="hint">Your key is encrypted before storage. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:#3b82f6;">Get a key</a></div>
+        <div class="form-row">
+          <label>AI Vendor</label>
+          <select id="reg-provider">
+            <option value="anthropic" selected>Anthropic (Claude)</option>
+            <option value="openai">OpenAI</option>
+            <option value="grok">Grok (xAI)</option>
+            <option value="custom">Custom</option>
+          </select>
+          <div class="hint">Bring your own key from the vendor of your choice</div>
+        </div>
+        <input type="password" id="reg-key" placeholder="Your vendor API key">
+        <div class="hint">Your key is encrypted before storage. <a id="key-help-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:#3b82f6;">Get a key</a></div>
       </div>
 
       <div class="actions" id="verify-actions">

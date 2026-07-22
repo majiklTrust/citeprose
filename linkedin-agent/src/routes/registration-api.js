@@ -336,7 +336,12 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
 
 router.post("/complete", async (req, res) => {
   try {
-    const { token, org_name, api_key, model_id } = req.body || {};
+    const { token, org_name, api_key, model_id, provider } = req.body || {};
+    // Vendor choice (Option 1 ruling): defaults to anthropic so every
+    // existing invite and admin-provided-key flow behaves unchanged.
+    const providerId = typeof provider === "string" && provider.trim().length > 0
+      ? provider.trim()
+      : "anthropic";
 
     // Validate inputs
     if (!token || typeof token !== "string") {
@@ -362,7 +367,17 @@ router.post("/complete", async (req, res) => {
       finalModel = adminKey.modelId;
     } else {
       if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
-        return safeError(res, 400, "Anthropic API key required");
+        return safeError(res, 400, "API key required");
+      }
+      // Same guard the card path runs: the key must verify against
+      // the CHOSEN vendor before any tenant is born from it.
+      try {
+        const keyCheck = await validateProviderKey(providerId, api_key.trim());
+        if (!keyCheck.valid) return safeError(res, 401, "Invalid API key for the selected provider");
+      } catch (err) {
+        if (err && err.code === "UNKNOWN_PROVIDER") return safeError(res, 400, "Unknown provider");
+        platformLog("warn", "registration_key_verify_error", { provider: providerId, code: err?.code || null });
+        return safeError(res, 502, "Unable to verify the API key with the selected provider");
       }
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required");
@@ -388,10 +403,18 @@ router.post("/complete", async (req, res) => {
         const { setAgentState } = await import("../services/database.js");
         await setAgentState("mode", "manual");
         await setAgentState("corroboration", "disabled");
-        await setAgentState("anthropic_model", finalModel);
-
-        // Encrypted credentials — API key only
-        await storeCredential("anthropic_api_key", finalKey);
+        // Vendor selection through the SAME primitives the vendor
+        // card uses: llmCredentialKeyFor names the credential,
+        // llm_provider / llm_model route the orchestrator. The
+        // anthropic_model write keeps the pre-abstraction chain
+        // coherent, exactly as the card does for anthropic.
+        await setAgentState("llm_provider", providerId);
+        await setAgentState("llm_model", finalModel);
+        if (providerId === "anthropic") {
+          await setAgentState("anthropic_model", finalModel);
+        }
+        const { llmCredentialKeyFor } = await import("../tenant/credential-store.js");
+        await storeCredential(llmCredentialKeyFor(providerId), finalKey);
 
         // Seed catchall feeds — broad-coverage RSS sources that
         // serve any topic the tenant creates

@@ -121,7 +121,7 @@
     fetch(API + '/api/register/validate-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: registrationToken, api_key: key })
+      body: JSON.stringify({ token: registrationToken, api_key: key, provider: $('reg-provider').value })
     })
       .then(function (res) {
         if (res.status === 401) {
@@ -187,6 +187,7 @@
       org_name: orgName
     };
     if (apiKey) payload.api_key = apiKey;
+    payload.provider = $('reg-provider').value;
     if (modelId) payload.model_id = modelId;
 
     var btn = $('register-btn');

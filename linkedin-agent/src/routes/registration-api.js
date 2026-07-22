@@ -132,7 +132,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
     // Adjust email body based on whether key was provided
     const whatYouNeed = validatedKey
       ? `  • a name for your workspace\n  • your Anthropic AI credentials have been configured by your administrator — no additional setup needed.`
-      : `  • an Anthropic API key (https://console.anthropic.com/settings/keys)\n  • A name for your workspace`;
+      : `  • A name for your workspace\n  • An LLM vendor API key:\n    - https://console.anthropic.com/settings/keys\n    - https://platform.openai.com/api-keys\n    - https://console.x.ai/\n`;
 
     const expires = new Date(invite.expires_at)
     const emailBody = [

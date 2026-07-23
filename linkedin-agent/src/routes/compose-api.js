@@ -17,6 +17,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
+import { resolveTenantLlmSelection } from "../llm/client.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -246,6 +247,19 @@ router.get("/topic-metrics", requirePermission("preview_post"), async (req, res)
 // returned not-selectable with a reason. topicId is optional — without
 // it (auto-select) no topic supplies metrics, so metric-bearing
 // genres are not selectable; non-metric genres always are.
+// GET /api/compose/model-info - the exact text model a generation
+// will use, resolved by the SAME function the pipeline calls
+// (resolveTenantLlmSelection), so this label can never drift from
+// the truth. Unprovisioned workspaces answer nulls, not errors.
+router.get("/model-info", requirePermission("preview_post"), async (req, res) => {
+  try {
+    const sel = await withTenant(req.tenant.id, () => resolveTenantLlmSelection());
+    return res.status(200).json({ provider: sel.provider, model: sel.model });
+  } catch {
+    return res.status(200).json({ provider: null, model: null });
+  }
+});
+
 router.get("/genres", requirePermission("preview_post"), async (req, res) => {
   try {
     const slug = typeof req.query.topicId === "string" ? req.query.topicId.trim() : "";

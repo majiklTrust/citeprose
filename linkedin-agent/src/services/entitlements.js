@@ -154,7 +154,7 @@ export async function subscriptionStatus(tenantId, userSub) {
   const { isPlatformAdmin } = await import("../tenant/platform-db.js");
   if (userSub && isPlatformAdmin(userSub)) {
     return { state: "platform_admin", readOnly: false,
-      capabilities: ["organization_manager", "ads_manager", "image_studio"] };
+      capabilities: ["organization_manager", "ads_manager", "image_studio", "employee_advocacy"] };
   }
   const sub = await getSubscription(tenantId);
   const general = evaluateAccess(sub, null);

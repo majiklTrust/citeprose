@@ -23,7 +23,7 @@
   var pages = [
     { path: '/app/linkedin', label: 'LinkedIn', perm: 'manage_linkedin' },
     { path: '/app/analytics', label: 'Analytics', perm: 'view_analytics' },
-    { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard' },
+    { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard', cap: 'employee_advocacy' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
     { path: '/app/billing', label: 'Billing', perm: 'manage_billing' },
@@ -36,7 +36,7 @@
     return div.innerHTML;
   }
 
-  var OM_PAGES = ['/app/analytics', '/app/linkedin', '/app/advocacy'];
+  var OM_PAGES = ['/app/analytics', '/app/linkedin'];
 
   function renderNav(role, omDisabled, permissions, capabilities) {
     var container = document.getElementById('manager-nav');
@@ -60,6 +60,14 @@
       // nav fails visible, not closed.
       var omEntitled = capabilities === null || (capabilities || []).indexOf('organization_manager') !== -1;
       if ((omDisabled || !omEntitled) && OM_PAGES.indexOf(page.path) !== -1) return;
+      // Per-page capability gate (2.4.34): same F4 fail-visible
+      // convention as the OM family, applied to any entry carrying
+      // a cap field. The operator's OM flag still governs advocacy.
+      if (page.cap) {
+        if (omDisabled && page.path === '/app/advocacy') return;
+        var capOk = capabilities === null || (capabilities || []).indexOf(page.cap) !== -1;
+        if (!capOk) return;
+      }
 
       var isActive = currentPath === page.path;
       if (isActive) {

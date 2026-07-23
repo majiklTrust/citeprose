@@ -49,7 +49,9 @@ router.use(requireOrganizationManager);
 // Payments (2.3.4): Organization Manager is now BOTH paid and
 // operator-enabled. The entitlement (business tier and above) and
 // the agent_state flag must each allow; neither can grant alone.
-router.use(requireEntitlement("organization_manager"));
+// 2.4.34: Advocacy is its own purchase (business_plus and up),
+// split off the organization_manager family per Reading 2.
+router.use(requireEntitlement("employee_advocacy"));
 
 // ── Member self surface ───────────────────────────────────────
 

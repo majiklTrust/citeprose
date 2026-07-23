@@ -13,11 +13,11 @@ export const TIERS = ["individual", "business", "business_plus", "business_premi
 const MATRIX = {
   individual: [],
   business: ["organization_manager"],
-  // business_plus (2.5.20): organization_manager is ruled; whether
-  // ads_manager or image_studio join it is an OPEN RULING. Under-
-  // grant until ruled: never mint entitlement from a guess.
-  business_plus: ["organization_manager"],
-  business_premium: ["organization_manager", "ads_manager", "image_studio"]
+  // business_plus (2.4.34, Reading 2 ruled): Employee Advocacy is
+  // sold at Plus. Analytics and LinkedIn stay under
+  // organization_manager, which Business carries.
+  business_plus: ["organization_manager", "employee_advocacy"],
+  business_premium: ["organization_manager", "ads_manager", "image_studio", "employee_advocacy"]
 };
 
 export function tierCapabilities(tier) {
@@ -29,7 +29,7 @@ export function tierCapabilities(tier) {
 
 export function isKnownCapability(capability) {
   if (typeof capability !== "string") return false;
-  return ["organization_manager", "ads_manager", "image_studio"].includes(capability);
+  return ["organization_manager", "ads_manager", "image_studio", "employee_advocacy"].includes(capability);
 }
 
 // Grace period (days) before the first 30-day cycle. Applies to

@@ -7,13 +7,59 @@
   <title>Billing - {{APPLICATION}}</title>
   <link rel="stylesheet" href="/app/shared/manager-nav.css?v={{CSSVERSION}}">
   <style>
-    .tier-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0; }
-    .tier-card { border: 1px solid #2a2f3a; border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; }
-    .tier-card h4 { margin: 0 0 0.25rem; }
-    .tier-price { font-size: 1.3rem; font-weight: 600; }
-    .tier-cycle { color: #8a93a5; font-size: 0.8rem; margin-bottom: 0.5rem; }
-    .tier-blurb { color: #aab3c5; font-size: 0.85rem; flex: 1; margin-bottom: 0.75rem; }
-    .tier-card .subscribe-btn { align-self: flex-start; }
+    /* Design carried from the compliance page: light, professional. */
+    :root{
+      --accent:#1f3a5f; --accent-dark:#152a45; --accent-soft:#eaf0f7;
+      --ink:#1a2230; --muted:#54607a; --line:#dde3ec;
+      --bg:#ffffff; --panel:#f7f9fc; --ok:#2e7d54;
+    }
+    body.page-billing{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+    .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+    header.site{padding:18px 0;border-bottom:1px solid var(--line);}
+    header.site .brand{font-weight:800;font-size:1.05rem;color:var(--accent);}
+    .hero{background:linear-gradient(180deg,var(--accent-soft),#ffffff);padding:44px 0 38px;border-bottom:1px solid var(--line);}
+    .hero .eyebrow{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem;margin-bottom:10px;}
+    .hero h1{font-size:2.1rem;margin:0 0 14px;max-width:24ch;}
+    .hero p.lede{font-size:1.1rem;color:var(--muted);max-width:62ch;margin:0 0 22px;}
+    .cta-row{display:flex;gap:12px;flex-wrap:wrap;}
+    .btn{display:inline-block;padding:12px 22px;border-radius:9px;font-weight:700;text-decoration:none;font-size:1rem;border:1px solid transparent;cursor:pointer;}
+    .btn-primary{background:var(--accent);color:#fff;}
+    .btn-primary:hover{background:var(--accent-dark);}
+    .btn-ghost{background:#fff;color:var(--accent);border-color:var(--line);}
+    .btn-ghost:hover{border-color:var(--accent);}
+    section.block{padding:44px 0;border-bottom:1px solid var(--line);}
+    section.block .lead{color:var(--muted);max-width:70ch;font-size:1.06rem;}
+    .grid{display:grid;gap:22px;margin-top:26px;}
+    .grid.cols-3{grid-template-columns:repeat(3,1fr);}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;}
+    .card h3{margin:0 0 8px;}
+    .card p{margin:0;color:var(--muted);font-size:.98rem;}
+    .pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:26px;align-items:stretch;}
+    .plan{border:1px solid var(--line);border-radius:14px;padding:24px 20px;display:flex;flex-direction:column;background:#fff;}
+    .plan.featured{border-color:var(--accent);box-shadow:0 6px 24px rgba(31,58,95,.10);}
+    .plan .price{font-size:1.7rem;font-weight:800;color:var(--accent);line-height:1.1;}
+    .plan .price span{font-size:.9rem;font-weight:600;color:var(--muted);}
+    .plan .cur{font-size:.8rem;color:var(--muted);margin:4px 0 14px;}
+    .plan .desc{color:var(--muted);font-size:.95rem;flex:1 0 auto;}
+    .plan .tag{display:inline-block;align-self:flex-start;background:var(--accent-soft);color:var(--accent);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;margin-bottom:12px;}
+    .plan .subscribe-btn{margin-top:14px;align-self:flex-start;}
+    .policy{max-width:78ch;}
+    .policy p{color:var(--muted);}
+    .policy h3{margin-top:26px;color:var(--ink);}
+    .status-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:8px;}
+    .status-panel table{border-collapse:collapse;}
+    .status-panel td{padding:4px 18px 4px 0;color:var(--muted);}
+    .status-panel td:first-child{color:var(--ink);font-weight:600;}
+    .hint{color:var(--muted);font-size:.85rem;}
+    .empty{color:var(--muted);}
+    select,input[type="text"],input[type="password"]{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:.95rem;background:#fff;color:var(--ink);}
+    .form-row{margin:10px 0;}
+    .form-row label{display:block;font-weight:600;margin-bottom:4px;font-size:.9rem;}
+    #message{margin:12px 0;font-weight:600;}
+    footer.site{padding:26px 0;color:var(--muted);font-size:.9rem;}
+    .auth-wall,.access-denied{padding:60px 24px;text-align:center;}
+    @media (max-width: 900px){ .pricing-grid{grid-template-columns:repeat(2,1fr);} .grid.cols-3{grid-template-columns:1fr;} }
+    @media (max-width: 560px){ .pricing-grid{grid-template-columns:1fr;} }
   </style>
 </head>
 <body class="page-billing">
@@ -27,25 +73,142 @@
     <p class="denied-note">Billing is available to the workspace owner.</p>
     <p class="denied-link"><a href="/app">Back to dashboard</a></p>
   </div>
+
   <div id="app" style="display:none">
-    <div class="page-header">
-      <h1>Billing</h1>
-      <div id="manager-nav"></div>
-    </div>
-    <div id="message"></div>
+    <nav id="manager-nav"></nav>
 
-    <div class="section" id="subscription-section">
-      <h2>Subscription</h2>
-      <div class="section-note">Tier changes take effect at the next renewal. The current cycle is never interrupted.</div>
-      <div id="subscription-body">Loading...</div>
-    </div>
+    <header class="site">
+      <div class="wrap"><span class="brand">{{APPLICATION}} Billing</span></div>
+    </header>
 
-    <div class="section" id="vendor-section">
-      <h2>AI Vendor</h2>
-      <div class="section-note">The language model behind content generation. Keys are validated with the vendor before anything is stored, and stored encrypted per workspace. This platform never purchases vendor service on your behalf.</div>
-      <div id="vendor-body">Loading...</div>
-    </div>
+    <main>
+      <section class="hero">
+        <div class="wrap">
+          <p class="eyebrow">Workspace subscription</p>
+          <h1>Your plan, billing, and AI vendor in one place.</h1>
+          <p class="lede">Manage the subscription that powers this workspace, review plans and policies, and control the language model vendor behind content generation.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#pricing">View plans and pricing</a>
+            <a class="btn btn-ghost" href="#contact">Contact us</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="services">
+        <div class="wrap">
+          <h2>What your subscription covers</h2>
+          <p class="lead">This workspace is an isolated tenant of a hosted, multi-tenant software service. Credentials and data are separated at the database level. Your subscription pays for access to the following capabilities.</p>
+          <div class="grid cols-3">
+            <div class="card">
+              <h3>Market intelligence monitoring</h3>
+              <p>The platform continuously monitors curated news and RSS sources relevant to your industry, sanitizing and screening incoming content before it is ever used.</p>
+            </div>
+            <div class="card">
+              <h3>AI content generation</h3>
+              <p>It researches topics and drafts posts grounded in cited primary sources, with fidelity checks so that figures in a post match the values in the underlying source.</p>
+            </div>
+            <div class="card">
+              <h3>Human approval workflow</h3>
+              <p>Role-based approval queues for owners, editors, and viewers mean nothing publishes without a person signing off. Every draft, edit, and approval is tracked.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="pricing">
+        <div class="wrap">
+          <h2>Plans and pricing</h2>
+          <p class="lead">All plans are recurring monthly subscriptions billed in ***REMOVED*** Dollars (USD). Each tier includes everything in the tier below it. Prices shown are per workspace, per month.</p>
+
+          <div id="subscription-body" class="status-panel"></div>
+          <div id="message"></div>
+
+          <div class="pricing-grid">
+            <div class="plan">
+              <span class="tag">Individual</span>
+              <div class="price">$250 <span>/ month</span></div>
+              <div class="cur">USD, billed monthly</div>
+              <p class="desc">A dashboard for keeping drafts, scheduling, and publishing history, AI text content generation, and social media posting capabilities.</p>
+              <a class="btn btn-primary subscribe-btn" data-tier="individual" hidden>Subscribe</a>
+            </div>
+            <div class="plan">
+              <span class="tag">Business</span>
+              <div class="price">$1,000 <span>/ month</span></div>
+              <div class="cur">USD, billed monthly</div>
+              <p class="desc">Everything in Individual, plus organizational capabilities: post to your LinkedIn company page and track its reach with an integrated Analytics dashboard.</p>
+              <a class="btn btn-primary subscribe-btn" data-tier="business" hidden>Subscribe</a>
+            </div>
+            <div class="plan featured">
+              <span class="tag">Business Plus</span>
+              <div class="price">$2,500 <span>/ month</span></div>
+              <div class="cur">USD, billed monthly</div>
+              <p class="desc">Everything in Business, plus Employee Advocacy and AI image rendering capabilities.</p>
+              <a class="btn btn-primary subscribe-btn" data-tier="business_plus" hidden>Subscribe</a>
+            </div>
+            <div class="plan">
+              <span class="tag">Business Premium</span>
+              <div class="price">$7,500 <span>/ month</span></div>
+              <div class="cur">USD, billed monthly</div>
+              <p class="desc">Everything in Business Plus, plus video rendering with direct engineering IT support.</p>
+              <a class="btn btn-primary subscribe-btn" data-tier="business_premium" hidden>Subscribe</a>
+            </div>
+          </div>
+          <p class="hint" id="checkout-hint" hidden>Checkout opens on Stripe. Your workspace activates on payment confirmation.</p>
+          <p class="lead" style="margin-top:24px;">Accepted currency: USD. To ask about a custom arrangement, contact us at <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>.</p>
+        </div>
+      </section>
+
+      <section class="block" id="vendor">
+        <div class="wrap">
+          <h2>AI Vendor</h2>
+          <p class="lead">The language model behind content generation. Keys are validated with the vendor before anything is stored, and stored encrypted per workspace. This platform never purchases vendor service on your behalf.</p>
+          <div id="vendor-body" class="status-panel"></div>
+        </div>
+      </section>
+
+      <section class="block" id="refunds">
+        <div class="wrap policy">
+          <h2>Refund and dispute policy</h2>
+          <p>We want you to be satisfied with majiklTrust Market Intelligence. Because we sell access to a digital software service and not physical goods, the following refund and dispute terms apply.</p>
+          <h3>Refund window</h3>
+          <p>You may request a full refund of your most recent subscription payment within 14 days of that charge by emailing <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email address on your account. Approved refunds are returned to the original payment method. After the 14-day window has passed, subscription payments are non-refundable, and you may cancel at any time to stop future renewals as described in the cancellation policy below.</p>
+          <h3>How to request a refund</h3>
+          <p>Send your workspace name and the date of the charge to <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>. We will confirm receipt and process eligible refunds promptly.</p>
+          <h3>Disputes and chargebacks</h3>
+          <p>If you believe you were charged in error or see a charge you do not recognize, please contact us first at <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> so we can resolve it quickly. We review every dispute in good faith and will correct genuine billing errors. Contacting us directly is usually faster than filing a payment dispute, and it allows us to investigate the specific charge on your account.</p>
+        </div>
+      </section>
+
+      <section class="block" id="cancellation">
+        <div class="wrap policy">
+          <h2>Cancellation policy</h2>
+          <p>majiklTrust Market Intelligence is sold as a recurring monthly subscription. The following terms govern cancellation.</p>
+          <h3>Cancel at any time</h3>
+          <p>You may cancel your subscription at any time by emailing <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email address on your account. There is no cancellation fee and no long-term commitment beyond the current billing period.</p>
+          <h3>What happens when you cancel</h3>
+          <p>When you cancel, your subscription remains active through the end of the billing period you have already paid for, and it will not renew after that. You keep access to your workspace until the paid period ends. You will not be billed again once the cancellation takes effect. Refunds for the current period, if any, are governed by the refund policy above.</p>
+          <h3>Non-renewal</h3>
+          <p>Subscriptions renew automatically each month until you cancel. Cancelling stops the automatic renewal so that no further charges are made to your payment method.</p>
+        </div>
+      </section>
+
+      <section class="block" id="contact">
+        <div class="wrap">
+          <h2>Contact us</h2>
+          <p class="lead">Our team is here to help with sales questions, account support, billing, refunds, and cancellations. Email is the fastest way to reach us: <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site">
+      <div class="wrap">
+        &copy; 2026 majiklTrust Market Intelligence, LLC. All rights reserved.
+        A digital software service. No physical goods are sold or shipped.
+        Support: <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>
+      </div>
+    </footer>
   </div>
+
   <script src="/app/shared/manager-nav.js?v={{CSSVERSION}}"></script>
   <script src="billing.js?v={{CSSVERSION}}"></script>
 </body>

@@ -12,37 +12,21 @@
 
   function $(id) { return document.getElementById(id); }
 
-  // Ruled service-tier copy (2.4.33), displayed verbatim. Prices
-  // are display strings: Stripe's checkout page remains the money
-  // truth, and these render only beside a live checkout link.
-  var TIER_DISPLAY = {
-    individual: { name: 'Individual', price: '$250 / month',
-      blurb: 'A dashboard for keeping drafts, scheduling, and publishing history, AI text content generation, and social media posting capabilities.' },
-    business: { name: 'Business', price: '$1,000 / month',
-      blurb: 'Everything in Individual, plus organizational capabilities: post to your LinkedIn company page and track its reach with an integrated Analytics dashboard.' },
-    business_plus: { name: 'Business Plus', price: '$2,500 / month',
-      blurb: 'Everything in Business, plus Employee Advocacy and AI image rendering capabilities.' },
-    business_premium: { name: 'Business Premium', price: '$7,500 / month',
-      blurb: 'Everything in Business Plus, plus video rendering with direct engineering IT support.' }
-  };
-
-  // Shared by every state that may start a checkout (none, and
-  // cancelled through the snapshot's server-side gating). Renders
-  // nothing when the server sent no links: fail-closed inherit.
-  function buildSubscribeHtml(checkout) {
-    if (!checkout) return '';
-    var html = '<div class="subscribe-links"><h3>Subscribe</h3><div class="tier-cards">';
-    Object.keys(checkout).forEach(function (t) {
-      var d = TIER_DISPLAY[t] || { name: t, price: '', blurb: '' };
-      html += '<div class="tier-card">'
-        + '<h4>' + esc(d.name) + '</h4>'
-        + (d.price ? '<div class="tier-price">' + esc(d.price) + '</div><div class="tier-cycle">USD, billed monthly</div>' : '')
-        + (d.blurb ? '<p class="tier-blurb">' + esc(d.blurb) + '</p>' : '')
-        + '<a class="btn btn-primary subscribe-btn" href="' + checkout[t] + '">Subscribe</a>'
-        + '</div>';
-    });
-    html += '</div><p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
-    return html;
+  // 2.4.35: the template owns the plan cards (compliance-page
+  // design). This fills each card's Subscribe href from the
+  // server-gated snapshot and reveals only configured tiers.
+  // Fail-closed inherit: no checkout, no visible buttons.
+  function fillSubscribeCards(checkout) {
+    var hint = $('checkout-hint');
+    var any = false;
+    var btns = document.querySelectorAll('.subscribe-btn[data-tier]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var url = checkout ? checkout[b.getAttribute('data-tier')] : null;
+      if (url) { b.href = url; b.hidden = false; any = true; }
+      else { b.removeAttribute('href'); b.hidden = true; }
+    }
+    if (hint) hint.hidden = !any;
   }
 
   function esc(str) {
@@ -87,8 +71,8 @@
       // 2.4.32: the primary purchase persona lives HERE. The early
       // return previously made the subscribe buttons unreachable in
       // exactly this state.
-      body.innerHTML = '<div class="empty">No subscription yet. Plans open with checkout; the platform operator can also provision access.</div>'
-        + buildSubscribeHtml(sub.checkout);
+      body.innerHTML = '<div class="empty">No subscription yet. Plans open with checkout below; the platform operator can also provision access.</div>';
+      fillSubscribeCards(sub.checkout);
       return;
     }
     var html = '<table><tbody>';
@@ -109,7 +93,7 @@
         html += '<p class="hint">Tier changes for live subscriptions are handled through support until self-serve upgrades ship.</p>';
       }
       if (sub.state === 'suspended') html += '<button class="btn" id="reactivate">Reactivate</button>';
-      html += buildSubscribeHtml(sub.checkout);
+      fillSubscribeCards(sub.checkout);
       html += '</div>';
     } else {
       html += '<div class="section-note">Complimentary subscriptions are managed by the platform operator.</div>';

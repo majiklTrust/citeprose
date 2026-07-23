@@ -15,8 +15,13 @@
     }
     body.page-billing{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
     .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
-    header.site{padding:18px 0;border-bottom:1px solid var(--line);}
-    header.site .brand{font-weight:800;font-size:1.05rem;color:var(--accent);}
+    header.site{position:sticky;top:0;z-index:20;padding:0;border-bottom:1px solid var(--line);background:rgba(255,255,255,0.97);backdrop-filter:saturate(180%) blur(6px);}
+    html{scroll-behavior:smooth;}
+    .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;flex-wrap:wrap;max-width:1080px;margin:0 auto;}
+    header.site .brand{font-weight:800;font-size:1.05rem;color:var(--accent);text-decoration:none;}
+    nav.main{display:flex;gap:20px;flex-wrap:wrap;}
+    nav.main a{color:var(--muted);text-decoration:none;font-size:.95rem;font-weight:600;}
+    nav.main a:hover{color:var(--accent);}
     .hero{background:linear-gradient(180deg,var(--accent-soft),#ffffff);padding:44px 0 38px;border-bottom:1px solid var(--line);}
     .hero .eyebrow{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem;margin-bottom:10px;}
     .hero h1{font-size:2.1rem;margin:0 0 14px;max-width:24ch;}
@@ -78,7 +83,16 @@
     <nav id="manager-nav"></nav>
 
     <header class="site">
-      <div class="wrap"><span class="brand">{{APPLICATION}} Billing</span></div>
+      <div class="bar">
+        <span class="brand">{{APPLICATION}} Billing</span>
+        <nav class="main" aria-label="Primary">
+          <a href="#services">Services</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#refunds">Refunds</a>
+          <a href="#cancellation">Cancellation</a>
+          <a href="#contact">Contact</a>
+        </nav>
+      </div>
     </header>
 
     <main>

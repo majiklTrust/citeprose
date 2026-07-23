@@ -12,16 +12,36 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // Ruled service-tier copy (2.4.33), displayed verbatim. Prices
+  // are display strings: Stripe's checkout page remains the money
+  // truth, and these render only beside a live checkout link.
+  var TIER_DISPLAY = {
+    individual: { name: 'Individual', price: '$250 / month',
+      blurb: 'A dashboard for keeping drafts, scheduling, and publishing history, AI text content generation, and social media posting capabilities.' },
+    business: { name: 'Business', price: '$1,000 / month',
+      blurb: 'Everything in Individual, plus organizational capabilities: post to your LinkedIn company page and track its reach with an integrated Analytics dashboard.' },
+    business_plus: { name: 'Business Plus', price: '$2,500 / month',
+      blurb: 'Everything in Business, plus Employee Advocacy and AI image rendering capabilities.' },
+    business_premium: { name: 'Business Premium', price: '$7,500 / month',
+      blurb: 'Everything in Business Plus, plus video rendering with direct engineering IT support.' }
+  };
+
   // Shared by every state that may start a checkout (none, and
   // cancelled through the snapshot's server-side gating). Renders
   // nothing when the server sent no links: fail-closed inherit.
   function buildSubscribeHtml(checkout) {
     if (!checkout) return '';
-    var html = '<div class="subscribe-links"><h3>Subscribe</h3>';
+    var html = '<div class="subscribe-links"><h3>Subscribe</h3><div class="tier-cards">';
     Object.keys(checkout).forEach(function (t) {
-      html += '<a class="btn btn-primary subscribe-btn" href="' + checkout[t] + '">' + t + '</a> ';
+      var d = TIER_DISPLAY[t] || { name: t, price: '', blurb: '' };
+      html += '<div class="tier-card">'
+        + '<h4>' + esc(d.name) + '</h4>'
+        + (d.price ? '<div class="tier-price">' + esc(d.price) + '</div><div class="tier-cycle">USD, billed monthly</div>' : '')
+        + (d.blurb ? '<p class="tier-blurb">' + esc(d.blurb) + '</p>' : '')
+        + '<a class="btn btn-primary subscribe-btn" href="' + checkout[t] + '">Subscribe</a>'
+        + '</div>';
     });
-    html += '<p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
+    html += '</div><p class="hint">Checkout opens on Stripe. Your workspace activates on payment confirmation.</p></div>';
     return html;
   }
 

@@ -6,6 +6,15 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>Billing - {{APPLICATION}}</title>
   <link rel="stylesheet" href="/app/shared/manager-nav.css?v={{CSSVERSION}}">
+  <style>
+    .tier-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    .tier-card { border: 1px solid #2a2f3a; border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; }
+    .tier-card h4 { margin: 0 0 0.25rem; }
+    .tier-price { font-size: 1.3rem; font-weight: 600; }
+    .tier-cycle { color: #8a93a5; font-size: 0.8rem; margin-bottom: 0.5rem; }
+    .tier-blurb { color: #aab3c5; font-size: 0.85rem; flex: 1; margin-bottom: 0.75rem; }
+    .tier-card .subscribe-btn { align-self: flex-start; }
+  </style>
 </head>
 <body class="page-billing">
   <div id="om-wall" class="auth-wall" hidden>

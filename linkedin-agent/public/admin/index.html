@@ -90,6 +90,73 @@
       </div>
 
       <div class="section">
+        <h2>Image Model</h2>
+        <p class="ai-hint">The vendor and model that render images for this workspace. The selection is validated against the image registry before it is saved.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-model-provider">Image provider</label>
+            <select id="img-model-provider"></select>
+          </div>
+          <div>
+            <label for="img-model-select">Image model</label>
+            <select id="img-model-select"></select>
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-model-save-btn">Save</button>
+          </div>
+          <div id="img-model-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Image Render Budget</h2>
+        <p class="ai-hint">Set the maximum you will spend on AI image generation per billing cycle. Generation is denied once the cycle spend reaches this cap, and a budget of 0 disables image generation entirely.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-budget-input">Budget (USD per cycle)</label>
+            <input type="number" id="img-budget-input" min="0" step="1" placeholder="0">
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-budget-save-btn">Save</button>
+          </div>
+          <div id="img-budget-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Brand Palette</h2>
+        <p class="ai-hint">Describe your brand colors in plain words (for example: deep navy, warm amber, off-white). Applied to AI-generated images so they carry your brand look. Leave empty for no palette.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-palette-input">Palette description</label>
+            <input type="text" id="img-palette-input" maxlength="240" placeholder="deep navy, warm amber, off-white">
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-palette-save-btn">Save</button>
+          </div>
+          <div id="img-palette-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Image Storage</h2>
+        <p class="ai-hint">Where NEW AI-generated images are stored. Existing images always stay where they were saved. S3 can only be selected when this server is configured for it.</p>
+        <div class="ai-form">
+          <div>
+            <label for="img-storage-select">Backend for new images</label>
+            <select id="img-storage-select">
+              <option value="db">Database (built in)</option>
+              <option value="s3">S3 object storage</option>
+            </select>
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-storage-save-btn">Save</button>
+          </div>
+          <div id="img-storage-current" class="ai-current"></div>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>Invite User</h2>
         <div class="invite-form">
           <input type="email" id="invite-email" placeholder="Email address">

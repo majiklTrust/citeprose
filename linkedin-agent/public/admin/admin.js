@@ -367,6 +367,239 @@
       });
   }
 
+  // ── Image render budget ─────────────────────────────────────
+
+  function renderImageBudget(status) {
+    var el = $('img-budget-current');
+    if (!status || typeof status !== 'object') { el.textContent = ''; return; }
+    if (!status.enabled) {
+      el.textContent = 'Current: generation disabled (budget not set)';
+      $('img-budget-input').value = '';
+      return;
+    }
+    var budget = Number(status.budgetUsd || 0);
+    var spent = Number(status.spentUsd || 0);
+    var remaining = Number(status.remainingUsd || 0);
+    el.textContent = 'Current: $' + budget.toFixed(2) + ' per cycle (spent $' +
+      spent.toFixed(2) + ', remaining $' + remaining.toFixed(2) + ')';
+    $('img-budget-input').value = String(budget);
+  }
+
+  function loadImageBudget() {
+    fetch(API + '/api/admin/image-budget', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load image budget');
+        return res.json();
+      })
+      .then(function (data) { renderImageBudget(data); })
+      .catch(function () {
+        $('img-budget-current').innerHTML = '<span class="msg msg-error">Failed to load image budget</span>';
+      });
+  }
+
+  function saveImageBudget() {
+    var raw = $('img-budget-input').value.trim();
+    if (raw === '') { showMessage('Enter a budget amount in dollars', 'error'); return; }
+    var dollars = Number(raw);
+    if (!isFinite(dollars) || dollars < 0 || dollars > 1000000) {
+      showMessage('Budget must be a dollar amount between 0 and 1,000,000', 'error');
+      return;
+    }
+    $('img-budget-save-btn').disabled = true;
+    $('img-budget-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-budget', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dollars: dollars })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image budget saved', 'success');
+        renderImageBudget(data);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-budget-save-btn').disabled = false;
+        $('img-budget-save-btn').textContent = 'Save';
+      });
+  }
+
+  // ── Brand palette (AI images) ───────────────────────────────
+
+  function renderImagePalette(palette) {
+    var el = $('img-palette-current');
+    if (!palette) {
+      el.textContent = 'Current: no palette set';
+      $('img-palette-input').value = '';
+      return;
+    }
+    el.textContent = 'Current: ' + palette;
+    $('img-palette-input').value = palette;
+  }
+
+  function loadImagePalette() {
+    fetch(API + '/api/admin/image-palette', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the brand palette');
+        return res.json();
+      })
+      .then(function (data) { renderImagePalette(data.palette); })
+      .catch(function () {
+        $('img-palette-current').innerHTML = '<span class="msg msg-error">Failed to load the brand palette</span>';
+      });
+  }
+
+  function saveImagePalette() {
+    var raw = $('img-palette-input').value;
+    if (raw.length > 240) { showMessage('Palette must be 240 characters or fewer', 'error'); return; }
+    if (/[{}]/.test(raw)) { showMessage('Palette cannot contain braces', 'error'); return; }
+    $('img-palette-save-btn').disabled = true;
+    $('img-palette-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-palette', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ palette: raw.trim() })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Brand palette saved', 'success');
+        renderImagePalette(data.palette);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-palette-save-btn').disabled = false;
+        $('img-palette-save-btn').textContent = 'Save';
+      });
+  }
+
+  // ── Image model selection ───────────────────────────────────
+
+  var _imgModelCatalog = [];
+
+  function renderImageModelOptions(providerId, selectedModel) {
+    var entry = null;
+    for (var i = 0; i < _imgModelCatalog.length; i++) {
+      if (_imgModelCatalog[i].id === providerId) { entry = _imgModelCatalog[i]; break; }
+    }
+    var sel = $('img-model-select');
+    sel.innerHTML = '';
+    ((entry && entry.models) || []).forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.label || m.id;
+      if (selectedModel && selectedModel === m.id) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+
+  function loadImageModel() {
+    fetch(API + '/api/admin/image-model', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the image model selection');
+        return res.json();
+      })
+      .then(function (data) {
+        _imgModelCatalog = data.providers || [];
+        var current = data.current || {};
+        var fallback = data.registryDefault || {};
+        var provider = current.provider || fallback.provider || '';
+        var psel = $('img-model-provider');
+        psel.innerHTML = '';
+        _imgModelCatalog.forEach(function (p) {
+          var o = document.createElement('option');
+          o.value = p.id;
+          o.textContent = p.label || p.id;
+          if (p.id === provider) o.selected = true;
+          psel.appendChild(o);
+        });
+        renderImageModelOptions(psel.value, current.model || fallback.model);
+        $('img-model-current').textContent = current.provider
+          ? ('Current: ' + current.provider + ' / ' + (current.model || '(default)'))
+          : 'Current: not configured yet (image generation refuses until saved)';
+      })
+      .catch(function () {
+        $('img-model-current').innerHTML = '<span class="msg msg-error">Failed to load the image model selection</span>';
+      });
+  }
+
+  function saveImageModel() {
+    var provider = $('img-model-provider').value;
+    var model = $('img-model-select').value;
+    $('img-model-save-btn').disabled = true;
+    $('img-model-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-model', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider, model: model })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image model saved', 'success');
+        $('img-model-current').textContent = 'Current: ' + data.provider + ' / ' + data.model;
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-model-save-btn').disabled = false;
+        $('img-model-save-btn').textContent = 'Save';
+      });
+  }
+
+  // ── Image storage backend ───────────────────────────────────
+
+  function renderImageStorage(backend) {
+    $('img-storage-current').textContent = 'Current: ' + (backend === 's3' ? 'S3 object storage' : 'Database (built in)');
+    $('img-storage-select').value = backend === 's3' ? 's3' : 'db';
+  }
+
+  function loadImageStorage() {
+    fetch(API + '/api/admin/image-storage', { credentials: 'include' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Failed to load the image storage backend');
+        return res.json();
+      })
+      .then(function (data) { renderImageStorage(data.backend); })
+      .catch(function () {
+        $('img-storage-current').innerHTML = '<span class="msg msg-error">Failed to load the image storage backend</span>';
+      });
+  }
+
+  function saveImageStorage() {
+    var backend = $('img-storage-select').value;
+    $('img-storage-save-btn').disabled = true;
+    $('img-storage-save-btn').textContent = 'Saving...';
+    fetch(API + '/api/admin/image-storage', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backend: backend })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showMessage('Image storage backend saved', 'success');
+        renderImageStorage(data.backend);
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-storage-save-btn').disabled = false;
+        $('img-storage-save-btn').textContent = 'Save';
+      });
+  }
+
   // ── Tenant Registration (platform admin only) ───────────────
 
   function buildRegistrationSection() {
@@ -538,6 +771,10 @@
     loadMembers();
     loadInvites();
     loadAiConfig();
+    loadImageBudget();
+    loadImagePalette();
+    loadImageStorage();
+    loadImageModel();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -557,6 +794,11 @@
     });
     $('ai-verify-btn').addEventListener('click', verifyAiKey);
     $('ai-save-btn').addEventListener('click', saveAiConfig);
+    $('img-budget-save-btn').addEventListener('click', saveImageBudget);
+    $('img-palette-save-btn').addEventListener('click', saveImagePalette);
+    $('img-storage-save-btn').addEventListener('click', saveImageStorage);
+    $('img-model-save-btn').addEventListener('click', saveImageModel);
+    $('img-model-provider').addEventListener('change', function () { renderImageModelOptions(this.value, null); });
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

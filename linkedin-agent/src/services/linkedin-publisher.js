@@ -349,7 +349,7 @@ async function uploadImageToLinkedIn(token, ownerUrn, imageBuffer, contentType) 
 // and organization page via the author URN. Optionally includes
 // an image if imageUrl is provided.
 
-async function restPublish(content, hashtags, imageUrl, target) {
+async function restPublish(content, hashtags, imageUrl, target, imageBytes = null) {
   let token, authorUrn;
 
   try {
@@ -371,23 +371,35 @@ async function restPublish(content, hashtags, imageUrl, target) {
   const payload = buildRestPostBody({ authorUrn, content, hashtags });
   const commentaryText = payload.commentary || "";
 
-  // Upload image if provided
-  if (imageUrl) {
+  // Upload image if provided. A stored (generated) image arrives as
+  // bytes and takes precedence: it has no public URL and must never
+  // touch the SSRF-guarded download path. A legacy image_url is
+  // fetched exactly as before. Either source converges on the same
+  // metadata-strip + upload, so the two paths cannot diverge.
+  let imageSource = null;
+  if (imageBytes && imageBytes.buffer) {
+    imageSource = {
+      buffer: imageBytes.buffer,
+      contentType: imageBytes.contentType || "image/png"
+    };
+  } else if (imageUrl) {
     platformLog("info", "linkedin_image_download_start", { imageUrl });
+    imageSource = await downloadImage(imageUrl);
+  }
 
-    const { buffer, contentType } = await downloadImage(imageUrl);
-
+  if (imageSource) {
     // Strip EXIF/metadata before uploading to LinkedIn.
     // Prevents leaking GPS, device info from article images.
-    const cleanBuffer = stripMetadata(buffer, contentType);
+    const cleanBuffer = stripMetadata(imageSource.buffer, imageSource.contentType);
 
-    platformLog("info", "linkedin_image_downloaded", {
+    platformLog("info", "linkedin_image_prepared", {
       bytes: cleanBuffer.length,
-      contentType
+      contentType: imageSource.contentType,
+      source: (imageBytes && imageBytes.buffer) ? "stored" : "url"
     });
 
     const imageUrn = await uploadImageToLinkedIn(
-      token, authorUrn, cleanBuffer, contentType
+      token, authorUrn, cleanBuffer, imageSource.contentType
     );
 
     payload.content = {
@@ -423,13 +435,13 @@ async function restPublish(content, hashtags, imageUrl, target) {
       postId,
       status: response.status,
       contentLength: commentaryText.length,
-      hasImage: !!imageUrl,
+      hasImage: !!imageSource,
       mode: "rest",
       target
     });
 
     platformLog("info", "linkedin_post_published", {
-      postId, hasImage: !!imageUrl, mode: "rest",
+      postId, hasImage: !!imageSource, mode: "rest",
       target
     });
 
@@ -441,7 +453,7 @@ async function restPublish(content, hashtags, imageUrl, target) {
     await logActivity("error", "linkedin_post_failed", {
       status: statusCode,
       error: errorDetail,
-      hasImage: !!imageUrl,
+      hasImage: !!imageSource,
       mode: "rest",
       target
     });
@@ -464,11 +476,15 @@ async function restPublish(content, hashtags, imageUrl, target) {
 //   content:  string — post body text
 //   hashtags: string[] — appended to content
 //   imageUrl: string|null — URL to download and attach (rest mode only)
+//   imageBytes: {buffer, contentType}|null - a stored (generated)
+//     image's bytes, attached directly in rest mode. Takes precedence
+//     over imageUrl and bypasses the SSRF-guarded URL download.
 //
-// In text-posting mode, imageUrl is ignored with a warning.
+// In text-posting mode, an image (URL or bytes) is ignored with a warning.
 
-export async function publishPost(content, hashtags = [], imageUrl = null, targetOverride = null) {
+export async function publishPost(content, hashtags = [], imageUrl = null, targetOverride = null, imageBytes = null) {
   const mode = getPublishMode();
+  const hasImage = !!imageUrl || !!(imageBytes && imageBytes.buffer); // ◄ either source counts
   // Per-post destination seam (MDP-proofing): a post may carry its own
   // publish_target (personal|organization), which overrides the global
   // LINKEDIN_PUBLISH_TARGET default. NULL -> global default (today's
@@ -486,16 +502,16 @@ export async function publishPost(content, hashtags = [], imageUrl = null, targe
     tenant,
     mode,
     target,
-    hasImage: !!imageUrl,
-    imageOutcome: !imageUrl ? "none"
+    hasImage,
+    imageOutcome: !hasImage ? "none"
       : mode === "text-posting" ? "ignored"
       : "attached"
   });
 
   if (mode === "text-posting") {
-    if (imageUrl) {
+    if (hasImage) {
       platformLog("warn", "linkedin_image_ignored_text_posting_mode", {
-        imageUrl,
+        source: (imageBytes && imageBytes.buffer) ? "stored" : "url",
         reason: "LINKEDIN_PUBLISH_MODE=text-posting does not support images"
       });
     }
@@ -508,7 +524,7 @@ export async function publishPost(content, hashtags = [], imageUrl = null, targe
     return legacyPublishPost(content, hashtags);
   }
 
-  return restPublish(content, hashtags, imageUrl, target);
+  return restPublish(content, hashtags, imageUrl, target, imageBytes);
 }
 
 // Re-export for callers that need to check the mode

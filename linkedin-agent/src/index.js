@@ -56,6 +56,7 @@ export function createApp(ctx) {
     analyticsRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
+    imageStudioRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,
@@ -197,6 +198,10 @@ export function createApp(ctx) {
   // roles; the data behind it is permission-gated at the API layer
   // (view_analytics / sync_analytics), matching the feeds pattern.
   instance.use("/app/analytics", express.static(path.join(__dirname, "../public/analytics"), { index: "index.html", setHeaders: staticCacheHeaders }));
+
+  // Image Studio page (Phase 4). Static shell; every capability on it
+  // is gated at the API layer (entitlement, permissions, budget).
+  instance.use("/app/image-studio", express.static(path.join(__dirname, "../public/image-studio"), { index: "index.html", setHeaders: staticCacheHeaders }));
   instance.use("/app/billing", express.static(path.join(__dirname, "../public/billing"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // LinkedIn connection settings page (owner controls; the APIs it
@@ -838,6 +843,11 @@ export function createApp(ctx) {
   // scoped. Must be before apiRoutes for the /api/* guard reason.
   instance.use("/api/advocacy", advocacyRoutes);
 
+  // Image Studio API routes - mounted at /api/image-studio. Own
+  // auth + tenant + entitlement("image_studio") + suspendedWriteGuard
+  // inside the router. Must be before apiRoutes (api.js guard 404s).
+  instance.use("/api/image-studio", imageStudioRoutes);
+
   // API routes (auth + tenant resolver applied inside apiRoutes)
   instance.use(apiRoutes);
 
@@ -912,6 +922,7 @@ export async function buildAppForTests() {
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
   const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
+  const { default: imageStudioRoutes }   = await import("./routes/image-studio-api.js");
 
   // Use the module-level platformLog so initRegistry's startup
   // events bypass the tenant-scoped logActivity.
@@ -922,6 +933,7 @@ export async function buildAppForTests() {
     analyticsRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
+    imageStudioRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,
@@ -1019,6 +1031,7 @@ export async function start() {
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
   const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
+  const { default: imageStudioRoutes }   = await import("./routes/image-studio-api.js");
 
   mkdirSync(path.join(__dirname, "../data"), { recursive: true });
 
@@ -1040,6 +1053,7 @@ export async function start() {
     analyticsRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
+    imageStudioRoutes,
     getAuthorizationUrl, exchangeCodeForToken, getProfile,
     escapeHtml, generateOAuthState, validateOAuthState,
     signMemberState, verifyMemberState, isMemberState,

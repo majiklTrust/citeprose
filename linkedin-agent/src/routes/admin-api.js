@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
+import { listProviders, listModels, getImageModelProfile, defaultModelId } from "../image/registry.js";
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
@@ -27,6 +28,8 @@ import {
   revokeInvite
 } from "../tenant/invite-store.js";
 import { createAiConfigRoutes } from "./admin-ai-api.js";
+import { getBudgetStatus, dollarsToCents, MAX_BUDGET_DOLLARS } from "../services/image-budget.js";
+import { setAgentState, getAgentState } from "../services/database.js";
 
 const router = Router();
 
@@ -238,6 +241,197 @@ router.delete("/members/:id", async (req, res) => {
   } catch (err) {
     platformLog("error", "member_remove_failed", { error: err.message });
     res.status(500).json({ error: "Failed to remove member" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Image render budget (owner only, inherits the blanket chain above:
+// auth -> tenant -> suspended-write -> no-dev-bypass -> manage_users)
+// ══════════════════════════════════════════════════════════════
+// The per-cycle spend cap for AI image generation. Stored as integer
+// CENTS in agent_state.image_render_budget_cents, which the render
+// budget gate reads (fail-closed: an unset or zero cap denies all
+// generation). The owner sets a DOLLAR amount here; dollarsToCents
+// (in the budget domain module, beside the gate that reads the stored
+// cents) validates and rounds so float dollars cannot drift the value.
+
+// Read the current budget status (cap, spent, remaining) for the UI.
+router.get("/image-budget", async (req, res) => {
+  try {
+    const status = await withTenant(req.tenant.id, () => getBudgetStatus());
+    res.json(status);
+  } catch (err) {
+    platformLog("error", "image_budget_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read image budget" });
+  }
+});
+
+// Set the per-cycle image render budget (dollars in, cents stored).
+router.put("/image-budget", async (req, res) => {
+  const cents = dollarsToCents((req.body || {}).dollars);
+  if (cents === null) {
+    return res.status(400).json({
+      error: `Budget must be a dollar amount between 0 and ${MAX_BUDGET_DOLLARS}.`
+    });
+  }
+  try {
+    const status = await withTenant(req.tenant.id, async () => {
+      await setAgentState("image_render_budget_cents", String(cents));
+      return getBudgetStatus();
+    });
+    platformLog("info", "image_budget_set", { cents });
+    res.json(status);
+  } catch (err) {
+    platformLog("error", "image_budget_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set image budget" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Brand palette for AI images (owner only, same blanket chain)
+// ══════════════════════════════════════════════════════════════
+// Free-text tenant palette (e.g. "deep navy, warm amber, off-white")
+// stored in agent_state.image_brand_palette and appended to image
+// prompts at composition time. Validated here at the write AND
+// sanitized defensively at composition (image-lenses.sanitizePalette):
+// template braces are rejected so a palette can never smuggle a
+// {{METRIC_...}} token into a post-fidelity-lock prompt.
+const PALETTE_MAX = 240;
+function validPalette(v) {
+  if (typeof v !== "string") return null;
+  if (v.length > PALETTE_MAX) return null;
+  if (/[{}]/.test(v)) return null;                       // token smuggling
+  if (/[\u0000-\u001f\u007f]/.test(v)) return null;      // control chars
+  return v.trim();                                       // "" clears the palette
+}
+
+router.get("/image-palette", async (req, res) => {
+  try {
+    const palette = await withTenant(req.tenant.id, async () => {
+      return (await getAgentState("image_brand_palette")) || "";
+    });
+    res.json({ palette });
+  } catch (err) {
+    platformLog("error", "image_palette_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the brand palette" });
+  }
+});
+
+router.put("/image-palette", async (req, res) => {
+  const palette = validPalette((req.body || {}).palette);
+  if (palette === null) {
+    return res.status(400).json({
+      error: `Palette must be plain text up to ${PALETTE_MAX} characters, without braces or control characters.`
+    });
+  }
+  try {
+    await withTenant(req.tenant.id, () => setAgentState("image_brand_palette", palette));
+    platformLog("info", "image_palette_set", { chars: palette.length });
+    res.json({ palette });
+  } catch (err) {
+    platformLog("error", "image_palette_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set the brand palette" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Image storage backend switch (owner only, same blanket chain)
+// ══════════════════════════════════════════════════════════════
+// Tenant default backend for NEW images (agent_state
+// image_storage_backend, registered in 40.2: db | s3). Existing
+// images keep their recorded backend, so switching is always safe
+// for old data. Switching TO s3 is fail-closed: the server must
+// actually resolve a configured object store (config present AND the
+// SDK installed) before the preference is stored, so an owner cannot
+// strand new images on an unreachable backend.
+router.get("/image-storage", async (req, res) => {
+  try {
+    const backend = await withTenant(req.tenant.id, async () => {
+      return (await getAgentState("image_storage_backend")) || "db";
+    });
+    res.json({ backend });
+  } catch (err) {
+    platformLog("error", "image_storage_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the image storage backend" });
+  }
+});
+
+router.put("/image-storage", async (req, res) => {
+  const backend = (req.body || {}).backend;
+  if (backend !== "db" && backend !== "s3") {
+    return res.status(400).json({ error: "Backend must be db or s3." });
+  }
+  try {
+    if (backend === "s3") {
+      let available = false;
+      try {
+        const { resolveObjectStore } = await import("../storage/object-store.js");
+        available = (await resolveObjectStore()) !== null;
+      } catch (err) {
+        platformLog("warn", "image_storage_s3_unavailable", { error: err.message });
+        available = false;
+      }
+      if (!available) {
+        return res.status(409).json({
+          error: "S3 storage is not available on this server (missing configuration or SDK). New images stay on the db backend."
+        });
+      }
+    }
+    await withTenant(req.tenant.id, () => setAgentState("image_storage_backend", backend));
+    platformLog("info", "image_storage_set", { backend });
+    res.json({ backend });
+  } catch (err) {
+    platformLog("error", "image_storage_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to set the image storage backend" });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// Image model selection (owner chain). The write path 40.2 always
+// anticipated: the selection is validated against the application
+// image registry BEFORE it is written, closing the NOT_PROVISIONED
+// dead end where registered defaults were unread and no surface
+// could set the keys. The reader stays fail-closed by design:
+// provisioning is an explicit owner act, never a silent default.
+// ══════════════════════════════════════════════════════════════
+router.get("/image-model", async (req, res) => {
+  try {
+    const providers = listProviders(process.env).map((p) => ({
+      id: p.id, label: p.label,
+      models: listModels(p.id)
+    }));
+    const current = await withTenant(req.tenant.id, async () => ({
+      provider: (await getAgentState("image_provider")) || null,
+      model: (await getAgentState("image_model")) || null
+    }));
+    res.json({ providers, current, registryDefault: { provider: "openai", model: defaultModelId("openai") } });
+  } catch (err) {
+    platformLog("error", "image_model_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the image model selection" });
+  }
+});
+
+router.put("/image-model", async (req, res) => {
+  const provider = (req.body || {}).provider;
+  const model = (req.body || {}).model;
+  if (typeof provider !== "string" || provider === "" || typeof model !== "string" || model === "") {
+    return res.status(400).json({ error: "Provider and model are required." });
+  }
+  try {
+    getImageModelProfile(provider, model, process.env);   // registry validation, fail-closed
+  } catch {
+    return res.status(400).json({ error: "The selected provider or model is not recognized by the image registry." });
+  }
+  try {
+    await withTenant(req.tenant.id, async () => {
+      await setAgentState("image_provider", provider);
+      await setAgentState("image_model", model);
+    });
+    platformLog("info", "image_model_set", { provider, model });
+    res.json({ provider, model });
+  } catch (err) {
+    platformLog("error", "image_model_set_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to save the image model selection" });
   }
 });
 

@@ -188,6 +188,38 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "image-studio-activity": {
+    label: "Image Studio Activity",
+    description: "Recent Image Studio events across all tenants, newest first: renders, refinements, attachments, budget refusals, storage switches.",
+    capability: "Watch the image pipeline operate end to end.",
+    sql: `SELECT created_at, tenant_id, level, event, detail
+          FROM platform_log WHERE event LIKE 'image\\_%'
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "image-cost-report": {
+    label: "Image Cost Report (Estimate v. Actual)",
+    description: "Per tenant and model over the window: renders, images, the pre-spend the budget gate charged, and the reconciled actual cost from token usage.",
+    capability: "Reconcile what the gate charged against what the vendor billed.",
+    sql: `SELECT tenant_id, detail->>'model' AS model,
+                 COUNT(*) AS renders,
+                 SUM((detail->>'imageCount')::int) AS images,
+                 ROUND(SUM((detail->>'preSpendUsd')::numeric), 4) AS pre_spend_usd,
+                 ROUND(SUM((detail->>'costEstimateUsd')::numeric), 4) AS actual_cost_usd,
+                 SUM((detail->'usage'->>'outputTokens')::bigint) AS output_tokens
+          FROM platform_log
+          WHERE event = 'image_response_orchestrated'
+            AND created_at >= now() - ($1 || ' days')::interval
+          GROUP BY tenant_id, detail->>'model'
+          ORDER BY actual_cost_usd DESC NULLS LAST LIMIT 200`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
   "payments-audit": {
     label: "Payments Audit Trail",
     description: "Lifecycle transitions and refusals from payment_events.",

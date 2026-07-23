@@ -24,6 +24,9 @@
     { path: '/app/linkedin', label: 'LinkedIn', perm: 'manage_linkedin' },
     { path: '/app/analytics', label: 'Analytics', perm: 'view_analytics' },
     { path: '/app/advocacy', label: 'Advocacy', perm: 'view_dashboard', cap: 'employee_advocacy' },
+    // Guarded the same way the page itself is: the entitlement wall.
+    // cap follows the F4 fail-visible convention below.
+    { path: '/app/image-studio', label: 'Image Studio', perm: 'preview_post', cap: 'image_studio' },
     { path: '/app/topics', label: 'Topics', roles: ['owner', 'editor'] },
     { path: '/app/feeds', label: 'Feeds', roles: ['owner', 'editor'] },
     { path: '/app/billing', label: 'Billing', perm: 'manage_billing' },
@@ -58,6 +61,13 @@
       // install). Hiding paid links on missing evidence strands a
       // paying user; the server gates enforce regardless, so the
       // nav fails visible, not closed.
+      // Capability-gated pages (Image Studio): hidden without the
+      // paid capability, fail-visible on missing evidence (F4), and
+      // the server gates enforce regardless of what the nav shows.
+      if (page.cap) {
+        var capOk = capabilities === null || (capabilities || []).indexOf(page.cap) !== -1;
+        if (!capOk) return;
+      }
       var omEntitled = capabilities === null || (capabilities || []).indexOf('organization_manager') !== -1;
       if ((omDisabled || !omEntitled) && OM_PAGES.indexOf(page.path) !== -1) return;
       // Per-page capability gate (2.4.34): same F4 fail-visible

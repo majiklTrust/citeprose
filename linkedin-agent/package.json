@@ -13,7 +13,7 @@
   },
   "scripts": {
     "000_": "",
-    "clean": "rm -rf node_modules && npm run build",
+    "clean": "rm -rf node_modules && npm install && npm run build",
     "pages": "node scripts/build-pages.mjs",
     "timesync": "sudo ntpdate -u pool.ntp.org",
     "cssversion": "node cssversion.js && npm run build",
@@ -37,6 +37,9 @@
     "refresh": "npm audit fix ; npm ci --omit=dev 2>&1",
     "350_": "",
     "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",
+    "s-login": "stripe login",
+    "s-listen": "npm run s-login && stripe listen --forward-to localhost:3001/api/payments/webhook",
+    "s-checkout": "stripe trigger checkout.session.completed --add checkout_session:client_reference_id=$ACC --add checkout_session:metadata.tier=individual",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
     "logout": "curl -I http://localhost:3001/auth/logout",
@@ -122,6 +125,7 @@
   },
   "devDependencies": {
     "json-stringify-safe": "^5.0.1",
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "@stripe/cli": "^1.44.0"
   }
 }

@@ -127,9 +127,13 @@ export async function grantComp(tenantId, tier) {
 }
 
 export async function revokeComp(tenantId) {
+  // 2.4.55 ruling: revoke REMOVES the row. The tenant returns to
+  // the none state: paywall shown, fresh checkout available, a
+  // clean self-serve path. The comp = true guard is load-bearing:
+  // paid subscriptions are structurally immune to this path.
   const query = await db();
   const { rowCount } = await query(
-    `UPDATE subscriptions SET state = 'suspended', comp = false, updated_at = now()
+    `DELETE FROM subscriptions
       WHERE tenant_id = $1 AND comp = true`,
     [tenantId]
   );

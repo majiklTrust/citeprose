@@ -152,16 +152,12 @@
   </div>
   <div class="section" id="payments-section">
     <h2>Payments: Complimentary Entitlements</h2>
-    <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier; revoking suspends it.</p>
+    <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier. Revoke removes a comp subscription entirely: the tenant returns to the paywall and can purchase. Only comp subscriptions can be revoked; paid rows are managed with the Subscription Controls below.</p>
     <div class="row">
       <select id="comp-tenant"></select>
-      <select id="comp-tier">
-        <option value="individual">individual</option>
-        <option value="individual_plus">individual_plus</option>
-        <option value="business" selected>business</option>
-        <option value="business_plus">business_plus</option>
-      </select>
+      <select id="comp-tier"><option value="">Loading tiers…</option></select>
       <button class="btn btn-primary" id="comp-grant">Grant Comp</button>
+      <button class="btn" id="comp-revoke">Revoke Comp</button>
     </div>
     <div id="payments-msg" class="hint"></div>
     <div id="payments-body">Loading...</div>

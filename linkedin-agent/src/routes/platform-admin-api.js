@@ -820,7 +820,7 @@ const QUERY_REGISTRY = {
           SELECT * FROM upd`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
-      { name: "tier", label: "Tier (one of: " + TIERS.join(", ") + ")", type: "text", required: true }
+      { name: "tier", label: "Tier", type: "select", source: "tiers", required: true }
     ],
     destructive: true,
     readOnly: false
@@ -922,7 +922,9 @@ export default function createPlatformAdminRoutes() {
   router.get("/subscriptions", async (req, res) => {
     try {
       const { listSubscriptions } = await import("../services/entitlements.js");
-      res.json({ subscriptions: await listSubscriptions() });
+      // tiers: derived from TIERS (2.4.54) so every console tier
+      // surface renders the ruled set with zero hand maintenance.
+      res.json({ subscriptions: await listSubscriptions(), tiers: TIERS });
     } catch (err) {
       res.status(500).json({ error: "Failed to list subscriptions" });
     }
@@ -958,8 +960,8 @@ export default function createPlatformAdminRoutes() {
       const ok = await revokeComp(tenantId);
       if (!ok) return res.status(404).json({ error: "No complimentary subscription for that tenant" });
       const { platformLog } = await import("../services/platform-log.js");
-      platformLog("info", "comp_entitlement_revoked", { tenantId, by: req.user.sub });
-      res.json({ tenantId, state: "suspended" });
+      platformLog("info", "comp_entitlement_revoked", { tenantId, removed: true, by: req.user.sub });
+      res.json({ tenantId, removed: true });
     } catch (err) {
       res.status(500).json({ error: "Comp revoke failed" });
     }

@@ -48,6 +48,10 @@
     }
     renderQueryList(queries, null);
     if (grouped.length > 0) renderQueryList(grouped, 'Subscription Controls');
+    // The tiers payload may have arrived before these cards were
+    // rendered; re-populate from the cache so arrival order can
+    // never leave a sourced select unfilled.
+    if (tierSetCache) populateTierSelects(tierSetCache);
   }
 
   function renderQueryList(queries, sectionTitle) {
@@ -111,6 +115,10 @@
           } else if (p.type === "select" && p.source === "tenants") {      // ◄ new branch
             html += '<select data-param="' + esc(p.name) + '" data-source="tenants" disabled>';
             html += '<option value="">Loading tenants…</option>';
+            html += '</select>';
+          } else if (p.type === "select" && p.source === "tiers") {
+            html += '<select data-param="' + esc(p.name) + '" data-source="tiers" disabled>';
+            html += '<option value="">Loading tiers…</option>';
             html += '</select>';
           } else if (p.type === "select" && p.optgroups) {
             html += '<select data-param="' + esc(p.name) + '">';
@@ -194,6 +202,33 @@
       });
   }
   
+// ── Populate tier dropdowns from the ruled tier set (2.4.54) ──
+// One source: the subscriptions payload's tiers field, derived
+// server-side from TIERS. Fail-visible: an empty select and a
+// message, never a stale hand-maintained list.
+
+  var tierSetCache = null;
+
+  function populateTierSelects(tiers) {
+    if (tiers && tiers.length > 0) tierSetCache = tiers;
+    var targets = [];
+    var comp = document.getElementById("comp-tier");
+    if (comp) targets.push(comp);
+    document.querySelectorAll('select[data-source="tiers"]').forEach(function (sel) {
+      targets.push(sel);
+      sel.disabled = false;
+    });
+    targets.forEach(function (sel) {
+      if (!tiers || tiers.length === 0) {
+        sel.innerHTML = '<option value="">Tier set unavailable</option>';
+        return;
+      }
+      sel.innerHTML = tiers.map(function (t) {
+        return '<option value="' + esc(t) + '">' + esc(t) + '</option>';
+      }).join('');
+    });
+  }
+
 // ── Populate tenant dropdowns from the platform tenant catalog ──
 
   function populateTenantSelects() {
@@ -489,6 +524,7 @@
     fetch(API + "/api/platform-admin/subscriptions", { credentials: "include" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        populateTierSelects(data.tiers || []);
         var rows = data.subscriptions || [];
         var html = rows.length === 0 ? '<div class="hint">No subscriptions yet.</div>'
           : '<table><thead><tr><th>Tenant</th><th>Tier</th><th>State</th><th>Comp</th></tr></thead><tbody>'
@@ -516,6 +552,19 @@
       });
   };
 
+  window.paymentsRevokeComp = function () {
+    var sel = document.getElementById("comp-tenant");
+    var msg = document.getElementById("payments-msg");
+    if (!sel.value) { msg.textContent = 'Select a tenant first.'; return; }
+    fetch(API + "/api/platform-admin/comp/" + encodeURIComponent(sel.value), {
+      method: "DELETE", credentials: "include"
+    }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+      .then(function (out) {
+        msg.textContent = out.ok ? 'Comp removed: the tenant is back at the paywall and can purchase.' : (out.b.error || 'Revoke failed.');
+        loadSubscriptions();
+      });
+  };
+
   (function initPayments() {
     var sel = document.getElementById("comp-tenant");
     if (!sel) return;
@@ -527,6 +576,8 @@
         }).join('');
       });
     document.getElementById("comp-grant").addEventListener("click", window.paymentsGrantComp);
+    var rev = document.getElementById("comp-revoke");
+    if (rev) rev.addEventListener("click", window.paymentsRevokeComp);
     loadSubscriptions();
   })();
 })();

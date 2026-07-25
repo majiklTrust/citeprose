@@ -16,6 +16,7 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { TIERS } from "../config/entitlements.js";
 import { getCheckoutLinksForTenant } from "../payments/checkout-links.js";
+import { getCatalogForDisplay } from "../payments/catalog.js";
 import { getPaymentsProviderName } from "../payments/provider.js";
 import { getFreshCheckoutAllowed, getTierChangeEnabled, getReactivationTier } from "../services/billing-policy.js";
 
@@ -35,8 +36,9 @@ export default function createBillingRoutes() {
       const { tierCapabilities } = await import("../config/entitlements.js");
       const sub = await getSubscription(req.tenant.id);
       const userEmail = req.user && req.user.email ? req.user.email : null;
+      const catalog = await getCatalogForDisplay();
       if (!sub) {
-        return res.json({ state: "none", tiers: TIERS,
+        return res.json({ state: "none", tiers: TIERS, catalog,
           checkout: getCheckoutLinksForTenant(req.tenant.id, userEmail, TIERS) });
       }
       // 2.4.25: subscribe links appear ONLY where a fresh checkout is
@@ -46,6 +48,7 @@ export default function createBillingRoutes() {
       // refuse the duplicate checkout event, but Stripe would still
       // be billing it. Suspended reactivation has its own route.
       res.json({
+        catalog,
         checkout: getFreshCheckoutAllowed(sub.state)
           ? getCheckoutLinksForTenant(req.tenant.id, userEmail, TIERS)
           : null,

@@ -16,6 +16,37 @@
   // design). This fills each card's Subscribe href from the
   // server-gated snapshot and reveals only configured tiers.
   // Fail-closed inherit: no checkout, no visible buttons.
+  // 2.4.41: live product info from the snapshot's catalog. Uses
+  // textContent only (XSS-safe) and touches a field only when the
+  // catalog supplies it: static template copy is the fallback at
+  // every granularity.
+  function applyCatalog(catalog) {
+    if (!catalog) return;
+    var btns = document.querySelectorAll('.subscribe-btn[data-tier]');
+    for (var i = 0; i < btns.length; i++) {
+      var tier = btns[i].getAttribute('data-tier');
+      var info = catalog[tier];
+      if (!info) continue;
+      var card = btns[i].closest('.plan');
+      if (!card) continue;
+      var el;
+      if (info.name && (el = card.querySelector('.tag'))) el.textContent = info.name;
+      if (info.description && (el = card.querySelector('.desc'))) el.textContent = info.description;
+      if (typeof info.amount === 'number' && (el = card.querySelector('.price'))) {
+        var whole = Math.floor(info.amount / 100).toLocaleString('en-US');
+        var per = info.interval ? ' / ' + info.interval : ' / month';
+        el.innerHTML = '';
+        el.appendChild(document.createTextNode('$' + whole + ' '));
+        var span = document.createElement('span');
+        span.textContent = per;
+        el.appendChild(span);
+      }
+      if (info.currency && (el = card.querySelector('.cur'))) {
+        el.textContent = info.currency + ', billed ' + (info.interval === 'year' ? 'yearly' : 'monthly');
+      }
+    }
+  }
+
   function fillSubscribeCards(checkout) {
     var hint = $('checkout-hint');
     var any = false;
@@ -72,6 +103,8 @@
       // return previously made the subscribe buttons unreachable in
       // exactly this state.
       body.innerHTML = '<div class="empty">No subscription yet. Plans open with checkout below; the platform operator can also provision access.</div>';
+      applyCatalog(sub.catalog);
+      applyCatalog(sub.catalog);
       fillSubscribeCards(sub.checkout);
       return;
     }

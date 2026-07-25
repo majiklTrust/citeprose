@@ -36,9 +36,9 @@ export function isKnownCapability(capability) {
   return ["organization_manager", "ads_manager", "image_studio", "employee_advocacy"].includes(capability);
 }
 
-// Grace period (days) before the first 30-day cycle. Applies to
-// individual and business only, per ruling; business_premium
-// starts active.
+// Grace period (days) before the first 30-day cycle. The
+// trial-eligible set is ruled; the condition in trialEligible
+// below is its single source of truth.
 export function getTrialDays() {
   const v = Number(process.env.PAYMENTS_TRIAL_DAYS);
   return Number.isInteger(v) && v >= 0 ? v : 5;
@@ -50,7 +50,7 @@ export function getCycleDays() {
 }
 
 export function trialEligible(tier) {
-  // Unchanged by the 2.4.40 restructure: the plus tiers' trial
-  // eligibility is an OPEN RULING; under-grant until ruled.
+  // Under-grant until ruled otherwise: tiers outside this
+  // condition are ineligible by default, never by omission.
   return tier === "individual" || tier === "business";
 }

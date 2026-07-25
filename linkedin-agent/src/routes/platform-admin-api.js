@@ -39,6 +39,7 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
+import { TIERS } from "../config/entitlements.js";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
 import { storePromptGenre } from "../services/prompt-vault.js";
 import { getProvider, resolveBaseUrl } from "../llm/registry.js";
@@ -819,7 +820,7 @@ const QUERY_REGISTRY = {
           SELECT * FROM upd`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
-      { name: "tier", label: "Tier (individual, individual_plus, business, business_plus)", type: "text", required: true }
+      { name: "tier", label: "Tier (one of: " + TIERS.join(", ") + ")", type: "text", required: true }
     ],
     destructive: true,
     readOnly: false

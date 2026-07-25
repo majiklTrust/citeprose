@@ -9,9 +9,8 @@
 // window. Zero new dependencies; the seam stays clean.
 //
 // ACTIVATION CHECKLIST (when the Stripe account unlocks):
-//   1. Create the three prices (individual, business,
-//      business_plus, business_premium) with metadata.tier set
-//      accordingly (one price per tier, four total).
+//   1. Create one price per tier in TIERS (config/entitlements.js)
+//      with metadata.tier set accordingly.
 //   2. Checkout sessions must carry metadata.tenant_id (and
 //      metadata.trial = "true" where the grace period applies);
 //      subscriptions created from them should copy both so

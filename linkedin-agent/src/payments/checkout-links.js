@@ -10,18 +10,16 @@
 // =================================================================
 
 import { getPaymentsProviderName } from "./provider.js";
+import { TIERS } from "../config/entitlements.js";
 
-const LINK_ENV_BY_TIER = {
-  individual: "STRIPE_PAYMENT_LINK_INDIVIDUAL",
-  individual_plus: "STRIPE_PAYMENT_LINK_INDIVIDUAL_PLUS",
-  business: "STRIPE_PAYMENT_LINK_BUSINESS",
-  business_plus: "STRIPE_PAYMENT_LINK_BUSINESS_PLUS"
-};
-
+// Env names derive from TIERS (2.4.53): STRIPE_PAYMENT_LINK_ plus
+// the uppercased tier. No hand-maintained map to drift from the
+// tier set. SECURITY: the TIERS membership gate below is load-
+// bearing, never derive an env name from caller input, or the
+// tier argument becomes an environment-probing primitive.
 export function getPaymentLinkBase(tier, env = process.env) {
-  const key = LINK_ENV_BY_TIER[tier];
-  if (!key) return null;
-  const raw = env[key];
+  if (typeof tier !== "string" || !TIERS.includes(tier)) return null;
+  const raw = env["STRIPE_PAYMENT_LINK_" + tier.toUpperCase()];
   if (!raw || typeof raw !== "string" || !raw.startsWith("https://")) return null;
   return raw;
 }

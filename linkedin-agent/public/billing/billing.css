@@ -1,0 +1,62 @@
+/* Billing page styles (2.4.42). Extracted from the page template;
+   design carried from the compliance page: light, professional. */
+
+/* Design carried from the compliance page: light, professional. */
+:root{
+  --accent:#1f3a5f; --accent-dark:#152a45; --accent-soft:#eaf0f7;
+  --ink:#1a2230; --muted:#54607a; --line:#dde3ec;
+  --bg:#ffffff; --panel:#f7f9fc; --ok:#2e7d54;
+}
+body.page-billing{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+header.site{position:sticky;top:0;z-index:20;padding:0;border-bottom:1px solid var(--line);background:rgba(255,255,255,0.97);backdrop-filter:saturate(180%) blur(6px);}
+html{scroll-behavior:smooth;}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;flex-wrap:wrap;max-width:1080px;margin:0 auto;}
+header.site .brand{font-weight:800;font-size:1.05rem;color:var(--accent);text-decoration:none;}
+nav.main{display:flex;gap:20px;flex-wrap:wrap;}
+nav.main a{color:var(--muted);text-decoration:none;font-size:.95rem;font-weight:600;}
+nav.main a:hover{color:var(--accent);}
+.hero{background:linear-gradient(180deg,var(--accent-soft),#ffffff);padding:44px 0 38px;border-bottom:1px solid var(--line);}
+.hero .eyebrow{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem;margin-bottom:10px;}
+.hero h1{font-size:2.1rem;margin:0 0 14px;max-width:24ch;}
+.hero p.lede{font-size:1.1rem;color:var(--muted);max-width:62ch;margin:0 0 22px;}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;}
+.btn{display:inline-block;padding:12px 22px;border-radius:9px;font-weight:700;text-decoration:none;font-size:1rem;border:1px solid transparent;cursor:pointer;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent-dark);}
+.btn-ghost{background:#fff;color:var(--accent);border-color:var(--line);}
+.btn-ghost:hover{border-color:var(--accent);}
+section.block{padding:44px 0;border-bottom:1px solid var(--line);}
+section.block .lead{color:var(--muted);max-width:70ch;font-size:1.06rem;}
+.grid{display:grid;gap:22px;margin-top:26px;}
+.grid.cols-3{grid-template-columns:repeat(3,1fr);}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;}
+.card h3{margin:0 0 8px;}
+.card p{margin:0;color:var(--muted);font-size:.98rem;}
+.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:26px;align-items:stretch;}
+.plan{border:1px solid var(--line);border-radius:14px;padding:24px 20px;display:flex;flex-direction:column;background:#fff;}
+.plan .price{font-size:1.7rem;font-weight:800;color:var(--accent);line-height:1.1;}
+.plan .price span{font-size:.9rem;font-weight:600;color:var(--muted);}
+.plan .price-cta{color:var(--accent);text-decoration:none;border-bottom:2px solid var(--accent-soft);}
+.plan .price-cta:hover{border-bottom-color:var(--accent);}
+.plan .cur{font-size:.8rem;color:var(--muted);margin:4px 0 14px;}
+.plan .desc{color:var(--muted);font-size:.95rem;flex:1 0 auto;}
+.plan .tag{display:inline-block;align-self:flex-start;background:var(--accent-soft);color:var(--accent);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;margin-bottom:12px;}
+.plan .subscribe-btn{margin-top:14px;align-self:flex-start;}
+.policy{max-width:78ch;}
+.policy p{color:var(--muted);}
+.policy h3{margin-top:26px;color:var(--ink);}
+.status-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:8px;}
+.status-panel table{border-collapse:collapse;}
+.status-panel td{padding:4px 18px 4px 0;color:var(--muted);}
+.status-panel td:first-child{color:var(--ink);font-weight:600;}
+.hint{color:var(--muted);font-size:.85rem;}
+.empty{color:var(--muted);}
+select,input[type="text"],input[type="password"]{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:.95rem;background:#fff;color:var(--ink);}
+.form-row{margin:10px 0;}
+.form-row label{display:block;font-weight:600;margin-bottom:4px;font-size:.9rem;}
+#message{margin:12px 0;font-weight:600;}
+footer.site{padding:26px 0;color:var(--muted);font-size:.9rem;}
+.auth-wall,.access-denied{padding:60px 24px;text-align:center;}
+@media (max-width: 900px){ .pricing-grid{grid-template-columns:repeat(2,1fr);} .grid.cols-3{grid-template-columns:1fr;} }
+@media (max-width: 560px){ .pricing-grid{grid-template-columns:1fr;} }

@@ -50,7 +50,9 @@
   function fillSubscribeCards(checkout) {
     var hint = $('checkout-hint');
     var any = false;
-    var btns = document.querySelectorAll('.subscribe-btn[data-tier]');
+    // The price CTA and the Purchase button are the same affordance
+    // in two positions: identical href, identical state gating.
+    var btns = document.querySelectorAll('.subscribe-btn[data-tier], .price-cta[data-tier]');
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
       var url = checkout ? checkout[b.getAttribute('data-tier')] : null;

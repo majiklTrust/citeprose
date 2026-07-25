@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "2.4.41",
+  "version": "2.4.47",
   "config": {
-    "cssversion": "80.0",
+    "cssversion": "81.2",
     "appname": "Market Intelligence"
   },
   "description": "Autonomous AI agent for Market Intelligence content creation",
@@ -16,7 +16,9 @@
     "clean": "rm -rf node_modules && npm install && npm run build",
     "pages": "node scripts/build-pages.mjs",
     "timesync": "sudo ntpdate -u pool.ntp.org",
-    "cssversion": "node cssversion.js && npm run build",
+    "cssversion": "npm run cssversion-m",
+    "cssversion-m": "node cssversion-minor.js && npm run build",
+    "cssversion-M": "node cssversion-major.js && npm run build",
     "build": "echo && echo \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* running build: build_alpha build_admin build_html build_js \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* \\* && npm run build_alpha && npm run build_admin && npm run build_html && npm run build_js && npm run pages && echo installed version $npm_package_name-$npm_package_version && V=$(npm pkg get version --workspaces=false | tr -d '\"') && echo $V >project.version && echo package version is $(cat project.version)",
     "build_alpha": "CSSVERSION=$(node -p \"require('./package.json').config.cssversion\") && APPVERSION=$(node -p \"require('./package.json').version\") && sed -e \"s/{{CSSVERSION}}/$CSSVERSION/\" -e \"s/{{APPVERSION}}/$APPVERSION/\" ***REMOVED***/site_templates/index.html >***REMOVED***/index.html && echo $CSSVERSION",
     "build_admin": "CSSVERSION=$(node -p \"require('./package.json').config.cssversion\") && sed \"s/{{CSSVERSION}}/$CSSVERSION/\" public_templates/platform-admin/index.html >public/platform-admin/index.html",

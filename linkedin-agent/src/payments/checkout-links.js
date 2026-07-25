@@ -13,9 +13,9 @@ import { getPaymentsProviderName } from "./provider.js";
 
 const LINK_ENV_BY_TIER = {
   individual: "STRIPE_PAYMENT_LINK_INDIVIDUAL",
+  individual_plus: "STRIPE_PAYMENT_LINK_INDIVIDUAL_PLUS",
   business: "STRIPE_PAYMENT_LINK_BUSINESS",
-  business_plus: "STRIPE_PAYMENT_LINK_BUSINESS_PLUS",
-  business_premium: "STRIPE_PAYMENT_LINK_BUSINESS_PREMIUM"
+  business_plus: "STRIPE_PAYMENT_LINK_BUSINESS_PLUS"
 };
 
 export function getPaymentLinkBase(tier, env = process.env) {

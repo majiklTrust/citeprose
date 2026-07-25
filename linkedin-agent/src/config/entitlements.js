@@ -8,16 +8,20 @@
 // those features are born entitlement-gated when they ship.
 // =================================================================
 
-export const TIERS = ["individual", "business", "business_plus", "business_premium"];
+export const TIERS = ["individual", "individual_plus", "business", "business_plus"];
 
 const MATRIX = {
+  // 2.4.40 restructure: two product lines, priced per ruling.
+  // individual line: core, then Image Studio at plus.
+  // business line: organization_manager, then Advocacy + Image
+  // Studio at plus. business_premium is RETIRED (migration:
+  // existing rows move to business_plus).
+  // image_studio also unlocks attaching an AI generated image to
+  // a post wherever that affordance gates on the capability.
   individual: [],
+  individual_plus: ["image_studio"],
   business: ["organization_manager"],
-  // business_plus (2.4.34, Reading 2 ruled): Employee Advocacy is
-  // sold at Plus. Analytics and LinkedIn stay under
-  // organization_manager, which Business carries.
-  business_plus: ["organization_manager", "employee_advocacy"],
-  business_premium: ["organization_manager", "ads_manager", "image_studio", "employee_advocacy"]
+  business_plus: ["organization_manager", "employee_advocacy", "image_studio"]
 };
 
 export function tierCapabilities(tier) {
@@ -46,5 +50,7 @@ export function getCycleDays() {
 }
 
 export function trialEligible(tier) {
+  // Unchanged by the 2.4.40 restructure: the plus tiers' trial
+  // eligibility is an OPEN RULING; under-grant until ruled.
   return tier === "individual" || tier === "business";
 }

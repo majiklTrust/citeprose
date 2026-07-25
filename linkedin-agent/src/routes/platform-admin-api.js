@@ -188,38 +188,6 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
-  "image-studio-activity": {
-    label: "Image Studio Activity",
-    description: "Recent Image Studio events across all tenants, newest first: renders, refinements, attachments, budget refusals, storage switches.",
-    capability: "Watch the image pipeline operate end to end.",
-    sql: `SELECT created_at, tenant_id, level, event, detail
-          FROM platform_log WHERE event LIKE 'image\\_%'
-          ORDER BY created_at DESC LIMIT 200`,
-    params: [],
-    destructive: false,
-    readOnly: true
-  },
-  "image-cost-report": {
-    label: "Image Cost Report (Estimate v. Actual)",
-    description: "Per tenant and model over the window: renders, images, the pre-spend the budget gate charged, and the reconciled actual cost from token usage.",
-    capability: "Reconcile what the gate charged against what the vendor billed.",
-    sql: `SELECT tenant_id, detail->>'model' AS model,
-                 COUNT(*) AS renders,
-                 SUM((detail->>'imageCount')::int) AS images,
-                 ROUND(SUM((detail->>'preSpendUsd')::numeric), 4) AS pre_spend_usd,
-                 ROUND(SUM((detail->>'costEstimateUsd')::numeric), 4) AS actual_cost_usd,
-                 SUM((detail->'usage'->>'outputTokens')::bigint) AS output_tokens
-          FROM platform_log
-          WHERE event = 'image_response_orchestrated'
-            AND created_at >= now() - ($1 || ' days')::interval
-          GROUP BY tenant_id, detail->>'model'
-          ORDER BY actual_cost_usd DESC NULLS LAST LIMIT 200`,
-    params: [
-      { name: "days", label: "Window (days)", type: "text", required: true }
-    ],
-    destructive: false,
-    readOnly: true
-  },
   "payments-audit": {
     label: "Payments Audit Trail",
     description: "Lifecycle transitions and refusals from payment_events.",
@@ -741,6 +709,192 @@ const QUERY_REGISTRY = {
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
+  },
+
+  // ── Image observability (2.4.50) ────────────────────────────
+  // Reconstructed for this lineage: the schema (DDLs 40-41) exists
+  // in production even where the Image Studio feature does not, so
+  // these read-only reports are valid today and become the feature
+  // observability the moment the studio lineage lands.
+  "image-studio-activity": {
+    label: "Image Studio Activity",
+    description: "Recent image generations across all tenants, newest first: who generated, with which provider and model, from what source. Read-only observability over the image ledger.",
+    capability: "IMAGE STUDIO OBSERVABILITY",
+    sql: `SELECT i.created_at, t.slug, i.provider, i.model, i.source_kind,
+                 i.human_name, i.input_tokens, i.output_tokens
+          FROM images i JOIN tenants t ON t.id = i.tenant_id
+          ORDER BY i.created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "image-cost-report": {
+    label: "Image Cost Report",
+    description: "Estimated image generation spend by tenant and model over the last N days, from recorded token usage and pre-spend estimates. Read-only observability over the cost ledger.",
+    capability: "IMAGE STUDIO OBSERVABILITY",
+    sql: `SELECT t.slug, i.provider, i.model,
+                 count(*)::bigint AS generations,
+                 COALESCE(sum(i.input_tokens), 0)::bigint AS input_tokens,
+                 COALESCE(sum(i.output_tokens), 0)::bigint AS output_tokens,
+                 ROUND(COALESCE(sum(i.pre_spend_estimate_usd), 0), 4) AS est_spend_usd
+          FROM images i JOIN tenants t ON t.id = i.tenant_id
+          WHERE i.created_at > now() - ($1 || ' days')::interval
+          GROUP BY t.slug, i.provider, i.model
+          ORDER BY est_spend_usd DESC LIMIT 100`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  // ── Subscription Controls (2.4.49) ──────────────────────────
+  // One contiguous group on the console (group: subscriptions).
+  // Mutations are single data-modifying CTEs: the change and its
+  // platform_log audit row commit atomically or not at all. Tier
+  // validity is enforced by the subscriptions CHECK constraint:
+  // an invalid tier surfaces the constraint error, fail-closed.
+  "sub-view-by-tenant": {
+    label: "Subscription (By Tenant)",
+    description: "The full subscription row for one tenant. Read one workspace's commercial state: tier, state, comp, period, pending.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `SELECT tenant_id, tier, state, comp, pending_tier,
+                 period_start, period_end, created_at, updated_at
+          FROM subscriptions WHERE tenant_id = $1::uuid`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "sub-list-all": {
+    label: "Subscriptions (All Tenants)",
+    description: "Every subscription with its tenant, newest change first. The whole commercial ledger at a glance.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `SELECT t.slug, s.tier, s.state, s.comp, s.pending_tier,
+                 s.period_end, s.updated_at
+          FROM subscriptions s JOIN tenants t ON t.id = s.tenant_id
+          ORDER BY s.updated_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "sub-audit-by-tenant": {
+    label: "Payment Audit (By Tenant)",
+    description: "The immutable payment_events trail for one tenant. Every billing transition this workspace ever made, with provider refs.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `SELECT recorded_at, event_type, prev_state, next_state,
+                 provider, provider_event_ref
+          FROM payment_events WHERE tenant_id = $1::uuid
+          ORDER BY recorded_at DESC LIMIT 200`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "sub-set-tier": {
+    label: "Set Tier (Immediate)",
+    description: "Immediately set a tenant's tier; clears any pending tier. Audited. Operator tier override, atomic with its audit row. The CHECK constraint refuses unknown tiers.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `WITH upd AS (
+            UPDATE subscriptions
+               SET tier = $2::text, pending_tier = NULL, updated_at = now()
+             WHERE tenant_id = $1::uuid
+             RETURNING tenant_id, tier, state
+          ), aud AS (
+            INSERT INTO platform_log (level, event, tenant_id, detail)
+            SELECT 'warn', 'admin_subscription_tier_set', tenant_id,
+                   jsonb_build_object('tier', tier)
+              FROM upd
+          )
+          SELECT * FROM upd`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tier", label: "Tier (individual, individual_plus, business, business_plus)", type: "text", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "sub-extend-period": {
+    label: "Extend Period",
+    description: "Push a tenant's period_end forward by N days. Audited. Grace extension without touching the state machine: renewals stay anchored to the new period_end.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `WITH upd AS (
+            UPDATE subscriptions
+               SET period_end = COALESCE(period_end, now()) + ($2 || ' days')::interval,
+                   updated_at = now()
+             WHERE tenant_id = $1::uuid
+             RETURNING tenant_id, tier, state, period_end
+          ), aud AS (
+            INSERT INTO platform_log (level, event, tenant_id, detail)
+            SELECT 'warn', 'admin_subscription_period_extended', tenant_id,
+                   jsonb_build_object('period_end', period_end, 'days', $2::text)
+              FROM upd
+          )
+          SELECT * FROM upd`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "days", label: "Days to add", type: "text", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "sub-clear-pending": {
+    label: "Clear Pending Tier",
+    description: "Remove a queued tier change before it applies. Audited. Cancel a scheduled tier flip while the current cycle stays untouched.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `WITH upd AS (
+            UPDATE subscriptions
+               SET pending_tier = NULL, updated_at = now()
+             WHERE tenant_id = $1::uuid AND pending_tier IS NOT NULL
+             RETURNING tenant_id, tier, state
+          ), aud AS (
+            INSERT INTO platform_log (level, event, tenant_id, detail)
+            SELECT 'warn', 'admin_subscription_pending_cleared', tenant_id, '{}'::jsonb
+              FROM upd
+          )
+          SELECT * FROM upd`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "sub-delete": {
+    label: "Delete Subscription",
+    description: "Remove a tenant's subscription row entirely: the tenant returns to the paywall. The payment audit trail is kept. Audited. The full reset: unsubscribed, halted, repurchasable. payment_events history survives by design.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `WITH del AS (
+            DELETE FROM subscriptions
+             WHERE tenant_id = $1::uuid
+             RETURNING tenant_id, tier, state
+          ), aud AS (
+            INSERT INTO platform_log (level, event, tenant_id, detail)
+            SELECT 'warn', 'admin_subscription_deleted', tenant_id,
+                   jsonb_build_object('tier', tier, 'state', state)
+              FROM del
+          )
+          SELECT * FROM del`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
   }
 };
 

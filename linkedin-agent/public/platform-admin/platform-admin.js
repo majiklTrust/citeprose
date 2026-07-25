@@ -35,14 +35,38 @@
 
   // ── Render query cards ───────────────────────────────────
 
-  function renderQueries(queries) {
+  function renderQueries(allQueries) {
+    // 2.4.49: grouped entries (group: "subscriptions") render as
+    // their own contiguous section after the main grid. Ungrouped
+    // entries flow through the original path unchanged: existing
+    // controls keep their exact placement and behavior.
+    var queries = [];
+    var grouped = [];
+    for (var qi = 0; qi < (allQueries || []).length; qi++) {
+      if (allQueries[qi].group === 'subscriptions') grouped.push(allQueries[qi]);
+      else queries.push(allQueries[qi]);
+    }
+    renderQueryList(queries, null);
+    if (grouped.length > 0) renderQueryList(grouped, 'Subscription Controls');
+  }
+
+  function renderQueryList(queries, sectionTitle) {
     var grid = document.getElementById("query-grid");
     if (queries.length === 0) {
-      grid.innerHTML = "<p>No queries available.</p>";
+      if (!sectionTitle) grid.innerHTML = "<p>No queries available.</p>";
       return;
     }
 
-    grid.innerHTML = "";
+    if (!sectionTitle) {
+      grid.innerHTML = "";
+    } else {
+      // Additive section: never clears what the main path rendered.
+      var head = document.createElement("h2");
+      head.textContent = sectionTitle;
+      head.style.gridColumn = "1 / -1";
+      head.style.margin = "1.5rem 0 0.25rem";
+      grid.appendChild(head);
+    }
 
     // Group: read-only first, then mutations, then destructive
     var sorted = queries.slice().sort(function (a, b) {

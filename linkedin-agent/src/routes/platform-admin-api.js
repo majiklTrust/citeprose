@@ -315,7 +315,9 @@ const QUERY_REGISTRY = {
             )
           )
           DELETE FROM feeds_v2 WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -325,7 +327,9 @@ const QUERY_REGISTRY = {
     description: "Removes all posts for a tenant.",
     capability: "Remove all of a tenant's posts — useful for resetting a demo or test tenant.",
     sql: `DELETE FROM posts WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -338,7 +342,9 @@ const QUERY_REGISTRY = {
             DELETE FROM feed_topics WHERE tenant_id = $1
           )
           DELETE FROM topics WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -348,7 +354,9 @@ const QUERY_REGISTRY = {
     description: "Removes all member invites (pending and claimed) for a tenant.",
     capability: "Clear a tenant's invite records before re-inviting users.",
     sql: `DELETE FROM invites WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -358,7 +366,9 @@ const QUERY_REGISTRY = {
     description: "Removes all memberships for a tenant, revoking every user's access.",
     capability: "Revoke all user access to a tenant in one step.",
     sql: `DELETE FROM memberships WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -368,7 +378,9 @@ const QUERY_REGISTRY = {
     description: "Deletes the tenant row itself. Run the other clear-tenant queries first to remove dependent data.",
     capability: "Final teardown step — remove the tenant shell after its data is cleared.",
     sql: `DELETE FROM tenants WHERE id = $1`,
-    params: [{ name: "id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: true,
     readOnly: false
   },
@@ -644,7 +656,7 @@ const QUERY_REGISTRY = {
           VALUES ($1, 'anthropic_model', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }, // ◄ was: label "Tenant UUID", type "uuid"
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "value", label: "Model", type: "select", source: "models", required: true }
     ],
     destructive: false,

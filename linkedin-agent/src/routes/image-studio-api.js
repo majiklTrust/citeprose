@@ -43,7 +43,7 @@ import { deriveImageBrief } from "../image/image-brief.js";
 import { lockBrief } from "../image/image-fidelity.js";
 import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
 import { requireLens, applyLens, listLenses, LENSES } from "../image/image-lenses.js";
-import { resolveAspectPreset, listAspectPresets } from "../image/registry.js";
+import { resolveAspectPreset, listAspectPresets, getImageModelProfile } from "../image/registry.js";
 import { getPost, getAgentState } from "../services/database.js";
 
 const router = Router();
@@ -144,8 +144,23 @@ router.get("/budget", async (req, res) => {
 // GET /api/image-studio/lenses - the Story Lens and aspect-preset
 // catalog for pickers. Read-only data; survives a suspended
 // (read-only) subscription like /budget does.
-router.get("/lenses", (req, res) => {
-  return res.status(200).json({ lenses: listLenses(), aspects: listAspectPresets() });
+router.get("/lenses", async (req, res) => {
+  // 2.5.39: the catalog also answers what size the Default chip
+  // means: the TENANT's configured model's defaultSize, resolved
+  // through the registry, never a client constant. Unprovisioned
+  // workspaces answer null and the page shows no size for Default.
+  let defaultSize = null;
+  try {
+    defaultSize = await withTenant(req.tenant.id, async () => {
+      const provider = await getAgentState("image_provider");
+      const model = await getAgentState("image_model");
+      if (typeof provider !== "string" || provider.trim() === "") return null;
+      const profile = getImageModelProfile(provider.trim(),
+        (typeof model === "string" && model.trim() !== "") ? model.trim() : undefined, process.env);
+      return profile.defaultSize || null;
+    });
+  } catch { /* readiness surfaces elsewhere; the catalog stays serving */ }
+  return res.status(200).json({ lenses: listLenses(), aspects: listAspectPresets(), defaultSize });
 });
 
 // GET /api/image-studio/library - the tenant-shared library: stored

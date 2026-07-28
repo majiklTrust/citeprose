@@ -140,6 +140,7 @@ function StudioApp() {
   const [status, setStatus] = useState(null);
   const [lenses, setLenses] = useState([]);
   const [aspects, setAspects] = useState([]);
+  const [defaultSize, setDefaultSize] = useState(null);
   const [library, setLibrary] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [lensId, setLensId] = useState(null);
@@ -186,7 +187,7 @@ function StudioApp() {
         setGate('ready');
         fetch(API + '/api/image-studio/lenses', { credentials: 'include' })
           .then(function (res) { return res.json(); })
-          .then(function (cat) { setLenses(cat.lenses || []); setAspects(cat.aspects || []); })
+          .then(function (cat) { setLenses(cat.lenses || []); setAspects(cat.aspects || []); setDefaultSize(cat.defaultSize || null); })
           .catch(function () { setMsg({ text: 'The lens catalog failed to load.', type: 'err' }); });
         loadLibrary();
       })
@@ -304,13 +305,27 @@ function StudioApp() {
           <div className="section-gap">
             <h2>Shape</h2>
             <AspectChips aspects={aspects} aspect={aspect} onPick={setAspect} busy={busy} />
+            {(function () {
+              // 2.5.42: Size and Budget share one line, round-bullet
+              // separated, each half degrading honestly when unknown.
+              var s = aspect ? ((aspects.filter(function (a) { return a.id === aspect; })[0] || {}).size || null) : defaultSize;
+              var money = null;
+              if (status && status.enabled) {
+                money = <span>Budget: <b>${Number(status.remainingUsd || 0).toFixed(2)}</b> remaining of ${Number(status.budgetUsd || 0).toFixed(2)} this cycle.</span>;
+              } else if (status && status.enabled === false) {
+                money = <span>Budget: not set (generation disabled). An owner can set it in Admin.</span>;
+              }
+              if (!s && !money) return null;
+              return (
+                <div className="budget-line">
+                  {s && <span>Size: <b>{s}</b></span>}
+                  {s && money && <span>{' \u2022 '}</span>}
+                  {money}
+                </div>
+              );
+            })()}
           </div>
-          {status && status.enabled === false && (
-            <div className="budget-line">Image budget: not set. Generation is disabled until an owner sets it in Admin.</div>
-          )}
-          {status && status.enabled && (
-            <div className="budget-line">Budget: <b>${Number(status.remainingUsd || 0).toFixed(2)}</b> remaining of ${Number(status.budgetUsd || 0).toFixed(2)} this cycle.</div>
-          )}
+
         </div>
 
         <div className="panel">

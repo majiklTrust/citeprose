@@ -475,37 +475,16 @@
     // image directly. Fails safe: hostile server codes map to plain
     // messages, attach is guarded on a generated id, and actions are
     // disabled while a request is in flight so they cannot double-fire.
-    function ImageStudioPanel({ API, post, onAttached }) {
+    function ImageStudioPanel({ API, post, onAttached, candidate, setCandidate }) {
       const [prompt, setPrompt] = useState('');
       const [busy, setBusy] = useState(false);
-      // 2.5.38: hydrate from the post row's truth. An attachment made
-      // in an earlier session (or before an off-modal close) is shown,
-      // not forgotten: component state dies with the modal, the
-      // database does not.
-      const initialImageId = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
-      const [imageId, setImageId] = useState(initialImageId);
-      const [attached, setAttached] = useState(!!initialImageId);
-      // 2.5.48: useState initializers run ONCE at mount. When the row's
-      // truth arrives or changes after mount, adopt it, unless the
-      // person is mid-render or holding an unattached candidate.
-      const [syncedFrom, setSyncedFrom] = useState(initialImageId);
-      useEffect(() => {
-        const v = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
-        if (v === syncedFrom) return;
-        setSyncedFrom(v);
-        if (v && !busy && (imageId === null || attached)) {
-          setImageId(v);
-          setAttached(true);
-          setError(null);
-        }
-      }, [post ? post.generated_image_id : null]);
-      // 2.5.49: DERIVED rendering. The display computes from the prop
-      // on every render; state is only the session override (a fresh
-      // generate or a library pick). The prop was proven correct at
-      // runtime while state was not: so the truth renders, period.
+      // 2.5.53: ONE image-choice model. The prop is the attachment
+      // truth; the App-owned candidate is the only session override,
+      // and a candidate is by definition not attached. Everything
+      // renders derived: no internal image state, nothing to drift.
       const propImageId = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
-      const effectiveImageId = imageId !== null ? imageId : propImageId;
-      const effectiveAttached = imageId !== null ? attached : !!propImageId;
+      const effectiveImageId = candidate !== null ? candidate : propImageId;
+      const effectiveAttached = candidate !== null ? false : !!propImageId;
       const [error, setError] = useState(null);
       const [libOpen, setLibOpen] = useState(false);
       const [library, setLibrary] = useState(null);
@@ -521,7 +500,7 @@
       const [libError, setLibError] = useState(null);
 
       useEffect(() => {
-        setImageId(null); setAttached(false); setError(null);
+        setError(null);
         const base = ((post && (post.title || post.content)) || '').slice(0, 200);
         setPrompt(base ? ('Editorial illustration for a LinkedIn post about: ' + base) : '');
       }, [post && post.id]);
@@ -538,7 +517,7 @@
 
       async function generate() {
         if (!post || !prompt.trim()) return;
-        setError(null); setBusy(true); setImageId(null); setAttached(false);
+        setError(null); setBusy(true); setCandidate(null);
         try {
           const genBody = { prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'linkedin_feed' };
           if (lens) genBody.lensId = lens;
@@ -549,9 +528,26 @@
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(messageFor(res.status, data));
-          setImageId(data.id);
+          setCandidate(data.id);
         } catch (e) { setError((e && e.message) || 'Generation failed.'); }
         finally { setBusy(false); }
+      }
+
+      async function detach() {
+        if (!post || !post.id) return;
+        setBusy(true); setError(null);
+        try {
+          const res = await fetch(API + '/api/image-studio/detach', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId: post.id })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(messageFor(res.status, data));
+          if (onAttached) onAttached(null, post.id);
+          setCandidate(null);
+          setError('Detached image #' + data.previousImageId + '. The URL choices below now publish.');
+        } catch (err) { setError(err.message); } finally { setBusy(false); }
       }
 
       async function attach() {
@@ -565,7 +561,7 @@
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(messageFor(res.status, data));
-          setAttached(true);
+          setCandidate(null);
           // 2.5.43: teach the CLIENT cache what the server just
           // learned, or a reopened modal hydrates a stale snapshot
           // and truthfully displays yesterday's state.
@@ -595,8 +591,7 @@
         }
       }
       function selectFromLibrary(item) {
-        setImageId(item.id);
-        setAttached(false);
+        setCandidate(item.id);
         setError(null);
       }
 
@@ -632,7 +627,11 @@
                 Attach to Post
               </button>
             )}
-            {effectiveAttached && <span className="image-studio-ok">AI image attached</span>}
+            {effectiveAttached && (
+              <span className="image-studio-ok">AI image attached
+                <button type="button" className="btn btn-ghost" disabled={busy} onClick={detach} style={{marginLeft: '8px'}}>Detach</button>
+              </span>
+            )}
           </div>
           {libOpen && (
             <div className="image-studio-lib">
@@ -853,9 +852,11 @@
       // from the ROW, not from a blank default, so a later save writes
       // what the person actually sees. Keyed by post id: cache patches
       // to the same open post must not reset in-modal choices.
-      const openPostKey = selectedPost ? String(selectedPost.id || selectedPost.draftPostId || '') : null;
+      const [candidateImageId, setCandidateImageId] = useState(null);
+      const openPostKey = (selectedPost ? String(selectedPost.id || selectedPost.draftPostId || '') : '') + '|' + (editingPost ? String(editingPost.id || '') : '');
       useEffect(() => {
-        if (!openPostKey || !selectedPost) return;
+        setCandidateImageId(null);
+        if (!selectedPost) return;
         const url = selectedPost.image_url || '';
         if (!url) { setImageChoice({ mode: 'none', url: null }); return; }
         const isArticle = getArticleImages(selectedPost).some((img) => img.imageUrl === url);
@@ -1279,7 +1280,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.52</div>
+                <div className="header-subtitle">v2.5.53</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1303,7 +1304,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.52</div>
+                <div className="header-subtitle">v2.5.53</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1355,7 +1356,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.5.52 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.53 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1994,6 +1995,12 @@
                 })()}
                 {selectedPost.status === 'pending_approval' && (() => {
                   const availableImages = getArticleImages(selectedPost);
+                  // 2.5.53: one gating model, both faces. Attachment
+                  // disables the URL machinery; a session candidate
+                  // unchecks it; otherwise imageChoice (row-initialized)
+                  // is the single controlled truth.
+                  const pAtt = ('generated_image_id' in selectedPost) && selectedPost.generated_image_id ? true : false;
+                  const pCand = candidateImageId !== null;
                   return (
                   <div>
                     <div className="section-divider">
@@ -2005,15 +2012,15 @@
                       <div className="detail-stack">
                         <label className="image-choice-inline">
                           <input type="radio" name="image-choice" value="none"
-                            defaultChecked={!selectedPost.image_url && imageChoice.mode === 'none'}
-                            onChange={() => setImageChoice({ mode: 'none', url: null })} />
+                            checked={!pAtt && !pCand && imageChoice.mode === 'none'} disabled={pAtt}
+                            onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'none', url: null }); }} />
                           No image
                         </label>
                         {availableImages.map((img, idx) => (
                           <label key={idx} className="image-choice">
                             <input type="radio" name="image-choice" value={`article-${idx}`}
-                              defaultChecked={selectedPost.image_url === img.imageUrl}
-                              onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
+                              checked={!pAtt && !pCand && imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl} disabled={pAtt}
+                              onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'auto', url: img.imageUrl }); }} />
                             <div className="flex-1">
                               <div className="text-edit-sm">{img.feedName || 'Article image'}</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
@@ -2029,8 +2036,8 @@
                         {availableImages.length === 0 && selectedPost.image_url && (
                           <label className="image-choice">
                             <input type="radio" name="image-choice" value="auto"
-                              defaultChecked={!!selectedPost.image_url}
-                              onChange={() => setImageChoice({ mode: 'auto', url: selectedPost.image_url })} />
+                              checked={!pAtt && !pCand && imageChoice.mode === 'auto' && imageChoice.url === selectedPost.image_url} disabled={pAtt}
+                              onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'auto', url: selectedPost.image_url }); }} />
                             <div className="flex-1">
                               <div className="text-edit-sm">Current image</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(selectedPost.image_url)}`}
@@ -2045,7 +2052,8 @@
                         )}
                         <label className="image-choice">
                           <input type="radio" name="image-choice" value="custom"
-                            onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
+                            checked={!pAtt && !pCand && imageChoice.mode === 'custom'} disabled={pAtt}
+                            onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'custom', url: '' }); }} />
                           <div className="flex-1">
                             Custom image URL
                             <input type="text" placeholder="https://example.com/image.jpg"
@@ -2054,7 +2062,7 @@
                               onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
-                        <ImageStudioPanel key={'isp-' + String(selectedPost.id || selectedPost.draftPostId || '')} API={API} post={selectedPost} onAttached={handleImageAttached} />
+                        <ImageStudioPanel key={'isp-' + String(selectedPost.id || selectedPost.draftPostId || '')} API={API} post={selectedPost} onAttached={handleImageAttached} candidate={candidateImageId} setCandidate={setCandidateImageId} />
                       </div>
                     </div>
                     <div className="modal-actions">
@@ -2095,15 +2103,15 @@
                       <div className="detail-stack">
                         <label className="image-choice-inline">
                           <input type="radio" name="preview-image-choice" value="none"
-                            defaultChecked={!savedGeneratedId && !savedUrl}
-                            onChange={() => setImageChoice({ mode: 'none', url: null })} />
+                            checked={!savedGeneratedId && candidateImageId === null && imageChoice.mode === 'none'} disabled={!!savedGeneratedId}
+                            onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'none', url: null }); }} />
                           No image
                         </label>
                         {availableImages.map((img, idx) => (
                           <label key={idx} className="image-choice">
                             <input type="radio" name="preview-image-choice" value={`article-${idx}`}
-                              defaultChecked={!savedGeneratedId && savedUrl === img.imageUrl}
-                              onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
+                              checked={!savedGeneratedId && candidateImageId === null && imageChoice.mode === 'auto' && imageChoice.url === img.imageUrl} disabled={!!savedGeneratedId}
+                              onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'auto', url: img.imageUrl }); }} />
                             <div className="flex-1">
                               <div className="text-edit-sm">{img.feedName || 'Article image'}</div>
                               <img src={`/api/image-proxy?url=${encodeURIComponent(img.imageUrl)}`}
@@ -2118,8 +2126,8 @@
                         ))}
                         <label className="image-choice">
                           <input type="radio" name="preview-image-choice" value="custom"
-                            defaultChecked={!savedGeneratedId && savedIsCustom}
-                            onChange={() => setImageChoice({ mode: 'custom', url: savedIsCustom ? savedUrl : '' })} />
+                            checked={!savedGeneratedId && candidateImageId === null && imageChoice.mode === 'custom'} disabled={!!savedGeneratedId}
+                            onChange={() => { setCandidateImageId(null); setImageChoice({ mode: 'custom', url: savedIsCustom ? savedUrl : '' }); }} />
                           <div className="flex-1">
                             Custom image URL
                             {!savedGeneratedId && savedIsCustom && (
@@ -2142,7 +2150,7 @@
                     their draftPostId. */}
                 {(() => {
                   const panelPost = selectedPost.id ? selectedPost : (selectedPost.draftPostId ? { ...selectedPost, id: selectedPost.draftPostId } : null);
-                  return panelPost ? <ImageStudioPanel key={'isp-' + String(panelPost.id || '')} API={API} post={panelPost} onAttached={handleImageAttached} /> : null;
+                  return panelPost ? <ImageStudioPanel key={'isp-' + String(panelPost.id || '')} API={API} post={panelPost} onAttached={handleImageAttached} candidate={candidateImageId} setCandidate={setCandidateImageId} /> : null;
                 })()}
                 <div className="modal-actions">
                       <button className="btn btn-approve" onClick={handleSavePreview} disabled={loading.savePreview || !(selectedPost.content || '').trim()}>
@@ -2190,7 +2198,7 @@
                 </div>
                 {/* 2.5.36: the panel for saved drafts, INSIDE the edit modal guard.
                     Pre-save (no id) stays panel-free: no post row exists yet. */}
-                {editingPost.id ? <ImageStudioPanel key={'isp-' + String(editingPost.id || '')} API={API} post={editingPost} onAttached={handleImageAttached} /> : null}
+                {editingPost.id ? <ImageStudioPanel key={'isp-' + String(editingPost.id || '')} API={API} post={editingPost} onAttached={handleImageAttached} candidate={candidateImageId} setCandidate={setCandidateImageId} /> : null}
                 <div className="modal-actions-end">
                   <button className="btn btn-ghost" onClick={() => setEditingPost(null)}>Cancel</button>
                   <button className="btn btn-approve" onClick={handleSaveEdit} disabled={loading.editSave}>

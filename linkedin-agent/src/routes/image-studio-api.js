@@ -364,6 +364,29 @@ router.post("/:id/attach", requirePermission("edit_post"), async (req, res) => {
   }
 });
 
+// POST /api/image-studio/detach { postId }: remove the post's AI
+// attachment so the URL choices become the publish truth again.
+// The inverse of attach, equally visible: previous id in response
+// and log, caches taught through the same client callback.
+router.post("/detach", async (req, res) => {
+  const postId = parseId((req.body || {}).postId);
+  if (!postId) return res.status(400).json({ error: "Invalid postId", code: "INVALID_INPUT" });
+  try {
+    const outcome = await withTenant(req.tenant.id, async (client) => {
+      const prevQ = await client.query("SELECT generated_image_id FROM posts WHERE id = $1", [postId]);
+      if (prevQ.rows.length === 0) return { found: false };
+      const previousImageId = toIntOrNull(prevQ.rows[0].generated_image_id);
+      await client.query("UPDATE posts SET generated_image_id = NULL WHERE id = $1", [postId]);
+      return { found: true, previousImageId };
+    });
+    if (!outcome.found) return res.status(404).json({ error: "Post not found", code: "POST_NOT_FOUND" });
+    platformLog("info", "image_detached", { postId, previousImageId: outcome.previousImageId });
+    return res.status(200).json({ detached: true, postId, previousImageId: outcome.previousImageId });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
 // POST /api/image-studio/brief - derive an image brief from a post
 // (preview). Grounds in the post's content and the research
 // (news_context) that produced it, through the text seam. Returns the

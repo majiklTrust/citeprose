@@ -282,7 +282,7 @@ export async function listImages(opts = {}, deps = {}) {
   const limit = clampInt(opts.limit, 1, LIBRARY_MAX_LIMIT, LIBRARY_DEFAULT_LIMIT);
   const offset = clampInt(opts.offset, 0, LIBRARY_MAX_OFFSET, 0);
   const r = await c.query(
-    `SELECT id, source_kind, source_post_id, source_topic_id, human_name, lens_id,
+    `SELECT id, source_kind, source_post_id, source_topic_id, human_name, lens_id, brief,
             provider, model, aspect, width, height, mime, byte_size, storage_backend,
             status, cost_estimate_usd, created_by, created_at
      FROM images

@@ -230,6 +230,10 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
         provider: rendered.provider,
         model: rendered.model,
         prompt: composed.prompt,
+        // The operator's pristine entry (2.5.31): what the person
+        // TYPED, before any lens or palette composition, persists as
+        // the image's brief and captions it everywhere it appears.
+        brief: typeof b.prompt === "string" ? b.prompt.trim() : null,
         sourceKind: b.sourceKind,
         sourcePostId,
         sourceTopicId,

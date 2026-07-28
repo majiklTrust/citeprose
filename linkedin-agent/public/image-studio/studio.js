@@ -128,6 +128,7 @@ function Provenance({ meta: m }) {
   var branded = m.sourceKind !== 'post' && m.sourceKind !== 'brief' && m.sourceKind !== 'topic';
   return (
     <div className="prov">
+      {m.brief && <div className="prov-brief">{'\u201C' + m.brief + '\u201D'}</div>}
       {branded && <span>From majiklTrust<sup>{'\u00A9'}</sup>, Image Studio. </span>}
       {parts.join(' ')}
     </div>
@@ -308,6 +309,7 @@ function StudioApp() {
                   {item.lens_id && <span className="lens-tag">{item.lens_id}</span>}
                   <span className="pick"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg></span>
                   <img src={API + '/api/image-studio/' + item.id + '/serve'} alt={item.human_name || ('Image ' + item.id)} loading="lazy" />
+                  {item.brief && <div className="tile-caption">{item.brief}</div>}
                 </div>
               );
             })}

@@ -51,6 +51,9 @@ section.block .lead{color:var(--muted);max-width:70ch;font-size:1.06rem;}
 .status-panel td{padding:4px 18px 4px 0;color:var(--muted);}
 .status-panel td:first-child{color:var(--ink);font-weight:600;}
 .hint{color:var(--muted);font-size:.85rem;}
+.grace-terms{max-width:78ch;margin-top:18px;}
+.grace-terms h3{margin:0 0 6px;font-size:1rem;}
+.grace-terms p{color:var(--muted);font-size:.9rem;margin:0 0 10px;}
 .empty{color:var(--muted);}
 select,input[type="text"],input[type="password"]{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:.95rem;background:#fff;color:var(--ink);}
 .form-row{margin:10px 0;}

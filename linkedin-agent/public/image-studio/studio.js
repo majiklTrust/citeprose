@@ -149,6 +149,7 @@ function StudioApp() {
   const [selectedId, setSelectedId] = useState(null);
   const [meta, setMeta] = useState(null);
   const [refineText, setRefineText] = useState('');
+  const [rebind, setRebind] = useState(null);     // { posts: [{id,title}], newId }
 
   const loadBudget = useCallback(function () {
     return fetch(API + '/api/image-studio/budget', { credentials: 'include' })
@@ -198,6 +199,28 @@ function StudioApp() {
     loadProvenance(id);
   }
 
+  function rebindPost(postId) {
+    if (busy || !rebind) return;
+    setBusy(true);
+    fetch(API + '/api/image-studio/' + rebind.newId + '/attach', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId: postId })
+    })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (d) { return { res: res, data: d }; }); })
+      .then(function (r) {
+        if (!r.res.ok) throw new Error(messageFor(r.res.status, r.data));
+        setMsg({ text: 'Post #' + postId + ' now carries the refined image.', type: 'ok' });
+        setRebind(function (cur) {
+          if (!cur) return null;
+          var left = cur.posts.filter(function (p) { return p.id !== postId; });
+          return left.length ? { posts: left, newId: cur.newId } : null;
+        });
+      })
+      .catch(function (err) { setMsg({ text: err.message, type: 'err' }); })
+      .finally(function () { setBusy(false); });
+  }
+
   function generate() {
     if (busy) return;
     var text = prompt.trim();
@@ -237,6 +260,9 @@ function StudioApp() {
         if (!r.res.ok) throw new Error(messageFor(r.res.status, r.data));
         setMsg({ text: 'Refined into a new image.', type: 'ok' });
         setRefineText('');
+        // Finding 1 made visible: posts still holding the source
+        // image are named, with a one-click rebind. Never automatic.
+        setRebind((r.data.attachedPosts && r.data.attachedPosts.length) ? { posts: r.data.attachedPosts, newId: r.data.id } : null);
         select(r.data.id);
         loadLibrary(); loadBudget();
       })
@@ -300,6 +326,14 @@ function StudioApp() {
             </button>
           </div>
           {msg && <div className={'msg-line ' + (msg.type === 'ok' ? 'ok' : 'err')}>{msg.text}</div>}
+          {rebind && rebind.posts.map(function (p) {
+            return (
+              <div key={p.id} className="msg-line err">
+                Post #{p.id}{p.title ? (': ' + p.title) : ''} still carries the previous image.
+                <button className="btn-quiet rebind-btn" disabled={busy} onClick={function () { rebindPost(p.id); }}>Point it at this refined image</button>
+              </div>
+            );
+          })}
           {library.length === 0 && <div className="empty-note">Nothing here yet. Write a visual brief and generate your first image.</div>}
           <div className="variants">
             {library.map(function (item) {
@@ -326,7 +360,7 @@ function StudioApp() {
               <div className="refine-row">
                 <input type="text" maxLength={500} value={refineText} disabled={busy}
                   onChange={function (e) { setRefineText(e.target.value); }}
-                  placeholder="Refine: warmer light, less clutter" />
+                  placeholder="warmer light, less clutter" />
                 <button className="btn-quiet" disabled={busy} onClick={refine}>Refine</button>
               </div>
               <div className="dl-row">

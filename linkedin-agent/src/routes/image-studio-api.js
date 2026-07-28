@@ -325,14 +325,25 @@ router.post("/:id/attach", requirePermission("edit_post"), async (req, res) => {
   const postId = parseId((req.body || {}).postId);
   if (!id || !postId) return res.status(400).json({ error: "Invalid image or post id", code: "INVALID_INPUT" });
   try {
-    const attached = await withTenant(req.tenant.id, async (client) => {
-      await getImageMeta(id); // throws IMAGE_NOT_FOUND if not this tenant's
-      const upd = await client.query("UPDATE posts SET generated_image_id = $1 WHERE id = $2 RETURNING id", [id, postId]);
-      return upd.rows.length > 0;
+    const outcome = await withTenant(req.tenant.id, async (client) => {
+      const meta = await getImageMeta(id); // throws IMAGE_NOT_FOUND if not this tenant's
+      // 2.5.32: only a servable image may bind to a post. Anything
+      // else would pass attach and fail days later at publish time.
+      if (meta.status !== "stored") {
+        throw imageError(IMAGE_ERROR_CODES.INVALID_INPUT, "The image is not in a publishable state", { imageId: id, status: meta.status });
+      }
+      // Capture the prior binding BEFORE the update so a replacement
+      // is visible, never silent (finding 3).
+      const prevQ = await client.query("SELECT generated_image_id FROM posts WHERE id = $1", [postId]);
+      if (prevQ.rows.length === 0) return { found: false };
+      const previousImageId = toIntOrNull(prevQ.rows[0].generated_image_id);
+      await client.query("UPDATE posts SET generated_image_id = $1 WHERE id = $2", [id, postId]);
+      return { found: true, previousImageId };
     });
-    if (!attached) return res.status(404).json({ error: "Post not found", code: "POST_NOT_FOUND" });
-    platformLog("info", "image_attached", { imageId: id, postId });
-    return res.status(200).json({ attached: true, imageId: id, postId });
+    if (!outcome.found) return res.status(404).json({ error: "Post not found", code: "POST_NOT_FOUND" });
+    const replaced = outcome.previousImageId !== null && outcome.previousImageId !== id;
+    platformLog("info", "image_attached", { imageId: id, postId, previousImageId: outcome.previousImageId });
+    return res.status(200).json({ attached: true, imageId: id, postId, previousImageId: outcome.previousImageId, replaced });
   } catch (err) {
     return sendError(res, err);
   }
@@ -560,8 +571,17 @@ router.post("/:id/refine", requirePermission("preview_post"), async (req, res) =
       });
       return { stored, usage: rendered.usage, costEstimateUsd: rendered.costEstimateUsd };
     });
-    platformLog("info", "image_refined", { fromImageId: id, imageId: out.stored.id });
+    // 2.5.32 (finding 1): a refined image is a NEW row, and any post
+    // still bound to the source will publish the OLD image. Say so,
+    // and let the page offer the rebind. Never rebind silently.
+    const attachedPosts = await withTenant(req.tenant.id, async (client) => {
+      const r = await client.query(
+        "SELECT id, title FROM posts WHERE generated_image_id = $1 ORDER BY id DESC LIMIT 5", [id]);
+      return r.rows.map((row) => ({ id: toIntOrNull(row.id), title: row.title || null }));
+    });
+    platformLog("info", "image_refined", { fromImageId: id, imageId: out.stored.id, postsStillOnSource: attachedPosts.length });
     return res.status(201).json({
+      attachedPosts,
       id: out.stored.id,
       mime: out.stored.mime,
       byteSize: out.stored.byteSize,

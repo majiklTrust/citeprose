@@ -44,6 +44,7 @@
     .composer-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
     .composer-genre-desc { font-size: 0.76rem; color: #777; }
     .composer-genre-reason { font-size: 0.72rem; color: #b45309; font-style: italic; }
+    .composer-model-note { font-size: 0.72rem; letter-spacing: 0.3px; color: #64748b; text-align: center; margin-top: 0.4rem; }
     .composer-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
     .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
     .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
@@ -64,6 +65,20 @@
     .composer-block-note { font-size: 0.76rem; color: #9a3412; background: #fff7ed; border-radius: 4px; padding: 0.45rem 0.6rem; margin-top: 0.5rem; line-height: 1.45; }
     .composer-fidelity-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 0.45rem 0.6rem; margin-bottom: 0.6rem; }
     .composer-fidelity-keys { font-size: 0.72rem; font-weight: 400; color: #4d7c5a; margin-top: 0.2rem; word-break: break-word; }
+    .image-studio-panel { margin-top: 0.7rem; border: 1px solid #dbe4f0; border-radius: 6px; background: #f8fbff; padding: 0.7rem 0.8rem; }
+    .image-studio-head { font-size: 0.82rem; font-weight: 700; color: #1e40af; margin-bottom: 0.5rem; }
+    .image-studio-lens-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .image-studio-lens-label { font-size: 0.78rem; color: #475569; }
+    .image-studio-lens { font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.3rem 0.4rem; background: #fff; }
+    .image-studio-prompt { width: 100%; box-sizing: border-box; font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.4rem 0.5rem; resize: vertical; }
+    .image-studio-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+    .image-studio-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; }
+    .image-studio-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
+    .image-studio-preview { display: block; max-width: 100%; margin-top: 0.6rem; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .image-studio-lib { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+    .image-studio-lib-item { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 2px solid #e2e8f0; cursor: pointer; }
+    .image-studio-lib-item.selected { border-color: #1e40af; }
+    .image-studio-lib-note { font-size: 0.78rem; color: #64748b; }
   </style>
 
   <script type="text/babel">
@@ -204,6 +219,13 @@
       const [genresLoading, setGenresLoading] = useState(false);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
+      const [composerModel, setComposerModel] = useState(null);
+      useEffect(() => {
+        fetch(API + '/api/compose/model-info', { credentials: 'include' })
+          .then(res => { if (!res.ok) throw res; return res.json(); })
+          .then(d => { if (d.provider && d.model) setComposerModel(d.provider + ' / ' + d.model); })
+          .catch(() => { /* label is additive; the button works without it */ });
+      }, []);
       const abortRef = React.useRef(null);
       const cancelKindRef = React.useRef(null);
       const mountedRef = React.useRef(true);
@@ -431,11 +453,173 @@
                 <button className="btn btn-ghost composer-cancel" onClick={handleCancel}>Cancel</button>
               </div>
             ) : (
-              <button className="btn btn-primary btn-full" onClick={selectedGenre === '' ? handleNewPost : handleGenerate} disabled={genresLoading}>
-                {selectedGenre === '' ? 'New Post' : 'Generate with AI'}
-              </button>
+              <React.Fragment>
+                <button className="btn btn-primary btn-full" onClick={selectedGenre === '' ? handleNewPost : handleGenerate} disabled={genresLoading}>
+                  {selectedGenre === '' ? 'New Post' : 'Generate with AI'}
+                </button>
+                {selectedGenre !== '' && composerModel && (
+                  <div className="composer-model-note" title="The text model that drafts this post">{composerModel}</div>
+                )}
+              </React.Fragment>
             )}
           </div>
+        </div>
+      );
+    }
+
+    // ── Image Studio: in-picker AI image generation ──────
+    // A self-contained entry inside the Post Image picker. Generates an
+    // image grounded in the current post, previews it, and attaches it
+    // (sets generated_image_id) via the studio API. Independent of the
+    // URL-based image-choice radios; the publish path reads the attached
+    // image directly. Fails safe: hostile server codes map to plain
+    // messages, attach is guarded on a generated id, and actions are
+    // disabled while a request is in flight so they cannot double-fire.
+    function ImageStudioPanel({ API, post }) {
+      const [prompt, setPrompt] = useState('');
+      const [busy, setBusy] = useState(false);
+      const [imageId, setImageId] = useState(null);
+      const [attached, setAttached] = useState(false);
+      const [error, setError] = useState(null);
+      const [libOpen, setLibOpen] = useState(false);
+      const [library, setLibrary] = useState(null);
+      // Story Lens (2.5.25): editorial_photo by default, catalog-fed.
+      const [lens, setLens] = useState('editorial_photo');
+      const [lensCatalog, setLensCatalog] = useState([{ id: 'editorial_photo', name: 'Editorial Photo' }]);
+      useEffect(() => {
+        fetch(API + '/api/image-studio/lenses', { credentials: 'include' })
+          .then(res => { if (!res.ok) throw res; return res.json(); })
+          .then(cat => { if (Array.isArray(cat.lenses) && cat.lenses.length) setLensCatalog(cat.lenses); })
+          .catch(() => { /* the seeded default still works; the server validates */ });
+      }, []);
+      const [libError, setLibError] = useState(null);
+
+      useEffect(() => {
+        setImageId(null); setAttached(false); setError(null);
+        const base = ((post && (post.title || post.content)) || '').slice(0, 200);
+        setPrompt(base ? ('Editorial illustration for a LinkedIn post about: ' + base) : '');
+      }, [post && post.id]);
+
+      function messageFor(statusCode, data) {
+        const code = data && data.code;
+        if (code === 'ENTITLEMENT_REQUIRED') return 'AI image generation requires the Business Premium plan.';
+        if (code === 'BUDGET_NOT_SET') return 'Set an image budget in Admin before generating.';
+        if (code === 'BUDGET_EXCEEDED') return 'The image budget for this cycle is used up. Increase it in Admin.';
+        if (code === 'NOT_PROVISIONED') return 'No image provider is configured for this workspace.';
+        if (code === 'MISSING_CREDENTIAL') return 'No image API key is configured for this workspace.';
+        return (data && data.error) || ('Request failed (' + statusCode + ').');
+      }
+
+      async function generate() {
+        if (!post || !prompt.trim()) return;
+        setError(null); setBusy(true); setImageId(null); setAttached(false);
+        try {
+          const genBody = { prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'square' };
+          if (lens) genBody.lensId = lens;
+          const res = await fetch(API + '/api/image-studio/generate', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(genBody)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(messageFor(res.status, data));
+          setImageId(data.id);
+        } catch (e) { setError((e && e.message) || 'Generation failed.'); }
+        finally { setBusy(false); }
+      }
+
+      async function attach() {
+        if (!imageId || !post) return;
+        setError(null); setBusy(true);
+        try {
+          const res = await fetch(API + '/api/image-studio/' + imageId + '/attach', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postId: post.id })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(messageFor(res.status, data));
+          setAttached(true);
+          // Finding 3 made visible: replacing an attachment says so.
+          if (data.replaced) setError('Note: this replaced previously attached image #' + data.previousImageId + '.');
+        } catch (e) { setError((e && e.message) || 'Attach failed.'); }
+        finally { setBusy(false); }
+      }
+
+      // From Library: pick an already-stored tenant image. Selecting an
+      // item feeds the SAME imageId the preview and attach flow already
+      // use, so there is one attach path, not two that can drift.
+      async function toggleLibrary() {
+        const opening = !libOpen;
+        setLibOpen(opening);
+        if (opening && library === null) {
+          try {
+            const res = await fetch(API + '/api/image-studio/library?limit=12', { credentials: 'include' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(messageFor(res.status, data));
+            setLibrary(data.images || []);
+          } catch (e) {
+            setLibError((e && e.message) || 'Library failed to load.');
+            setLibrary([]);
+          }
+        }
+      }
+      function selectFromLibrary(item) {
+        setImageId(item.id);
+        setAttached(false);
+        setError(null);
+      }
+
+      return (
+        <div className="image-studio-panel">
+          <div className="image-studio-head">Generate with AI</div>
+          <div className="image-studio-lens-row">
+            <label className="image-studio-lens-label" htmlFor="image-studio-lens">Story Lens</label>
+            <select id="image-studio-lens" className="image-studio-lens" value={lens} disabled={busy}
+              onChange={e => setLens(e.target.value)}>
+              {lensCatalog.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              <option value="">No lens</option>
+            </select>
+          </div>
+          <textarea className="image-studio-prompt" rows="2" value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe the image to generate" />
+          <div className="image-studio-actions">
+            <button type="button" className="btn btn-primary"
+              disabled={busy || !prompt.trim()} onClick={generate}>
+              {busy ? 'Working...' : (imageId ? 'Regenerate' : 'Generate')}
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={toggleLibrary}>
+              {libOpen ? 'Hide Library' : 'From Library'}
+            </button>
+            {imageId && !attached && (
+              <button type="button" className="btn btn-approve" disabled={busy} onClick={attach}>
+                Attach to post
+              </button>
+            )}
+            {attached && <span className="image-studio-ok">AI image attached</span>}
+          </div>
+          {libOpen && (
+            <div className="image-studio-lib">
+              {library === null && <span className="image-studio-lib-note">Loading library...</span>}
+              {Array.isArray(library) && library.length === 0 && !libError && <span className="image-studio-lib-note">No images in the library yet.</span>}
+              {Array.isArray(library) && library.map((item) => (
+                <img key={item.id}
+                  className={'image-studio-lib-item' + (imageId === item.id ? ' selected' : '')}
+                  src={API + '/api/image-studio/' + item.id + '/serve'}
+                  alt={item.human_name || ('Image ' + item.id)}
+                  title={(item.human_name || 'Untitled') + (item.lens_id ? (' (' + item.lens_id + ')') : '')}
+                  onClick={() => selectFromLibrary(item)} />
+              ))}
+              {libError && <div className="image-studio-error">{libError}</div>}
+            </div>
+          )}
+          {imageId && (
+            <img className="image-studio-preview"
+              src={API + '/api/image-studio/' + imageId + '/serve'}
+              alt="Generated preview" />
+          )}
+          {error && <div className="image-studio-error">{error}</div>}
         </div>
       );
     }
@@ -1038,7 +1222,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.33</div>
+                <div className="header-subtitle">v2.5.34</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1050,7 +1234,15 @@
             </div>
             <div className="card" style={{ maxWidth: '640px', margin: '2rem auto', textAlign: 'center' }}>
               <h2 style={{ marginBottom: '0.5rem' }}>Choose a plan to activate this workspace</h2>
-              <p><a className="btn btn-primary" href="/app/billing">choose a plan from our billing page</a></p>
+              <p style={{ color: '#666', marginBottom: '1rem' }}>
+                Individual covers the core research-to-publish loop.
+                Business adds the Organization Manager. Business Premium
+                adds the Ads Manager and Image Studio as they arrive.
+              </p>
+              <p style={{ color: '#666' }}>
+                Checkout opens here when billing goes live. Your workspace
+                stays intact; nothing has been removed.
+              </p>
             </div>
           </div>
         );
@@ -1062,7 +1254,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.5.33</div>
+                <div className="header-subtitle">v2.5.34</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1114,7 +1306,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.5.33 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.34 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1813,6 +2005,7 @@
                               onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
+                        <ImageStudioPanel API={API} post={selectedPost} />
                       </div>
                     </div>
                     <div className="modal-actions">

@@ -68,6 +68,21 @@ const BODY_SNIPPET_MAX = 200;
 export function normalizeVendorHttpError(providerId, httpStatus, bodyText) {
   const status = Number.isInteger(httpStatus) ? httpStatus : 0;
   const snippet = typeof bodyText === "string" ? bodyText.slice(0, BODY_SNIPPET_MAX) : "";
+  // Diagnosability (2.5.30, the 2.5.28 lesson generalized): vendors
+  // answer 4xx with a body that NAMES the cause (unverified
+  // organization, quota, a rejected parameter). Extract that reason
+  // and put it in the message a person actually sees; a bare
+  // "HTTP 400" hides the vendor's own explanation. Sanitized: JSON
+  // error.message preferred, single line, hard length cap, and never
+  // any request content of ours.
+  let providerMessage = "";
+  try {
+    const parsed = JSON.parse(snippet);
+    const m = parsed && parsed.error && typeof parsed.error.message === "string" ? parsed.error.message
+      : (typeof parsed.message === "string" ? parsed.message : "");
+    providerMessage = m;
+  } catch { providerMessage = snippet; }
+  providerMessage = String(providerMessage || "").replace(/\s+/g, " ").trim().slice(0, 240);
   // A 400 whose body names a moderation or safety rejection is a
   // content denial, not a transport fault: give it its own code so
   // the UX can say "revise the prompt" rather than "try again".
@@ -75,9 +90,9 @@ export function normalizeVendorHttpError(providerId, httpStatus, bodyText) {
   if (status === 400 && (lc.includes("moderation") || lc.includes("safety") || lc.includes("content_policy"))) {
     return new ImageError(IMAGE_ERROR_CODES.CONTENT_REJECTED,
       `Image provider ${String(providerId)} rejected the prompt on content grounds`,
-      { providerId: String(providerId), status });
+      { providerId: String(providerId), status, providerMessage });
   }
   return new ImageError(IMAGE_ERROR_CODES.VENDOR_HTTP,
-    `Image provider ${String(providerId)} returned HTTP ${status}`,
-    { providerId: String(providerId), status, bodySnippet: snippet });
+    `Image provider ${String(providerId)} returned HTTP ${status}` + (providerMessage ? `: ${providerMessage}` : ""),
+    { providerId: String(providerId), status, bodySnippet: snippet, providerMessage });
 }

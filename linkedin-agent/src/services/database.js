@@ -456,7 +456,8 @@ export async function getPostsByStatus(status) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url
+            p.image_url,
+            p.generated_image_id
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.status = $1::post_status
@@ -472,7 +473,8 @@ export async function getRecentPosts(days = 10) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url
+            p.image_url,
+            p.generated_image_id
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.posted_at >= now() - ($1 || ' days')::interval
@@ -489,7 +491,8 @@ export async function getAllPosts(limit = 50) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url
+            p.image_url,
+            p.generated_image_id
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      ORDER BY p.created_at DESC

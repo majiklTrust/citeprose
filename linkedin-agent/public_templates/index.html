@@ -475,11 +475,37 @@
     // image directly. Fails safe: hostile server codes map to plain
     // messages, attach is guarded on a generated id, and actions are
     // disabled while a request is in flight so they cannot double-fire.
-    function ImageStudioPanel({ API, post }) {
+    function ImageStudioPanel({ API, post, onAttached }) {
       const [prompt, setPrompt] = useState('');
       const [busy, setBusy] = useState(false);
-      const [imageId, setImageId] = useState(null);
-      const [attached, setAttached] = useState(false);
+      // 2.5.38: hydrate from the post row's truth. An attachment made
+      // in an earlier session (or before an off-modal close) is shown,
+      // not forgotten: component state dies with the modal, the
+      // database does not.
+      const initialImageId = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
+      const [imageId, setImageId] = useState(initialImageId);
+      const [attached, setAttached] = useState(!!initialImageId);
+      // 2.5.48: useState initializers run ONCE at mount. When the row's
+      // truth arrives or changes after mount, adopt it, unless the
+      // person is mid-render or holding an unattached candidate.
+      const [syncedFrom, setSyncedFrom] = useState(initialImageId);
+      useEffect(() => {
+        const v = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
+        if (v === syncedFrom) return;
+        setSyncedFrom(v);
+        if (v && !busy && (imageId === null || attached)) {
+          setImageId(v);
+          setAttached(true);
+          setError(null);
+        }
+      }, [post ? post.generated_image_id : null]);
+      // 2.5.49: DERIVED rendering. The display computes from the prop
+      // on every render; state is only the session override (a fresh
+      // generate or a library pick). The prop was proven correct at
+      // runtime while state was not: so the truth renders, period.
+      const propImageId = post && post.generated_image_id ? parseInt(post.generated_image_id, 10) : null;
+      const effectiveImageId = imageId !== null ? imageId : propImageId;
+      const effectiveAttached = imageId !== null ? attached : !!propImageId;
       const [error, setError] = useState(null);
       const [libOpen, setLibOpen] = useState(false);
       const [library, setLibrary] = useState(null);
@@ -514,7 +540,7 @@
         if (!post || !prompt.trim()) return;
         setError(null); setBusy(true); setImageId(null); setAttached(false);
         try {
-          const genBody = { prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'square' };
+          const genBody = { prompt: prompt.trim(), sourceKind: 'post', sourcePostId: post.id, aspect: 'linkedin_feed' };
           if (lens) genBody.lensId = lens;
           const res = await fetch(API + '/api/image-studio/generate', {
             method: 'POST', credentials: 'include',
@@ -529,10 +555,10 @@
       }
 
       async function attach() {
-        if (!imageId || !post) return;
+        if (!effectiveImageId || !post) return;
         setError(null); setBusy(true);
         try {
-          const res = await fetch(API + '/api/image-studio/' + imageId + '/attach', {
+          const res = await fetch(API + '/api/image-studio/' + effectiveImageId + '/attach', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId: post.id })
@@ -540,6 +566,10 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(messageFor(res.status, data));
           setAttached(true);
+          // 2.5.43: teach the CLIENT cache what the server just
+          // learned, or a reopened modal hydrates a stale snapshot
+          // and truthfully displays yesterday's state.
+          if (onAttached) onAttached(effectiveImageId, post.id);
           // Finding 3 made visible: replacing an attachment says so.
           if (data.replaced) setError('Note: this replaced previously attached image #' + data.previousImageId + '.');
         } catch (e) { setError((e && e.message) || 'Attach failed.'); }
@@ -573,6 +603,11 @@
       return (
         <div className="image-studio-panel">
           <div className="image-studio-head">Generate with AI</div>
+          {post && !('generated_image_id' in post) && (
+            <div className="image-studio-error">
+              Attachment state unavailable: the running server predates 2.5.38 and does not report it. Restart the app process, then refresh.
+            </div>
+          )}
           <div className="image-studio-lens-row">
             <label className="image-studio-lens-label" htmlFor="image-studio-lens">Story Lens</label>
             <select id="image-studio-lens" className="image-studio-lens" value={lens} disabled={busy}
@@ -587,17 +622,17 @@
           <div className="image-studio-actions">
             <button type="button" className="btn btn-primary"
               disabled={busy || !prompt.trim()} onClick={generate}>
-              {busy ? 'Working...' : (imageId ? 'Regenerate' : 'Generate')}
+              {busy ? 'Working...' : (effectiveImageId ? 'Regenerate' : 'Generate')}
             </button>
             <button type="button" className="btn btn-ghost" disabled={busy} onClick={toggleLibrary}>
               {libOpen ? 'Hide Library' : 'From Library'}
             </button>
-            {imageId && !attached && (
+            {effectiveImageId && !effectiveAttached && (
               <button type="button" className="btn btn-approve" disabled={busy} onClick={attach}>
-                Attach to post
+                Attach to Post
               </button>
             )}
-            {attached && <span className="image-studio-ok">AI image attached</span>}
+            {effectiveAttached && <span className="image-studio-ok">AI image attached</span>}
           </div>
           {libOpen && (
             <div className="image-studio-lib">
@@ -605,7 +640,7 @@
               {Array.isArray(library) && library.length === 0 && !libError && <span className="image-studio-lib-note">No images in the library yet.</span>}
               {Array.isArray(library) && library.map((item) => (
                 <img key={item.id}
-                  className={'image-studio-lib-item' + (imageId === item.id ? ' selected' : '')}
+                  className={'image-studio-lib-item' + (effectiveImageId === item.id ? ' selected' : '')}
                   src={API + '/api/image-studio/' + item.id + '/serve'}
                   alt={item.human_name || ('Image ' + item.id)}
                   title={(item.human_name || 'Untitled') + (item.lens_id ? (' (' + item.lens_id + ')') : '')}
@@ -614,9 +649,9 @@
               {libError && <div className="image-studio-error">{libError}</div>}
             </div>
           )}
-          {imageId && (
+          {effectiveImageId && (
             <img className="image-studio-preview"
-              src={API + '/api/image-studio/' + imageId + '/serve'}
+              src={API + '/api/image-studio/' + effectiveImageId + '/serve'}
               alt="Generated preview" />
           )}
           {error && <div className="image-studio-error">{error}</div>}
@@ -811,6 +846,28 @@
       // A DB-loaded draft carries `id`; a preview carries `draftPostId`
       // (the row saved at generation). If neither is present nothing was
       // persisted, so just close the modal.
+      // 2.5.43: one attach updates every client copy of the post:
+      // the list row, the open detail modal, the open edit modal.
+      // String comparison because pg bigint ids arrive as strings.
+      // 2.5.44: when a post opens, session image-choice state starts
+      // from the ROW, not from a blank default, so a later save writes
+      // what the person actually sees. Keyed by post id: cache patches
+      // to the same open post must not reset in-modal choices.
+      const openPostKey = selectedPost ? String(selectedPost.id || selectedPost.draftPostId || '') : null;
+      useEffect(() => {
+        if (!openPostKey || !selectedPost) return;
+        const url = selectedPost.image_url || '';
+        if (!url) { setImageChoice({ mode: 'none', url: null }); return; }
+        const isArticle = getArticleImages(selectedPost).some((img) => img.imageUrl === url);
+        setImageChoice(isArticle ? { mode: 'auto', url } : { mode: 'custom', url });
+      }, [openPostKey]);
+
+      const handleImageAttached = (attachedImageId, postId) => {
+        setPosts(list => list.map(p => String(p.id) === String(postId) ? { ...p, generated_image_id: attachedImageId } : p));
+        setSelectedPost(sp => sp && String(sp.id || sp.draftPostId) === String(postId) ? { ...sp, generated_image_id: attachedImageId } : sp);
+        setEditingPost(ep => ep && String(ep.id) === String(postId) ? { ...ep, generated_image_id: attachedImageId } : ep);
+      };
+
       async function handleDiscard(post, e) {
         if (e) e.stopPropagation();
         const id = post.id || post.draftPostId;
@@ -1997,7 +2054,7 @@
                               onClick={() => { document.querySelector('input[name="image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
-                        <ImageStudioPanel API={API} post={selectedPost} />
+                        <ImageStudioPanel key={'isp-' + String(selectedPost.id || selectedPost.draftPostId || '')} API={API} post={selectedPost} onAttached={handleImageAttached} />
                       </div>
                     </div>
                     <div className="modal-actions">
@@ -2015,6 +2072,18 @@
                   );})()}
                 {(selectedPost.isPreview || selectedPost.status === 'draft') && (() => {
                   const availableImages = getArticleImages(selectedPost);
+                  // 2.5.44: read BEFORE write. The saved row decides the
+                  // initial radio and URL box; session state only tracks
+                  // changes made after open.
+                  const savedUrl = selectedPost.image_url || '';
+                  const savedIsArticle = !!savedUrl && availableImages.some((img) => img.imageUrl === savedUrl);
+                  const savedIsCustom = !!savedUrl && !savedIsArticle;
+                  // 2.5.47: publish precedence expressed by SELECTION state:
+                  // with an attached AI image, the panel preview is the
+                  // image display and every radio hydrates unchecked (the
+                  // URL machinery is dormant). Session state still tracks
+                  // the saved URL so queueing preserves the column.
+                  const savedGeneratedId = ('generated_image_id' in selectedPost) && selectedPost.generated_image_id ? parseInt(selectedPost.generated_image_id, 10) : null;
                   return (
                   <div>
                     <div className="section-divider">
@@ -2026,13 +2095,14 @@
                       <div className="detail-stack">
                         <label className="image-choice-inline">
                           <input type="radio" name="preview-image-choice" value="none"
-                            defaultChecked={imageChoice.mode === 'none'}
+                            defaultChecked={!savedGeneratedId && !savedUrl}
                             onChange={() => setImageChoice({ mode: 'none', url: null })} />
                           No image
                         </label>
                         {availableImages.map((img, idx) => (
                           <label key={idx} className="image-choice">
                             <input type="radio" name="preview-image-choice" value={`article-${idx}`}
+                              defaultChecked={!savedGeneratedId && savedUrl === img.imageUrl}
                               onChange={() => setImageChoice({ mode: 'auto', url: img.imageUrl })} />
                             <div className="flex-1">
                               <div className="text-edit-sm">{img.feedName || 'Article image'}</div>
@@ -2048,18 +2118,33 @@
                         ))}
                         <label className="image-choice">
                           <input type="radio" name="preview-image-choice" value="custom"
-                            onChange={() => setImageChoice({ mode: 'custom', url: '' })} />
+                            defaultChecked={!savedGeneratedId && savedIsCustom}
+                            onChange={() => setImageChoice({ mode: 'custom', url: savedIsCustom ? savedUrl : '' })} />
                           <div className="flex-1">
                             Custom image URL
+                            {!savedGeneratedId && savedIsCustom && (
+                              <img src={`/api/image-proxy?url=${encodeURIComponent(savedUrl)}`}
+                                alt="Saved custom image"
+                                className="image-thumb"
+                                onError={(e) => { e.target.style.display = 'none'; }} />
+                            )}
                             <input type="text" placeholder="https://example.com/image.jpg"
                               className="image-url-field"
+                              defaultValue={savedIsCustom ? savedUrl : ''}
                               onChange={(e) => setImageChoice({ mode: 'custom', url: e.target.value })}
                               onClick={() => { document.querySelector('input[name="preview-image-choice"][value="custom"]').checked = true; }} />
                           </div>
                         </label>
                       </div>
                     </div>
-                    <div className="modal-actions">
+                {/* 2.5.37: the same panel the pending face carries, so drafts and
+                    previews generate and attach here. Previews ground through
+                    their draftPostId. */}
+                {(() => {
+                  const panelPost = selectedPost.id ? selectedPost : (selectedPost.draftPostId ? { ...selectedPost, id: selectedPost.draftPostId } : null);
+                  return panelPost ? <ImageStudioPanel key={'isp-' + String(panelPost.id || '')} API={API} post={panelPost} onAttached={handleImageAttached} /> : null;
+                })()}
+                <div className="modal-actions">
                       <button className="btn btn-approve" onClick={handleSavePreview} disabled={loading.savePreview || !(selectedPost.content || '').trim()}>
                         {loading.savePreview ? <span className="loading-spinner"></span> : 'Queue for Approval'}
                       </button>
@@ -2103,6 +2188,9 @@
                     onChange={e => setEditFields(f => ({ ...f, hashtags: e.target.value }))}
                     className="form-input" />
                 </div>
+                {/* 2.5.36: the panel for saved drafts, INSIDE the edit modal guard.
+                    Pre-save (no id) stays panel-free: no post row exists yet. */}
+                {editingPost.id ? <ImageStudioPanel key={'isp-' + String(editingPost.id || '')} API={API} post={editingPost} onAttached={handleImageAttached} /> : null}
                 <div className="modal-actions-end">
                   <button className="btn btn-ghost" onClick={() => setEditingPost(null)}>Cancel</button>
                   <button className="btn btn-approve" onClick={handleSaveEdit} disabled={loading.editSave}>

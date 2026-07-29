@@ -365,6 +365,20 @@ const QUERY_REGISTRY = {
     readOnly: false
   },
 
+  "select-tenant-invites": {
+    label: "Shows Tenant Member Invites (all users)",
+    description: "Shows all member invites (pending and claimed) for a tenant.",
+    capability: "Shows a tenant's invite records.",
+    sql: `select i.email,i.status Invite,i.created_at Created,i.claimed_at Claimed,t.name Tenant,s.state Subscription, s.comp
+            from invites i
+            join tenants t on t.id = i.tenant_id
+            join subscriptions s on s.tenant_id = i.tenant_id
+            order by s.state,s.comp,i.status`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
   "clear-tenant-memberships": {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",

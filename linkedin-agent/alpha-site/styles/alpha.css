@@ -238,7 +238,7 @@
 
 .hero-title {
   font-size: clamp(1.125rem, 3vw, 2rem);
-  text-align: center;
+  margin-top: 2rem;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -772,7 +772,9 @@
 .hero-shots{
   display:grid;
   grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
-  gap:16px;width:100%;margin-top:22px;
+  gap:16px;
+  width:100%;max-width:100%;
+  margin:22px auto 0;
 }
 .hero-shots .shot{
   margin:0;

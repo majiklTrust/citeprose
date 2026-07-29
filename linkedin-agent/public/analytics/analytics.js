@@ -321,6 +321,26 @@
       });
   }
 
+  // 2.4.63: section-scoped fetch for widgets whose backing routes
+  // are sold on a HIGHER tier than this page (the advocacy pair).
+  // An entitlement denial here means "not in this plan": the
+  // section reports it; the page is not denied and no wall shows.
+  function getJsonSection(path) {
+    return fetch(API + path, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          return { ok: res.ok, status: res.status, body: body };
+        });
+      });
+  }
+
+  function sectionNotInPlan(id) {
+    var el = $(id);
+    if (!el) return;
+    el.className = 'empty';
+    el.textContent = 'Included with the Business Plus plan.';
+  }
+
   function loadAll() {
     clearMessage();
     var days = windowDays();
@@ -336,11 +356,13 @@
       if (r.ok) renderHeatmap(r.body);
       else { $('heatmap-body').className = 'empty'; $('heatmap-body').textContent = 'Failed to load heatmap.'; }
     });
-    getJson('/api/advocacy/reach').then(function (r) {
+    getJsonSection('/api/advocacy/reach').then(function (r) {
+      if (r.status === 402) return sectionNotInPlan('amplification-body');
       renderAmplification(r.ok ? r.body : null);
     });
 
-    getJson('/api/advocacy/insights').then(function (r) {
+    getJsonSection('/api/advocacy/insights').then(function (r) {
+      if (r.status === 402) return sectionNotInPlan('advocacy-intel-body');
       renderAdvocacyIntel(r.ok ? r.body : null);
     });
 

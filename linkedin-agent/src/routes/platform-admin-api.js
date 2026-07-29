@@ -231,12 +231,12 @@ const QUERY_REGISTRY = {
     label: "Tenant Members",
     description: "Show the Members.",
     capability: "Show the Members.",
-    sql: `select t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id,m.id from memberships m
+    sql: `select t.name,t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id from memberships m
             join tenants t on t.id = m.tenant_id
-            where t.slug = $1
+            where t.id = $1::uuid
             order by m.created_at desc`,
     params: [
-      { name: "tenant_slug", label: "Tenant Slug", type: "text", required: true }
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
     destructive: false,
     readOnly: true
@@ -247,10 +247,10 @@ const QUERY_REGISTRY = {
     description: "Authorizes a Tenant Member's workspace.",
     capability: "Authorizes a Tenant Member's workspace.",
     sql: `update memberships set auth_sub=$3
-            where tenant_id=$1
+            where tenant_id=$1::uuid
             and id = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "id", label: "Member UUID", type: "uuid", required: true },
       { name: "value", label: "IDP Authorization", type: "text", required: true }
     ],
@@ -267,9 +267,11 @@ const QUERY_REGISTRY = {
                  f.last_validated_at,
                  (SELECT count(*) FROM feed_articles fa WHERE fa.feed_id = f.id) AS article_count
           FROM feeds_v2 f
-          WHERE f.tenant_id = $1
+          WHERE f.tenant_id = $1::uuid
           ORDER BY f.name`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: true
   },
@@ -281,9 +283,11 @@ const QUERY_REGISTRY = {
     sql: `SELECT a.key, a.value, s.value_type, s.allowed_values, s.description
           FROM agent_state a
           LEFT JOIN agent_state_schema s ON s.key = a.key
-          WHERE a.tenant_id = $1
+          WHERE a.tenant_id = $1::uuid
           ORDER BY a.key`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: true
   },
@@ -293,10 +297,10 @@ const QUERY_REGISTRY = {
     description: "Sets feeds_manager_version for a tenant (1 or 2).",
     capability: "Switch a tenant between the v1 and v2 Feeds Manager UI.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1, 'feeds_manager_version', $2)
+          VALUES ($1::uuid, 'feeds_manager_version', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "version", label: "Version (1 or 2)", type: "text", required: true }
     ],
     destructive: false,
@@ -308,13 +312,13 @@ const QUERY_REGISTRY = {
     description: "Removes all feeds, feed-topic mappings, and feed-article links for a tenant. Articles are preserved.",
     capability: "Wipe a tenant's feeds and feed links while preserving the underlying articles.",
     sql: `WITH deleted_mappings AS (
-            DELETE FROM feed_topics WHERE tenant_id = $1
+            DELETE FROM feed_topics WHERE tenant_id = $1::uuid
           ), deleted_articles AS (
             DELETE FROM feed_articles WHERE feed_id IN (
-              SELECT id FROM feeds_v2 WHERE tenant_id = $1
+              SELECT id FROM feeds_v2 WHERE tenant_id = $1::uuid
             )
           )
-          DELETE FROM feeds_v2 WHERE tenant_id = $1`,
+          DELETE FROM feeds_v2 WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -326,7 +330,7 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant Posts",
     description: "Removes all posts for a tenant.",
     capability: "Remove all of a tenant's posts — useful for resetting a demo or test tenant.",
-    sql: `DELETE FROM posts WHERE tenant_id = $1`,
+    sql: `DELETE FROM posts WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -339,9 +343,9 @@ const QUERY_REGISTRY = {
     description: "Removes all topics and their feed mappings for a tenant.",
     capability: "Remove a tenant's topics and their feed mappings.",
     sql: `WITH deleted_mappings AS (
-            DELETE FROM feed_topics WHERE tenant_id = $1
+            DELETE FROM feed_topics WHERE tenant_id = $1::uuid
           )
-          DELETE FROM topics WHERE tenant_id = $1`,
+          DELETE FROM topics WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -353,7 +357,7 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant Member Invites (all users)",
     description: "Removes all member invites (pending and claimed) for a tenant.",
     capability: "Clear a tenant's invite records before re-inviting users.",
-    sql: `DELETE FROM invites WHERE tenant_id = $1`,
+    sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -365,7 +369,7 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",
     capability: "Revoke all user access to a tenant in one step.",
-    sql: `DELETE FROM memberships WHERE tenant_id = $1`,
+    sql: `DELETE FROM memberships WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -377,7 +381,7 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant",
     description: "Deletes the tenant row itself. Run the other clear-tenant queries first to remove dependent data.",
     capability: "Final teardown step — remove the tenant shell after its data is cleared.",
-    sql: `DELETE FROM tenants WHERE id = $1`,
+    sql: `DELETE FROM tenants WHERE id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],
@@ -404,8 +408,10 @@ const QUERY_REGISTRY = {
               last_validation_grade = NULL,
               last_validated_at = NULL,
               last_error = NULL
-          WHERE tenant_id = $1`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+          WHERE tenant_id = $1::uuid`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: false
   },
@@ -455,9 +461,11 @@ const QUERY_REGISTRY = {
     capability: "Confirm which credentials a tenant has set without exposing the encrypted values.",
     sql: `SELECT key, length(value_enc) > 0 AS has_value, updated_at
           FROM credentials
-          WHERE tenant_id = $1
+          WHERE tenant_id = $1::uuid
           ORDER BY key`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: true
   },
@@ -623,10 +631,10 @@ const QUERY_REGISTRY = {
     description: "Pauses or resumes the agent for a tenant. Value must be 'true' or 'false'.",
     capability: "Stop or restart a tenant's scheduled posting without touching any other config.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1, 'paused', $2)
+          VALUES ($1::uuid, 'paused', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "value", label: "Paused (true or false)", type: "text", required: true }
     ],
     destructive: false,
@@ -638,10 +646,10 @@ const QUERY_REGISTRY = {
     description: "Toggles multi-source corroboration for a tenant. Value must be 'enabled' or 'disabled'.",
     capability: "Turn cross-source fact-checking on or off for a tenant's content pipeline.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1, 'corroboration', $2)
+          VALUES ($1::uuid, 'corroboration', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "value", label: "Corroboration (enabled or disabled)", type: "text", required: true }
     ],
     destructive: false,
@@ -653,7 +661,7 @@ const QUERY_REGISTRY = {
     description: "Sets the per-tenant Language Model override from the live model catalog. Falls back to the deployment default when unset.",
     capability: "Pin or change which LLM a tenant's generation pipeline uses.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1, 'anthropic_model', $2)
+          VALUES ($1::uuid, 'anthropic_model', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
@@ -668,10 +676,10 @@ const QUERY_REGISTRY = {
     description: "Sets any agent_state key/value for a tenant. Use for properties without a dedicated setter.",
     capability: "Maintenance escape hatch — adjust any single agent_state property by key.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1, $2, $3)
+          VALUES ($1::uuid, $2, $3)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $3`,
     params: [
-      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "key", label: "agent_state key", type: "text", required: true },
       { name: "value", label: "Value", type: "text", required: true }
     ],
@@ -685,9 +693,9 @@ const QUERY_REGISTRY = {
     label: "Set Tenant Status",
     description: "Sets the tenants.status field. Known values: pending, active, suspended. Suspending a tenant cuts off access.",
     capability: "Activate, suspend, or reset a tenant's lifecycle state. Run 'Database Wide enum Type Fields' to see all valid values.",
-    sql: `UPDATE tenants SET status = $2::tenant_status WHERE id = $1`,
+    sql: `UPDATE tenants SET status = $2::tenant_status WHERE id = $1::uuid`,
     params: [
-      { name: "id", label: "Tenant UUID", type: "uuid", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
       { name: "status", label: "Status (pending / active / suspended)", type: "text", required: true }
     ],
     destructive: true,
@@ -702,10 +710,12 @@ const QUERY_REGISTRY = {
     capability: "Diagnose stuck or piled-up posts — see how a tenant's posts are distributed across the workflow.",
     sql: `SELECT status::text, count(*) AS posts
           FROM posts
-          WHERE tenant_id = $1
+          WHERE tenant_id = $1::uuid
           GROUP BY status
           ORDER BY status`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: true
   },
@@ -716,10 +726,12 @@ const QUERY_REGISTRY = {
     capability: "Triage failures fast — surface a tenant's recent errors without shell access to logs.",
     sql: `SELECT timestamp, action, details
           FROM activity_log
-          WHERE tenant_id = $1 AND level = 'error'::log_level
+          WHERE tenant_id = $1::uuid AND level = 'error'::log_level
           ORDER BY timestamp DESC
           LIMIT 50`,
-    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
     destructive: false,
     readOnly: true
   },

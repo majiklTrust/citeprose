@@ -142,7 +142,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       ``,
       `What to expect when you click the link:`,
       `  • You will be guided through a short setup process to name, configure, and create your workspace.`,
-      `  • Log In and register with our security partner, Auth0, using this or other email address of you choice.`,
+      `  • Log In and register (sign-up) with our security partner, Auth0, using this or other email address of your choice.`,
       `  • Choose the service level and be on your way to the future of advertising.`,
       `  • At any time, return to https://www.***REMOVED***/app/`,
       ``,

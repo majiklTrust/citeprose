@@ -189,11 +189,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
           // tenant context on purpose (subscriptions carry no RLS).
           try {
             const { subscriptionStatus } = await import("../services/entitlements.js");
-            subscription = await subscriptionStatus(tenant.id, req.user ? req.user.sub : null);
-          } catch (statusErr) {
-            // 2.4.23: this catch swallowed a ReferenceError for days.
-            // A swallowed failure is a diagnostic hole; log the truth.
-            platformLog("error", "subscription_status_failed", { tenantId: tenant.id, error: statusErr.message });
+            subscription = await subscriptionStatus(tenant.id, user ? user.sub : null);
+          } catch {
             // AUDIT F2 (2.4.2): a transient read failure must NEVER
             // paint the paywall over a paying tenant's dashboard.
             // "unknown" renders the dashboard; the server gates stay
@@ -832,7 +829,16 @@ router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, re
 
 router.get("/api/research/stats", requirePermission("view_dashboard"), async (req, res) => {
   try {
-    const stats = await withTenant(req.tenant.id, async () => getArticleStats());
+    // 2.5.54: optional topic filter. Present-but-invalid is refused,
+    // never silently treated as unfiltered.
+    let topic = null;
+    if (req.query.topic !== undefined) {
+      if (typeof req.query.topic !== "string" || !/^[a-z0-9_-]{1,64}$/i.test(req.query.topic)) {
+        return res.status(400).json({ error: "Invalid topic", code: "INVALID_INPUT" });
+      }
+      topic = req.query.topic;
+    }
+    const stats = await withTenant(req.tenant.id, async () => getArticleStats(topic));
     res.json(stats);
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });

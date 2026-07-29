@@ -572,13 +572,28 @@ export async function searchArticles(keywords, topicSlug = null, maxAgeDays = nu
   return r.rows;
 }
 
-export async function getArticleStats() {
-  const c = client();
+export async function getArticleStats(topicSlug = null, deps = {}) {
+  const c = deps.client ? deps.client() : client();
   const ageDays = getMaxAgeDays();
+  // 2.5.54: optional topic filter, the SAME feed_topics join the
+  // article queries already use, applied to ALL THREE counts so the
+  // aggregate and the per-feed rows agree with each other. Always
+  // parameterized; a null slug is the unfiltered card of today.
+  const topicJoin = topicSlug
+    ? `JOIN feed_topics ft ON ft.feed_id = f.id
+       JOIN topics t ON t.id = ft.topic_id AND t.slug = $2`
+    : "";
+  const totalTopicJoin = topicSlug
+    ? `JOIN feeds_v2 f ON f.id = fa.feed_id
+       JOIN feed_topics ft ON ft.feed_id = f.id
+       JOIN topics t ON t.id = ft.topic_id AND t.slug = $1`
+    : "";
 
   const total = await c.query(
     `SELECT COUNT(DISTINCT fa.article_id)::int AS count
-     FROM feed_articles fa`
+     FROM feed_articles fa
+     ${totalTopicJoin}`,
+    topicSlug ? [topicSlug] : []
   );
   const byFeed = await c.query(
     `SELECT f.name AS feed_name, f.tier::text AS feed_tier,
@@ -586,6 +601,7 @@ export async function getArticleStats() {
      FROM feed_articles fa
      JOIN feeds_v2 f ON f.id = fa.feed_id
      JOIN articles_v2 a ON a.id = fa.article_id
+     ${topicJoin}
      WHERE a.published_at >= now() - ($1 || ' days')::interval
      GROUP BY f.name, f.tier
      ORDER BY CASE f.tier::text
@@ -594,14 +610,16 @@ export async function getArticleStats() {
                 WHEN 'secondary' THEN 3
                 ELSE 4
               END, f.name`,
-    [String(ageDays)]
+    topicSlug ? [String(ageDays), topicSlug] : [String(ageDays)]
   );
   const recent = await c.query(
     `SELECT COUNT(DISTINCT fa.article_id)::int AS count
      FROM feed_articles fa
+     JOIN feeds_v2 f ON f.id = fa.feed_id
      JOIN articles_v2 a ON a.id = fa.article_id
+     ${topicJoin}
      WHERE a.published_at >= now() - ($1 || ' days')::interval`,
-    [String(ageDays)]
+    topicSlug ? [String(ageDays), topicSlug] : [String(ageDays)]
   );
 
   return {

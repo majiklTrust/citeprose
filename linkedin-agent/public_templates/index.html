@@ -1669,7 +1669,7 @@
               <div className="sidebar-panel">
                 <div className="section-title section-title-flush">Research Monitor <span className="section-title-meta">(<span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.byFeed?.length || 0}</span> feeds)</span></div>
                 <div className="research-meta">
-                  using <span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.recentArticles || 0}</span> articles · last <span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.maxAgeDays || 0}</span> days
+                  using <span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.recentArticles || 0}</span> articles · last <span className="highlight-cyan">{status.researchStats?.maxAgeDays || "xx"}</span> days
                 </div>
                 {(researchStatsOverride || status.researchStats) ? (
                   <div>

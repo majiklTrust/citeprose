@@ -853,6 +853,18 @@
       // what the person actually sees. Keyed by post id: cache patches
       // to the same open post must not reset in-modal choices.
       const [candidateImageId, setCandidateImageId] = useState(null);
+      // 2.5.54: the topic-filtered Research Monitor view. A separate
+      // override so the unfiltered status poll can never stomp it.
+      const [researchStatsOverride, setResearchStatsOverride] = useState(null);
+      useEffect(() => {
+        if (!selectedTopic) { setResearchStatsOverride(null); return; }
+        let dead = false;
+        fetch(`${API}/api/research/stats?topic=${encodeURIComponent(selectedTopic)}`, { credentials: 'include' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (!dead) setResearchStatsOverride(d); })
+          .catch(() => { if (!dead) setResearchStatsOverride(null); });
+        return () => { dead = true; };
+      }, [selectedTopic]);
       const openPostKey = (selectedPost ? String(selectedPost.id || selectedPost.draftPostId || '') : '') + '|' + (editingPost ? String(editingPost.id || '') : '');
       useEffect(() => {
         setCandidateImageId(null);
@@ -1280,7 +1292,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.4.63</div>
+                <div className="header-subtitle">v2.5.54</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1304,7 +1316,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.4.63</div>
+                <div className="header-subtitle">v2.5.54</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1356,7 +1368,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.4.63 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.5.54 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1650,15 +1662,19 @@
               </div>
 
               {/* Research Monitor */}
+              {/* {researchStatsOverride && <span> {'\u00B7'} topic: 
+                <span className="highlight-cyan">{(topics.find(tp => tp.slug === selectedTopic) || {}).name || selectedTopic}</span></span>
+                }
+             */}
               <div className="sidebar-panel">
-                <div className="section-title section-title-flush">Research Monitor <span className="section-title-meta">(<span className="highlight-cyan">{status.researchStats?.byFeed?.length || 0}</span> feeds)</span></div>
+                <div className="section-title section-title-flush">Research Monitor <span className="section-title-meta">(<span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.byFeed?.length || 0}</span> feeds)</span></div>
                 <div className="research-meta">
-                  using <span className="highlight-cyan">{status.researchStats?.recentArticles || 0}</span> articles · last <span className="highlight-cyan">{status.researchStats?.maxAgeDays || 20}</span> days
+                  using <span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.recentArticles || 0}</span> articles · last <span className="highlight-cyan">{(researchStatsOverride || status.researchStats)?.maxAgeDays || 0}</span> days
                 </div>
-                {status.researchStats ? (
+                {(researchStatsOverride || status.researchStats) ? (
                   <div>
                     <div className="feed-list-scroll">
-                      {(status.researchStats.byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
+                      {((researchStatsOverride || status.researchStats).byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
                         <div key={i} className="feed-row">
                           <span className="feed-name">
                             {f.feed_name}

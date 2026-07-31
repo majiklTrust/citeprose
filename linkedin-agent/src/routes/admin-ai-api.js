@@ -49,10 +49,6 @@ async function defaultStoreKey(providerId, plaintext) {
   const { storeCredential, llmCredentialKeyFor } = await import("../tenant/credential-store.js");
   return storeCredential(llmCredentialKeyFor(providerId), plaintext);
 }
-async function defaultHasPermission(role, permission) {
-  const { hasPermission } = await import("../tenant/platform-db.js");
-  return hasPermission(role, permission);
-}
 async function defaultDeleteKey(providerId) {
   const { deleteCredential, llmCredentialKeyFor } = await import("../tenant/credential-store.js");
   return deleteCredential(llmCredentialKeyFor(providerId));
@@ -72,7 +68,6 @@ export function createAiConfigRoutes(overrides = {}) {
     getState: overrides.getState || defaultGetState,
     setState: overrides.setState || defaultSetState,
     hasKey: overrides.hasKey || defaultHasKey,
-    hasPermission: overrides.hasPermission || defaultHasPermission,
     storeKey: overrides.storeKey || defaultStoreKey,
     anthropicModelChain: overrides.anthropicModelChain,
     log: overrides.log || platformLog
@@ -99,8 +94,9 @@ export function createAiConfigRoutes(overrides = {}) {
   // than inherited through the parent chain's manage_users.
   router.use(async (req, res, next) => {
     try {
+      const { hasPermission } = await import("../tenant/platform-db.js");
       const role = req.tenant && req.tenant.role;
-      if (role && await d.hasPermission(role, "manage_llm_vendor")) return next();
+      if (role && await hasPermission(role, "manage_llm_vendor")) return next();
       return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
     } catch {
       return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
@@ -192,6 +188,22 @@ export function createAiConfigRoutes(overrides = {}) {
           if (!existing) return { ok: false };
         } else {
           await d.storeKey(providerEntry.id, apiKey);
+          // 2.5.56: a tenant may always store their own key. Doing so
+          // immediately retires any active trial grant for the same
+          // provider; the tenant's key has precedence until a new
+          // trial is assigned.
+          try {
+            const { deactivateForTenantProvider } = await import("../spend/trial-store.js");
+            const out = await deactivateForTenantProvider(req.tenant.id, providerEntry.id, req.user && req.user.sub);
+            if (out.deactivated.length > 0) {
+              d.log("info", "trial_auto_deactivated", {
+                provider: providerEntry.id, activationIds: out.deactivated,
+                by: req.user && req.user.sub
+              });
+            }
+          } catch (trialErr) {
+            d.log("error", "trial_auto_deactivate_failed", { provider: providerEntry.id, error: trialErr && trialErr.message });
+          }
         }
         await d.setState("llm_provider", providerEntry.id);
         await d.setState("llm_model", profile.modelId);

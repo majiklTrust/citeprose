@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // trial-store.js - the ONLY module touching trial_keys and
-// trial_activations, and the only one decrypting trial ciphertext
+// trial_key_activations, and the only one decrypting trial ciphertext
 // (platform-secret scheme: trial keys are PLATFORM property, never
 // the tenant vault). Caps are ledger sums via the SECURITY DEFINER
 // aggregates; there is no counter to drift.
@@ -24,7 +24,7 @@ export async function resolveActiveTrial(tenantId, providerId, deps = {}) {
     `SELECT ta.id AS activation_id, ta.max_spend_usd AS activation_cap,
             k.id AS key_id, k.key_ciphertext, k.key_fingerprint,
             k.max_spend_usd AS key_cap, k.starts_at, k.ends_at, k.active AS key_active
-     FROM trial_activations ta
+     FROM trial_key_activations ta
      JOIN trial_keys k ON k.id = ta.trial_key_id
      WHERE ta.tenant_id = $1 AND ta.active AND k.provider = $2
      ORDER BY ta.activated_at DESC LIMIT 1`,
@@ -63,7 +63,7 @@ export async function listTrialKeys(deps = {}) {
     `SELECT k.id, k.provider::text, k.name, k.key_fingerprint, k.max_spend_usd, k.starts_at, k.ends_at,
             k.active, k.created_at, k.revoked_at,
             trial_key_spend_usd(k.id) AS spent_usd,
-            (SELECT COUNT(*)::int FROM trial_activations ta WHERE ta.trial_key_id = k.id AND ta.active) AS active_grants
+            (SELECT COUNT(*)::int FROM trial_key_activations ta WHERE ta.trial_key_id = k.id AND ta.active) AS active_grants
      FROM trial_keys k ORDER BY k.created_at DESC`, []
   );
   return r.rows;
@@ -81,7 +81,7 @@ export async function setTrialKeyActive(id, active, actorSub, deps = {}) {
 export async function activateForTenant({ trialKeyId, tenantId, maxSpendUsd, activatedBy }, deps = {}) {
   const q = deps.query || ((sql, params) => pool.query(sql, params));
   const r = await q(
-    `INSERT INTO trial_activations (trial_key_id, tenant_id, max_spend_usd, activated_by)
+    `INSERT INTO trial_key_activations (trial_key_id, tenant_id, max_spend_usd, activated_by)
      VALUES ($1,$2,$3,$4) RETURNING id`,
     [trialKeyId, tenantId, maxSpendUsd ?? null, activatedBy]
   );
@@ -91,8 +91,24 @@ export async function activateForTenant({ trialKeyId, tenantId, maxSpendUsd, act
 export async function deactivateActivation(activationId, actorSub, deps = {}) {
   const q = deps.query || ((sql, params) => pool.query(sql, params));
   await q(
-    `UPDATE trial_activations SET active = false, deactivated_by = $2, deactivated_at = now() WHERE id = $1`,
+    `UPDATE trial_key_activations SET active = false, deactivated_by = $2, deactivated_at = now() WHERE id = $1`,
     [activationId, actorSub]
   );
   return { id: activationId, by: actorSub };
+}
+
+// Auto-deactivation: a tenant storing their OWN key for a provider
+// immediately retires any active trial grant for that pair. The
+// tenant's key then has precedence until a NEW trial is assigned.
+export async function deactivateForTenantProvider(tenantId, providerId, actorSub, deps = {}) {
+  const q = deps.query || ((sql, params) => pool.query(sql, params));
+  const r = await q(
+    `UPDATE trial_key_activations ta
+     SET active = false, deactivated_by = $3, deactivated_at = now()
+     FROM trial_keys k
+     WHERE k.id = ta.trial_key_id AND ta.tenant_id = $1 AND k.provider = $2 AND ta.active
+     RETURNING ta.id`,
+    [tenantId, providerId, actorSub]
+  );
+  return { deactivated: r.rows.map((x) => Number(x.id)) };
 }

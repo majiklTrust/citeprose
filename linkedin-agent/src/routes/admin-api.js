@@ -434,7 +434,7 @@ router.get("/spend-summary", async (req, res) => {
               ta.max_spend_usd AS activation_cap, ta.id AS activation_id,
               trial_activation_spend_usd(ta.id) AS activation_spent,
               trial_key_spend_usd(k.id) AS key_spent
-       FROM trial_activations ta
+       FROM trial_key_activations ta
        JOIN trial_keys k ON k.id = ta.trial_key_id
        WHERE ta.tenant_id = $1 AND ta.active AND k.active
          AND now() BETWEEN k.starts_at AND k.ends_at`,

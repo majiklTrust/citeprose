@@ -202,6 +202,15 @@ async function schedulerTick(topicId = null) {
 // Must be called inside withTenant.
 
 export async function executePost(postId) {
+  // 2.5.57: each unattended publish runs in its OWN activation so
+  // spend from different posts can never share a lifecycle (the
+  // enterWith bleed class). Continuation via posts.llm_activation_id
+  // lands with the artifact-links delivery.
+  const { runWithActivation } = await import("../spend/activation-context.js");
+  return runWithActivation({ workflow: "auto_publish" }, () => executePostInner(postId));
+}
+
+async function executePostInner(postId) {
   const post = await getPost(postId);
   if (!post) throw new Error(`Post ${postId} not found`);
 

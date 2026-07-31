@@ -39,24 +39,24 @@ export function setRequestType(t) {
   if (c) c.requestTypeOverride = t;
 }
 
-// Ensure the activation ROW exists (mint lazily), inside the ambient
-// tenant transaction so RLS holds. A call with no ambient context at
-// all gets an implicit activation: the ledger never drops a row for
-// want of context.
+// Ensure the activation ROW exists (mint lazily) using the caller's
+// provided query (the recorder's own transaction). A call with no
+// ambient context gets a STANDALONE activation for this call only:
+// never enterWith, which would bleed one lifecycle across unrelated
+// work sharing an async chain (the scheduler sweep case).
 export async function ensureActivationId(fallbackWorkflow, deps = {}) {
   const q = deps.query || ((sql, params) => currentClient().query(sql, params));
-  let c = store.getStore();
-  if (!c) {
-    c = { workflow: fallbackWorkflow, label: "(unattributed)", keyProvenance: null, requestTypeOverride: null };
-    store.enterWith(c);
-  }
-  if (c.id) return c.id;
+  const c = store.getStore();
+  if (c && c.id) return c.id;
   const id = randomUUID();
+  const workflow = (c && c.workflow) || fallbackWorkflow;
+  const label = c ? (c.label || null) : "(unattributed)";
+  const createdBy = (c && c.createdBy) || null;
   await q(
     `INSERT INTO llm_activations (id, tenant_id, workflow, label, created_by)
      VALUES ($1, $2, $3, $4, $5)`,
-    [id, deps.tenantId || currentTenantId(), c.workflow || fallbackWorkflow, c.label || null, c.createdBy || null]
+    [id, deps.tenantId || currentTenantId(), workflow, label, createdBy]
   );
-  c.id = id;
+  if (c) c.id = id;
   return id;
 }

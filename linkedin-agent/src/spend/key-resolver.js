@@ -30,7 +30,19 @@ export class TrialRefusedError extends Error {
 
 export async function resolveLlmKey(providerId, deps = {}) {
   const tenantId = deps.tenantId || currentTenantId();
-  const trial = await (deps.resolveActiveTrial || resolveActiveTrial)(tenantId, providerId, deps);
+  // F3/F5 (2.5.57): a trial REFUSAL is typed and final; trial
+  // INFRASTRUCTURE failure (DDL not yet applied, connectivity,
+  // ciphertext under a rotated secret) must never take generation
+  // down for a visibility feature. It logs loudly and the chain
+  // continues to the tenant's own key.
+  let trial = null;
+  try {
+    trial = await (deps.resolveActiveTrial || resolveActiveTrial)(tenantId, providerId, deps);
+  } catch (infraErr) {
+    const { platformLog } = await import("../services/platform-log.js");
+    platformLog("error", "trial_resolution_unavailable", { providerId, error: infraErr && infraErr.message });
+    trial = null;
+  }
   if (trial && trial.refused) throw new TrialRefusedError(trial.code, providerId);
   if (trial) {
     setKeyProvenance({ keySource: "trial", keyFingerprint: trial.keyFingerprint, trialActivationId: trial.trialActivationId });
@@ -40,7 +52,15 @@ export async function resolveLlmKey(providerId, deps = {}) {
     const { getLlmApiKey } = await import("../tenant/credential-store.js");
     return getLlmApiKey(p);
   });
-  const tenantKey = await getTenantKey(providerId);
+  // F4 (2.5.57): a MISSING tenant credential is a normal chain step,
+  // not an error; the platform fallback must stay reachable. Other
+  // errors (decrypt failure on a stored key) still propagate.
+  let tenantKey = null;
+  try {
+    tenantKey = await getTenantKey(providerId);
+  } catch (credErr) {
+    if (!(credErr && /Credential not found/.test(credErr.message || ""))) throw credErr;
+  }
   if (typeof tenantKey === "string" && tenantKey.length > 0) {
     setKeyProvenance({ keySource: "tenant", keyFingerprint: fp(tenantKey) });
     return tenantKey;

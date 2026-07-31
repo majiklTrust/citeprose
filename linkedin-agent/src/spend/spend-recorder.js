@@ -10,9 +10,27 @@ import { platformLog } from "../services/platform-log.js";
 
 export async function recordSpend(evt, deps = {}) {
   try {
-    const q = deps.query || ((sql, params) => currentClient().query(sql, params));
     const ctx = currentActivation();
-    const activationId = await ensureActivationId(evt.fallbackWorkflow || "compose", deps);
+    // F1 (2.5.57): the ledger writes in its OWN short transaction,
+    // never the caller's. Money already spent at the vendor must
+    // survive a caller rollback; a ledger row that can vanish with
+    // someone else's transaction is the fail-open class again.
+    if (deps.query) {
+      return await writeSpend(evt, ctx, deps.query, deps);
+    }
+    const tenantId = deps.tenantId || currentTenantId();
+    const { withTenant } = await import("../db/with-tenant.js");
+    return await withTenant(tenantId, async (client) =>
+      writeSpend(evt, ctx, (sql, params) => client.query(sql, params), { ...deps, tenantId })
+    );
+  } catch (err) {
+    platformLog("error", "spend_record_failed", { error: err && err.message, provider: evt && evt.provider });
+  }
+}
+
+async function writeSpend(evt, ctx, q, deps) {
+  {
+    const activationId = await ensureActivationId(evt.fallbackWorkflow || "compose", { ...deps, query: q });
     const prov = evt.provenance || takeKeyProvenance() || { keySource: "tenant", keyFingerprint: "unresolved" };
     const requestType = (ctx && ctx.requestTypeOverride) || evt.requestType;
     const u = evt.usage || {};
@@ -31,8 +49,6 @@ export async function recordSpend(evt, deps = {}) {
        evt.sourceRef ? JSON.stringify(evt.sourceRef).slice(0, 2048) : null,
        (ctx && ctx.createdBy) || null]
     );
-  } catch (err) {
-    platformLog("error", "spend_record_failed", { error: err && err.message, provider: evt && evt.provider });
   }
 }
 

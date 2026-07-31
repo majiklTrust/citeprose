@@ -188,22 +188,6 @@ export function createAiConfigRoutes(overrides = {}) {
           if (!existing) return { ok: false };
         } else {
           await d.storeKey(providerEntry.id, apiKey);
-          // 2.5.56: a tenant may always store their own key. Doing so
-          // immediately retires any active trial grant for the same
-          // provider; the tenant's key has precedence until a new
-          // trial is assigned.
-          try {
-            const { deactivateForTenantProvider } = await import("../spend/trial-store.js");
-            const out = await deactivateForTenantProvider(req.tenant.id, providerEntry.id, req.user && req.user.sub);
-            if (out.deactivated.length > 0) {
-              d.log("info", "trial_auto_deactivated", {
-                provider: providerEntry.id, activationIds: out.deactivated,
-                by: req.user && req.user.sub
-              });
-            }
-          } catch (trialErr) {
-            d.log("error", "trial_auto_deactivate_failed", { provider: providerEntry.id, error: trialErr && trialErr.message });
-          }
         }
         await d.setState("llm_provider", providerEntry.id);
         await d.setState("llm_model", profile.modelId);
@@ -214,6 +198,24 @@ export function createAiConfigRoutes(overrides = {}) {
         }
         return { ok: true };
       });
+      // 2.5.57 (F6): trial auto-retirement runs only AFTER the tenant
+      // transaction committed. Retiring first and rolling back the
+      // key store would strand the tenant with neither trial nor key.
+      if (apiKey && (!outcome || outcome.ok !== false)) {
+        try {
+          const { deactivateForTenantProvider } = await import("../spend/trial-store.js");
+          const out = await deactivateForTenantProvider(req.tenant.id, providerEntry.id, req.user && req.user.sub);
+          if (out.deactivated.length > 0) {
+            d.log("info", "trial_auto_deactivated", {
+              provider: providerEntry.id, activationIds: out.deactivated,
+              by: req.user && req.user.sub
+            });
+          }
+        } catch (trialErr) {
+          d.log("error", "trial_auto_deactivate_failed", { provider: providerEntry.id, error: trialErr && trialErr.message });
+        }
+      }
+
 
       if (!outcome.ok) {
         d.log("warn", "ai_config_rejected", { reason: "no_key_for_provider", provider: providerEntry.id });

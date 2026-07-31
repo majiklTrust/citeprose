@@ -38,8 +38,16 @@ export async function resolveActiveTrial(tenantId, providerId, deps = {}) {
   if (t.activation_cap !== null && actSpent >= Number(t.activation_cap)) return { refused: true, code: "TRIAL_EXHAUSTED" };
   const keySpent = Number((await q(`SELECT trial_key_spend_usd($1) AS s`, [t.key_id])).rows[0].s);
   if (keySpent >= Number(t.key_cap)) return { refused: true, code: "TRIAL_EXHAUSTED" };
+  // Newest-wins when an admin has granted multiple keys for one
+  // provider (unique index is per key+tenant, not per provider).
+  let apiKey;
+  try {
+    apiKey = (deps.decrypt || decryptPlatformSecret)(t.key_ciphertext);
+  } catch (e) {
+    throw new Error("trial key ciphertext failed decryption (rotated ENCRYPTION_SECRET?): " + (e && e.message));
+  }
   return {
-    apiKey: (deps.decrypt || decryptPlatformSecret)(t.key_ciphertext),
+    apiKey,
     keyFingerprint: t.key_fingerprint,
     trialActivationId: Number(t.activation_id)
   };

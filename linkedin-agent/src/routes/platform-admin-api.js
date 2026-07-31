@@ -189,6 +189,38 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "image-studio-activity": {
+    label: "Image Studio Activity",
+    description: "Recent Image Studio events across all tenants, newest first: renders, refinements, attachments, budget refusals, storage switches.",
+    capability: "Watch the image pipeline operate end to end.",
+    sql: `SELECT created_at, tenant_id, level, event, detail
+          FROM platform_log WHERE event LIKE 'image\\_%'
+          ORDER BY created_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "image-cost-report": {
+    label: "Image Cost Report (Estimate v. Actual)",
+    description: "Per tenant and model over the window: renders, images, the pre-spend the budget gate charged, and the reconciled actual cost from token usage.",
+    capability: "Reconcile what the gate charged against what the vendor billed.",
+    sql: `SELECT tenant_id, detail->>'model' AS model,
+                 COUNT(*) AS renders,
+                 SUM((detail->>'imageCount')::int) AS images,
+                 ROUND(SUM((detail->>'preSpendUsd')::numeric), 4) AS pre_spend_usd,
+                 ROUND(SUM((detail->>'costEstimateUsd')::numeric), 4) AS actual_cost_usd,
+                 SUM((detail->'usage'->>'outputTokens')::bigint) AS output_tokens
+          FROM platform_log
+          WHERE event = 'image_response_orchestrated'
+            AND created_at >= now() - ($1 || ' days')::interval
+          GROUP BY tenant_id, detail->>'model'
+          ORDER BY actual_cost_usd DESC NULLS LAST LIMIT 200`,
+    params: [
+      { name: "days", label: "Window (days)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
   "payments-audit": {
     label: "Payments Audit Trail",
     description: "Lifecycle transitions and refusals from payment_events.",
@@ -1279,6 +1311,93 @@ export default function createPlatformAdminRoutes() {
       platformLog("error", "content_genre_write_failed", {
         admin: req.user.sub, error: err.message
       });
+      return res.status(500).json({ error: "An internal error occurred" });
+    }
+  });
+
+  // ── Trial key management (Phase D writes) ────────────────────
+  // The console's first write routes: same isPlatformAdmin gate,
+  // pool-level access (platform tables carry no RLS), loud audits.
+  // Key material is validated against the provider BEFORE the vault
+  // accepts it (prove-first), encrypted platform-secret, and never
+  // echoed in any response or log.
+
+  router.post("/trial-keys", async (req, res) => {
+    if (!isPlatformAdmin(req.user && req.user.sub)) return res.status(403).json({ error: "Forbidden" });
+    const { provider, name, apiKey, maxSpendUsd, startsAt, endsAt } = req.body || {};
+    if (!provider || !name || !apiKey || !Number.isFinite(Number(maxSpendUsd)) || !startsAt || !endsAt) {
+      return res.status(400).json({ error: "provider, name, apiKey, maxSpendUsd, startsAt, endsAt required", code: "INVALID_INPUT" });
+    }
+    try {
+      const { validateProviderKey } = await import("../llm/client.js");
+      const probe = await validateProviderKey(provider, apiKey);
+      if (!probe || probe.valid !== true) {
+        return res.status(400).json({ error: "Key failed live validation for " + provider, code: "KEY_INVALID" });
+      }
+      const { createTrialKey } = await import("../spend/trial-store.js");
+      const out = await createTrialKey({ provider, name, apiKey, maxSpendUsd: Number(maxSpendUsd), startsAt, endsAt, createdBy: req.user.sub });
+      platformLog("info", "trial_key_created", { trialKeyId: out.id, provider, name, by: req.user.sub });
+      return res.status(201).json({ id: out.id, provider, name });
+    } catch (err) {
+      platformLog("error", "trial_key_create_failed", { error: err && err.message, by: req.user && req.user.sub });
+      return res.status(500).json({ error: "An internal error occurred" });
+    }
+  });
+
+  router.get("/trial-keys", async (req, res) => {
+    if (!isPlatformAdmin(req.user && req.user.sub)) return res.status(403).json({ error: "Forbidden" });
+    try {
+      const { listTrialKeys } = await import("../spend/trial-store.js");
+      return res.json({ keys: await listTrialKeys() });
+    } catch (err) {
+      platformLog("error", "trial_key_list_failed", { error: err && err.message });
+      return res.status(500).json({ error: "An internal error occurred" });
+    }
+  });
+
+  router.post("/trial-keys/:id/active", async (req, res) => {
+    if (!isPlatformAdmin(req.user && req.user.sub)) return res.status(403).json({ error: "Forbidden" });
+    const id = parseInt(req.params.id, 10);
+    const active = !!(req.body || {}).active;
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id", code: "INVALID_INPUT" });
+    try {
+      const { setTrialKeyActive } = await import("../spend/trial-store.js");
+      await setTrialKeyActive(id, active, req.user.sub);
+      platformLog("info", active ? "trial_key_reactivated" : "trial_key_revoked", { trialKeyId: id, by: req.user.sub });
+      return res.json({ id, active });
+    } catch (err) {
+      platformLog("error", "trial_key_toggle_failed", { error: err && err.message });
+      return res.status(500).json({ error: "An internal error occurred" });
+    }
+  });
+
+  router.post("/trial-keys/:id/activate", async (req, res) => {
+    if (!isPlatformAdmin(req.user && req.user.sub)) return res.status(403).json({ error: "Forbidden" });
+    const id = parseInt(req.params.id, 10);
+    const { tenantId, maxSpendUsd } = req.body || {};
+    if (!Number.isFinite(id) || !tenantId) return res.status(400).json({ error: "id and tenantId required", code: "INVALID_INPUT" });
+    try {
+      const { activateForTenant } = await import("../spend/trial-store.js");
+      const out = await activateForTenant({ trialKeyId: id, tenantId, maxSpendUsd: maxSpendUsd != null ? Number(maxSpendUsd) : null, activatedBy: req.user.sub });
+      platformLog("info", "trial_activated", { trialKeyId: id, trialActivationId: out.id, tenantId, by: req.user.sub });
+      return res.status(201).json({ activationId: out.id });
+    } catch (err) {
+      platformLog("error", "trial_activate_failed", { error: err && err.message, tenantId });
+      return res.status(500).json({ error: "An internal error occurred" });
+    }
+  });
+
+  router.post("/trial-activations/:id/deactivate", async (req, res) => {
+    if (!isPlatformAdmin(req.user && req.user.sub)) return res.status(403).json({ error: "Forbidden" });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id", code: "INVALID_INPUT" });
+    try {
+      const { deactivateActivation } = await import("../spend/trial-store.js");
+      await deactivateActivation(id, req.user.sub);
+      platformLog("info", "trial_deactivated", { trialActivationId: id, by: req.user.sub });
+      return res.json({ id, active: false });
+    } catch (err) {
+      platformLog("error", "trial_deactivate_failed", { error: err && err.message });
       return res.status(500).json({ error: "An internal error occurred" });
     }
   });

@@ -394,6 +394,153 @@ router.put("/image-storage", async (req, res) => {
 // could set the keys. The reader stays fail-closed by design:
 // provisioning is an explicit owner act, never a silent default.
 // ══════════════════════════════════════════════════════════════
+// Image destination (Phase 6, 2.5.27): one pasted string names where
+// new generated images live. The PUT proves the destination LIVE
+// (write, read back, compare, delete) BEFORE anything persists: a
+// destination that cannot pass the probe cannot be configured. An
+// empty string clears back to the platform default.
+// GET /api/admin/spend-summary: the Spend card. Read-only ledger
+// sums (30-day window) by provider, recent activations, and the
+// trial indicator (existence + burn, never key material).
+router.get("/spend-summary", async (req, res) => {
+  try {
+    const out = await withTenant(req.tenant.id, async (client) => {
+      const byProvider = (await client.query(
+        `SELECT provider::text, key_source::text,
+                COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
+                COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
+                SUM(cost_estimate_usd) AS cost_estimate_usd,
+                COUNT(*)::int AS calls
+         FROM llm_spend_events
+         WHERE created_at >= now() - interval '30 days'
+         GROUP BY provider, key_source
+         ORDER BY provider, key_source`)).rows;
+      const recent = (await client.query(
+        `SELECT a.id, a.workflow::text, a.label, a.created_at,
+                COALESCE(SUM(e.input_tokens),0)::bigint AS input_tokens,
+                COALESCE(SUM(e.output_tokens),0)::bigint AS output_tokens,
+                SUM(e.cost_estimate_usd) AS cost_estimate_usd,
+                COUNT(e.id)::int AS calls
+         FROM llm_activations a
+         LEFT JOIN llm_spend_events e ON e.activation_id = a.id
+         GROUP BY a.id, a.workflow, a.label, a.created_at
+         ORDER BY a.created_at DESC
+         LIMIT 10`)).rows;
+      return { byProvider, recent };
+    });
+    const { pool } = await import("../db/pool.js");
+    const trial = (await pool.query(
+      `SELECT k.provider::text, k.name, k.ends_at, k.max_spend_usd,
+              ta.max_spend_usd AS activation_cap, ta.id AS activation_id,
+              trial_activation_spend_usd(ta.id) AS activation_spent,
+              trial_key_spend_usd(k.id) AS key_spent
+       FROM trial_activations ta
+       JOIN trial_keys k ON k.id = ta.trial_key_id
+       WHERE ta.tenant_id = $1 AND ta.active AND k.active
+         AND now() BETWEEN k.starts_at AND k.ends_at`,
+      [req.tenant.id])).rows;
+    res.json({ windowDays: 30, byProvider: out.byProvider, recent: out.recent, activeTrials: trial });
+  } catch (err) {
+    platformLog("error", "spend_summary_failed", { error: err && err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+router.get("/image-destination", async (req, res) => {
+  try {
+    const { DESTINATION_STATE_KEY } = await import("../storage/object-store.js");
+    const { hasAwsImageCredentials } = await import("../tenant/credential-store.js");
+    const out = await withTenant(req.tenant.id, async () => ({
+      destination: null,
+      raw: await getAgentState(DESTINATION_STATE_KEY),
+      hasCredentials: await hasAwsImageCredentials()      // existence only: the secret NEVER leaves the vault
+    }));
+    res.json({
+      destination: (typeof out.raw === "string" && out.raw.trim() !== "") ? out.raw.trim() : null,
+      hasCredentials: out.hasCredentials
+    });
+  } catch (err) {
+    platformLog("error", "image_destination_get_failed", { error: err.message });
+    res.status(500).json({ error: "Failed to read the image destination" });
+  }
+});
+
+router.put("/image-destination", async (req, res) => {
+  const raw = (req.body || {}).destination;
+  const accessKeyId = (req.body || {}).accessKeyId;
+  const secretAccessKey = (req.body || {}).secretAccessKey;
+  if (raw !== null && typeof raw !== "string") {
+    return res.status(400).json({ error: "destination must be a string, or null to clear." });
+  }
+  // The identity pair travels together or not at all: a half pair is
+  // a mistake, never a guess.
+  const idGiven = typeof accessKeyId === "string" && accessKeyId.trim() !== "";
+  const secretGiven = typeof secretAccessKey === "string" && secretAccessKey.trim() !== "";
+  if (idGiven !== secretGiven) {
+    return res.status(400).json({ error: "Provide both the access key id and the secret, or neither." });
+  }
+  const suppliedCreds = idGiven ? { accessKeyId: accessKeyId.trim(), secretAccessKey: secretAccessKey.trim() } : null;
+  try {
+    const os = await import("../storage/object-store.js");
+    const creds = await import("../tenant/credential-store.js");
+    if (raw === null || raw.trim() === "") {
+      await withTenant(req.tenant.id, async () => {
+        await setAgentState(os.DESTINATION_STATE_KEY, "");
+        await creds.deleteCredential(creds.AWS_IMAGE_KEY_ID);       // Clear clears the identity too:
+        await creds.deleteCredential(creds.AWS_IMAGE_KEY_SECRET);   // no orphaned secrets in the vault
+      });
+      os.resetObjectStoreCache();
+      platformLog("info", "image_destination_cleared", {});
+      return res.json({ destination: null, verified: false, hasCredentials: false });
+    }
+    const dest = await withTenant(req.tenant.id, async () => {
+      // Zero Trust ordering: PROVE the identity against the exact
+      // destination FIRST; only a passing pair earns the vault. The
+      // probe uses the supplied pair, else the stored one, else the
+      // ambient chain, precisely what renders will use.
+      const verified = await os.probeObjectStoreDestination(raw.trim(),
+        suppliedCreds ? { credentials: suppliedCreds } : {});        // throws typed on any failure
+      if (suppliedCreds) {
+        await creds.storeCredential(creds.AWS_IMAGE_KEY_ID, suppliedCreds.accessKeyId);
+        await creds.storeCredential(creds.AWS_IMAGE_KEY_SECRET, suppliedCreds.secretAccessKey);
+      }
+      await setAgentState(os.DESTINATION_STATE_KEY, raw.trim());
+      return verified;
+    });
+    os.resetObjectStoreCache();
+    platformLog("info", "image_destination_set", { bucket: dest.bucket, prefix: dest.prefix, region: dest.region });
+    return res.json({
+      destination: raw.trim(), verified: true,
+      bucket: dest.bucket, prefix: dest.prefix, region: dest.region, endpoint: dest.endpoint,
+      hasCredentials: suppliedCreds !== null || undefined            // the secret itself never appears here
+    });
+  } catch (err) {
+    const code = err && err.code;
+    // Diagnosability (2.5.28): the adapter already knows WHICH SDK
+    // error and HTTP status it folded into the typed code. Surface
+    // both in the log and the refusal, so "STORE_FAILED" reads as
+    // "PermanentRedirect, HTTP 301" (wrong region) or
+    // "CredentialsProviderError" (no AWS identity) at a glance.
+    const detail = (err && err.details) || {};
+    platformLog("warn", "image_destination_probe_failed", {
+      code, providerError: detail.name || null, httpStatus: detail.status || null, op: detail.op || null
+    });
+    let why = [detail.name, detail.status ? ("HTTP " + detail.status) : null].filter(Boolean).join(", ");
+    if (detail.name === "CredentialsProviderError") {
+      why += "; no AWS identity reached the bucket. Enter this workspace's access key id and secret beside the destination and save again";
+    }
+    if (code === "DESTINATION_INVALID") return res.status(400).json({ error: err.message, code });
+    if (code === "SDK_UNAVAILABLE") return res.status(409).json({ error: "The S3 SDK is not installed on this server.", code });
+    if (code === "ENDPOINT_BLOCKED" || code === "ACCESS_DENIED" || code === "STORE_FAILED" || code === "OBJECT_NOT_FOUND") {
+      return res.status(409).json({
+        error: "The destination did not pass the live verification: " + (err.message || code) + (why ? " [" + why + "]" : ""),
+        code, providerError: detail.name || null, httpStatus: detail.status || null
+      });
+    }
+    res.status(500).json({ error: "Failed to verify the destination" });
+  }
+});
+
 router.get("/image-model", async (req, res) => {
   try {
     const providers = listProviders(process.env).map((p) => ({

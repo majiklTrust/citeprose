@@ -255,6 +255,12 @@ export async function render(input, deps = {}) {
       imageCount: response.images.length, usage: response.usage,
       durationMs, costEstimateUsd, preSpendUsd
     });
+    try {
+      const { recordSpend } = await import("../spend/spend-recorder.js");
+      await recordSpend({ requestType: "image_generation", fallbackWorkflow: "image_studio",
+        provider: selection.provider, model: selection.model,
+        usage: response.usage, costEstimateUsd, status: "ok" });
+    } catch { /* recorder logs its own failures */ }
 
     return Object.freeze({
       images: response.images,

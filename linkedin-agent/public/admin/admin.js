@@ -480,6 +480,72 @@
       });
   }
 
+  // ── Image destination (Phase 6) ─────────────────────────────
+
+  function loadImageDestination() {
+    fetch(API + '/api/admin/image-destination', { credentials: 'include' })
+      .then(function (res) { if (!res.ok) throw new Error('load failed'); return res.json(); })
+      .then(function (d) {
+        var idn = d.hasCredentials ? 'stored tenant credentials' : "the server's ambient identity";
+        if (d.destination) {
+          $('img-dest-input').value = d.destination;
+          $('img-dest-current').textContent = 'Current destination: ' + d.destination + ' (identity: ' + idn + ')';
+        } else {
+          $('img-dest-current').textContent = 'No tenant destination set: the platform default applies.';
+        }
+      })
+      .catch(function () {
+        $('img-dest-current').innerHTML = '<span class="msg msg-error">Failed to load the image destination</span>';
+      });
+  }
+
+  function saveImageDestination() {
+    var v = $('img-dest-input').value.trim();
+    if (!v) { showMessage('Paste a destination first, or use Clear.', 'error'); return; }
+    $('img-dest-save-btn').disabled = true;
+    $('img-dest-save-btn').textContent = 'Verifying live...';
+    fetch(API + '/api/admin/image-destination', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination: v,
+        accessKeyId: $('img-dest-key-id').value.trim() || null,
+        secretAccessKey: $('img-dest-secret').value.trim() || null
+      })
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Verification failed'); });
+        return res.json();
+      })
+      .then(function (d) {
+        $('img-dest-secret').value = '';   // the secret lives in the vault now, not in the page
+        showMessage('Destination verified: wrote and read back at s3://' + d.bucket + '/' + (d.prefix || ''), 'success');
+        $('img-dest-current').textContent = 'Current destination: ' + d.destination + ' (verified live, identity: ' + (d.hasCredentials ? 'stored tenant credentials' : 'ambient') + ')';
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); })
+      .finally(function () {
+        $('img-dest-save-btn').disabled = false;
+        $('img-dest-save-btn').textContent = 'Verify and save destination';
+      });
+  }
+
+  function clearImageDestination() {
+    fetch(API + '/api/admin/image-destination', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destination: null })
+    })
+      .then(function (res) { if (!res.ok) throw new Error('Clear failed'); return res.json(); })
+      .then(function () {
+        $('img-dest-input').value = '';
+        $('img-dest-key-id').value = '';
+        $('img-dest-secret').value = '';
+        $('img-dest-current').textContent = 'No tenant destination set: the platform default applies.';
+        showMessage('Destination and stored credentials cleared', 'success');
+      })
+      .catch(function (err) { showMessage(err.message, 'error'); });
+  }
+
   // ── Image model selection ───────────────────────────────────
 
   var _imgModelCatalog = [];
@@ -775,6 +841,8 @@
     loadImagePalette();
     loadImageStorage();
     loadImageModel();
+    loadImageDestination();
+    loadSpendSummary();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -799,6 +867,8 @@
     $('img-storage-save-btn').addEventListener('click', saveImageStorage);
     $('img-model-save-btn').addEventListener('click', saveImageModel);
     $('img-model-provider').addEventListener('change', function () { renderImageModelOptions(this.value, null); });
+    $('img-dest-save-btn').addEventListener('click', saveImageDestination);
+    $('img-dest-clear-btn').addEventListener('click', clearImageDestination);
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {
@@ -826,3 +896,30 @@
     }
   });
 })();
+
+function loadSpendSummary() {
+  fetch(API + '/api/admin/spend-summary', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) { $('spend-by-provider').textContent = 'Spend data unavailable.'; return; }
+      var money = function (v) { return v === null || v === undefined ? 'n/a' : '$' + Number(v).toFixed(4); };
+      if (d.activeTrials && d.activeTrials.length) {
+        var tr = d.activeTrials[0];
+        var pill = $('spend-trial-pill');
+        pill.style.display = 'block';
+        pill.innerHTML = '<strong>Platform Trial Key Active</strong> (' + tr.provider + '): ' +
+          money(tr.key_spent) + ' of ' + money(tr.max_spend_usd) + ' used; ends ' + new Date(tr.ends_at).toLocaleDateString() + '.';
+      }
+      var rows = (d.byProvider || []).map(function (p) {
+        return '<div>' + p.provider + ' (' + p.key_source + '): ' + p.calls + ' calls, ' +
+          p.input_tokens + ' in / ' + p.output_tokens + ' out tokens, ' + money(p.cost_estimate_usd) + ' est.</div>';
+      }).join('');
+      $('spend-by-provider').innerHTML = rows || '<div>No spend recorded in the last 30 days.</div>';
+      var recent = (d.recent || []).map(function (a) {
+        return '<div>' + new Date(a.created_at).toLocaleString() + ' \u00B7 ' + a.workflow +
+          (a.label ? (': ' + a.label) : '') + ' \u00B7 ' + a.calls + ' calls \u00B7 ' + money(a.cost_estimate_usd) + ' est.</div>';
+      }).join('');
+      $('spend-recent').innerHTML = recent || '<div>No activity yet.</div>';
+    })
+    .catch(function () { $('spend-by-provider').textContent = 'Spend data unavailable.'; });
+}

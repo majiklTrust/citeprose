@@ -31,8 +31,10 @@ import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
 import { createPost, logActivity, getPost } from "../services/database.js";
 import { selectPrimarySource } from "../services/source-provenance.js";
+import { annotateActivation } from "../spend/activation-middleware.js";
 
 const router = Router();
+router.use(annotateActivation("compose"));
 
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();

@@ -54,8 +54,11 @@ async function defaultGetState(key) {
 }
 
 async function defaultGetApiKey(providerId) {
-  const { getLlmApiKey } = await import("../tenant/credential-store.js");
-  return getLlmApiKey(providerId);
+  // 2.5.55: the key comes from the resolver CHAIN (trial precedence,
+  // tenant vault, platform env). Same string contract as before;
+  // provenance rides the activation context, invisible here.
+  const { resolveLlmKey } = await import("../spend/key-resolver.js");
+  return resolveLlmKey(providerId);
 }
 
 async function defaultAnthropicModelChain() {
@@ -242,6 +245,12 @@ export async function generateWithTenantLlm(input, deps = {}) {
       usage: response.usage, stopReason: response.stopReason, durationMs, costEstimateUsd
     });
 
+    try {
+      const { recordSpend } = await import("../spend/spend-recorder.js");
+      await recordSpend({ requestType: "text_generation", provider: selection.provider,
+        model: selection.model, usage: response.usage, costEstimateUsd, status: "ok" });
+    } catch { /* recorder logs its own failures; generation never breaks for metering */ }
+
     return Object.freeze({
       text: response.text,
       usage: response.usage,
@@ -257,6 +266,15 @@ export async function generateWithTenantLlm(input, deps = {}) {
       purpose, cycleId,
       code: isLlmError(err) ? err.code : (err && err.name) || "Error"
     });
+    try {
+      if (selection) {
+        const { recordSpend } = await import("../spend/spend-recorder.js");
+        const timedOut = isLlmError(err) && err.code === "TIMEOUT";
+        await recordSpend({ requestType: "text_generation", provider: selection.provider,
+          model: selection.model, usage: null, costEstimateUsd: null,
+          status: timedOut ? "unknown_usage" : "failed" });
+      }
+    } catch { /* never mask the real error */ }
     throw err;
   }
 }

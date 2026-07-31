@@ -56,6 +56,7 @@ import { getAnthropicModel } from "../config/ai.js";
 import { getPublishMode } from "../services/linkedin-publisher.js";
 import { handleImageProxy } from "./image-proxy.js";
 import { collectSourceLinks, mergeArticleImages } from "../services/post-image-hydrate.js";
+import { annotateActivation } from "../spend/activation-middleware.js";
 
 const router = Router();
 
@@ -639,7 +640,7 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
 
 // ── Manual Triggers ──────────────────────────────────────────
 
-router.post("/api/generate-preview", requirePermission("preview_post"), async (req, res) => {
+router.post("/api/generate-preview", requirePermission("preview_post"), annotateActivation("quick_action"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
     // Feature 2: an explicitly chosen EXISTING angle may accompany the

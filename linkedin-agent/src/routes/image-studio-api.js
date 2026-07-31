@@ -45,8 +45,10 @@ import { imageError, IMAGE_ERROR_CODES } from "../image/errors.js";
 import { requireLens, applyLens, listLenses, LENSES } from "../image/image-lenses.js";
 import { resolveAspectPreset, listAspectPresets, getImageModelProfile } from "../image/registry.js";
 import { getPost, getAgentState } from "../services/database.js";
+import { annotateActivation } from "../spend/activation-middleware.js";
 
 const router = Router();
+router.use(annotateActivation("image_studio"));
 const { requireAuth } = createAuthMiddleware(platformLog);
 const resolveTenant = createTenantResolver();
 
@@ -524,6 +526,8 @@ const REFINE_MAX_CHARS = 500;
 router.post("/:id/refine", requirePermission("preview_post"), async (req, res) => {
   const id = parseId(req.params.id);
   const instruction = typeof (req.body || {}).instruction === "string" ? req.body.instruction.trim() : "";
+  const { setRequestType } = await import("../spend/activation-context.js");
+  setRequestType("image_refine");
   if (!id) return res.status(400).json({ error: "Invalid image id", code: "INVALID_INPUT" });
   if (!instruction || instruction.length > REFINE_MAX_CHARS) {
     return res.status(400).json({ error: `A refinement instruction of 1 to ${REFINE_MAX_CHARS} characters is required`, code: "INVALID_INPUT" });

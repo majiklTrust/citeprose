@@ -1330,7 +1330,15 @@ export default function createPlatformAdminRoutes() {
     }
     try {
       const { validateProviderKey } = await import("../llm/client.js");
-      const probe = await validateProviderKey(provider, apiKey);
+      let probe;
+      try {
+        probe = await validateProviderKey(provider, apiKey);
+      } catch (provErr) {
+        if (provErr && provErr.code === "UNKNOWN_PROVIDER") {
+          return res.status(400).json({ error: "Unknown provider: " + String(provider), code: "UNKNOWN_PROVIDER" });
+        }
+        throw provErr;
+      }
       if (!probe || probe.valid !== true) {
         return res.status(400).json({ error: "Key failed live validation for " + provider, code: "KEY_INVALID" });
       }

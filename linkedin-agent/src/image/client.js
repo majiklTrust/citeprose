@@ -55,8 +55,10 @@ async function defaultGetState(key) {
 }
 
 async function defaultGetApiKey(providerId) {
-  const { getLlmApiKey } = await import("../tenant/credential-store.js");
-  return getLlmApiKey(providerId);
+  // 2.5.58: image generation resolves through the SAME chain as
+  // text: trial precedence and key provenance apply to images too.
+  const { resolveLlmKey } = await import("../spend/key-resolver.js");
+  return resolveLlmKey(providerId);
 }
 
 function resolveDeps(deps = {}) {

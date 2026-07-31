@@ -65,10 +65,20 @@ export async function resolveLlmKey(providerId, deps = {}) {
     setKeyProvenance({ keySource: "tenant", keyFingerprint: fp(tenantKey) });
     return tenantKey;
   }
-  const env = deps.env || process.env;
-  if (providerId === "anthropic" && typeof env.PLATFORM_ANTHROPIC_API_KEY === "string" && env.PLATFORM_ANTHROPIC_API_KEY.length > 0) {
-    setKeyProvenance({ keySource: "platform", keyFingerprint: fp(env.PLATFORM_ANTHROPIC_API_KEY) });
-    return env.PLATFORM_ANTHROPIC_API_KEY;
+  // Platform default, RULED 2.5.60: a tenant with neither a trial
+  // grant nor a stored key falls back to the platform's own key for
+  // the provider (anthropic, openai). The config getter DECRYPTS the
+  // env ciphertext and resolves null on any fault, so ciphertext can
+  // never travel as an API key. Ledger rows carry key_source
+  // 'platform': the platform's money, visibly accounted.
+  const getPlatform = deps.getPlatformApiKey || (async (p) => {
+    const { getPlatformApiKey } = await import("../config/platform-keys.js");
+    return getPlatformApiKey(p, deps);
+  });
+  const platformKey = await getPlatform(providerId);
+  if (typeof platformKey === "string" && platformKey.length > 0) {
+    setKeyProvenance({ keySource: "platform", keyFingerprint: fp(platformKey) });
+    return platformKey;
   }
   return null;
 }

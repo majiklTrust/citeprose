@@ -84,6 +84,19 @@ export const pool = new pg.Pool({
   connectionTimeoutMillis: 5000
 });
 
+// 2.5.61: an IDLE client dying (database restart, network drop,
+// timeout) emits 'error' on the pool; without a listener that is an
+// unhandled 'error' event and Node terminates the whole process.
+// A database outage must surface as loud logs and failing requests,
+// never as process death. console.error directly: platformLog
+// persists THROUGH this pool and must not be in its failure path.
+pool.on("error", (err) => {
+  console.error(
+    "[PLATFORM:ERROR] db_pool_idle_client_error",
+    JSON.stringify({ error: err && err.message })
+  );
+});
+
 // Convenience wrapper — fires a query against the shared pool without
 // checking out a dedicated client. For tenant-scoped work use
 // withTenant() from with-tenant.js instead.

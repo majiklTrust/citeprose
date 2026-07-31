@@ -39,12 +39,8 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
-import { TIERS } from "../config/entitlements.js";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
 import { storePromptGenre } from "../services/prompt-vault.js";
-import { getProvider, resolveBaseUrl } from "../llm/registry.js";
-import { getModelListingPageLimit } from "../config/ai.js";
-import { getCatchallFeedList } from "../tenant/seed-defaults.js";
 
 const router = Router();
 
@@ -121,17 +117,6 @@ function setCachedModels(optgroups) {
 //
 // To add a query, add one object. The frontend picks it up
 // automatically from GET /queries.
-
-// The reseed card's row set is generated from the tenant seeding
-// module so the catchall feed list has exactly one source of
-// truth. Values are trusted module constants, not user input; the
-// only bind parameter remains the tenant UUID.
-function buildReseedCatchallSql() {
-  const rows = getCatchallFeedList()
-    .map((f) => `($1, '${f.url}', '${f.name.replace(/'/g, "''")}', '${f.tier}', ${f.refresh}, true)`)
-    .join(",\n            ");
-  return `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES\n            ${rows}\n          ON CONFLICT (tenant_id, url) DO NOTHING`;
-}
 
 const QUERY_REGISTRY = {
 
@@ -263,12 +248,12 @@ const QUERY_REGISTRY = {
     label: "Tenant Members",
     description: "Show the Members.",
     capability: "Show the Members.",
-    sql: `select t.name,t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id from memberships m
+    sql: `select t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id,m.id from memberships m
             join tenants t on t.id = m.tenant_id
-            where t.id = $1::uuid
+            where t.slug = $1
             order by m.created_at desc`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+      { name: "tenant_slug", label: "Tenant Slug", type: "text", required: true }
     ],
     destructive: false,
     readOnly: true
@@ -279,10 +264,10 @@ const QUERY_REGISTRY = {
     description: "Authorizes a Tenant Member's workspace.",
     capability: "Authorizes a Tenant Member's workspace.",
     sql: `update memberships set auth_sub=$3
-            where tenant_id=$1::uuid
+            where tenant_id=$1
             and id = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "id", label: "Member UUID", type: "uuid", required: true },
       { name: "value", label: "IDP Authorization", type: "text", required: true }
     ],
@@ -299,11 +284,9 @@ const QUERY_REGISTRY = {
                  f.last_validated_at,
                  (SELECT count(*) FROM feed_articles fa WHERE fa.feed_id = f.id) AS article_count
           FROM feeds_v2 f
-          WHERE f.tenant_id = $1::uuid
+          WHERE f.tenant_id = $1
           ORDER BY f.name`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
   },
@@ -315,11 +298,9 @@ const QUERY_REGISTRY = {
     sql: `SELECT a.key, a.value, s.value_type, s.allowed_values, s.description
           FROM agent_state a
           LEFT JOIN agent_state_schema s ON s.key = a.key
-          WHERE a.tenant_id = $1::uuid
+          WHERE a.tenant_id = $1
           ORDER BY a.key`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
   },
@@ -329,10 +310,10 @@ const QUERY_REGISTRY = {
     description: "Sets feeds_manager_version for a tenant (1 or 2).",
     capability: "Switch a tenant between the v1 and v2 Feeds Manager UI.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1::uuid, 'feeds_manager_version', $2)
+          VALUES ($1, 'feeds_manager_version', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "version", label: "Version (1 or 2)", type: "text", required: true }
     ],
     destructive: false,
@@ -344,16 +325,14 @@ const QUERY_REGISTRY = {
     description: "Removes all feeds, feed-topic mappings, and feed-article links for a tenant. Articles are preserved.",
     capability: "Wipe a tenant's feeds and feed links while preserving the underlying articles.",
     sql: `WITH deleted_mappings AS (
-            DELETE FROM feed_topics WHERE tenant_id = $1::uuid
+            DELETE FROM feed_topics WHERE tenant_id = $1
           ), deleted_articles AS (
             DELETE FROM feed_articles WHERE feed_id IN (
-              SELECT id FROM feeds_v2 WHERE tenant_id = $1::uuid
+              SELECT id FROM feeds_v2 WHERE tenant_id = $1
             )
           )
-          DELETE FROM feeds_v2 WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+          DELETE FROM feeds_v2 WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },
@@ -362,10 +341,8 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant Posts",
     description: "Removes all posts for a tenant.",
     capability: "Remove all of a tenant's posts — useful for resetting a demo or test tenant.",
-    sql: `DELETE FROM posts WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    sql: `DELETE FROM posts WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },
@@ -375,12 +352,10 @@ const QUERY_REGISTRY = {
     description: "Removes all topics and their feed mappings for a tenant.",
     capability: "Remove a tenant's topics and their feed mappings.",
     sql: `WITH deleted_mappings AS (
-            DELETE FROM feed_topics WHERE tenant_id = $1::uuid
+            DELETE FROM feed_topics WHERE tenant_id = $1
           )
-          DELETE FROM topics WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+          DELETE FROM topics WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },
@@ -389,37 +364,18 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant Member Invites (all users)",
     description: "Removes all member invites (pending and claimed) for a tenant.",
     capability: "Clear a tenant's invite records before re-inviting users.",
-    sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    sql: `DELETE FROM invites WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
-  },
-
-  "select-tenant-invites": {
-    label: "Shows Tenant Member Invites (all users)",
-    description: "Shows all member invites (pending and claimed) for a tenant.",
-    capability: "Shows a tenant's invite records.",
-    sql: `select tr.email,i.status Invite,i.created_at Created,i.claimed_at Claimed,t.name Tenant,s.state Subscription, s.comp
-            from tenant_registrations tr
-            left join invites i on i.tenant_id = tr.tenant_id
-            left join tenants t on t.id = i.tenant_id
-            left join subscriptions s on s.tenant_id = i.tenant_id
-            order by s.state,s.comp,i.status`,
-    params: [],
-    destructive: false,
-    readOnly: true
   },
 
   "clear-tenant-memberships": {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",
     capability: "Revoke all user access to a tenant in one step.",
-    sql: `DELETE FROM memberships WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    sql: `DELETE FROM memberships WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },
@@ -428,10 +384,8 @@ const QUERY_REGISTRY = {
     label: "Clear Tenant",
     description: "Deletes the tenant row itself. Run the other clear-tenant queries first to remove dependent data.",
     capability: "Final teardown step — remove the tenant shell after its data is cleared.",
-    sql: `DELETE FROM tenants WHERE id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    sql: `DELETE FROM tenants WHERE id = $1`,
+    params: [{ name: "id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: true,
     readOnly: false
   },
@@ -440,7 +394,18 @@ const QUERY_REGISTRY = {
     label: "Reseed Catchall Feeds",
     description: "Re-inserts default catchall feeds for a tenant. Idempotent — skips existing URLs.",
     capability: "Restore the default catchall feed set for a tenant without touching existing feeds.",
-    sql: buildReseedCatchallSql(),
+    sql: `INSERT INTO feeds_v2 (tenant_id, url, name, tier, refresh_minutes, is_catchall) VALUES
+            ($1, 'https://www.technologyreview.com/feed/', 'MIT Technology Review', 'primary', 240, true),
+            ($1, 'https://www.wired.com/feed/rss', 'Wired', 'secondary', 120, true),
+            ($1, 'https://feeds.arstechnica.com/arstechnica/index', 'Ars Technica', 'primary', 120, true),
+            ($1, 'https://www.theverge.com/rss/index.xml', 'The Verge', 'secondary', 120, true),
+            ($1, 'https://www.zdnet.com/news/rss.xml', 'ZDNet', 'secondary', 120, true),
+            ($1, 'https://www.fastcompany.com/latest/rss', 'Fast Company', 'secondary', 180, true),
+            ($1, 'https://feeds.bbci.co.uk/news/technology/rss.xml', 'BBC Technology', 'primary', 180, true),
+            ($1, 'https://feeds.npr.org/1019/rss.xml', 'NPR Technology', 'primary', 240, true),
+            ($1, 'https://www.nature.com/nature.rss', 'Nature News', 'primary', 360, true),
+            ($1, 'https://www.statnews.com/feed/', 'STAT News', 'primary', 240, true)
+          ON CONFLICT (tenant_id, url) DO NOTHING`,
     params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: false
@@ -455,10 +420,8 @@ const QUERY_REGISTRY = {
               last_validation_grade = NULL,
               last_validated_at = NULL,
               last_error = NULL
-          WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+          WHERE tenant_id = $1`,
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: false
   },
@@ -508,11 +471,9 @@ const QUERY_REGISTRY = {
     capability: "Confirm which credentials a tenant has set without exposing the encrypted values.",
     sql: `SELECT key, length(value_enc) > 0 AS has_value, updated_at
           FROM credentials
-          WHERE tenant_id = $1::uuid
+          WHERE tenant_id = $1
           ORDER BY key`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
   },
@@ -678,10 +639,10 @@ const QUERY_REGISTRY = {
     description: "Pauses or resumes the agent for a tenant. Value must be 'true' or 'false'.",
     capability: "Stop or restart a tenant's scheduled posting without touching any other config.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1::uuid, 'paused', $2)
+          VALUES ($1, 'paused', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "value", label: "Paused (true or false)", type: "text", required: true }
     ],
     destructive: false,
@@ -693,10 +654,10 @@ const QUERY_REGISTRY = {
     description: "Toggles multi-source corroboration for a tenant. Value must be 'enabled' or 'disabled'.",
     capability: "Turn cross-source fact-checking on or off for a tenant's content pipeline.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1::uuid, 'corroboration', $2)
+          VALUES ($1, 'corroboration', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "value", label: "Corroboration (enabled or disabled)", type: "text", required: true }
     ],
     destructive: false,
@@ -708,10 +669,10 @@ const QUERY_REGISTRY = {
     description: "Sets the per-tenant Language Model override from the live model catalog. Falls back to the deployment default when unset.",
     capability: "Pin or change which LLM a tenant's generation pipeline uses.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1::uuid, 'anthropic_model', $2)
+          VALUES ($1, 'anthropic_model', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }, // ◄ was: label "Tenant UUID", type "uuid"
       { name: "value", label: "Model", type: "select", source: "models", required: true }
     ],
     destructive: false,
@@ -723,10 +684,10 @@ const QUERY_REGISTRY = {
     description: "Sets any agent_state key/value for a tenant. Use for properties without a dedicated setter.",
     capability: "Maintenance escape hatch — adjust any single agent_state property by key.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
-          VALUES ($1::uuid, $2, $3)
+          VALUES ($1, $2, $3)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $3`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "key", label: "agent_state key", type: "text", required: true },
       { name: "value", label: "Value", type: "text", required: true }
     ],
@@ -740,9 +701,9 @@ const QUERY_REGISTRY = {
     label: "Set Tenant Status",
     description: "Sets the tenants.status field. Known values: pending, active, suspended. Suspending a tenant cuts off access.",
     capability: "Activate, suspend, or reset a tenant's lifecycle state. Run 'Database Wide enum Type Fields' to see all valid values.",
-    sql: `UPDATE tenants SET status = $2::tenant_status WHERE id = $1::uuid`,
+    sql: `UPDATE tenants SET status = $2::tenant_status WHERE id = $1`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "id", label: "Tenant UUID", type: "uuid", required: true },
       { name: "status", label: "Status (pending / active / suspended)", type: "text", required: true }
     ],
     destructive: true,
@@ -757,12 +718,10 @@ const QUERY_REGISTRY = {
     capability: "Diagnose stuck or piled-up posts — see how a tenant's posts are distributed across the workflow.",
     sql: `SELECT status::text, count(*) AS posts
           FROM posts
-          WHERE tenant_id = $1::uuid
+          WHERE tenant_id = $1
           GROUP BY status
           ORDER BY status`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
   },
@@ -773,201 +732,82 @@ const QUERY_REGISTRY = {
     capability: "Triage failures fast — surface a tenant's recent errors without shell access to logs.",
     sql: `SELECT timestamp, action, details
           FROM activity_log
-          WHERE tenant_id = $1::uuid AND level = 'error'::log_level
+          WHERE tenant_id = $1 AND level = 'error'::log_level
           ORDER BY timestamp DESC
           LIMIT 50`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
+    params: [{ name: "tenant_id", label: "Tenant UUID", type: "uuid", required: true }],
     destructive: false,
     readOnly: true
   },
 
-  // ── Image observability (2.4.50) ────────────────────────────
-  // Reconstructed for this lineage: the schema (DDLs 40-41) exists
-  // in production even where the Image Studio feature does not, so
-  // these read-only reports are valid today and become the feature
-  // observability the moment the studio lineage lands.
-  "image-studio-activity": {
-    label: "Image Studio Activity",
-    description: "Recent image generations across all tenants, newest first: who generated, with which provider and model, from what source. Read-only observability over the image ledger.",
-    capability: "IMAGE STUDIO OBSERVABILITY",
-    sql: `SELECT i.created_at, t.slug, i.provider, i.model, i.source_kind,
-                 i.human_name, i.input_tokens, i.output_tokens
-          FROM images i JOIN tenants t ON t.id = i.tenant_id
-          ORDER BY i.created_at DESC LIMIT 200`,
+  "llm-spend-by-tenant": {
+    label: "LLM Spend by Tenant",
+    description: "Ledger sums over the window per tenant, provider, and key source: calls, tokens, and estimate dollars. The double-ledger view: whose money burned where.",
+    capability: "See what every workspace spends, split by who paid.",
+    sql: `SELECT tenant_id, provider::text, key_source::text,
+                 COUNT(*) AS calls,
+                 SUM(COALESCE(input_tokens,0)) AS input_tokens,
+                 SUM(COALESCE(output_tokens,0)) AS output_tokens,
+                 ROUND(SUM(cost_estimate_usd), 4) AS cost_estimate_usd
+          FROM llm_spend_events
+          WHERE created_at >= now() - ($1 || ' days')::interval
+          GROUP BY tenant_id, provider, key_source
+          ORDER BY cost_estimate_usd DESC NULLS LAST`,
+    params: [{ name: "days", label: "Window (days)", type: "text", required: true }],
+    destructive: false,
+    readOnly: true
+  },
+
+  "llm-activations-by-workflow": {
+    label: "LLM Activations by Workflow",
+    description: "Lifecycle counts and spend per workflow kind over the window: which product surfaces drive cost.",
+    capability: "Attribute spend to the workflows that caused it.",
+    sql: `SELECT a.workflow::text,
+                 COUNT(DISTINCT a.id) AS activations,
+                 COUNT(e.id) AS calls,
+                 ROUND(SUM(e.cost_estimate_usd), 4) AS cost_estimate_usd
+          FROM llm_activations a
+          LEFT JOIN llm_spend_events e ON e.activation_id = a.id
+          WHERE a.created_at >= now() - ($1 || ' days')::interval
+          GROUP BY a.workflow
+          ORDER BY cost_estimate_usd DESC NULLS LAST`,
+    params: [{ name: "days", label: "Window (days)", type: "text", required: true }],
+    destructive: false,
+    readOnly: true
+  },
+
+  "trial-burn-by-tenant": {
+    label: "Trial Burn by Tenant",
+    description: "Every trial grant with its tenant, caps, and ledger-summed burn. The platform's money, accounted.",
+    capability: "Watch trial keys burn against their caps in real time.",
+    sql: `SELECT k.name, k.provider::text, k.key_fingerprint, ta.tenant_id,
+                 ta.active AS grant_active, k.active AS key_active,
+                 k.starts_at, k.ends_at,
+                 ROUND(trial_activation_spend_usd(ta.id), 4) AS activation_spent_usd,
+                 ta.max_spend_usd AS activation_cap_usd,
+                 ROUND(trial_key_spend_usd(k.id), 4) AS key_spent_usd,
+                 k.max_spend_usd AS key_cap_usd
+          FROM trial_key_activations ta
+          JOIN trial_keys k ON k.id = ta.trial_key_id
+          ORDER BY ta.activated_at DESC`,
     params: [],
     destructive: false,
     readOnly: true
   },
 
-  "image-cost-report": {
-    label: "Image Cost Report",
-    description: "Estimated image generation spend by tenant and model over the last N days, from recorded token usage and pre-spend estimates. Read-only observability over the cost ledger.",
-    capability: "IMAGE STUDIO OBSERVABILITY",
-    sql: `SELECT t.slug, i.provider, i.model,
-                 count(*)::bigint AS generations,
-                 COALESCE(sum(i.input_tokens), 0)::bigint AS input_tokens,
-                 COALESCE(sum(i.output_tokens), 0)::bigint AS output_tokens,
-                 ROUND(COALESCE(sum(i.pre_spend_estimate_usd), 0), 4) AS est_spend_usd
-          FROM images i JOIN tenants t ON t.id = i.tenant_id
-          WHERE i.created_at > now() - ($1 || ' days')::interval
-          GROUP BY t.slug, i.provider, i.model
-          ORDER BY est_spend_usd DESC LIMIT 100`,
-    params: [
-      { name: "days", label: "Window (days)", type: "text", required: true }
-    ],
-    destructive: false,
-    readOnly: true
-  },
-
-  // ── Subscription Controls (2.4.49) ──────────────────────────
-  // One contiguous group on the console (group: subscriptions).
-  // Mutations are single data-modifying CTEs: the change and its
-  // platform_log audit row commit atomically or not at all. Tier
-  // validity is enforced by the subscriptions CHECK constraint:
-  // an invalid tier surfaces the constraint error, fail-closed.
-  "sub-view-by-tenant": {
-    label: "Subscription (By Tenant)",
-    description: "The full subscription row for one tenant. Read one workspace's commercial state: tier, state, comp, period, pending.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `SELECT tenant_id, tier, state, comp, pending_tier,
-                 period_start, period_end, created_at, updated_at
-          FROM subscriptions WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
-    destructive: false,
-    readOnly: true
-  },
-
-  "sub-list-all": {
-    label: "Subscriptions (All Tenants)",
-    description: "Every subscription with its tenant, newest change first. The whole commercial ledger at a glance.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `SELECT t.slug, s.tier, s.state, s.comp, s.pending_tier,
-                 s.period_end, s.updated_at
-          FROM subscriptions s JOIN tenants t ON t.id = s.tenant_id
-          ORDER BY s.updated_at DESC LIMIT 200`,
+  "llm-unknown-usage-audit": {
+    label: "Unknown Usage Audit",
+    description: "Spend events where tokens were possibly consumed but never reported (timeouts): the rows to reconcile first when an invoice surprises.",
+    capability: "Find the money that may have moved unreported.",
+    sql: `SELECT created_at, tenant_id, provider::text, model, key_source::text, request_type::text
+          FROM llm_spend_events
+          WHERE status = 'unknown_usage'
+          ORDER BY created_at DESC LIMIT 200`,
     params: [],
     destructive: false,
     readOnly: true
   },
 
-  "sub-audit-by-tenant": {
-    label: "Payment Audit (By Tenant)",
-    description: "The immutable payment_events trail for one tenant. Every billing transition this workspace ever made, with provider refs.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `SELECT recorded_at, event_type, prev_state, next_state,
-                 provider, provider_event_ref
-          FROM payment_events WHERE tenant_id = $1::uuid
-          ORDER BY recorded_at DESC LIMIT 200`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
-    destructive: false,
-    readOnly: true
-  },
-
-  "sub-set-tier": {
-    label: "Set Tier (Immediate)",
-    description: "Immediately set a tenant's tier; clears any pending tier. Audited. Operator tier override, atomic with its audit row. The CHECK constraint refuses unknown tiers.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `WITH upd AS (
-            UPDATE subscriptions
-               SET tier = $2::text, pending_tier = NULL, updated_at = now()
-             WHERE tenant_id = $1::uuid
-             RETURNING tenant_id, tier, state
-          ), aud AS (
-            INSERT INTO platform_log (level, event, tenant_id, detail)
-            SELECT 'warn', 'admin_subscription_tier_set', tenant_id,
-                   jsonb_build_object('tier', tier)
-              FROM upd
-          )
-          SELECT * FROM upd`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
-      { name: "tier", label: "Tier", type: "select", source: "tiers", required: true }
-    ],
-    destructive: true,
-    readOnly: false
-  },
-
-  "sub-extend-period": {
-    label: "Extend Period",
-    description: "Push a tenant's period_end forward by N days. Audited. Grace extension without touching the state machine: renewals stay anchored to the new period_end.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `WITH upd AS (
-            UPDATE subscriptions
-               SET period_end = COALESCE(period_end, now()) + ($2 || ' days')::interval,
-                   updated_at = now()
-             WHERE tenant_id = $1::uuid
-             RETURNING tenant_id, tier, state, period_end
-          ), aud AS (
-            INSERT INTO platform_log (level, event, tenant_id, detail)
-            SELECT 'warn', 'admin_subscription_period_extended', tenant_id,
-                   jsonb_build_object('period_end', period_end, 'days', $2::text)
-              FROM upd
-          )
-          SELECT * FROM upd`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
-      { name: "days", label: "Days to add", type: "text", required: true }
-    ],
-    destructive: true,
-    readOnly: false
-  },
-
-  "sub-clear-pending": {
-    label: "Clear Pending Tier",
-    description: "Remove a queued tier change before it applies. Audited. Cancel a scheduled tier flip while the current cycle stays untouched.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `WITH upd AS (
-            UPDATE subscriptions
-               SET pending_tier = NULL, updated_at = now()
-             WHERE tenant_id = $1::uuid AND pending_tier IS NOT NULL
-             RETURNING tenant_id, tier, state
-          ), aud AS (
-            INSERT INTO platform_log (level, event, tenant_id, detail)
-            SELECT 'warn', 'admin_subscription_pending_cleared', tenant_id, '{}'::jsonb
-              FROM upd
-          )
-          SELECT * FROM upd`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
-    destructive: true,
-    readOnly: false
-  },
-
-  "sub-delete": {
-    label: "Delete Subscription",
-    description: "Remove a tenant's subscription row entirely: the tenant returns to the paywall. The payment audit trail is kept. Audited. The full reset: unsubscribed, halted, repurchasable. payment_events history survives by design.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
-    group: "subscriptions",
-    sql: `WITH del AS (
-            DELETE FROM subscriptions
-             WHERE tenant_id = $1::uuid
-             RETURNING tenant_id, tier, state
-          ), aud AS (
-            INSERT INTO platform_log (level, event, tenant_id, detail)
-            SELECT 'warn', 'admin_subscription_deleted', tenant_id,
-                   jsonb_build_object('tier', tier, 'state', state)
-              FROM del
-          )
-          SELECT * FROM del`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
-    destructive: true,
-    readOnly: false
-  }
 };
 
 // ── Middleware ────────────────────────────────────────────────
@@ -993,9 +833,7 @@ export default function createPlatformAdminRoutes() {
   router.get("/subscriptions", async (req, res) => {
     try {
       const { listSubscriptions } = await import("../services/entitlements.js");
-      // tiers: derived from TIERS (2.4.54) so every console tier
-      // surface renders the ruled set with zero hand maintenance.
-      res.json({ subscriptions: await listSubscriptions(), tiers: TIERS });
+      res.json({ subscriptions: await listSubscriptions() });
     } catch (err) {
       res.status(500).json({ error: "Failed to list subscriptions" });
     }
@@ -1031,8 +869,8 @@ export default function createPlatformAdminRoutes() {
       const ok = await revokeComp(tenantId);
       if (!ok) return res.status(404).json({ error: "No complimentary subscription for that tenant" });
       const { platformLog } = await import("../services/platform-log.js");
-      platformLog("info", "comp_entitlement_revoked", { tenantId, removed: true, by: req.user.sub });
-      res.json({ tenantId, removed: true });
+      platformLog("info", "comp_entitlement_revoked", { tenantId, by: req.user.sub });
+      res.json({ tenantId, state: "suspended" });
     } catch (err) {
       res.status(500).json({ error: "Comp revoke failed" });
     }
@@ -1093,13 +931,7 @@ export default function createPlatformAdminRoutes() {
     }
 
     try {
-      // Vendor URL comes from the LLM registry profile, the single
-      // sanctioned home for provider endpoints; the page limit is a
-      // config getter. No vendor literals in the route layer.
-      const anthropicProfile = getProvider("anthropic");
-      const modelsUrl = resolveBaseUrl(anthropicProfile, process.env)
-        + anthropicProfile.modelsPath + `?limit=${getModelListingPageLimit()}`;
-      const resp = await fetch(modelsUrl, {
+      const resp = await fetch("https://api.anthropic.com/v1/models?limit=100", {
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01"

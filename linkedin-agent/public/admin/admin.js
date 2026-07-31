@@ -486,7 +486,7 @@
     fetch(API + '/api/admin/image-destination', { credentials: 'include' })
       .then(function (res) { if (!res.ok) throw new Error('load failed'); return res.json(); })
       .then(function (d) {
-        var idn = d.hasCredentials ? 'stored tenant credentials' : "the server's ambient identity";
+        var idn = "the server's ambient identity";
         if (d.destination) {
           $('img-dest-input').value = d.destination;
           $('img-dest-current').textContent = 'Current destination: ' + d.destination + ' (identity: ' + idn + ')';
@@ -508,9 +508,7 @@
       method: 'PUT', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        destination: v,
-        accessKeyId: $('img-dest-key-id').value.trim() || null,
-        secretAccessKey: $('img-dest-secret').value.trim() || null
+        destination: v
       })
     })
       .then(function (res) {
@@ -518,9 +516,8 @@
         return res.json();
       })
       .then(function (d) {
-        $('img-dest-secret').value = '';   // the secret lives in the vault now, not in the page
         showMessage('Destination verified: wrote and read back at s3://' + d.bucket + '/' + (d.prefix || ''), 'success');
-        $('img-dest-current').textContent = 'Current destination: ' + d.destination + ' (verified live, identity: ' + (d.hasCredentials ? 'stored tenant credentials' : 'ambient') + ')';
+        $('img-dest-current').textContent = 'Current destination: ' + d.destination + ' (verified live, ambient identity)';
       })
       .catch(function (err) { showMessage(err.message, 'error'); })
       .finally(function () {
@@ -538,8 +535,6 @@
       .then(function (res) { if (!res.ok) throw new Error('Clear failed'); return res.json(); })
       .then(function () {
         $('img-dest-input').value = '';
-        $('img-dest-key-id').value = '';
-        $('img-dest-secret').value = '';
         $('img-dest-current').textContent = 'No tenant destination set: the platform default applies.';
         showMessage('Destination and stored credentials cleared', 'success');
       })
@@ -895,7 +890,6 @@
       $('reg-verify-key-btn').addEventListener('click', verifyAdminKey);
     }
   });
-})();
 
 function loadSpendSummary() {
   fetch(API + '/api/admin/spend-summary', { credentials: 'include' })
@@ -923,3 +917,5 @@ function loadSpendSummary() {
     })
     .catch(function () { $('spend-by-provider').textContent = 'Spend data unavailable.'; });
 }
+
+})();

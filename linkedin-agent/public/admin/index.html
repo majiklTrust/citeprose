@@ -139,6 +139,15 @@
       </div>
 
       <div class="section">
+        <h2>Spend</h2>
+        <p class="hint">Actual token usage and estimate dollars from the spend ledger, last 30 days. Dollar figures are estimates from published list prices; the vendor invoice is the ground truth.</p>
+        <div id="spend-trial-pill" style="display:none"></div>
+        <div id="spend-by-provider">Loading...</div>
+        <h3 style="margin-top:14px">Recent Activity</h3>
+        <div id="spend-recent"></div>
+      </div>
+
+      <div class="section">
         <h2>Image Storage</h2>
         <p class="ai-hint">Where NEW AI-generated images are stored. Existing images always stay where they were saved. S3 can only be selected when this server is configured for it.</p>
         <div class="ai-form">
@@ -153,6 +162,15 @@
             <button class="btn btn-primary" id="img-storage-save-btn">Save</button>
           </div>
           <div id="img-storage-current" class="ai-current"></div>
+          <div>
+            <label for="img-dest-input">S3 Destination</label>
+            <input type="text" id="img-dest-input" placeholder="s3://bucket/prefix (region auto-detected)" autocomplete="off">
+          </div>
+          <div class="ai-actions">
+            <button class="btn btn-primary" id="img-dest-save-btn">Verify And Save Destination</button>
+            <button class="btn" id="img-dest-clear-btn">Clear Destination</button>
+          </div>
+          <div id="img-dest-current" class="ai-current"></div>
         </div>
       </div>
 

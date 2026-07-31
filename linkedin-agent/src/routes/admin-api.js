@@ -449,11 +449,9 @@ router.get("/spend-summary", async (req, res) => {
 router.get("/image-destination", async (req, res) => {
   try {
     const { DESTINATION_STATE_KEY } = await import("../storage/object-store.js");
-    const { hasAwsImageCredentials } = await import("../tenant/credential-store.js");
     const out = await withTenant(req.tenant.id, async () => ({
       destination: null,
-      raw: await getAgentState(DESTINATION_STATE_KEY),
-      hasCredentials: await hasAwsImageCredentials()      // existence only: the secret NEVER leaves the vault
+      raw: await getAgentState(DESTINATION_STATE_KEY)
     }));
     res.json({
       destination: (typeof out.raw === "string" && out.raw.trim() !== "") ? out.raw.trim() : null,
@@ -467,43 +465,25 @@ router.get("/image-destination", async (req, res) => {
 
 router.put("/image-destination", async (req, res) => {
   const raw = (req.body || {}).destination;
-  const accessKeyId = (req.body || {}).accessKeyId;
-  const secretAccessKey = (req.body || {}).secretAccessKey;
   if (raw !== null && typeof raw !== "string") {
     return res.status(400).json({ error: "destination must be a string, or null to clear." });
   }
-  // The identity pair travels together or not at all: a half pair is
-  // a mistake, never a guess.
-  const idGiven = typeof accessKeyId === "string" && accessKeyId.trim() !== "";
-  const secretGiven = typeof secretAccessKey === "string" && secretAccessKey.trim() !== "";
-  if (idGiven !== secretGiven) {
-    return res.status(400).json({ error: "Provide both the access key id and the secret, or neither." });
-  }
-  const suppliedCreds = idGiven ? { accessKeyId: accessKeyId.trim(), secretAccessKey: secretAccessKey.trim() } : null;
   try {
     const os = await import("../storage/object-store.js");
-    const creds = await import("../tenant/credential-store.js");
     if (raw === null || raw.trim() === "") {
       await withTenant(req.tenant.id, async () => {
         await setAgentState(os.DESTINATION_STATE_KEY, "");
-        await creds.deleteCredential(creds.AWS_IMAGE_KEY_ID);       // Clear clears the identity too:
-        await creds.deleteCredential(creds.AWS_IMAGE_KEY_SECRET);   // no orphaned secrets in the vault
       });
       os.resetObjectStoreCache();
       platformLog("info", "image_destination_cleared", {});
-      return res.json({ destination: null, verified: false, hasCredentials: false });
+      return res.json({ destination: null, verified: false });
     }
     const dest = await withTenant(req.tenant.id, async () => {
-      // Zero Trust ordering: PROVE the identity against the exact
-      // destination FIRST; only a passing pair earns the vault. The
-      // probe uses the supplied pair, else the stored one, else the
-      // ambient chain, precisely what renders will use.
-      const verified = await os.probeObjectStoreDestination(raw.trim(),
-        suppliedCreds ? { credentials: suppliedCreds } : {});        // throws typed on any failure
-      if (suppliedCreds) {
-        await creds.storeCredential(creds.AWS_IMAGE_KEY_ID, suppliedCreds.accessKeyId);
-        await creds.storeCredential(creds.AWS_IMAGE_KEY_SECRET, suppliedCreds.secretAccessKey);
-      }
+      // Zero Trust ordering preserved: PROVE the destination FIRST
+      // with the server's ambient AWS identity (the EC2 role), the
+      // same identity renders will use. 2.5.62: the per-tenant key
+      // vault (2.5.29) is removed; identity is role-based.
+      const verified = await os.probeObjectStoreDestination(raw.trim(), {});  // throws typed on any failure
       await setAgentState(os.DESTINATION_STATE_KEY, raw.trim());
       return verified;
     });
@@ -511,8 +491,7 @@ router.put("/image-destination", async (req, res) => {
     platformLog("info", "image_destination_set", { bucket: dest.bucket, prefix: dest.prefix, region: dest.region });
     return res.json({
       destination: raw.trim(), verified: true,
-      bucket: dest.bucket, prefix: dest.prefix, region: dest.region, endpoint: dest.endpoint,
-      hasCredentials: suppliedCreds !== null || undefined            // the secret itself never appears here
+      bucket: dest.bucket, prefix: dest.prefix, region: dest.region, endpoint: dest.endpoint
     });
   } catch (err) {
     const code = err && err.code;
@@ -527,7 +506,7 @@ router.put("/image-destination", async (req, res) => {
     });
     let why = [detail.name, detail.status ? ("HTTP " + detail.status) : null].filter(Boolean).join(", ");
     if (detail.name === "CredentialsProviderError") {
-      why += "; no AWS identity reached the bucket. Enter this workspace's access key id and secret beside the destination and save again";
+      why += "; no AWS identity reached the bucket. Ensure the server's IAM role (or AWS environment) grants access to this bucket";
     }
     if (code === "DESTINATION_INVALID") return res.status(400).json({ error: err.message, code });
     if (code === "SDK_UNAVAILABLE") return res.status(409).json({ error: "The S3 SDK is not installed on this server.", code });

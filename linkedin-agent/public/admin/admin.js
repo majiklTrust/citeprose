@@ -284,11 +284,20 @@
     });
   }
 
+  // 2.6.7 ruling: with a stored key the line reads
+  // "Current: provider / model". Without a valid key nothing is
+  // selected as far as the workspace is concerned, so no provider
+  // or model is displayed at all; the line reads exactly
+  // "(no key stored yet)".
   function renderAiCurrent() {
-    if (!_aiCurrent) { $('ai-current').textContent = ''; return; }
-    var keyNote = _aiCurrent.hasKey ? 'key stored' : 'no key stored yet';
-    $('ai-current').textContent = 'Current: ' + (_aiCurrent.provider || '(none)') +
-      ' / ' + (_aiCurrent.model || '(no model)') + ' (' + keyNote + ')';
+    var el = $('ai-current');
+    if (!_aiCurrent) { el.textContent = ''; return; }
+    if (!_aiCurrent.hasKey) {
+      el.textContent = '(no key stored yet)';
+      return;
+    }
+    el.textContent = 'Current: ' + (_aiCurrent.provider || '(none)') +
+      ' / ' + (_aiCurrent.model || '(no model)');
   }
 
   function loadAiConfig() {

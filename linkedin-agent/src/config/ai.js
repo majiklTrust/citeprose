@@ -22,7 +22,7 @@ import { getAgentState } from "../services/database.js";
 // a code change, set ANTHROPIC_MODEL in .env. To override
 // per-tenant, set the 'anthropic_model' key in agent_state via
 // the dashboard or direct SQL.
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_MODEL = "not set";
 
 // Hardcoded value flagged per project convention. The Anthropic
 // API base URL is used in error messages when a model name is

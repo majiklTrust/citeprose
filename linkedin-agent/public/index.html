@@ -9,8 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-  <link rel="stylesheet" href="/app/styles/app.css?v=93">
-  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=93">
+  <link rel="stylesheet" href="/app/styles/app.css?v=94">
+  <link rel="stylesheet" href="/app/styles/app-mobile.css?v=94">
 </head>
 <body>
   <div id="root"></div>
@@ -1023,7 +1023,7 @@
         const overlay = document.getElementById('keygate-overlay');
         if (!overlay || overlay.style.display === 'flex') return;
         overlay.style.display = 'flex';
-        setTimeout(() => { window.location.href = '/app/admin'; }, 6000);
+        setTimeout(() => { window.location.href = '/app/admin'; }, 4000);
       }
 
       async function handlePreview() {
@@ -1317,7 +1317,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.6.6</div>
+                <div className="header-subtitle">v2.6.7</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1341,7 +1341,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.6.6</div>
+                <div className="header-subtitle">v2.6.7</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1393,7 +1393,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.6.6 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.6.7 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (

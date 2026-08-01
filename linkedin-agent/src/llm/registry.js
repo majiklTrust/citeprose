@@ -85,7 +85,8 @@ export function listProviders(env = process.env) {
       label: p.label,
       adapterType: p.adapterType,
       configured,
-      textGeneration: textGenerationAvailability(p.id)
+      textGeneration: textGenerationAvailability(p.id),
+      textGenerationNotice: textGenerationNotice(p.id)
     };
   });
 }
@@ -103,6 +104,17 @@ export function textGenerationAvailability(providerId) {
 
 export function isTextProviderAvailable(providerId) {
   return textGenerationAvailability(providerId) === "available";
+}
+
+// Per-vendor parked-selection copy (2.6.5). Each parked provider
+// tells its own true story (the OpenAI notice routes the key to the
+// Image Model section; the Grok notice must not). Falls back to the
+// shared notice when an entry carries no copy of its own. Unknown
+// ids throw via getProvider, fail-closed like every lookup here.
+export function textGenerationNotice(providerId) {
+  const entry = getProvider(providerId);
+  return (typeof entry.textGenerationNotice === "string" && entry.textGenerationNotice)
+    || TEXT_GENERATION_NOTICE;
 }
 
 // The egress allowlist is derived from the registry: exactly the

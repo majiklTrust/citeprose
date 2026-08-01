@@ -222,14 +222,13 @@
   var _aiCurrent = null;
   var _aiKeyValidated = false;
 
-  // 2.6.1: client-side mirror of the server's text-availability
-  // notice. UX only; PUT /api/admin/ai-config re-enforces with 409
-  // TEXT_PROVIDER_COMING_SOON. The vendor list itself carries
-  // textGeneration from the registry, so this copy is the fallback
-  // message, never the decision.
+  // 2.6.1: client-side fallback for the text-availability notice.
+  // UX only; PUT /api/admin/ai-config re-enforces with 409
+  // TEXT_PROVIDER_COMING_SOON. 2.6.5: each parked vendor carries its
+  // OWN notice from the registry (textGenerationNotice), so this
+  // vendor-neutral copy renders only when server data is absent.
   var TEXT_GENERATION_NOTICE =
-    'Language generation runs on Anthropic Claude models today. ' +
-    'Support for OpenAI language generation models is coming soon.';
+    'Support for other language generation models is coming soon.';
 
   function aiProviderById(id) {
     for (var i = 0; i < _aiProviders.length; i++) {
@@ -243,14 +242,22 @@
     return !!p && p.textGeneration === 'coming_soon';
   }
 
+  // The message for a parked vendor: server-supplied per-vendor
+  // copy first, neutral fallback second (2.6.5).
+  function aiVendorNoticeFor(id) {
+    var p = aiProviderById(id);
+    return (p && p.textGenerationNotice) || TEXT_GENERATION_NOTICE;
+  }
+
   // Shows the friendly note and parks Verify/Save while a
   // coming-soon vendor is selected; restores them otherwise.
   function updateAiVendorNote() {
     var note = $('ai-vendor-note');
-    var parked = aiVendorComingSoon($('ai-provider').value);
+    var selected = $('ai-provider').value;
+    var parked = aiVendorComingSoon(selected);
     if (note) {
       note.hidden = !parked;
-      note.textContent = parked ? TEXT_GENERATION_NOTICE : '';
+      note.textContent = parked ? aiVendorNoticeFor(selected) : '';
     }
     $('ai-verify-btn').disabled = parked;
     $('ai-save-btn').disabled = parked;
@@ -317,7 +324,7 @@
     var key = $('ai-key').value.trim();
     var provider = $('ai-provider').value;
     if (aiVendorComingSoon(provider)) {
-      showMessage(TEXT_GENERATION_NOTICE, 'warn');
+      showMessage(aiVendorNoticeFor(provider), 'warn');
       return;
     }
     if (!key) {
@@ -363,7 +370,7 @@
     var model = $('ai-model').value;
     var key = $('ai-key').value.trim();
     if (aiVendorComingSoon(provider)) {
-      showMessage(TEXT_GENERATION_NOTICE, 'warn');
+      showMessage(aiVendorNoticeFor(provider), 'warn');
       return;
     }
     if (!provider || !model) {

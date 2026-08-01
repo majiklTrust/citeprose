@@ -28,16 +28,19 @@
 //                       key validation or the image seam: an OpenAI
 //                       key remains storable for image generation
 //                       while OpenAI text selection is coming soon.
+//   textGenerationNotice (2.6.5) the customer-facing sentence(s)
+//                       shown when this parked vendor is selected.
+//                       Per vendor because the stories differ: the
+//                       OpenAI notice routes the key to the Image
+//                       Model section; the Grok notice must not.
+//                       Absent -> TEXT_GENERATION_NOTICE fallback.
 // ═══════════════════════════════════════════════════════════════
 
 // 2.6.1: the single canonical wording for the OpenAI text
 // availability notice. Routes and pages consume this through the
 // registry so the copy can never drift between surfaces.
 export const TEXT_GENERATION_NOTICE =
-  "Language generation runs on Anthropic Claude models today. " +
-  "OpenAI powers image generation for this application: add an OpenAI key " +
-  "in the Image Model section of the User Management page. " +
-  "Support for OpenAI language generation models is coming soon.";
+  "Support for this LLM provider is coming soon!";
 
 export const LLM_LIMITS = Object.freeze({
   // Server-side output-token billing guardrail (canonical requests
@@ -83,6 +86,10 @@ export const PROVIDERS = Object.freeze([
     // yet. The adapter and profiles below stay wired so the flip
     // back to "available" is a one-word data edit.
     textGeneration: "coming_soon",
+    // The shared constant IS the OpenAI story (2.6.1 wording kept
+    // verbatim); referencing it here instead of repeating the text
+    // makes drift impossible (2.6.5).
+    textGenerationNotice: TEXT_GENERATION_NOTICE,
     adapterType: "openai-compatible",
     baseUrlEnv: "LLM_OPENAI_BASE_URL",
     defaultBaseUrl: "https://api.openai.com",
@@ -102,7 +109,12 @@ export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "grok",
     label: "Grok (xAI)",
-    textGeneration: "available",
+    // 2.6.5 ruling: Grok language generation is not selectable yet,
+    // same parking pattern as OpenAI. Flip back is a one-word edit.
+    textGeneration: "coming_soon",
+    textGenerationNotice:
+      "Language generation runs on Anthropic Claude models today. " +
+      "Support for Grok (xAI) language generation models is coming soon.",
     adapterType: "openai-compatible",
     baseUrlEnv: "LLM_GROK_BASE_URL",
     defaultBaseUrl: "https://api.x.ai",

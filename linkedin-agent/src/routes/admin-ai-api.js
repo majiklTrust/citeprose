@@ -27,7 +27,8 @@
 import { Router } from "express";
 import { platformLog } from "../services/platform-log.js";
 import { listProviders, listModels, getProvider, getModelProfile,
-         textGenerationAvailability, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
+         textGenerationAvailability, textGenerationNotice,
+         TEXT_GENERATION_NOTICE } from "../llm/registry.js";
 import { validateProviderKey, resolveTenantLlmSelection } from "../llm/client.js";
 
 async function defaultWithTenant(tenantId, fn) {
@@ -117,8 +118,11 @@ export function createAiConfigRoutes(overrides = {}) {
           label: p.label,
           // 2.6.1: availability travels with the option so the page
           // renders the coming-soon note from server data, never from
-          // a hardcoded client list.
+          // a hardcoded client list. 2.6.5: the notice itself is
+          // per-vendor data too, so each parked vendor tells its own
+          // true story on the page.
           textGeneration: p.textGeneration || "available",
+          textGenerationNotice: p.textGenerationNotice || TEXT_GENERATION_NOTICE,
           models: d.listModels(p.id, d.env)
         }));
 
@@ -178,12 +182,13 @@ export function createAiConfigRoutes(overrides = {}) {
       // no matter what the client sent. Runs BEFORE key validation so
       // no vendor call is spent on a refused selection. This does NOT
       // gate key storage for the image seam (Image Model section).
+      // 2.6.5: the refusal carries the vendor's OWN notice.
       if (textGenerationAvailability(providerEntry.id) !== "available") {
         d.log("warn", "ai_config_rejected", {
           reason: "text_provider_coming_soon", provider: providerEntry.id
         });
         return res.status(409).json({
-          error: TEXT_GENERATION_NOTICE,
+          error: textGenerationNotice(providerEntry.id) || TEXT_GENERATION_NOTICE,
           code: "TEXT_PROVIDER_COMING_SOON"
         });
       }

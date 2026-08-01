@@ -26,6 +26,16 @@
       <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;">Your draft is saved automatically.</div>
     </div>
   </div>
+  <div id="keygate-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:8px; padding:2rem 3rem; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.3); max-width:400px;">
+      <div style="margin-bottom:1rem;">
+        <div style="width:40px; height:40px; border:3px solid #e0e0e0; border-top-color:#0073b1; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+      </div>
+      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating content needs a valid LLM Provider API key to activate.</div>
+      <div style="font-size:0.85rem; color:#888;">Redirecting to the Management page.</div>
+      <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;"></div>
+    </div>
+  </div>
   <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
   <style>
     .composer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; overflow-y: auto; }
@@ -679,8 +689,6 @@
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
       const [showComposer, setShowComposer] = useState(false);
       const [showComingSoon, setShowComingSoon] = useState(false);
-      const [showKeyGate, setShowKeyGate] = useState(false);
-
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
         if (res.status === 401) {
@@ -1005,6 +1013,17 @@
         const meta = status && status.tenantMeta;
         if (!meta || typeof meta.flags !== 'number') return false;
         return (meta.flags & TENANT_FLAG_LLM_KEY_PRESENT) === 0;
+      }
+
+      // 2.6.6: the key gate is the generate-overlay pattern, toggled
+      // imperatively like handlePreview toggles its spinner. Shows
+      // the fixed message, always waits 3 seconds, then lands the
+      // user on the Management page. No links, no role branches.
+      function showKeyGateOverlay() {
+        const overlay = document.getElementById('keygate-overlay');
+        if (!overlay || overlay.style.display === 'flex') return;
+        overlay.style.display = 'flex';
+        setTimeout(() => { window.location.href = '/app/admin'; }, 6000);
       }
 
       async function handlePreview() {
@@ -1606,7 +1625,7 @@
                     {/* 2.6.1: both generation CTAs check the tenant
                         meta flag at activation and warn BEFORE any
                         generation workflow is invoked without a key. */}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { setShowKeyGate(true); return; } handlePreview(); }} disabled={loading.preview}>
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } handlePreview(); }} disabled={loading.preview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
                     </button>
                     {/**
@@ -1614,7 +1633,7 @@
                       ✎ Compose
                     </button>
                     **/}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { setShowKeyGate(true); return; } setShowComposer(true); }}>
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } setShowComposer(true); }}>
                       ✚ Create
                     </button>
                   </div>
@@ -1794,59 +1813,6 @@
             </div>
           )}
 
-          {/* 2.6.1: API key gate. Shown when Generate or Create is
-              activated without a stored LLM vendor key. Owners get a
-              one-click path to the User Management page; other roles
-              are pointed to their workspace owner (the admin page
-              would deny them, so no dead-end redirect). */}
-          {showKeyGate && (() => {
-            const isOwner = !!(status && status.user && status.user.role === 'owner');
-            return (
-              <div className="modal-overlay" onClick={() => setShowKeyGate(false)}>
-                <div className="modal-content modal-content-sm" onClick={e => e.stopPropagation()}>
-                  <button className="modal-close" onClick={() => setShowKeyGate(false)}>✕</button>
-                  <h3 className="modal-heading">Add an AI Model API Key</h3>
-                  <p style={{ margin: '0.5rem 0' }}>
-                    Generating content needs a valid Anthropic API key for this
-                    workspace, and one has not been added yet.
-                  </p>
-                  {isOwner ? (
-                    <p style={{ margin: '0.5rem 0' }}>
-                      You can create a key in the{' '}
-                      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console</a>,
-                      then paste it into the AI Model Provider section on the
-                      User Management page. The key is verified with the vendor
-                      before it is saved.
-                    </p>
-                  ) : (
-                    <p style={{ margin: '0.5rem 0' }}>
-                      A workspace owner can create a key in the{' '}
-                      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console</a>{' '}
-                      and add it in the AI Model Provider section on the User
-                      Management page. Please ask your workspace owner to add
-                      the key.
-                    </p>
-                  )}
-                  <div className="modal-actions">
-                    {isOwner ? (
-                      <React.Fragment>
-                        <button className="btn btn-primary" onClick={() => { window.location.href = '/app/admin/'; }}>
-                          Open User Management
-                        </button>
-                        <button className="btn btn-ghost" onClick={() => setShowKeyGate(false)}>
-                          Not Now
-                        </button>
-                      </React.Fragment>
-                    ) : (
-                      <button className="btn btn-primary" onClick={() => setShowKeyGate(false)}>
-                        OK
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Post Detail Modal */}
           {selectedPost && (() => {

@@ -32,7 +32,7 @@ import {
   clearRegistrationKey
 } from "../tenant/platform-db.js";
 import { validateProviderKey } from "../llm/client.js";
-import { isTextProviderAvailable, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
+import { isTextProviderAvailable, textGenerationNotice, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
@@ -347,10 +347,12 @@ router.post("/complete", async (req, res) => {
     // 2.6.1: registration selects the workspace TEXT vendor, so the
     // same availability gate as /api/admin/ai-config applies here.
     // Unknown ids fall through: the key-verify step below keeps its
-    // existing "Unknown provider" contract.
+    // existing "Unknown provider" contract. 2.6.5: the refusal
+    // carries the vendor's OWN notice (per-vendor data), with the
+    // shared notice as the fallback.
     try {
       if (!isTextProviderAvailable(providerId)) {
-        return safeError(res, 409, TEXT_GENERATION_NOTICE);
+        return safeError(res, 409, textGenerationNotice(providerId) || TEXT_GENERATION_NOTICE);
       }
     } catch { /* unknown provider: handled by the verify step below */ }
 

@@ -926,6 +926,16 @@
     });
     $('img-model-provider').addEventListener('change', function () { renderImageModelOptions(this.value, null); });
 
+    // 2.6.8: the password key fields live in inert forms (see
+    // admin-index.html) purely to satisfy the browser's
+    // password-field-in-a-form check. Those forms have no action, so
+    // block implicit submit (pressing Enter in the field) or the page
+    // would reload and discard the typed key.
+    var keyForms = document.querySelectorAll('form.key-field');
+    for (var kf = 0; kf < keyForms.length; kf++) {
+      keyForms[kf].addEventListener('submit', function (e) { e.preventDefault(); });
+    }
+
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {
       var section = buildRegistrationSection();

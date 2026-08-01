@@ -38,6 +38,7 @@
     .ai-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 460px; }
     .ai-form label { font-size: 0.8rem; font-weight: 600; color: #666; }
     .ai-form select, .ai-form input { padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+    .key-field { display: contents; }
     .ai-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .ai-hint { color: #666; font-size: 0.85rem; margin-bottom: 1rem; }
     .ai-current { color: #666; font-size: 0.85rem; margin-top: 0.75rem; }
@@ -79,7 +80,9 @@
           </div>
           <div>
             <label for="ai-key">API Key</label>
-            <input type="password" id="ai-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
+            <form class="key-field" autocomplete="off">
+              <input type="password" id="ai-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
+            </form>
           </div>
           <div class="ai-actions">
             <button class="btn btn-primary" id="ai-verify-btn">Verify Key</button>
@@ -104,7 +107,9 @@
           </div>
           <div>
             <label for="img-model-key">Vendor API Key</label>
-            <input type="password" id="img-model-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
+            <form class="key-field" autocomplete="off">
+              <input type="password" id="img-model-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
+            </form>
           </div>
           <div class="ai-actions">
             <button class="btn btn-primary" id="img-key-verify-btn">Verify Key</button>

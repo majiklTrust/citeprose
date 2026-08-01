@@ -86,6 +86,10 @@
 
     const API = '';  // same-origin
     const DASHBOARD_POLL_INTERVAL_MS = 15000;
+    // 2.6.1: mirrors TENANT_FLAG.LLM_KEY_PRESENT in
+    // src/services/tenant-meta.js. Consumers mask bits, never
+    // compare the whole flags integer.
+    const TENANT_FLAG_LLM_KEY_PRESENT = 1;
     const TIER_ORDER = { authoritative: 0, primary: 1, secondary: 2 };
 
     // ── Dynamic topic colors — deterministic hash from slug ──
@@ -675,6 +679,7 @@
       const [editFields, setEditFields] = useState({ title: '', content: '', hashtags: '' });
       const [showComposer, setShowComposer] = useState(false);
       const [showComingSoon, setShowComingSoon] = useState(false);
+      const [showKeyGate, setShowKeyGate] = useState(false);
 
       const authFetch = useCallback(async (url, opts) => {
         const res = await fetch(url, opts);
@@ -989,6 +994,19 @@
         }
       }
 
+      // 2.6.1: CTA key gate. status.tenantMeta.flags is the bitwise
+      // readiness summary computed server-side after authentication
+      // (see src/services/tenant-meta.js). True ONLY on a definite
+      // "no key stored" answer: a missing or malformed meta object
+      // fails open so the warning can never block a provisioned
+      // tenant on stale or partial status data. UX affordance only;
+      // the server still refuses key-less generation on its own.
+      function llmKeyMissing() {
+        const meta = status && status.tenantMeta;
+        if (!meta || typeof meta.flags !== 'number') return false;
+        return (meta.flags & TENANT_FLAG_LLM_KEY_PRESENT) === 0;
+      }
+
       async function handlePreview() {
         setLoading(l => ({ ...l, preview: true }));
         // Show blocking overlay
@@ -1280,7 +1298,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.4.63</div>
+                <div className="header-subtitle">v2.6.1</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1304,7 +1322,7 @@
             <div className="header">
               <div>
                 <div className="header-title">Market Intelligence</div>
-                <div className="header-subtitle">v2.4.63</div>
+                <div className="header-subtitle">v2.6.1</div>
               </div>
               <div className="header-controls-wide">
                 <a href="/" className="btn btn-ghost btn-nav">Home</a>
@@ -1356,7 +1374,7 @@
           <div className="header">
             <div>
               <div className="header-title">Market Intelligence</div>
-              <div className="header-subtitle">v2.4.63 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+              <div className="header-subtitle">v2.6.1 · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1585,7 +1603,10 @@
                 <div className="section-title">Quick Actions</div>
                 <div className="vstack-sm">
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={handlePreview} disabled={loading.preview}>
+                    {/* 2.6.1: both generation CTAs check the tenant
+                        meta flag at activation and warn BEFORE any
+                        generation workflow is invoked without a key. */}
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { setShowKeyGate(true); return; } handlePreview(); }} disabled={loading.preview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
                     </button>
                     {/**
@@ -1593,7 +1614,7 @@
                       ✎ Compose
                     </button>
                     **/}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
+                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { setShowKeyGate(true); return; } setShowComposer(true); }}>
                       ✚ Create
                     </button>
                   </div>
@@ -1772,6 +1793,60 @@
               </div>
             </div>
           )}
+
+          {/* 2.6.1: API key gate. Shown when Generate or Create is
+              activated without a stored LLM vendor key. Owners get a
+              one-click path to the User Management page; other roles
+              are pointed to their workspace owner (the admin page
+              would deny them, so no dead-end redirect). */}
+          {showKeyGate && (() => {
+            const isOwner = !!(status && status.user && status.user.role === 'owner');
+            return (
+              <div className="modal-overlay" onClick={() => setShowKeyGate(false)}>
+                <div className="modal-content modal-content-sm" onClick={e => e.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setShowKeyGate(false)}>✕</button>
+                  <h3 className="modal-heading">Add an AI Model API Key</h3>
+                  <p style={{ margin: '0.5rem 0' }}>
+                    Generating content needs a valid Anthropic API key for this
+                    workspace, and one has not been added yet.
+                  </p>
+                  {isOwner ? (
+                    <p style={{ margin: '0.5rem 0' }}>
+                      You can create a key in the{' '}
+                      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console</a>,
+                      then paste it into the AI Model Provider section on the
+                      User Management page. The key is verified with the vendor
+                      before it is saved.
+                    </p>
+                  ) : (
+                    <p style={{ margin: '0.5rem 0' }}>
+                      A workspace owner can create a key in the{' '}
+                      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console</a>{' '}
+                      and add it in the AI Model Provider section on the User
+                      Management page. Please ask your workspace owner to add
+                      the key.
+                    </p>
+                  )}
+                  <div className="modal-actions">
+                    {isOwner ? (
+                      <React.Fragment>
+                        <button className="btn btn-primary" onClick={() => { window.location.href = '/app/admin/'; }}>
+                          Open User Management
+                        </button>
+                        <button className="btn btn-ghost" onClick={() => setShowKeyGate(false)}>
+                          Not Now
+                        </button>
+                      </React.Fragment>
+                    ) : (
+                      <button className="btn btn-primary" onClick={() => setShowKeyGate(false)}>
+                        OK
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Post Detail Modal */}
           {selectedPost && (() => {

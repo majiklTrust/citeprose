@@ -65,11 +65,12 @@
       <div id="message"></div>
 
       <div class="section">
-        <h2>AI Model Provider</h2>
-        <p class="ai-hint">Choose the AI vendor and model that generate this workspace's content, and set the vendor API key. A key is saved only after it validates with the selected vendor.</p>
+        <h2>AI Language Provider</h2>
+        <p class="ai-hint">Select a provider and model, then set an API key.<br/>Your key will be encrypted and stored in our secure system.<br/> Need a key? <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Get an Anthropic API key</a></p>
+        <p id="ai-vendor-note" class="msg msg-warn" hidden></p>
         <div class="ai-form">
           <div>
-            <label for="ai-provider">Vendor</label>
+            <label for="ai-provider">Provider</label>
             <select id="ai-provider"></select>
           </div>
           <div>
@@ -77,7 +78,7 @@
             <select id="ai-model"></select>
           </div>
           <div>
-            <label for="ai-key">Vendor API Key</label>
+            <label for="ai-key">API Key</label>
             <input type="password" id="ai-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
           </div>
           <div class="ai-actions">
@@ -90,18 +91,24 @@
       </div>
 
       <div class="section">
-        <h2>Image Model</h2>
-        <p class="ai-hint">The vendor and model that render images for this workspace. The selection is validated against the image registry before it is saved.</p>
+        <h2>Image Generation Provider</h2>
+        <p class="ai-hint">Select a provider and model, then set an API key.<br/>Your key will be encrypted and stored in our secure system.<br/> Need a key? <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Get an OpenAI API key</a></p>
         <div class="ai-form">
           <div>
-            <label for="img-model-provider">Image provider</label>
+            <label for="img-model-provider">Provider</label>
             <select id="img-model-provider"></select>
           </div>
           <div>
-            <label for="img-model-select">Image model</label>
+            <label for="img-model-select">Model</label>
             <select id="img-model-select"></select>
           </div>
+          <div>
+            <label for="img-model-key">Vendor API Key</label>
+            <input type="password" id="img-model-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
+          </div>
           <div class="ai-actions">
+            <button class="btn btn-primary" id="img-key-verify-btn">Verify Key</button>
+            <span id="img-key-status"></span>
             <button class="btn btn-primary" id="img-model-save-btn">Save</button>
           </div>
           <div id="img-model-current" class="ai-current"></div>

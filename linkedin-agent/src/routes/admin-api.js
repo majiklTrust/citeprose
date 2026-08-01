@@ -30,6 +30,10 @@ import {
 import { createAiConfigRoutes } from "./admin-ai-api.js";
 import { getBudgetStatus, dollarsToCents, MAX_BUDGET_DOLLARS } from "../services/image-budget.js";
 import { setAgentState, getAgentState } from "../services/database.js";
+// 2.6.1: the Image Model section is now also the home for the image
+// vendor's API key (the shared credential store serves both seams).
+import { validateProviderKey } from "../llm/client.js";
+import { storeCredential, llmCredentialKeyFor, hasLlmApiKey } from "../tenant/credential-store.js";
 
 const router = Router();
 
@@ -400,10 +404,21 @@ router.get("/image-model", async (req, res) => {
       id: p.id, label: p.label,
       models: listModels(p.id)
     }));
-    const current = await withTenant(req.tenant.id, async () => ({
-      provider: (await getAgentState("image_provider")) || null,
-      model: (await getAgentState("image_model")) || null
-    }));
+    const current = await withTenant(req.tenant.id, async () => {
+      const provider = (await getAgentState("image_provider")) || null;
+      const model = (await getAgentState("image_model")) || null;
+      // 2.6.1: keyed honesty for the section (existence probe only,
+      // never the key). Probes the saved provider, or the registry
+      // default the page will preselect. Failure reads as no key;
+      // this is display state, not a gate.
+      let hasKey = false;
+      try {
+        hasKey = await hasLlmApiKey(provider || "openai");
+      } catch {
+        hasKey = false;
+      }
+      return { provider, model, hasKey };
+    });
     res.json({ providers, current, registryDefault: { provider: "openai", model: defaultModelId("openai") } });
   } catch (err) {
     platformLog("error", "image_model_get_failed", { error: err.message });
@@ -414,6 +429,11 @@ router.get("/image-model", async (req, res) => {
 router.put("/image-model", async (req, res) => {
   const provider = (req.body || {}).provider;
   const model = (req.body || {}).model;
+  // 2.6.1: optional vendor API key for the image seam. Same
+  // validate-before-store discipline as the text form: a key that
+  // fails vendor validation is never persisted. Omitting the key
+  // keeps the existing selection-only behavior unchanged.
+  const apiKey = typeof (req.body || {}).api_key === "string" ? req.body.api_key.trim() : "";
   if (typeof provider !== "string" || provider === "" || typeof model !== "string" || model === "") {
     return res.status(400).json({ error: "Provider and model are required." });
   }
@@ -422,13 +442,37 @@ router.put("/image-model", async (req, res) => {
   } catch {
     return res.status(400).json({ error: "The selected provider or model is not recognized by the image registry." });
   }
+  if (apiKey) {
+    let verdict;
+    try {
+      verdict = await validateProviderKey(provider, apiKey);
+    } catch (err) {
+      platformLog("warn", "image_model_key_validation_unavailable", {
+        provider, code: err && err.code ? err.code : null
+      });
+      return res.status(502).json({ error: "Unable to verify API key with the selected provider" });
+    }
+    if (!verdict || verdict.valid !== true) {
+      platformLog("warn", "image_model_key_rejected", { provider });
+      return res.status(400).json({ error: "API key is not valid for the selected provider" });
+    }
+  }
   try {
+    let hasKey = false;
     await withTenant(req.tenant.id, async () => {
+      if (apiKey) {
+        await storeCredential(llmCredentialKeyFor(provider), apiKey);
+      }
       await setAgentState("image_provider", provider);
       await setAgentState("image_model", model);
+      try {
+        hasKey = await hasLlmApiKey(provider);
+      } catch {
+        hasKey = !!apiKey;
+      }
     });
-    platformLog("info", "image_model_set", { provider, model });
-    res.json({ provider, model });
+    platformLog("info", "image_model_set", { provider, model, keyStored: !!apiKey });
+    res.json({ provider, model, hasKey, keyStored: !!apiKey });
   } catch (err) {
     platformLog("error", "image_model_set_failed", { error: err.message });
     res.status(500).json({ error: "Failed to save the image model selection" });

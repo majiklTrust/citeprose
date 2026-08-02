@@ -517,6 +517,44 @@ const QUERY_REGISTRY = {
     readOnly: true
   },
 
+  "clear-tenant-api-keys": {
+    label: "Clear LLM Credentials",
+    description: "Removes API keys and LLM credentials",
+    capability: "TENANT LLM SETTINGS",
+    sql: `DELETE FROM credentials
+          WHERE tenant_id = $1::uuid
+          AND key in (
+            'anthropic_api_key',
+            'openai_api_key'
+          )`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "clear-llm-providers": {
+    label: "Clear LLM Providers",
+    description: "Removes language and image LLM provider and model settings",
+    capability: "TENANT LLM SETTINGS",
+    sql: `DELETE FROM agent_state
+          WHERE tenant_id = $1::uuid
+          AND key in (
+            'image_provider',
+            'image_model',
+            'llm_provider',
+            'llm_model',
+            'anthropic_model'
+          )`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+
   // ── Prompt Security (Phase 1 vault metadata) ─────────────────
 
   "prompt-vault-inventory": {

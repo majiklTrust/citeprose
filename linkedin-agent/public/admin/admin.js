@@ -348,7 +348,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: provider, api_key: key })
+      body: JSON.stringify({ provider: provider, apiKey: key })
     })
       .then(function (res) {
         if (res.status === 401) {
@@ -391,7 +391,7 @@
       return;
     }
     var payload = { provider: provider, model: model };
-    if (key) payload.api_key = key;
+    if (key) payload.apiKey = key;
 
     $('ai-save-btn').disabled = true;
     $('ai-save-btn').textContent = 'Saving...';
@@ -673,7 +673,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: provider, api_key: key })
+      body: JSON.stringify({ provider: provider, apiKey: key })
     })
       .then(function (res) {
         if (res.status === 401) {
@@ -708,7 +708,7 @@
       return;
     }
     var payload = { provider: provider, model: model };
-    if (key) payload.api_key = key;
+    if (key) payload.apiKey = key;
     $('img-model-save-btn').disabled = true;
     $('img-model-save-btn').textContent = 'Saving...';
     fetch(API + '/api/admin/image-model', {
@@ -800,7 +800,10 @@
       '  <div id="reg-key-section" style="display:none; margin-top:0.75rem; padding:0.75rem; background:#12141c; border:1px solid #2a2d3a; border-radius:6px;">',
       '    <div style="margin-bottom:0.5rem;">',
       '      <label style="display:block; font-size:0.75rem; color:#888; margin-bottom:0.2rem;">API Key</label>',
-      '      <input type="password" id="reg-admin-key" placeholder="sk-ant-..." style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;">',
+      '      <form class="key-field" autocomplete="off" onsubmit="return false">',
+      '        <input type="text" autocomplete="username" value="" tabindex="-1" aria-hidden="true" style="display:none">',
+      '        <input type="password" id="reg-admin-key" placeholder="sk-ant-..." autocomplete="new-password" style="width:100%; padding:0.4rem; background:#0f1117; border:1px solid #2a2d3a; color:#e0e0e0; border-radius:4px; font-size:0.85rem;">',
+      '      </form>',
       '    </div>',
       '    <button class="btn btn-secondary" id="reg-verify-key-btn" style="margin-bottom:0.5rem;">Verify Key</button>',
       '    <span id="reg-key-status" style="margin-left:0.5rem; font-size:0.8rem;"></span>',
@@ -832,7 +835,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: '_admin_validation_', api_key: key })
+      body: JSON.stringify({ token: '_admin_validation_', apiKey: key })
     })
       .then(function (res) {
         if (res.status === 401) {
@@ -889,7 +892,7 @@
         showMessage('Please select a model', 'error');
         return;
       }
-      payload.api_key = key;
+      payload.apiKey = key;
       payload.model_id = model;
     }
 

@@ -194,7 +194,7 @@
     $('vendor-save').addEventListener('click', function () {
       var payload = { provider: $('vendor-provider').value, model: $('vendor-model').value };
       var key = $('vendor-key').value.trim();
-      if (key) payload.api_key = key;
+      if (key) payload.apiKey = key;
       sendJson('PUT', '/api/admin/ai-config', payload).then(function (r) {
         showMessage(r.ok ? 'Vendor validated and saved.' : (r.body.error || 'Save failed.'), r.ok ? 'success' : 'error');
         if (r.ok) loadVendor();

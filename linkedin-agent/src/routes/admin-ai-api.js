@@ -11,7 +11,7 @@
 //                   the options track what the abstraction actually
 //                   supports) plus the tenant's current selection
 //                   and whether a key is stored (never the key).
-//   PUT /ai-config  save provider + model (+ api_key). The key is
+//   PUT /ai-config  save provider + model (+ apiKey). The key is
 //                   validated against the SELECTED vendor through
 //                   the provider abstraction BEFORE it is stored;
 //                   a key that fails validation is never persisted.
@@ -159,7 +159,7 @@ export function createAiConfigRoutes(overrides = {}) {
       const body = req.body && typeof req.body === "object" ? req.body : {};
       const provider = body.provider;
       const model = body.model;
-      const apiKey = typeof body.api_key === "string" ? body.api_key.trim() : "";
+      const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
 
       // Zero Trust boundary: the selection must resolve in the
       // registry or the request dies here, before any side effect.
@@ -227,18 +227,8 @@ export function createAiConfigRoutes(overrides = {}) {
       // transaction committed. Retiring first and rolling back the
       // key store would strand the tenant with neither trial nor key.
       if (apiKey && (!outcome || outcome.ok !== false)) {
-        try {
-          const { deactivateForTenantProvider } = await import("../spend/trial-store.js");
-          const out = await deactivateForTenantProvider(req.tenant.id, providerEntry.id, req.user && req.user.sub);
-          if (out.deactivated.length > 0) {
-            d.log("info", "trial_auto_deactivated", {
-              provider: providerEntry.id, activationIds: out.deactivated,
-              by: req.user && req.user.sub
-            });
-          }
-        } catch (trialErr) {
-          d.log("error", "trial_auto_deactivate_failed", { provider: providerEntry.id, error: trialErr && trialErr.message });
-        }
+        const { retireTrialForStoredKey } = await import("../spend/trial-store.js");
+        await retireTrialForStoredKey(req.tenant.id, providerEntry.id, req.user && req.user.sub, { log: d.log });
       }
 
 

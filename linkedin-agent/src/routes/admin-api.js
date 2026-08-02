@@ -559,7 +559,7 @@ router.put("/image-model", async (req, res) => {
   // validate-before-store discipline as the text form: a key that
   // fails vendor validation is never persisted. Omitting the key
   // keeps the existing selection-only behavior unchanged.
-  const apiKey = typeof (req.body || {}).api_key === "string" ? req.body.api_key.trim() : "";
+  const apiKey = typeof (req.body || {}).apiKey === "string" ? req.body.apiKey.trim() : "";
   if (typeof provider !== "string" || provider === "" || typeof model !== "string" || model === "") {
     return res.status(400).json({ error: "Provider and model are required." });
   }
@@ -597,6 +597,13 @@ router.put("/image-model", async (req, res) => {
         hasKey = !!apiKey;
       }
     });
+    if (apiKey) {
+      // Ruling enforcement (2.5.66, closing the second-seam gap): a
+      // tenant key stored through the IMAGE card retires the trial
+      // for that provider exactly as the language card does.
+      const { retireTrialForStoredKey } = await import("../spend/trial-store.js");
+      await retireTrialForStoredKey(req.tenant.id, provider, req.user && req.user.sub);
+    }
     platformLog("info", "image_model_set", { provider, model, keyStored: !!apiKey });
     res.json({ provider, model, hasKey, keyStored: !!apiKey });
   } catch (err) {

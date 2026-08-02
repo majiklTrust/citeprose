@@ -120,3 +120,24 @@ export async function deactivateForTenantProvider(tenantId, providerId, actorSub
   );
   return { deactivated: r.rows.map((x) => Number(x.id)) };
 }
+
+// THE single enforcement point for the ruling "a tenant storing
+// their own key retires the trial for that provider" (2.5.56, made
+// the only seam 2.5.66). Every route that vaults a tenant vendor
+// key calls THIS after its tenant transaction commits; no route
+// composes deactivation and audit inline. Failure is swallowed
+// with a loud log: a tenant's key store never fails over trial
+// bookkeeping.
+export async function retireTrialForStoredKey(tenantId, providerId, actorSub, deps = {}) {
+  const log = deps.log || (await import("../services/platform-log.js")).platformLog;
+  try {
+    const out = await deactivateForTenantProvider(tenantId, providerId, actorSub, deps);
+    if (out.deactivated.length > 0) {
+      log("info", "trial_auto_deactivated", { provider: providerId, activationIds: out.deactivated, by: actorSub });
+    }
+    return out;
+  } catch (err) {
+    log("error", "trial_auto_deactivate_failed", { provider: providerId, error: err && err.message });
+    return { deactivated: [] };
+  }
+}

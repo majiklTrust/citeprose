@@ -15,7 +15,10 @@
 // precedent in routes/api.js: a transient read failure must never
 // paint a warning over a provisioned tenant's dashboard.
 //
-// Flag bits (mirror the constant in public_templates/index.html):
+// Flag bits (MIRROR SEAM: the same values exist as constants in
+// public_templates/index.html; any change to a bit here moves BOTH
+// files in the SAME delivery, the one-script-moves-all-lists rule
+// that governs the provider enum mirrors):
 //   LLM_KEY_PRESENT  1 << 0  the tenant's ACTIVE text vendor has a
 //                            stored API key (existence probe only,
 //                            nothing is decrypted)

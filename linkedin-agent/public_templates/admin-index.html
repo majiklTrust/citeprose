@@ -80,7 +80,8 @@
           </div>
           <div>
             <label for="ai-key">API Key</label>
-            <form class="key-field" autocomplete="off">
+            <form class="key-field" autocomplete="off" onsubmit="return false">
+              <input type="text" autocomplete="username" value="" tabindex="-1" aria-hidden="true" style="display:none">
               <input type="password" id="ai-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
             </form>
           </div>
@@ -107,7 +108,8 @@
           </div>
           <div>
             <label for="img-model-key">Vendor API Key</label>
-            <form class="key-field" autocomplete="off">
+            <form class="key-field" autocomplete="off" onsubmit="return false">
+              <input type="text" autocomplete="username" value="" tabindex="-1" aria-hidden="true" style="display:none">
               <input type="password" id="img-model-key" placeholder="Leave blank to keep the stored key" autocomplete="off">
             </form>
           </div>

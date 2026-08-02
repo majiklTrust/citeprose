@@ -88,7 +88,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       return safeError(res, 403, "Permission denied");
     }
 
-    const { email, api_key, model_id } = req.body || {};
+    const { email, apiKey, model_id } = req.body || {};
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return safeError(res, 400, "Valid email address required");
     }
@@ -99,13 +99,13 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
     // on the platform default vendor, anthropic. Zero token cost.
     let validatedKey = null;
     let validatedModel = null;
-    if (api_key && typeof api_key === "string" && api_key.trim().length > 0) {
+    if (apiKey && typeof apiKey === "string" && apiKey.trim().length > 0) {
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required when providing an API key");
       }
       let keyCheck;
       try {
-        keyCheck = await validateProviderKey("anthropic", api_key.trim());
+        keyCheck = await validateProviderKey("anthropic", apiKey.trim());
       } catch (err) {
         platformLog("warn", "provider_models_error", { provider: "anthropic", code: err?.code || null });
         return safeError(res, 502, "Unable to verify API key with the selected provider");
@@ -113,7 +113,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       if (!keyCheck.valid) {
         return safeError(res, 401, "Invalid API key");
       }
-      validatedKey = api_key.trim();
+      validatedKey = apiKey.trim();
       validatedModel = model_id.trim();
     }
 
@@ -248,7 +248,7 @@ router.post("/init", async (req, res) => {
 
 router.post("/validate-key", optionalAuth, async (req, res) => {
   try {
-    const { token, api_key, provider } = req.body || {};
+    const { token, apiKey, provider } = req.body || {};
     const providerId = typeof provider === "string" && provider.trim().length > 0
       ? provider.trim()
       : "anthropic";
@@ -299,7 +299,7 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
       validationAttempts.set(token, attempts + 1);
     }
 
-    if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
+    if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length === 0) {
       return safeError(res, 400, "API key required");
     }
 
@@ -308,7 +308,7 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
     // allowlist enforced before the call.
     let outcome;
     try {
-      outcome = await validateProviderKey(providerId, api_key.trim());
+      outcome = await validateProviderKey(providerId, apiKey.trim());
     } catch (err) {
       if (err && err.code === "UNKNOWN_PROVIDER") {
         return safeError(res, 400, "Unknown provider");
@@ -337,7 +337,7 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
 
 router.post("/complete", async (req, res) => {
   try {
-    const { token, org_name, api_key, model_id, provider } = req.body || {};
+    const { token, org_name, apiKey, model_id, provider } = req.body || {};
     // Vendor choice (Option 1 ruling): defaults to anthropic so every
     // existing invite and admin-provided-key flow behaves unchanged.
     const providerId = typeof provider === "string" && provider.trim().length > 0
@@ -379,7 +379,7 @@ router.post("/complete", async (req, res) => {
       finalKey = adminKey.apiKey;
       finalModel = adminKey.modelId;
     } else {
-      if (!api_key || typeof api_key !== "string" || api_key.trim().length === 0) {
+      if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length === 0) {
         return safeError(res, 400, "API key required");
       }
       // Same guard the card path runs: the key must verify against
@@ -389,7 +389,7 @@ router.post("/complete", async (req, res) => {
         // here and are exempt; every registry vendor still verifies.
         const keyCheck = providerId === "custom"
           ? { valid: true }
-          : await validateProviderKey(providerId, api_key.trim());
+          : await validateProviderKey(providerId, apiKey.trim());
         if (!keyCheck.valid) return safeError(res, 401, "Invalid API key for the selected provider");
       } catch (err) {
         if (err && err.code === "UNKNOWN_PROVIDER") return safeError(res, 400, "Unknown provider");
@@ -399,7 +399,7 @@ router.post("/complete", async (req, res) => {
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required");
       }
-      finalKey = api_key.trim();
+      finalKey = apiKey.trim();
       finalModel = model_id.trim();
     }
 

@@ -8,3 +8,5 @@ data/pgsql/findings_export.jsonl
 linkedin-agent/backup
 linkedin-agent/project.version
 data/pgsql/.psql_history
+linkedin-agent/favicon.png
+linkedin-agent/favicon.ico

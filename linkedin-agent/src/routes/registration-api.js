@@ -32,6 +32,7 @@ import {
   clearRegistrationKey
 } from "../tenant/platform-db.js";
 import { validateProviderKey } from "../llm/client.js";
+import { isTextProviderAvailable, textGenerationNotice, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
@@ -139,17 +140,14 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       `Welcome to ${appName} - your workspace is ready to for you.`,
       ``,
       `The ${appName} platform uses AI-powered research to help you create credible, professional content for social media and other brand marketing channels.`,
-      ``,
-      `What to expect when you click the link:`,
-      `  • You will be guided through a short setup process to name and create your workspace.`,
-      `  • Sign-in or Log In, then register (sign-up) with our security partner, Auth0, using an email address of your choice.`,
-      `  • Choose the service level and be on your way to the future of advertising.`,
-      `  • At any time, return to https://www.***REMOVED***/app/`,
+      `To get started, click the link below.`,
       ``,
       `What you'll need:`,
       whatYouNeed,
       ``,
-      `To get started, click the link below.`,
+      `What to expect when you click the link:`,
+      `  • You will be guided through a short setup process to name and configure your workspace.`,
+      ``,
       `This link can only be used once and expires at ${
   expires.toLocaleString("en-US", {
     timeZone: "America/New_York",
@@ -345,6 +343,18 @@ router.post("/complete", async (req, res) => {
     const providerId = typeof provider === "string" && provider.trim().length > 0
       ? provider.trim()
       : "anthropic";
+
+    // 2.6.1: registration selects the workspace TEXT vendor, so the
+    // same availability gate as /api/admin/ai-config applies here.
+    // Unknown ids fall through: the key-verify step below keeps its
+    // existing "Unknown provider" contract. 2.6.5: the refusal
+    // carries the vendor's OWN notice (per-vendor data), with the
+    // shared notice as the fallback.
+    try {
+      if (!isTextProviderAvailable(providerId)) {
+        return safeError(res, 409, textGenerationNotice(providerId) || TEXT_GENERATION_NOTICE);
+      }
+    } catch { /* unknown provider: handled by the verify step below */ }
 
     // Validate inputs
     if (!token || typeof token !== "string") {

@@ -12,8 +12,12 @@
 // deployment variable can never silently redirect traffic.
 // ═══════════════════════════════════════════════════════════════
 
-import { PROVIDERS, MODELS, LLM_LIMITS } from "./model-profiles.js";
+import { PROVIDERS, MODELS, LLM_LIMITS, TEXT_GENERATION_NOTICE } from "./model-profiles.js";
 import { llmError, LLM_ERROR_CODES } from "./errors.js";
+
+// Re-exported so routes keep the "registry is the only reader of
+// model-profiles" boundary while sharing one notice string (2.6.1).
+export { TEXT_GENERATION_NOTICE };
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
 
@@ -76,8 +80,41 @@ export function listProviders(env = process.env) {
     } catch {
       configured = false;
     }
-    return { id: p.id, label: p.label, adapterType: p.adapterType, configured };
+    return {
+      id: p.id,
+      label: p.label,
+      adapterType: p.adapterType,
+      configured,
+      textGeneration: textGenerationAvailability(p.id),
+      textGenerationNotice: textGenerationNotice(p.id)
+    };
   });
+}
+
+// ── Text-generation availability (2.6.1) ─────────────────────
+// Whether a provider may be SELECTED as the workspace text vendor.
+// Data-driven from the provider entry; a missing field reads as
+// "available" so existing entries keep their behavior. Unknown
+// provider ids throw (getProvider fail-closed), so availability can
+// never be minted for an id the registry does not know.
+export function textGenerationAvailability(providerId) {
+  const entry = getProvider(providerId);
+  return entry.textGeneration === "coming_soon" ? "coming_soon" : "available";
+}
+
+export function isTextProviderAvailable(providerId) {
+  return textGenerationAvailability(providerId) === "available";
+}
+
+// Per-vendor parked-selection copy (2.6.5). Each parked provider
+// tells its own true story (the OpenAI notice routes the key to the
+// Image Model section; the Grok notice must not). Falls back to the
+// shared notice when an entry carries no copy of its own. Unknown
+// ids throw via getProvider, fail-closed like every lookup here.
+export function textGenerationNotice(providerId) {
+  const entry = getProvider(providerId);
+  return (typeof entry.textGenerationNotice === "string" && entry.textGenerationNotice)
+    || TEXT_GENERATION_NOTICE;
 }
 
 // The egress allowlist is derived from the registry: exactly the

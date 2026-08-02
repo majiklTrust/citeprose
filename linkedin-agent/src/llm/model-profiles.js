@@ -20,7 +20,27 @@
 //   reasoningEffort     null, or a default when the model accepts it
 //   silentlyIgnored     params the vendor accepts but quietly drops
 //   pricing             optional USD per million tokens, for estimates
+//
+// Provider entry field (2.6.1):
+//   textGeneration      "available" | "coming_soon". Governs whether
+//                       the provider may be SELECTED as a workspace
+//                       text vendor (llm_provider). It does not gate
+//                       key validation or the image seam: an OpenAI
+//                       key remains storable for image generation
+//                       while OpenAI text selection is coming soon.
+//   textGenerationNotice (2.6.5) the customer-facing sentence(s)
+//                       shown when this parked vendor is selected.
+//                       Per vendor because the stories differ: the
+//                       OpenAI notice routes the key to the Image
+//                       Model section; the Grok notice must not.
+//                       Absent -> TEXT_GENERATION_NOTICE fallback.
 // ═══════════════════════════════════════════════════════════════
+
+// 2.6.1: the single canonical wording for the OpenAI text
+// availability notice. Routes and pages consume this through the
+// registry so the copy can never drift between surfaces.
+export const TEXT_GENERATION_NOTICE =
+  "Support for this LLM provider is coming soon!";
 
 export const LLM_LIMITS = Object.freeze({
   // Server-side output-token billing guardrail (canonical requests
@@ -36,6 +56,7 @@ export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "anthropic",
     label: "Anthropic",
+    textGeneration: "available",
     adapterType: "anthropic",
     baseUrlEnv: "LLM_ANTHROPIC_BASE_URL",
     defaultBaseUrl: "https://api.anthropic.com",
@@ -61,6 +82,14 @@ export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "openai",
     label: "OpenAI",
+    // 2.6.1 ruling: OpenAI language generation is not selectable
+    // yet. The adapter and profiles below stay wired so the flip
+    // back to "available" is a one-word data edit.
+    textGeneration: "coming_soon",
+    // The shared constant IS the OpenAI story (2.6.1 wording kept
+    // verbatim); referencing it here instead of repeating the text
+    // makes drift impossible (2.6.5).
+    textGenerationNotice: TEXT_GENERATION_NOTICE,
     adapterType: "openai-compatible",
     baseUrlEnv: "LLM_OPENAI_BASE_URL",
     defaultBaseUrl: "https://api.openai.com",
@@ -80,6 +109,12 @@ export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "grok",
     label: "Grok (xAI)",
+    // 2.6.5 ruling: Grok language generation is not selectable yet,
+    // same parking pattern as OpenAI. Flip back is a one-word edit.
+    textGeneration: "coming_soon",
+    textGenerationNotice:
+      "Language generation runs on Anthropic Claude models today. " +
+      "Support for Grok (xAI) language generation models is coming soon.",
     adapterType: "openai-compatible",
     baseUrlEnv: "LLM_GROK_BASE_URL",
     defaultBaseUrl: "https://api.x.ai",
@@ -99,6 +134,7 @@ export const PROVIDERS = Object.freeze([
   Object.freeze({
     id: "custom",
     label: "Custom (OpenAI-compatible)",
+    textGeneration: "available",
     adapterType: "openai-compatible",
     baseUrlEnv: "LLM_CUSTOM_BASE_URL",
     // No default: the operator MUST configure the endpoint before

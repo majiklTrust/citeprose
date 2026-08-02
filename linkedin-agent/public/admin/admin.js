@@ -222,11 +222,45 @@
   var _aiCurrent = null;
   var _aiKeyValidated = false;
 
+  // 2.6.1: client-side fallback for the text-availability notice.
+  // UX only; PUT /api/admin/ai-config re-enforces with 409
+  // TEXT_PROVIDER_COMING_SOON. 2.6.5: each parked vendor carries its
+  // OWN notice from the registry (textGenerationNotice), so this
+  // vendor-neutral copy renders only when server data is absent.
+  var TEXT_GENERATION_NOTICE =
+    'Support for other language generation models is coming soon.';
+
   function aiProviderById(id) {
     for (var i = 0; i < _aiProviders.length; i++) {
       if (_aiProviders[i].id === id) return _aiProviders[i];
     }
     return null;
+  }
+
+  function aiVendorComingSoon(id) {
+    var p = aiProviderById(id);
+    return !!p && p.textGeneration === 'coming_soon';
+  }
+
+  // The message for a parked vendor: server-supplied per-vendor
+  // copy first, neutral fallback second (2.6.5).
+  function aiVendorNoticeFor(id) {
+    var p = aiProviderById(id);
+    return (p && p.textGenerationNotice) || TEXT_GENERATION_NOTICE;
+  }
+
+  // Shows the friendly note and parks Verify/Save while a
+  // coming-soon vendor is selected; restores them otherwise.
+  function updateAiVendorNote() {
+    var note = $('ai-vendor-note');
+    var selected = $('ai-provider').value;
+    var parked = aiVendorComingSoon(selected);
+    if (note) {
+      note.hidden = !parked;
+      note.textContent = parked ? aiVendorNoticeFor(selected) : '';
+    }
+    $('ai-verify-btn').disabled = parked;
+    $('ai-save-btn').disabled = parked;
   }
 
   function renderAiModels(providerId, selectedModel) {
@@ -250,11 +284,20 @@
     });
   }
 
+  // 2.6.7 ruling: with a stored key the line reads
+  // "Current: provider / model". Without a valid key nothing is
+  // selected as far as the workspace is concerned, so no provider
+  // or model is displayed at all; the line reads exactly
+  // "(no key stored yet)".
   function renderAiCurrent() {
-    if (!_aiCurrent) { $('ai-current').textContent = ''; return; }
-    var keyNote = _aiCurrent.hasKey ? 'key stored' : 'no key stored yet';
-    $('ai-current').textContent = 'Current: ' + (_aiCurrent.provider || '(none)') +
-      ' / ' + (_aiCurrent.model || '(no model)') + ' (' + keyNote + ')';
+    var el = $('ai-current');
+    if (!_aiCurrent) { el.textContent = ''; return; }
+    if (!_aiCurrent.hasKey) {
+      el.textContent = '(no key stored yet)';
+      return;
+    }
+    el.textContent = 'Current: ' + (_aiCurrent.provider || '(none)') +
+      ' / ' + (_aiCurrent.model || '(no model)');
   }
 
   function loadAiConfig() {
@@ -271,13 +314,15 @@
         _aiProviders.forEach(function (p) {
           var opt = document.createElement('option');
           opt.value = p.id;
-          opt.textContent = p.label || p.id;
+          opt.textContent = (p.label || p.id) +
+            (p.textGeneration === 'coming_soon' ? ' (coming soon)' : '');
           if (_aiCurrent && _aiCurrent.provider === p.id) opt.selected = true;
           select.appendChild(opt);
         });
         var activeProvider = (select.value || (_aiProviders[0] && _aiProviders[0].id)) || '';
         renderAiModels(activeProvider, _aiCurrent && _aiCurrent.model);
         renderAiCurrent();
+        updateAiVendorNote();
       })
       .catch(function () {
         $('ai-current').innerHTML = '<span class="msg msg-error">Failed to load AI configuration</span>';
@@ -287,6 +332,10 @@
   function verifyAiKey() {
     var key = $('ai-key').value.trim();
     var provider = $('ai-provider').value;
+    if (aiVendorComingSoon(provider)) {
+      showMessage(aiVendorNoticeFor(provider), 'warn');
+      return;
+    }
     if (!key) {
       showMessage('Enter the vendor API key to verify', 'error');
       return;
@@ -329,6 +378,10 @@
     var provider = $('ai-provider').value;
     var model = $('ai-model').value;
     var key = $('ai-key').value.trim();
+    if (aiVendorComingSoon(provider)) {
+      showMessage(aiVendorNoticeFor(provider), 'warn');
+      return;
+    }
     if (!provider || !model) {
       showMessage('Choose a vendor and model', 'error');
       return;
@@ -561,6 +614,21 @@
     });
   }
 
+  // 2.6.1: the Image Model section now also stores the image
+  // vendor's API key (shared credential store, one key per vendor).
+  // Client-side verification mirrors the text form and stays UX
+  // only: the server validates against the vendor before storing.
+  var _imgKeyValidated = false;
+
+  // 2.6.9: mirror the AI Language Provider current-line (2.6.7 rule).
+  // With a valid key stored, show "Current: provider / model". With
+  // no key, nothing is usable, so a provider/model is not shown at
+  // all; the line reads exactly "(no key stored yet)".
+  function imageModelCurrentText(provider, model, hasKey) {
+    if (!hasKey) return '(no key stored yet)';
+    return 'Current: ' + (provider || '(none)') + ' / ' + (model || '(no model)');
+  }
+
   function loadImageModel() {
     fetch(API + '/api/admin/image-model', { credentials: 'include' })
       .then(function (res) {
@@ -582,25 +650,72 @@
           psel.appendChild(o);
         });
         renderImageModelOptions(psel.value, current.model || fallback.model);
-        $('img-model-current').textContent = current.provider
-          ? ('Current: ' + current.provider + ' / ' + (current.model || '(default)'))
-          : 'Current: not configured yet (image generation refuses until saved)';
+        $('img-model-current').textContent =
+          imageModelCurrentText(current.provider, current.model, current.hasKey === true);
       })
       .catch(function () {
         $('img-model-current').innerHTML = '<span class="msg msg-error">Failed to load the image model selection</span>';
       });
   }
 
+  function verifyImgKey() {
+    var key = $('img-model-key').value.trim();
+    var provider = $('img-model-provider').value;
+    if (!key) {
+      showMessage('Enter the vendor API key to verify', 'error');
+      return;
+    }
+    $('img-key-verify-btn').disabled = true;
+    $('img-key-verify-btn').textContent = 'Verifying...';
+    $('img-key-status').innerHTML = '<span class="ai-status-wait">checking...</span>';
+
+    fetch(API + '/api/register/validate-key', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider, api_key: key })
+    })
+      .then(function (res) {
+        if (res.status === 401) {
+          $('img-key-status').innerHTML = '<span class="ai-status-bad">invalid key for this vendor</span>';
+          _imgKeyValidated = false;
+          return null;
+        }
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Verification failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data) return;
+        $('img-key-status').innerHTML = '<span class="ai-status-ok">verified</span>';
+        _imgKeyValidated = true;
+      })
+      .catch(function (err) {
+        $('img-key-status').innerHTML = '<span class="ai-status-bad">' + escapeHtml(err.message) + '</span>';
+        _imgKeyValidated = false;
+      })
+      .finally(function () {
+        $('img-key-verify-btn').disabled = false;
+        $('img-key-verify-btn').textContent = 'Verify Key';
+      });
+  }
+
   function saveImageModel() {
     var provider = $('img-model-provider').value;
     var model = $('img-model-select').value;
+    var key = $('img-model-key').value.trim();
+    if (key && !_imgKeyValidated) {
+      showMessage('Please verify the API key first', 'error');
+      return;
+    }
+    var payload = { provider: provider, model: model };
+    if (key) payload.api_key = key;
     $('img-model-save-btn').disabled = true;
     $('img-model-save-btn').textContent = 'Saving...';
     fetch(API + '/api/admin/image-model', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: provider, model: model })
+      body: JSON.stringify(payload)
     })
       .then(function (res) {
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to save'); });
@@ -608,7 +723,11 @@
       })
       .then(function (data) {
         showMessage('Image model saved', 'success');
-        $('img-model-current').textContent = 'Current: ' + data.provider + ' / ' + data.model;
+        $('img-model-key').value = '';
+        $('img-key-status').innerHTML = '';
+        _imgKeyValidated = false;
+        $('img-model-current').textContent =
+          imageModelCurrentText(data.provider, data.model, data.hasKey === true);
       })
       .catch(function (err) { showMessage(err.message, 'error'); })
       .finally(function () {
@@ -850,6 +969,7 @@
       renderAiModels(this.value, _aiCurrent && _aiCurrent.provider === this.value ? _aiCurrent.model : null);
       _aiKeyValidated = false;
       $('ai-key-status').innerHTML = '';
+      updateAiVendorNote();
     });
     $('ai-key').addEventListener('input', function () {
       _aiKeyValidated = false;
@@ -861,9 +981,28 @@
     $('img-palette-save-btn').addEventListener('click', saveImagePalette);
     $('img-storage-save-btn').addEventListener('click', saveImageStorage);
     $('img-model-save-btn').addEventListener('click', saveImageModel);
+    $('img-key-verify-btn').addEventListener('click', verifyImgKey);
+    $('img-model-key').addEventListener('input', function () {
+      _imgKeyValidated = false;
+      $('img-key-status').innerHTML = '';
+    });
+    $('img-model-provider').addEventListener('change', function () {
+      _imgKeyValidated = false;
+      $('img-key-status').innerHTML = '';
+    });
     $('img-model-provider').addEventListener('change', function () { renderImageModelOptions(this.value, null); });
     $('img-dest-save-btn').addEventListener('click', saveImageDestination);
     $('img-dest-clear-btn').addEventListener('click', clearImageDestination);
+
+    // 2.6.8: the password key fields live in inert forms (see
+    // admin-index.html) purely to satisfy the browser's
+    // password-field-in-a-form check. Those forms have no action, so
+    // block implicit submit (pressing Enter in the field) or the page
+    // would reload and discard the typed key.
+    var keyForms = document.querySelectorAll('form.key-field');
+    for (var kf = 0; kf < keyForms.length; kf++) {
+      keyForms[kf].addEventListener('submit', function (e) { e.preventDefault(); });
+    }
 
     // Platform admin: show registration section above Invite User
     if (_isPlatformAdmin) {

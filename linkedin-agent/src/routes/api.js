@@ -126,6 +126,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let cadence = null;
     let tokenStatus = { valid: false };
     let anthropicModel = null;
+    let tenantMeta = null;
     let tenantRole = null;
     let organizationManager = "enabled";
     let subscription = { state: "none", readOnly: false, capabilities: [] };
@@ -206,6 +207,15 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             cadence = await canPostNow();
             tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
             anthropicModel = await getAnthropicModel();
+            // 2.6.1: workspace readiness flags, computed by a quick
+            // credential-presence lookup on the first authenticated
+            // call after login (and refreshed by the dashboard poll,
+            // so adding a key clears the warning without re-login).
+            // getTenantMeta never throws; probe failures fail open.
+            try {
+              const { getTenantMeta } = await import("../services/tenant-meta.js");
+              tenantMeta = await getTenantMeta();
+            } catch { /* status stays serveable; tenantMeta stays null */ }
             // Publish authorship, resolved per tenant (override layer
             // does not apply to the dashboard summary), plus whether
             // organization mode is even configurable.
@@ -250,6 +260,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       permissions,
       linkedinOrgConfigured,
       anthropicModel,
+      tenantMeta,
       publishMode: getPublishMode()
     });
   } catch (err) {

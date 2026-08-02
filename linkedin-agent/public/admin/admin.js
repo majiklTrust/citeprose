@@ -559,10 +559,13 @@
   // only: the server validates against the vendor before storing.
   var _imgKeyValidated = false;
 
+  // 2.6.9: mirror the AI Language Provider current-line (2.6.7 rule).
+  // With a valid key stored, show "Current: provider / model". With
+  // no key, nothing is usable, so a provider/model is not shown at
+  // all; the line reads exactly "(no key stored yet)".
   function imageModelCurrentText(provider, model, hasKey) {
-    if (!provider) return 'Current: not configured yet (image generation refuses until saved)';
-    var keyNote = hasKey ? 'key stored' : 'no key stored yet';
-    return 'Current: ' + provider + ' / ' + (model || '(default)') + ' (' + keyNote + ')';
+    if (!hasKey) return '(no key stored yet)';
+    return 'Current: ' + (provider || '(none)') + ' / ' + (model || '(no model)');
   }
 
   function loadImageModel() {

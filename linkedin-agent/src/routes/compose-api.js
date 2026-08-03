@@ -165,8 +165,12 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
       });
     }
 
+    // 2.5.82: same contract as generate-preview (2.5.69): a fresh
+    // preview CARRIES the attachment property so the panel's
+    // staleness check cannot false-fire. A just-created draft's
+    // attachment is null by construction.
     res.json({
-      post: result.generated, quality: result.quality, postId: result.postId,
+      post: { ...result.generated, generated_image_id: null }, quality: result.quality, postId: result.postId,
       genre, fidelity: result.generated.fidelity || null,
       publishTarget: result.publishTarget ?? null
     });

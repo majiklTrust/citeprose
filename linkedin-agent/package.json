@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "2.5.72",
+  "version": "2.5.77",
   "config": {
     "cssversion": "94",
     "appname": "Market Intelligence"
@@ -59,6 +59,7 @@
     "extract-v": "unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d .. && v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip | tail -1));v=${v##*-};v=${v%.zip} && mkdir -p /datavol/$npm_package_name/drop/$v && unzip -o \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\" -d /datavol/$npm_package_name/drop/$v && npm version $v && npm run build; unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"|$(which grep) 'scripts/testing' >/dev/null && echo && echo found scripts/testing --\\> extracting to git \\\"Testing\\\" project",
     "extract-l": "unzip -l \"$(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1)\"     || unzip -l /datavol/$npm_package_name/drop/\"$(/bin/ls -tr /datavol/$npm_package_name/drop/|tail -1)\"",
     "extractit": "/datavol/LinkedIn_Agent_drop/bin/extractit.sh",
+    "listit": "/datavol/LinkedIn_Agent_drop/bin/listit.sh",
     "extract": "v=$(basename $(/bin/ls -tr /datavol/$npm_package_name/drop/*.zip|tail -1));v=${v##*-};v=${v%.zip} && npm run extractit -- $v",
     "linkdir": "bash /datavol/LinkedIn_Agent_drop/bin/linkdir.sh",
     "420_": "",

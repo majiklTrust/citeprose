@@ -175,6 +175,7 @@ export function createSession(res, tokens) {
       sub: tokens.user.sub,
       email: tokens.user.email || null,
       name: tokens.user.name || null,
+      emailVerified: tokens.user.emailVerified === true,
     }
   };
 
@@ -290,6 +291,7 @@ export function refreshSession(res, session) {
         sub: session.user.sub,
         email: session.user.email || null,
         name: session.user.name || null,
+        emailVerified: session.user.emailVerified === true,
       }
     };
 

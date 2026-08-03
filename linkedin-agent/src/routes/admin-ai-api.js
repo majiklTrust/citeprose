@@ -55,6 +55,10 @@ async function defaultDeleteKey(providerId) {
   const { deleteCredential, llmCredentialKeyFor } = await import("../tenant/credential-store.js");
   return deleteCredential(llmCredentialKeyFor(providerId));
 }
+async function defaultHasPermission(role, permission) {
+  const { hasPermission } = await import("../tenant/platform-db.js");
+  return hasPermission(role, permission);
+}
 
 export function createAiConfigRoutes(overrides = {}) {
   const d = {
@@ -70,6 +74,7 @@ export function createAiConfigRoutes(overrides = {}) {
     getState: overrides.getState || defaultGetState,
     setState: overrides.setState || defaultSetState,
     hasKey: overrides.hasKey || defaultHasKey,
+    hasPermission: overrides.hasPermission || defaultHasPermission,
     storeKey: overrides.storeKey || defaultStoreKey,
     anthropicModelChain: overrides.anthropicModelChain,
     log: overrides.log || platformLog
@@ -96,9 +101,8 @@ export function createAiConfigRoutes(overrides = {}) {
   // than inherited through the parent chain's manage_users.
   router.use(async (req, res, next) => {
     try {
-      const { hasPermission } = await import("../tenant/platform-db.js");
       const role = req.tenant && req.tenant.role;
-      if (role && await hasPermission(role, "manage_llm_vendor")) return next();
+      if (role && await d.hasPermission(role, "manage_llm_vendor")) return next();
       return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
     } catch {
       return res.status(403).json({ error: "Managing the AI vendor requires owner access" });

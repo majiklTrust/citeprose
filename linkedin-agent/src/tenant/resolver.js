@@ -68,6 +68,20 @@ export function createTenantResolver() {
         });
 
         if (invite) {
+          // ── Email verification gate (Zero Trust) ─────────────
+          // A pending invite must never be claimable by an identity
+          // whose email address is unverified: an attacker who
+          // registers the invitee's address at the IDP without
+          // proving ownership could otherwise hijack the invite.
+          // Strict !== true fails closed on false, missing, string,
+          // and numeric impostors. The gate sits at the claim
+          // decision itself, so existing members (Path 1) and users
+          // with no invite (generic denial below) are unaffected.
+          if (req.user.emailVerified !== true) {
+            platformLog("warn", "tenant_resolve_unverified_email", { sub: req.user.sub });
+            res.status(403).json({ error: "Email address not verified. Please verify your email before joining a workspace." });
+            return;
+          }
           const claimed = await claimInvite(invite.id, provider, req.user.sub);
 
           platformLog("info", "tenant_resolve_claim_result", {

@@ -219,12 +219,49 @@ export async function initRegistry(logFn) {
         // not complete in time, it is marked as failed and the
         // registry continues with remaining providers. This also
         // addresses the hang scenario in 3.1.2.1-A.
+        // ── FIX 3.1.7.1-A + 3.1.7.2-A | HIGH ─────────────────
+        // Threat closed: a provider whose init() steals or plants
+        // process.env values, or injects globals, is detected by an
+        // env/global snapshot diff. Mutations are reverted and the
+        // provider is evicted before registration (fail closed).
+        const envBefore = { ...process.env };
+        const globalsBefore = new Set(Object.getOwnPropertyNames(globalThis));
+
         await Promise.race([
           result.provider.init(),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error("INIT_TIMEOUT")), INIT_TIMEOUT_MS)
           )
         ]);
+
+        const mutatedEnvKeys = [];
+        for (const k of new Set([...Object.keys(envBefore), ...Object.keys(process.env)])) {
+          if (process.env[k] !== envBefore[k]) {
+            mutatedEnvKeys.push(k);
+            if (Object.prototype.hasOwnProperty.call(envBefore, k)) {
+              process.env[k] = envBefore[k];
+            } else {
+              delete process.env[k];
+            }
+          }
+        }
+        const addedGlobals = Object.getOwnPropertyNames(globalThis)
+          .filter((k) => !globalsBefore.has(k));
+        for (const k of addedGlobals) {
+          try { delete globalThis[k]; } catch { /* non-configurable: reported below */ }
+        }
+        if (mutatedEnvKeys.length > 0 || addedGlobals.length > 0) {
+          result.status = "init_failed";
+          result.reason = "env/global mutation during init: provider evicted";
+          if (logFn) {
+            logFn("error", "auth_provider_env_mutation", {
+              name: result.provider.name,
+              mutatedEnvKeys,
+              addedGlobals
+            });
+          }
+          continue;
+        }
 
         // ── FIX 3.1.4.3-A / 3.1.4.4-A | CRITICAL ─────────────
         // Snapshot immutable copies of security-critical fields at

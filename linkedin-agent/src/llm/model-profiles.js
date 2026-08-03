@@ -40,7 +40,9 @@
 // availability notice. Routes and pages consume this through the
 // registry so the copy can never drift between surfaces.
 export const TEXT_GENERATION_NOTICE =
-  "Support for this LLM provider is coming soon!";
+  "Language generation runs on Anthropic Claude models today; support for " +
+  "this vendor's language models is coming soon. Your OpenAI API key " +
+  "already powers image generation when saved under the Image Model section.";
 
 export const LLM_LIMITS = Object.freeze({
   // Server-side output-token billing guardrail (canonical requests

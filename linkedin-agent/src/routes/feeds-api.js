@@ -35,14 +35,15 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { getMaxAgeDays, getFeedsManagerVersion } from "../config/research.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
-import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getAnthropicModel, callAnthropic, getFeedDiscoveryMaxTokens, getFeedDiscoveryRetryMaxTokens } from "../config/ai.js";
+import { getFeedDiscoveryTimeoutMs } from "../config/feeds.js";
 import { isSafeUrl } from "../services/security.js";
 import { validateFeed, formatValidationMessage } from "../services/feed-validator.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "../services/prompt-vault.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { annotateActivation } from "../spend/activation-middleware.js";
 
-const rssParser = new Parser({ timeout: 10000 });
+const rssParser = new Parser({ timeout: getFeedDiscoveryTimeoutMs() });
 
 const router = Router();
 router.use(annotateActivation("feed_discovery"));
@@ -278,7 +279,7 @@ router.post("/discover", async (req, res) => {
 
       const aiResponse = await callAnthropic(anthropic, {
         model,
-        max_tokens: 2000,
+        max_tokens: getFeedDiscoveryMaxTokens(),
         messages: [{ role: "user", content: prompt }]
       });
       prompt = null;
@@ -379,7 +380,7 @@ router.post("/discover", async (req, res) => {
 
         try {
           const retryResponse = await callAnthropic(anthropic, {
-            model, max_tokens: 1500,
+            model, max_tokens: getFeedDiscoveryRetryMaxTokens(),
             messages: [{ role: "user", content: retryPrompt }]
           });
 

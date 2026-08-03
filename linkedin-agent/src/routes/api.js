@@ -148,7 +148,9 @@ router.get("/api/status", optionalAuth, async (req, res) => {
         // pending invite, claim it now. This is the first API call
         // after login — if we don't claim here, the dashboard shows
         // "No Membership" and the resolver never gets a chance.
-        if (!tenant && req.user.email) {
+        // Email verification gate: an unverified identity must not
+        // claim an invite here either (mirrors the resolver gate).
+        if (!tenant && req.user.email && req.user.emailVerified === true) {
           try {
             const invite = await findPendingInviteByEmail(req.user.email);
             if (invite) {
@@ -724,7 +726,7 @@ router.post("/api/generate-preview", requirePermission("preview_post"), annotate
         topicId: result.generated.topicId, angle: result.generated.angle
       });
     }
-    res.json({ post: result.generated, quality: result.quality, postId: result.postId });
+    res.json({ post: { ...result.generated, generated_image_id: null }, quality: result.quality, postId: result.postId });
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });

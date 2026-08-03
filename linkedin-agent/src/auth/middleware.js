@@ -113,6 +113,7 @@ function syntheticDevUser(log) {
     sub: sub.trim(),
     email: null,
     name: 'Dev Bypass User',
+    emailVerified: true,
     authMethod: 'dev-bypass'
   };
 }
@@ -245,6 +246,7 @@ export function createAuthMiddleware(logFn) {
             email: session.user.email || null,
             name: session.user.name || null,
             expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+            emailVerified: session.user.emailVerified === true,
             authMethod: 'session',
           };
 
@@ -318,6 +320,7 @@ export function createAuthMiddleware(logFn) {
         audience: payload.aud,
         expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
         raw: payload,
+        emailVerified: payload.email_verified === true,
         authMethod: 'bearer',
       };
 
@@ -388,6 +391,7 @@ export function createAuthMiddleware(logFn) {
             email: session.user.email || null,
             name: session.user.name || null,
             expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+            emailVerified: session.user.emailVerified === true,
             authMethod: 'session',
           };
 
@@ -444,6 +448,7 @@ export function createAuthMiddleware(logFn) {
         audience: payload.aud,
         expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
         raw: payload,
+        emailVerified: payload.email_verified === true,
         authMethod: 'bearer',
       };
       req.authProvider = snapshot?.name || "unknown";

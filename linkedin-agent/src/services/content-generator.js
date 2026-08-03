@@ -10,6 +10,19 @@ import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
 import { getAnthropicModel, callAnthropic } from "../config/ai.js";
 import { generateWithTenantLlm, isLlmAbstractionEnabled } from "../llm/client.js";
+
+// 2.5.81: the abstraction flag's OFF state is a WHOLE OPERATING
+// MODE (legacy direct Anthropic; no key-resolution chain, no trial
+// precedence, no spend metering for text) and it must never again
+// be silent. One warning per boot, at first legacy use.
+let legacyPathWarned = false;
+function warnLegacyPathOnce() {
+  if (legacyPathWarned) return;
+  legacyPathWarned = true;
+  platformLog("warn", "llm_abstraction_disabled_legacy_path", {
+    detail: "LLM_ABSTRACTION is not '1': text generation runs the legacy direct path. Trial keys and spend metering are INACTIVE for text until the flag is set."
+  });
+}
 import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./prompt-vault.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
@@ -289,6 +302,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       generatedText = orchestrated.text;
       generationModel = `${orchestrated.provider}/${orchestrated.model}`;
     } else {
+      warnLegacyPathOnce();
       const client = await newAnthropicClient();
       const model = await getAnthropicModel();
       const requestParams = {
@@ -453,6 +467,7 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     });
     reviewText = orchestrated.text;
   } else {
+    warnLegacyPathOnce();
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
     const requestParams = {
@@ -544,6 +559,7 @@ export async function refinePost(
       });
       refinedText = orchestrated.text;
     } else {
+      warnLegacyPathOnce();
       const client = await newAnthropicClient();
       const model = await getAnthropicModel();
       const requestParams = {

@@ -249,7 +249,12 @@ export async function generateWithTenantLlm(input, deps = {}) {
       const { recordSpend } = await import("../spend/spend-recorder.js");
       await recordSpend({ requestType: "text_generation", provider: selection.provider,
         model: selection.model, usage: response.usage, costEstimateUsd, status: "ok" });
-    } catch { /* recorder logs its own failures; generation never breaks for metering */ }
+    } catch (recErr) {
+      // The recorder logs its own failures; this catch fires only if
+      // the recorder itself cannot load or crashed pre-log. That
+      // must never be silent (2.5.81).
+      console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+    }
 
     return Object.freeze({
       text: response.text,

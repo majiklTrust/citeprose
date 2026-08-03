@@ -262,7 +262,9 @@ export async function render(input, deps = {}) {
       await recordSpend({ requestType: "image_generation", fallbackWorkflow: "image_studio",
         provider: selection.provider, model: selection.model,
         usage: response.usage, costEstimateUsd, status: "ok" });
-    } catch { /* recorder logs its own failures */ }
+    } catch (recErr) {
+      console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+    }
 
     return Object.freeze({
       images: response.images,

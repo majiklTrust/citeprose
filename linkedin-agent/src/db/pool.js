@@ -104,6 +104,31 @@ export async function query(text, params) {
   return pool.query(text, params);
 }
 
+// Phase 0 instrumentation: a point-in-time read of pool saturation.
+//
+// node-postgres exposes these as live properties on the Pool, so
+// this is arithmetic on already-resident counters: no query, no
+// round trip, safe to call on a timer.
+//
+//   total   clients created (idle plus checked out)
+//   idle    clients sitting in the pool, available immediately
+//   waiting callers queued because every client is checked out
+//   max     the configured ceiling
+//
+// waiting is the number that matters. A value persistently above
+// zero means callers are queuing, and once a caller waits longer
+// than connectionTimeoutMillis it does not queue further: it
+// throws. Sustained waiting is therefore the leading indicator of
+// user-visible 500s, not a soft warning.
+export function poolGauge() {
+  return {
+    total: pool.totalCount,
+    idle: pool.idleCount,
+    waiting: pool.waitingCount,
+    max: pool.options ? pool.options.max : null
+  };
+}
+
 // Graceful shutdown helper — call from the SIGTERM/SIGINT handler to
 // drain the pool before exit.
 export async function closePool() {

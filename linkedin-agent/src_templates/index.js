@@ -980,7 +980,9 @@ export async function start() {
   delete process.env.ANTHROPIC_API_KEY_ENCRYPTED;
 
   // STEP 4: Dynamic-import services
-  const { connectionInfo }               = await import("./db/pool.js");
+  const { connectionInfo, poolGauge }     = await import("./db/pool.js");
+  const { startRuntimeMetrics,
+          setPoolGauge }                 = await import("./services/runtime-metrics.js");
   const { logActivity, setAgentState }   = await import("./services/database.js");
   const { startScheduler }               = await import("./services/scheduler.js");
   const { startMonitor }                 = await import("./services/news-monitor.js");
@@ -1097,6 +1099,14 @@ export async function start() {
       console.log(`🔐 Auth0 login at   ${addr.origin}/auth/login`);
     }
     console.log("");
+
+    // Phase 0 capacity instrumentation. Started before the
+    // cron jobs so the very first sweep is measured. The pool
+    // gauge is injected rather than imported by the metrics
+    // module, which keeps pool.js out of that module's load
+    // graph and preserves the STEP 4 import ordering.
+    setPoolGauge(poolGauge);
+    startRuntimeMetrics();
 
     startScheduler();
     // News monitor — iterates all active tenants each hour

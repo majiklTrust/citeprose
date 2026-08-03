@@ -125,6 +125,97 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: true
   },
 
+  // ── Phase 0 capacity instrumentation ────────────────────────
+  // Reads runtime_metric, written once per sampling window by
+  // services/runtime-metrics.js. These four are the baseline
+  // scoreboard for the transaction-scope work: they answer how
+  // long connections are held, whether the pool is starving,
+  // whether the event loop is blocked, and which call sites are
+  // responsible.
+
+  "runtime-gauges": {
+    label: "Runtime Gauges (Recent Windows)",
+    description: "Latest sampling windows: event loop lag, transaction hold times, pool saturation, and memory.",
+    capability: "The capacity scoreboard: one row per window, newest first.",
+    sql: `SELECT captured_at, window_seconds,
+                 loop_lag_p99_ms, loop_lag_max_ms,
+                 txn_count, txn_hold_p50_ms, txn_hold_p99_ms, txn_hold_max_ms,
+                 txn_wait_p99_ms, txn_open_max, txn_error_count,
+                 acquire_failure_count,
+                 pool_total, pool_idle, pool_waiting_max, pool_max,
+                 rss_mb, heap_used_mb
+          FROM runtime_metric
+          ORDER BY captured_at DESC LIMIT 200`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
+  "transaction-hold-summary": {
+    label: "Transaction Hold Summary (Window)",
+    description: "Aggregated transaction hold and wait behavior over the last N hours, with the worst window called out.",
+    capability: "Prove whether transaction hold time is improving, in one number.",
+    sql: `SELECT COUNT(*)::bigint AS windows,
+                 SUM(txn_count)::bigint AS transactions,
+                 ROUND(AVG(txn_hold_p50_ms), 3) AS avg_hold_p50_ms,
+                 ROUND(MAX(txn_hold_p99_ms), 3) AS worst_hold_p99_ms,
+                 ROUND(MAX(txn_hold_max_ms), 3) AS worst_hold_max_ms,
+                 ROUND(MAX(txn_wait_p99_ms), 3) AS worst_wait_p99_ms,
+                 MAX(txn_open_max) AS peak_open_transactions,
+                 MAX(pool_max) AS pool_ceiling,
+                 SUM(txn_error_count)::bigint AS rollbacks,
+                 SUM(acquire_failure_count)::bigint AS pool_acquire_failures,
+                 ROUND(MAX(loop_lag_p99_ms), 3) AS worst_loop_lag_p99_ms
+          FROM runtime_metric
+          WHERE captured_at >= now() - ($1 || ' hours')::interval`,
+    params: [
+      { name: "hours", label: "Window (hours)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "transaction-slow-sites": {
+    label: "Slow Transaction Call Sites",
+    description: "Call sites ranked by worst observed transaction hold time over the last N hours.",
+    capability: "Name the exact file and line holding connections longest, ranked worst first.",
+    sql: `SELECT s->>'site' AS call_site,
+                 SUM((s->>'count')::bigint) AS slow_transactions,
+                 ROUND(MAX((s->>'maxMs')::numeric), 3) AS worst_hold_ms,
+                 ROUND(AVG((s->>'avgMs')::numeric), 3) AS avg_hold_ms,
+                 MIN(captured_at) AS first_seen,
+                 MAX(captured_at) AS last_seen
+          FROM runtime_metric,
+               LATERAL jsonb_array_elements(COALESCE(detail->'slowSites', '[]'::jsonb)) AS s
+          WHERE captured_at >= now() - ($1 || ' hours')::interval
+          GROUP BY s->>'site'
+          ORDER BY worst_hold_ms DESC NULLS LAST LIMIT 100`,
+    params: [
+      { name: "hours", label: "Window (hours)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
+  "pool-saturation-windows": {
+    label: "Pool Saturation Windows",
+    description: "Only the windows where callers queued for a connection or an acquisition failed outright.",
+    capability: "Isolate the exact moments the pool ran dry and users saw errors.",
+    sql: `SELECT captured_at, txn_count, txn_open_max, pool_max,
+                 pool_waiting_max, acquire_failure_count,
+                 txn_wait_p99_ms, txn_hold_p99_ms, txn_hold_max_ms,
+                 loop_lag_p99_ms
+          FROM runtime_metric
+          WHERE (pool_waiting_max > 0 OR acquire_failure_count > 0)
+            AND captured_at >= now() - ($1 || ' hours')::interval
+          ORDER BY captured_at DESC LIMIT 200`,
+    params: [
+      { name: "hours", label: "Window (hours)", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
   "list-tenants": {
     label: "List All Tenants",
     description: "Shows all tenants with status, slug, and creation date.",

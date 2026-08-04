@@ -26,6 +26,121 @@ function buildReseedCatchallSql() {
 
 export const QUERY_REGISTRY = Object.freeze({
 
+  "catchall-v1": {
+    label: "feeds serving each topic",
+    description: "-- V1: feeds serving each topic, by tier and catchall, across all tenants.",
+    capability: "CATCHALL",
+    sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
+            f.tier::text AS tier, f.is_catchall,
+            count(*) AS feed_count
+          FROM tenants te
+          JOIN topics   t ON t.tenant_id = te.id AND t.enabled = true
+          JOIN feeds_v2 f ON f.tenant_id = te.id AND f.enabled = true
+          WHERE f.is_catchall
+            OR EXISTS (SELECT 1 FROM feed_topics ft WHERE ft.feed_id = f.id AND ft.topic_id = t.id)
+            OR (t.domains <> '[]'::jsonb
+                AND f.domains ?| ARRAY(SELECT jsonb_array_elements_text(t.domains)))
+          GROUP BY te.slug, t.slug, f.tier, f.is_catchall
+          ORDER BY te.slug, t.slug, f.tier, f.is_catchall`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "catchall-v2": {
+    label: "tier profile per topic",
+    description: "-- V2: tier profile per topic (wide format).",
+    capability: "CATCHALL",
+    sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
+            count(*) FILTER (WHERE f.tier = 'authoritative') AS authoritative,
+            count(*) FILTER (WHERE f.tier = 'primary')       AS primary_ct,
+            count(*) FILTER (WHERE f.tier = 'secondary')     AS secondary_ct,
+            count(*) FILTER (WHERE f.is_catchall)            AS catchall,
+            count(*) FILTER (WHERE NOT f.is_catchall)        AS dedicated,
+            count(*)                                         AS total_feeds
+          FROM tenants te
+          JOIN topics   t ON t.tenant_id = te.id AND t.enabled = true
+          JOIN feeds_v2 f ON f.tenant_id = te.id AND f.enabled = true
+          AND ( f.is_catchall
+              OR EXISTS (SELECT 1 FROM feed_topics ft WHERE ft.feed_id = f.id AND ft.topic_id = t.id)
+              OR (t.domains <> '[]'::jsonb
+                  AND f.domains ?| ARRAY(SELECT jsonb_array_elements_text(t.domains))) )
+          GROUP BY te.slug, t.slug
+          ORDER BY te.slug, t.slug`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "catchall-v3": {
+    label: "how feeds reach each topic",
+    description: "-- V3: how feeds reach each topic (explicit map / domain overlap / catchall).",
+    capability: "CATCHALL",
+    sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
+            count(*) FILTER (WHERE ft.feed_id IS NOT NULL) AS via_explicit_map,
+            count(*) FILTER (WHERE t.domains <> '[]'::jsonb
+                  AND f.domains ?| ARRAY(SELECT jsonb_array_elements_text(t.domains))) AS via_domain_overlap,
+            count(*) FILTER (WHERE f.is_catchall) AS via_catchall,
+            count(*) AS feeds_serving
+          FROM tenants te
+          JOIN topics   t ON t.tenant_id = te.id AND t.enabled = true
+          JOIN feeds_v2 f ON f.tenant_id = te.id AND f.enabled = true
+          LEFT JOIN feed_topics ft ON ft.feed_id = f.id AND ft.topic_id = t.id
+          WHERE f.is_catchall
+            OR ft.feed_id IS NOT NULL
+            OR (t.domains <> '[]'::jsonb
+                AND f.domains ?| ARRAY(SELECT jsonb_array_elements_text(t.domains)))
+          GROUP BY te.slug, t.slug
+          ORDER BY te.slug, t.slug`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "catchall-v4": {
+    label: "under-served topics",
+    description: "-- V4: under-served topics (no dedicated feed, or no authoritative source).",
+    capability: "CATCHALL",
+    sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
+            count(f.id) FILTER (WHERE NOT f.is_catchall)      AS dedicated_feeds,
+            count(f.id) FILTER (WHERE f.tier='authoritative') AS authoritative_feeds,
+            count(f.id) FILTER (WHERE f.is_catchall)          AS catchall_feeds,
+            count(f.id)                                       AS total_serving
+          FROM tenants te
+          JOIN topics t ON t.tenant_id = te.id AND t.enabled = true
+          LEFT JOIN feeds_v2 f
+                ON f.tenant_id = te.id AND f.enabled = true
+                AND ( f.is_catchall
+                  OR EXISTS (SELECT 1 FROM feed_topics ft WHERE ft.feed_id = f.id AND ft.topic_id = t.id)
+                  OR (t.domains <> '[]'::jsonb
+                      AND f.domains ?| ARRAY(SELECT jsonb_array_elements_text(t.domains))) )
+          GROUP BY te.slug, t.slug
+          HAVING count(f.id) FILTER (WHERE NOT f.is_catchall) = 0
+              OR count(f.id) FILTER (WHERE f.tier='authoritative') = 0
+          ORDER BY total_serving ASC, dedicated_feeds ASC, te.slug, t.slug`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+  "catchall-v5": {
+    label: "per-tenant feed inventory",
+    description: "-- V5 (preferred): no correlated subquery; distinct counts over two LEFT JOINs.",
+    capability: "CATCHALL",
+    sql: `SELECT te.slug AS tenant, te.name AS tenant_name, te.status::text AS status,
+            count(f.id) FILTER (WHERE f.tier='authoritative')   AS authoritative,
+            count(f.id) FILTER (WHERE f.tier='primary')         AS primary_ct,
+            count(f.id) FILTER (WHERE f.tier='secondary')       AS secondary_ct,
+            count(f.id) FILTER (WHERE f.is_catchall)            AS catchall,
+            count(f.id) FILTER (WHERE NOT f.is_catchall)        AS dedicated,
+            count(f.id) FILTER (WHERE f.domains <> '[]'::jsonb) AS domain_tagged,
+            count(f.id)                                         AS total_feeds,
+            (SELECT count(*) FROM topics t WHERE t.tenant_id = te.id AND t.enabled) AS enabled_topics
+          FROM tenants te
+          LEFT JOIN feeds_v2 f ON f.tenant_id = te.id AND f.enabled = true
+          GROUP BY te.id, te.slug, te.name, te.status
+          ORDER BY te.slug;`,
+    params: [],
+    destructive: false,
+    readOnly: true
+  },
+
   // ── Operational self-awareness (2.4.1) ──────────────────────
   "platform-events-recent": {
     label: "Platform Events (Recent)",

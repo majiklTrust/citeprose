@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>Billing - Market Intelligence</title>
-  <link rel="stylesheet" href="/app/shared/manager-nav.css?v=100">
+  <link rel="stylesheet" href="/app/shared/manager-nav.css?v=101">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
   <style>
     /* Billing in the about-page idiom: one quiet column, serif
@@ -84,6 +84,7 @@
 
         <h2>Choose A Plan</h2>
         <p>All financial transactions are handled through our partner platform. Select a service tier and complete your purchase in their secure web portal. Your workspace activates immediately after payment is confirmed.</p>
+        <p class="muted" id="checkout-hint" hidden>Purchase or Switch Pland opens our secure partner platform.</p>
         <ul class="pricing-grid">
           <li class="plan" data-plan="individual">
             <span class="tag">Individual</span>
@@ -114,7 +115,6 @@
             <a class="subscribe-btn btn" data-tier="business_plus" hidden>Purchase</a>
           </li>
         </ul>
-        <p class="muted" id="checkout-hint" hidden>Checkout opens a secure partner platform. Your workspace activates on payment confirmation.</p>
 
         <h2>Renewal, Grace Period</h2>
         <p>Subscriptions renew automatically every 30 days. New Individual and Business subscriptions include a 5-day grace period: your workspace activates as soon as checkout completes, and the first billing cycle begins when the grace period ends. Individual Plus and Business Plus begin billing at checkout.</p>
@@ -137,7 +137,7 @@
     </div>
   </div>
 
-  <script src="/app/shared/manager-nav.js?v=100"></script>
-  <script src="billing.js?v=100"></script>
+  <script src="/app/shared/manager-nav.js?v=101"></script>
+  <script src="billing.js?v=101"></script>
 </body>
 </html>

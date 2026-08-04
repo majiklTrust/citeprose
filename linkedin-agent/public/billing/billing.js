@@ -153,7 +153,7 @@
       // 2.4.32: the primary purchase persona lives HERE. The early
       // return previously made the subscribe buttons unreachable in
       // exactly this state.
-      body.innerHTML = '<div class="hint">No subscription yet - Pick a plan below - The platform operator can also provision access.</div>';
+      body.innerHTML = '<div class="hint">No subscription yet - Pick a plan below</div>';
       applyCatalog(sub.catalog);
       fillSubscribeCards(sub.checkout);
       return;

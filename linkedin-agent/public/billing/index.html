@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/favicon.png">
   <title>Billing - Market Intelligence</title>
-  <link rel="stylesheet" href="/app/shared/manager-nav.css?v=99">
+  <link rel="stylesheet" href="/app/shared/manager-nav.css?v=100">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
   <style>
     /* Billing in the about-page idiom: one quiet column, serif
@@ -36,7 +36,7 @@
     .billing-article .hint { color: var(--muted); font-size: 0.9rem; }
     .billing-article .row { margin-top: 1rem; display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
     .billing-article select, .billing-article input { font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--rule); background: #fffdf9; color: var(--ink); }
-    .billing-article .btn, .billing-article button { font: inherit; font-weight: 500; padding: 0.5rem 1.1rem; border: 1px solid var(--accent); background: var(--accent); color: #fffdf9; cursor: pointer; text-decoration: none; display: inline-block; }
+    .billing-article .btn, .billing-article button { font: inherit; font-weight: 500; padding: 0.25rem 0.55rem; border: 1px solid var(--accent); background: var(--accent); color: #fffdf9; cursor: pointer; text-decoration: none; display: inline-block; }
     .billing-article .btn:hover, .billing-article button:hover { background: #142e49; }
     .billing-article #message .error-box { border-left: 3px solid #8a2f2f; background: #f6e8e8; padding: 0.8rem 1rem; margin-top: 1rem; }
     .billing-article #message .success-box { border-left: 3px solid var(--accent); background: var(--accent-lt); padding: 0.8rem 1rem; margin-top: 1rem; }
@@ -44,7 +44,7 @@
     /* The plan list: principles-style cards, one per tier */
     .billing-article .pricing-grid { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; margin: 0.9rem 0 0; padding: 0; }
     @media (max-width: 640px) { .billing-article .pricing-grid { grid-template-columns: 1fr; } }
-    .billing-article .plan { background: var(--accent-lt); border-left: 3px solid var(--accent); padding: 0.85rem 1rem; position: relative; }
+    .billing-article .plan { background: var(--accent-lt); border-left: 3px solid var(--accent); padding: 0.85rem 1rem; position: relative; display: flex; flex-direction: column; }
     .billing-article .plan.current { outline: 2px solid var(--accent); }
     .billing-article .plan .tag { display: block; font-weight: 500; color: var(--accent); margin-bottom: 0.2rem; letter-spacing: 0.03em; }
     .billing-article .plan .price { font-family: 'Playfair Display', serif; font-size: 1.45rem; margin: 0.1rem 0; }
@@ -53,9 +53,8 @@
     .billing-article .plan .price a:not([href]) { cursor: default; }
     .billing-article .plan .price a:not([href]):hover { text-decoration: none; }
     .billing-article .plan .cur { color: var(--muted); font-size: 0.85rem; }
-    .billing-article .plan .desc { margin-top: 0.4rem; }
-    .billing-article .plan .subscribe-btn { margin-top: 0.55rem; }
-    .billing-article .plan .subscribe-btn.portal-cta { padding: 0.25rem 0.55rem; }
+    .billing-article .plan .desc { margin-top: 0.4rem; margin-bottom: 0.55rem; }
+    .billing-article .plan .subscribe-btn { margin-top: auto; align-self: flex-start; }
     .billing-article .plan .subscribe-btn[hidden] { display: none; }
   </style>
 </head>
@@ -115,7 +114,7 @@
             <a class="subscribe-btn btn" data-tier="business_plus" hidden>Purchase</a>
           </li>
         </ul>
-        <p class="muted" id="checkout-hint" hidden>Checkout opens on Stripe. Your workspace activates on payment confirmation.</p>
+        <p class="muted" id="checkout-hint" hidden>Checkout opens a secure partner platform. Your workspace activates on payment confirmation.</p>
 
         <h2>Renewal, Grace Period</h2>
         <p>Subscriptions renew automatically every 30 days. New Individual and Business subscriptions include a 5-day grace period: your workspace activates as soon as checkout completes, and the first billing cycle begins when the grace period ends. Individual Plus and Business Plus begin billing at checkout.</p>
@@ -127,10 +126,10 @@
 
         <h2>Cancellation Policy</h2>
         <p>You can cancel your subscription at any time. Cancellation stops future renewals; your workspace keeps access until the end of the current paid period, and no further charges occur after that. To cancel, contact <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email on the account.</p>
-<!-- 
+
         <h2>AI Vendor Key</h2>
         <p>The language model vendor and API key behind this workspace's content generation. Stored keys are encrypted; generation requires a stored key or an active platform trial.</p>
-        <div id="vendor-body" class="status-panel" style="margin-top:1.25rem"></div> -->
+        <div id="vendor-body" class="status-panel" style="margin-top:1.25rem"></div>
 
         <h2>Contact</h2>
         <p>Questions about billing, plans, or a custom arrangement: <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>.</p>
@@ -138,7 +137,7 @@
     </div>
   </div>
 
-  <script src="/app/shared/manager-nav.js?v=99"></script>
-  <script src="billing.js?v=99"></script>
+  <script src="/app/shared/manager-nav.js?v=100"></script>
+  <script src="billing.js?v=100"></script>
 </body>
 </html>

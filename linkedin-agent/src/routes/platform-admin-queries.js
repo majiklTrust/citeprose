@@ -1062,6 +1062,31 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: false
   },
 
+  "sub-add-or-change-no-comp": {
+    label: "Add Or Change Subscription",
+    description: "Immediately add or update a tenant's subscription tier; clears any pending tier. Audited. Operator tier override, atomic with its audit row. The CHECK constraint refuses unknown tiers.",
+    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    group: "subscriptions",
+    sql: `WITH upd AS (
+            insert into subscriptions (tenant_id,tier,state,comp)
+               values ($1::uuid,$2::text,'active',false)
+               ON CONFLICT (tenant_id) do update set tier=$2::text
+             RETURNING tenant_id, tier, state
+          ), aud AS (
+            INSERT INTO platform_log (level, event, tenant_id, detail)
+            SELECT 'warn', 'admin_subscription_tier_set', tenant_id,
+                   jsonb_build_object('tier', tier)
+              FROM upd
+          )
+          SELECT * FROM upd`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "tier", label: "Tier", type: "select", source: "tiers", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
   "sub-extend-period": {
     label: "Extend Period",
     description: "Push a tenant's period_end forward by N days. Audited. Grace extension without touching the state machine: renewals stay anchored to the new period_end.",

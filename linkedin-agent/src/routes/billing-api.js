@@ -15,7 +15,7 @@ import { createAuthMiddleware } from "../auth/middleware.js";
 import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { TIERS } from "../config/entitlements.js";
-import { getCheckoutLinksForTenant } from "../payments/checkout-links.js";
+import { getCheckoutLinksForTenant, getCustomerPortalUrl } from "../payments/checkout-links.js";
 import { getCatalogForDisplay } from "../payments/catalog.js";
 import { getPaymentsProviderName } from "../payments/provider.js";
 import { getFreshCheckoutAllowed, getTierChangeEnabled, getReactivationTier } from "../services/billing-policy.js";
@@ -52,6 +52,7 @@ export default function createBillingRoutes() {
         checkout: getFreshCheckoutAllowed(sub.state)
           ? getCheckoutLinksForTenant(req.tenant.id, userEmail, TIERS)
           : null,
+        portalUrl: getCustomerPortalUrl(),
         tierChangeEnabled: getTierChangeEnabled(getPaymentsProviderName(), sub.comp === true),
         state: sub.state, tier: sub.tier, comp: sub.comp === true,
         pendingTier: sub.pending_tier || null,

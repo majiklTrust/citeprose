@@ -32,6 +32,16 @@ export function buildCheckoutUrl(base, tenantId, email) {
   return url;
 }
 
+// 2.5.95: the Stripe no-code Customer Portal login link. Same
+// contract as the payment links: a static env-configured URL, no
+// SDK, no outbound calls. Absent or non-https resolves null and the
+// page hides the affordance (fail closed).
+export function getCustomerPortalUrl(env = process.env) {
+  const raw = env.STRIPE_CUSTOMER_PORTAL_URL;
+  const url = typeof raw === "string" ? raw.trim() : "";
+  return url.startsWith("https://") ? url : null;
+}
+
 export function getCheckoutLinksForTenant(tenantId, email, tiers, env = process.env, providerName = getPaymentsProviderName()) {
   if (providerName !== "stripe") return null;
   const links = {};

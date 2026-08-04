@@ -27,6 +27,9 @@
       renderQueries(data.queries || []);
       bindGenrePanel();
       loadGenreOptions();
+      // 2.4.65: payments controls initialize ONLY on the granted
+      // path. The denied path binds nothing and fetches nothing.
+      initPayments();
     })
     .catch(function (err) {
       document.getElementById("auth-wall").style.display = "block";
@@ -565,7 +568,7 @@
       });
   };
 
-  (function initPayments() {
+  function initPayments() {
     var sel = document.getElementById("comp-tenant");
     if (!sel) return;
     fetch(API + "/api/platform-admin/tenants", { credentials: "include" })
@@ -579,5 +582,5 @@
     var rev = document.getElementById("comp-revoke");
     if (rev) rev.addEventListener("click", window.paymentsRevokeComp);
     loadSubscriptions();
-  })();
+  }
 })();

@@ -794,3 +794,6 @@
   .hero-shots{grid-template-columns:1fr;}
   .hero-shots .shot{aspect-ratio:16/10;min-height:120px;}
 }
+.footer-copy-version {
+font-size: 0.5rem;color: var(--text-muted);text-decoration: none;padding-left: 6.0rem;
+}

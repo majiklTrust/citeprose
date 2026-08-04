@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- The document itself must revalidate so the browser always sees
        the current ?v= on its subresources. Subresources below are
-       cache-busted by 94; this meta keeps the bootstrap
+       cache-busted by {{CSSVERSION}}; this meta keeps the bootstrap
        HTML from being served stale by heuristic/CDN caching, without
        depending on the global no-cache toggle in the server. -->
   <meta http-equiv="Cache-Control" content="no-cache">
@@ -143,25 +143,28 @@
           <button class="btn-genre" id="genre-submit">Save Genre Template</button>
           <span class="genre-result" id="genre-result"></span>
         </div>
+
       </div>
 
       <div id="query-grid" class="query-grid">
         <span style="color:#999;">Loading queries...</span>
       </div>
+
+      <div class="section" id="payments-section">
+        <h2>Payments: Complimentary Entitlements</h2>
+        <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier. Revoke removes a comp subscription entirely: the tenant returns to the paywall and can purchase. Only comp subscriptions can be revoked; paid rows are managed with the Subscription Controls below.</p>
+        <div class="row">
+          <select id="comp-tenant"></select>
+          <select id="comp-tier"><option value="">Loading tiers…</option></select>
+          <button class="btn btn-primary" id="comp-grant">Grant Comp</button>
+          <button class="btn" id="comp-revoke">Revoke Comp</button>
+        </div>
+        <div id="payments-msg" class="hint"></div>
+        <div id="payments-body">Loading...</div>
+      </div>
+
     </div>
   </div>
-  <div class="section" id="payments-section">
-    <h2>Payments: Complimentary Entitlements</h2>
-    <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier. Revoke removes a comp subscription entirely: the tenant returns to the paywall and can purchase. Only comp subscriptions can be revoked; paid rows are managed with the Subscription Controls below.</p>
-    <div class="row">
-      <select id="comp-tenant"></select>
-      <select id="comp-tier"><option value="">Loading tiers…</option></select>
-      <button class="btn btn-primary" id="comp-grant">Grant Comp</button>
-      <button class="btn" id="comp-revoke">Revoke Comp</button>
-    </div>
-    <div id="payments-msg" class="hint"></div>
-    <div id="payments-body">Loading...</div>
-  </div>
-  <script src="platform-admin.js?v=94"></script>
+  <script src="platform-admin.js?v={{CSSVERSION}}"></script>
 </body>
 </html>

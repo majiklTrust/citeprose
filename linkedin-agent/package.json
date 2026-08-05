@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "2.5.104",
+  "version": "2.5.107",
   "config": {
     "cssversion": "101",
     "appname": "Market Intelligence"
@@ -119,6 +119,7 @@
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
     "jose": "^6.2.2",
+    "lru-cache": "11.5.2",
     "node-cron": "^4.4.1",
     "open": "^10.0.0",
     "openai": "6.45.0",
@@ -128,8 +129,8 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@stripe/cli": "^1.44.0",
     "json-stringify-safe": "^5.0.1",
-    "nodemon": "^3.1.14",
-    "@stripe/cli": "^1.44.0"
+    "nodemon": "^3.1.14"
   }
 }

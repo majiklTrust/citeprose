@@ -74,7 +74,20 @@ export async function listTrialKeys(deps = {}) {
             (SELECT COUNT(*)::int FROM trial_key_activations ta WHERE ta.trial_key_id = k.id AND ta.active) AS active_grants
      FROM trial_keys k ORDER BY k.created_at DESC`, []
   );
-  return r.rows;
+  // 2.5.85 (additive, console card): each key carries its grants so
+  // the platform admin can activate and deactivate per tenant from
+  // the page. Same response route, one more query, no new surface.
+  const acts = await q(
+    `SELECT ta.id, ta.trial_key_id, ta.tenant_id, t.name AS tenant_name, ta.active,
+            ta.max_spend_usd, ta.activated_at,
+            trial_activation_spend_usd(ta.id) AS spent_usd
+     FROM trial_key_activations ta
+     LEFT JOIN tenants t ON t.id = ta.tenant_id
+     ORDER BY ta.activated_at DESC`, []
+  );
+  const byKey = {};
+  for (const a of acts.rows) (byKey[a.trial_key_id] = byKey[a.trial_key_id] || []).push(a);
+  return r.rows.map((k) => ({ ...k, activations: byKey[k.id] || [] }));
 }
 
 export async function setTrialKeyActive(id, active, actorSub, deps = {}) {

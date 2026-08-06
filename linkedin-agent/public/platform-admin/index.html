@@ -150,6 +150,34 @@
       </div>
     </div>
   </div>
+  <div class="section" id="trial-keys-section">
+    <h2>Platform Trial Keys</h2>
+    <p class="hint">Platform-owned vendor keys granted to tenants for a capped, time-boxed trial. A trial takes precedence over the tenant's own key until it is exhausted, expired, deactivated, or the tenant stores their own key. Keys are validated live against the vendor before vaulting; the secret never leaves the vault after that.</p>
+    <div class="param-row">
+      <label>Provider</label>
+      <input type="text" id="tk-provider" placeholder="anthropic" autocomplete="off">
+      <label>Name</label>
+      <input type="text" id="tk-name" placeholder="Q3 Onboarding Trial" autocomplete="off">
+    </div>
+    <form class="key-field" autocomplete="off" onsubmit="return false">
+      <input type="text" autocomplete="username" value="" tabindex="-1" aria-hidden="true" style="display:none">
+      <input type="password" id="tk-key" placeholder="Vendor API Key (validated live before vaulting)" autocomplete="new-password">
+    </form>
+    <div class="param-row">
+      <label>Key Spend Cap USD</label>
+      <input type="number" id="tk-cap" min="0" step="0.01" placeholder="25">
+      <label>Starts</label>
+      <input type="datetime-local" id="tk-starts">
+      <label>Ends</label>
+      <input type="datetime-local" id="tk-ends">
+    </div>
+    <div class="param-row">
+      <button class="btn-run" id="tk-create">Validate And Create Trial Key</button>
+    </div>
+    <div id="tk-message"></div>
+    <div id="tk-list">Loading trial keys...</div>
+  </div>
+
   <div class="section" id="payments-section">
     <h2>Payments: Complimentary Entitlements</h2>
     <p class="hint">Processor-free grants. Deliberate, auditable, revocable. Grants set the tenant active on the chosen tier. Revoke removes a comp subscription entirely: the tenant returns to the paywall and can purchase. Only comp subscriptions can be revoked; paid rows are managed with the Subscription Controls below.</p>
@@ -163,5 +191,6 @@
     <div id="payments-body">Loading...</div>
   </div>
   <script src="platform-admin.js?v=101"></script>
+  <script src="trial-keys.js?v=101"></script>
 </body>
 </html>

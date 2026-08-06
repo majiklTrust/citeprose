@@ -26,10 +26,25 @@ function buildReseedCatchallSql() {
 
 export const QUERY_REGISTRY = Object.freeze({
 
+  "add-member": {
+    label: "Add Member as Owner",
+    description: "Adds an owner user for the tenant.",
+    capability: "MEMBERSHIPS",
+    sql: `INSERT INTO public.memberships(
+            tenant_id, auth_provider, auth_sub, role)
+            VALUES ($1::uuid, 'auth0', $2::text, 'owner')`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "auth_sub", label: "Auth Sub", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: false
+  },
+
   "catchall-v1": {
     label: "feeds serving each topic",
     description: "-- V1: feeds serving each topic, by tier and catchall, across all tenants.",
-    capability: "CATCHALL",
+    capability: "FEEDS CATCHALL",
     sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
             f.tier::text AS tier, f.is_catchall,
             count(*) AS feed_count
@@ -49,7 +64,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "catchall-v2": {
     label: "tier profile per topic",
     description: "-- V2: tier profile per topic (wide format).",
-    capability: "CATCHALL",
+    capability: "FEEDS CATCHALL",
     sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
             count(*) FILTER (WHERE f.tier = 'authoritative') AS authoritative,
             count(*) FILTER (WHERE f.tier = 'primary')       AS primary_ct,
@@ -73,7 +88,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "catchall-v3": {
     label: "how feeds reach each topic",
     description: "-- V3: how feeds reach each topic (explicit map / domain overlap / catchall).",
-    capability: "CATCHALL",
+    capability: "FEEDS CATCHALL",
     sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
             count(*) FILTER (WHERE ft.feed_id IS NOT NULL) AS via_explicit_map,
             count(*) FILTER (WHERE t.domains <> '[]'::jsonb
@@ -97,7 +112,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "catchall-v4": {
     label: "under-served topics",
     description: "-- V4: under-served topics (no dedicated feed, or no authoritative source).",
-    capability: "CATCHALL",
+    capability: "FEEDS CATCHALL",
     sql: `SELECT te.slug AS tenant, t.slug AS topic_slug,
             count(f.id) FILTER (WHERE NOT f.is_catchall)      AS dedicated_feeds,
             count(f.id) FILTER (WHERE f.tier='authoritative') AS authoritative_feeds,
@@ -122,7 +137,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "catchall-v5": {
     label: "per-tenant feed inventory",
     description: "-- V5 (preferred): no correlated subquery; distinct counts over two LEFT JOINs.",
-    capability: "CATCHALL",
+    capability: "FEEDS CATCHALL",
     sql: `SELECT te.slug AS tenant, te.name AS tenant_name, te.status::text AS status,
             count(f.id) FILTER (WHERE f.tier='authoritative')   AS authoritative,
             count(f.id) FILTER (WHERE f.tier='primary')         AS primary_ct,
@@ -345,7 +360,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "list-memberships": {
     label: "List All Memberships",
     description: "Shows all tenant memberships with auth provider and role.",
-    capability: "See who has access to which tenant, by auth provider and role.",
+    capability: "MEMBERSHIPS.",
     sql: `SELECT t.slug, m.auth_sub,
                  m.role::text, m.auth_provider::text, m.created_at
           FROM memberships m
@@ -359,7 +374,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "show-tenant-members": {
     label: "Tenant Members",
     description: "Show the Members.",
-    capability: "Show the Members.",
+    capability: "MEMBERSHIPS.",
     sql: `select t.name,t.slug,m.role,m.auth_provider,m.created_at,m.auth_sub, m.tenant_id from memberships m
             join tenants t on t.id = m.tenant_id
             where t.id = $1::uuid
@@ -374,7 +389,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "update-membership-workspace": {
     label: "Update Workspace",
     description: "Authorizes a Tenant Member's workspace.",
-    capability: "Authorizes a Tenant Member's workspace.",
+    capability: "MEMBERSHIPS.",
     sql: `update memberships set auth_sub=$3
             where tenant_id=$1::uuid
             and id = $2`,
@@ -407,8 +422,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "tenant-agent-state": {
     label: "Tenant Agent State",
-    description: "Shows all agent_state configuration values for a tenant.",
-    capability: "Review a tenant's full agent configuration in one place, with schema metadata.",
+    description: "Shows all agent_state configuration values for a tenant with schema metadata.",
+    capability: "agent_state per tenant.",
     sql: `SELECT a.key, a.value, s.value_type, s.allowed_values, s.description
           FROM agent_state a
           LEFT JOIN agent_state_schema s ON s.key = a.key
@@ -423,8 +438,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "set-feeds-manager-version": {
     label: "Set Feeds Manager Version",
-    description: "Sets feeds_manager_version for a tenant (1 or 2).",
-    capability: "Switch a tenant between the v1 and v2 Feeds Manager UI.",
+    description: "Sets feeds_manager_version for a tenant, v1 and v2 Feeds Manager (1 or 2).",
+    capability: "agent_state per tenant.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
           VALUES ($1::uuid, 'feeds_manager_version', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
@@ -485,7 +500,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-tenant-invites": {
     label: "Clear Tenant Member Invites (all users)",
     description: "Removes all member invites (pending and claimed) for a tenant.",
-    capability: "Clear a tenant's invite records before re-inviting users.",
+    capability: "INVITES.",
     sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -497,7 +512,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "select-tenant-invites": {
     label: "Shows Tenant Member Invites (all users)",
     description: "Shows all member invites (pending and claimed) for a tenant.",
-    capability: "Shows a tenant's invite records.",
+    capability: "INVITES.",
     sql: `select tr.email,i.status Invite,i.created_at Created,i.claimed_at Claimed,t.name Tenant,s.state Subscription, s.comp
             from tenant_registrations tr
             left join invites i on i.tenant_id = tr.tenant_id
@@ -512,7 +527,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-tenant-memberships": {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",
-    capability: "Revoke all user access to a tenant in one step.",
+    capability: "MEMBERSHIPS",
     sql: `DELETE FROM memberships WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -563,7 +578,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "all-tenant-states": {
     label: "All Tenant Config States",
     description: "Shows agent_state configuration across all tenants with schema metadata.",
-    capability: "Compare agent configuration across every tenant in one result.",
+    capability: "agent_state per tenant.",
     sql: `SELECT t.slug AS tenant, a.key, a.value,
                  s.value_type, s.allowed_values
           FROM agent_state a
@@ -634,7 +649,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-llm-providers": {
     label: "Clear LLM Providers",
     description: "Removes language and image LLM provider and model settings",
-    capability: "TENANT LLM SETTINGS",
+    capability: "agent_state per tenant TENANT LLM SETTINGS",
     sql: `DELETE FROM agent_state
           WHERE tenant_id = $1::uuid
           AND key in (
@@ -810,8 +825,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "set-agent-paused": {
     label: "Set Agent Paused",
-    description: "Pauses or resumes the agent for a tenant. Value must be 'true' or 'false'.",
-    capability: "Stop or restart a tenant's scheduled posting without touching any other config.",
+    description: "Pauses or resumes the agentic generation for a tenant. Value must be 'true' or 'false'.",
+    capability: "agent_state per tenant",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
           VALUES ($1::uuid, 'paused', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
@@ -825,8 +840,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "set-agent-corroboration": {
     label: "Set Corroboration",
-    description: "Toggles multi-source corroboration for a tenant. Value must be 'enabled' or 'disabled'.",
-    capability: "Turn cross-source fact-checking on or off for a tenant's content pipeline.",
+    description: "Toggles multi-source, fact-checking corroboration for a tenant's content pipeline. Value must be 'enabled' or 'disabled'.",
+    capability: "agent_state per tenant",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
           VALUES ($1::uuid, 'corroboration', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
@@ -840,8 +855,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
 "set-agent-model": {
     label: "Set Language Model",
-    description: "Sets the per-tenant Language Model override from the live model catalog. Falls back to the deployment default when unset.",
-    capability: "Pin or change which LLM a tenant's generation pipeline uses.",
+    description: "Sets the per-tenant Language Model override from the live Anthropic model catalog for the generation pipeline. Falls back to the deployment default when unset.",
+    capability: "agent_state per tenant AI Model display card.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
           VALUES ($1::uuid, 'anthropic_model', $2)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
@@ -855,8 +870,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "set-agent-state-generic": {
     label: "Set Agent State (any key)",
-    description: "Sets any agent_state key/value for a tenant. Use for properties without a dedicated setter.",
-    capability: "Maintenance escape hatch — adjust any single agent_state property by key.",
+    description: "Maintenance escape hatch — adjust any single agent_state property by key. Sets any agent_state key/value for a tenant. Use for properties without a dedicated setter.",
+    capability: "agent_state per tenant.",
     sql: `INSERT INTO agent_state (tenant_id, key, value)
           VALUES ($1::uuid, $2, $3)
           ON CONFLICT (tenant_id, key) DO UPDATE SET value = $3`,

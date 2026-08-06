@@ -579,31 +579,45 @@ export async function getArticleStats(topicSlug = null, deps = {}) {
   // article queries already use, applied to ALL THREE counts so the
   // aggregate and the per-feed rows agree with each other. Always
   // parameterized; a null slug is the unfiltered card of today.
+  // 2.5.86: the filter matches what GENERATION actually reads for a
+  // topic: feeds mapped to it PLUS the tenant's catchall feeds, the
+  // same LEFT JOIN + (t.id IS NOT NULL OR f.is_catchall) predicate
+  // the article-selection queries above use. Applied to ALL THREE
+  // counts (the 2.5.54 rule) so aggregate and rows agree.
   const topicJoin = topicSlug
-    ? `JOIN feed_topics ft ON ft.feed_id = f.id
-       JOIN topics t ON t.id = ft.topic_id AND t.slug = $2`
+    ? `LEFT JOIN feed_topics ft ON ft.feed_id = f.id
+       LEFT JOIN topics t ON t.id = ft.topic_id AND t.slug = $2`
+    : "";
+  const topicPredicate = topicSlug
+    ? `AND (t.id IS NOT NULL OR f.is_catchall = true)`
     : "";
   const totalTopicJoin = topicSlug
     ? `JOIN feeds_v2 f ON f.id = fa.feed_id
-       JOIN feed_topics ft ON ft.feed_id = f.id
-       JOIN topics t ON t.id = ft.topic_id AND t.slug = $1`
+       LEFT JOIN feed_topics ft ON ft.feed_id = f.id
+       LEFT JOIN topics t ON t.id = ft.topic_id AND t.slug = $1`
+    : "";
+  const totalPredicate = topicSlug
+    ? `WHERE (t.id IS NOT NULL OR f.is_catchall = true)`
     : "";
 
   const total = await c.query(
     `SELECT COUNT(DISTINCT fa.article_id)::int AS count
      FROM feed_articles fa
-     ${totalTopicJoin}`,
+     ${totalTopicJoin}
+     ${totalPredicate}`,
     topicSlug ? [topicSlug] : []
   );
   const byFeed = await c.query(
     `SELECT f.name AS feed_name, f.tier::text AS feed_tier,
+            f.is_catchall,
             COUNT(DISTINCT fa.article_id)::int AS count
      FROM feed_articles fa
      JOIN feeds_v2 f ON f.id = fa.feed_id
      JOIN articles_v2 a ON a.id = fa.article_id
      ${topicJoin}
      WHERE a.published_at >= now() - ($1 || ' days')::interval
-     GROUP BY f.name, f.tier
+     ${topicPredicate}
+     GROUP BY f.name, f.tier, f.is_catchall
      ORDER BY CASE f.tier::text
                 WHEN 'authoritative' THEN 1
                 WHEN 'primary' THEN 2
@@ -618,7 +632,8 @@ export async function getArticleStats(topicSlug = null, deps = {}) {
      JOIN feeds_v2 f ON f.id = fa.feed_id
      JOIN articles_v2 a ON a.id = fa.article_id
      ${topicJoin}
-     WHERE a.published_at >= now() - ($1 || ' days')::interval`,
+     WHERE a.published_at >= now() - ($1 || ' days')::interval
+     ${topicPredicate}`,
     topicSlug ? [String(ageDays), topicSlug] : [String(ageDays)]
   );
 

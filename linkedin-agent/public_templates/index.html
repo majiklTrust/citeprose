@@ -31,7 +31,7 @@
       <div style="margin-bottom:1rem;">
         <div style="width:40px; height:40px; border:3px solid #e0e0e0; border-top-color:#0073b1; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
       </div>
-      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating content needs a valid LLM Provider API key to activate this workspace.</div>
+      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating content needs a valid LLM Provider API key to activate.</div>
       <div style="font-size:0.85rem; color:#888;">Redirecting to the Management page.</div>
       <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;"></div>
     </div>
@@ -1035,7 +1035,7 @@
         const overlay = document.getElementById('keygate-overlay');
         if (!overlay || overlay.style.display === 'flex') return;
         overlay.style.display = 'flex';
-        setTimeout(() => { window.location.href = '/app/admin'; }, 3000);
+        setTimeout(() => { window.location.href = '/app/admin'; }, 4000);
       }
 
       async function handlePreview() {
@@ -1717,7 +1717,7 @@
                       {((researchStatsOverride || status.researchStats).byFeed || []).slice(0, status.feedLimit || 8).map((f, i) => (
                         <div key={i} className="feed-row">
                           <span className="feed-name">
-                            {f.feed_name}
+                            {f.feed_name}{f.is_catchall && ' (Catchall)'}
                           </span>
                           <div className="feed-meta">
                             <span className={`source-tier tier-${f.feed_tier} feed-tier-sm`}>{{ authoritative: 'auth', primary: 'prim', secondary: 'sec' }[f.feed_tier] || f.feed_tier}</span>

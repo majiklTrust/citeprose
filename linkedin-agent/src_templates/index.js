@@ -81,6 +81,13 @@ export function createApp(ctx) {
     ? ctx.adminPageGate
     : [(req, res) => res.status(403).json({ error: "Forbidden" })];
 
+  // Server-side platform-admin gate for the /app/platform-admin
+  // page (2.5.110). Same fail-closed rule: absent gate, the page
+  // refuses everyone rather than serving privileged structure.
+  const platformAdminPageGate = Array.isArray(ctx.platformAdminPageGate) && ctx.platformAdminPageGate.length > 0
+    ? ctx.platformAdminPageGate
+    : [(req, res) => res.status(403).json({ error: "Forbidden" })];
+
   const instance = express();
   instance.disable("x-powered-by");
   instance.disable("etag");
@@ -220,7 +227,7 @@ export function createApp(ctx) {
   instance.use("/app/admin", ...adminPageGate, express.static(path.join(__dirname, "../public/admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   // Platform admin — super admin only, server-side query execution
-  instance.use("/app/platform-admin", express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
+  instance.use("/app/platform-admin", ...platformAdminPageGate, express.static(path.join(__dirname, "../public/platform-admin"), { index: "index.html", setHeaders: staticCacheHeaders }));
 
   instance.use("/app", express.static(path.join(__dirname, "../public"), { index: false, setHeaders: staticCacheHeaders }));
   instance.use(express.static(alphaDir, { index: false, setHeaders: staticCacheHeaders }));
@@ -917,7 +924,7 @@ export async function buildAppForTests() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
-  const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
+  const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
@@ -949,7 +956,8 @@ export async function buildAppForTests() {
     invalidateTokenCache,
     createPlatformAdminRoutes,
     createBillingRoutes,
-    adminPageGate: createAdminPageGate()
+    adminPageGate: createAdminPageGate(),
+    platformAdminPageGate: createPlatformAdminPageGate()
   });
 }
 
@@ -1028,7 +1036,7 @@ export async function start() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
-  const { default: createPlatformAdminRoutes } = await import("./routes/platform-admin-api.js");
+  const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
@@ -1071,7 +1079,8 @@ export async function start() {
     invalidateTokenCache,
     createPlatformAdminRoutes,
     createBillingRoutes,
-    adminPageGate: createAdminPageGate()
+    adminPageGate: createAdminPageGate(),
+    platformAdminPageGate: createPlatformAdminPageGate()
   });
 
   // STEP 7: Listen

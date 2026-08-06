@@ -126,6 +126,21 @@ function setCachedModels(optgroups) {
 
 // ── Middleware ────────────────────────────────────────────────
 
+// ── Server-side PAGE gate (2.5.110) ─────────────────────────────
+// Mirror of createAdminPageGate (admin-api.js): the STATIC page at
+// /app/platform-admin mounts behind this chain in index, so a
+// non-admin request receives a bare 403 and NONE of the page's
+// bytes. The page structure is itself privileged surface: forms,
+// copy, and capability names must never reach a non-admin response.
+export function createPlatformAdminPageGate(overrides = {}) {
+  const gateAuth = overrides.requireAuth || createAuthMiddleware().requireAuth;
+  const gateAdmin = overrides.platformAdminOnly || ((req, res, next) => {
+    if (req.user && isPlatformAdmin(req.user.sub)) return next();
+    return res.status(403).json({ error: "Forbidden" });
+  });
+  return [gateAuth, gateAdmin];
+}
+
 export default function createPlatformAdminRoutes() {
   const { requireAuth } = createAuthMiddleware();
 

@@ -646,6 +646,25 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: false
   },
 
+  "clear-tenant-linked-creds": {
+    label: "Clear LinkedIn Credentials",
+    description: "Removes linkedin_person_urn,linkedin_org_urn,linkedin_access_token,linkedin_refresh_token",
+    capability: "TENANT LINKEDIN SETTINGS",
+    sql: `DELETE FROM credentials
+          WHERE tenant_id = $1::uuid
+          AND key in (
+            'linkedin_person_urn'
+            ,'linkedin_org_urn'
+            ,'linkedin_access_token'
+            ,'linkedin_refresh_token'
+          )`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
   "clear-llm-providers": {
     label: "Clear LLM Providers",
     description: "Removes language and image LLM provider and model settings",

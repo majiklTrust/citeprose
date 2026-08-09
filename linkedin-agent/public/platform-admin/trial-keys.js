@@ -103,6 +103,14 @@
         startsAt: isoOf("tk-starts"),
         endsAt: isoOf("tk-ends")
       };
+      // 2.5.111: the server requires ALL SIX fields; refuse the
+      // post locally with a specific message instead of inviting an
+      // INVALID_INPUT round trip.
+      if (!payload.provider) { msg("Provider Is Required.", "error"); return; }
+      if (!payload.name) { msg("Name Is Required.", "error"); return; }
+      if (!payload.apiKey) { msg("The Vendor API Key Is Required.", "error"); return; }
+      if (!(payload.maxSpendUsd > 0)) { msg("Key Spend Cap USD Must Be A Positive Number.", "error"); return; }
+      if (!payload.startsAt || !payload.endsAt) { msg("Starts And Ends Are Both Required: A Trial Is Time Boxed By Design.", "error"); return; }
       msg("Validating The Key Against The Vendor...", "info");
       postJson("/api/platform-admin/trial-keys", payload).then(function (r) {
         if (r.ok) { msg("Trial Key Created.", "success"); $("tk-key").value = ""; loadKeys(); }

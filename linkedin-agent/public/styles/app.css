@@ -20,6 +20,7 @@
   --glow-green: rgba(16, 185, 129, 0.15);
   --glow-amber: rgba(245, 158, 11, 0.15);
   --glow-red: rgba(239, 68, 68, 0.15);
+  --glow-purple: rgba(171, 68, 239, 0.15);
   --radius: 12px;
   --radius-sm: 8px;
   --font-body: 'DM Sans', -apple-system, sans-serif;
@@ -263,7 +264,7 @@ body::after {
 
 .post-topic-badge {
   font-size: 0.7rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.3rem;
   border-radius: 6px;
   font-weight: 600;
   font-family: var(--font-mono);
@@ -276,7 +277,7 @@ body::after {
 
 .post-status {
   font-size: 0.7rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.3rem;
   border-radius: 6px;
   font-weight: 600;
   font-family: var(--font-mono);
@@ -284,6 +285,8 @@ body::after {
 
 .status-posted { background: var(--glow-green); color: var(--accent-green); }
 .status-pending_approval { background: var(--glow-amber); color: var(--accent-amber); }
+.status-schedule { background: var(--glow-purple); color: var(--accent-purple); }
+.status-scheduled { background: var(--glow-purple); color: var(--accent-purple); }
 .status-draft { background: rgba(90,106,128,0.2); color: var(--text-secondary); }
 .status-rejected { background: var(--glow-red); color: var(--accent-red); }
 .status-failed { background: var(--glow-red); color: var(--accent-red); }
@@ -329,7 +332,7 @@ body::after {
 }
 
 .post-actions { display: flex; gap: 0.5rem; }
-.post-actions .btn { white-space: nowrap; padding: 0.3rem 0.6rem; }
+.post-actions .btn { white-space: nowrap; padding: 0.2rem 0.5rem; }
 
 /* Buttons */
 .btn {
@@ -750,7 +753,7 @@ body::after {
 .corroboration-badge {
   display: inline-flex; align-items: center; gap: 0.35rem;
   font-family: var(--font-mono); font-size: 0.7rem;
-  padding: 0.2rem 0.6rem; border-radius: 6px; margin-left: 0.5rem;
+  padding: 0.2rem 0.3rem; border-radius: 6px; margin-left: 0.5rem;
 }
 .corroboration-strong { background: rgba(16,185,129,0.15); color: var(--accent-green); }
 .corroboration-weak { background: rgba(245,158,11,0.15); color: var(--accent-amber); }

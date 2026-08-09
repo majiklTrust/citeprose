@@ -1563,12 +1563,14 @@
                                 Review
                               </button>
                             ) : (<>
+                            {post.status !== 'scheduled' && (<>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Publish'}
                             </button>
                             <button className="btn btn-reject" onClick={(e) => handleReject(post.id, e)}>
                               Reject
                             </button>
+                            </>)}
                             <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
                               >
                               Edit

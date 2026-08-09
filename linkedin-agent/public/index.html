@@ -1262,8 +1262,14 @@
         setLoading(l => ({ ...l, statusChange: false }));
       }
 
-      const pendingPosts = posts.filter(p => p.status === 'pending_approval' || p.status === 'draft');
-      const recentPosts = posts.filter(p => p.status !== 'pending_approval' && p.status !== 'draft');
+      const pendingStatusRank = (s) => (s === 'draft' ? 0 : s === 'pending_approval' ? 1 : 2);
+      const pendingPosts = posts
+        .filter(p => p.status === 'draft' || p.status === 'pending_approval' || p.status === 'scheduled')
+        .sort((a, b) => pendingStatusRank(a.status) - pendingStatusRank(b.status));
+      const recentStatusRank = (s) => (s === 'posted' ? 0 : s === 'rejected' ? 2 : 1);
+      const recentPosts = posts
+        .filter(p => p.status !== 'pending_approval' && p.status !== 'draft')
+        .sort((a, b) => recentStatusRank(a.status) - recentStatusRank(b.status));
 
       // ── Login Wall: shown when auth is required but no user ──
       if (status && status.authRequired && !status.user) {
@@ -1540,8 +1546,8 @@
                           </div>
                           <span className={post.status === 'draft'
                             ? 'post-status badge-draft'
-                            : 'post-status status-pending_approval'}>
-                            {post.status === 'draft' ? 'DRAFT' : 'PENDING'}
+                            : 'post-status status-'+post.status}>
+                            {post.status.replace('_', ' ').slice(0, 8).toUpperCase()}
                           </span>
                         </div>
                         <div className="post-title-text">{post.title}</div>
@@ -1557,12 +1563,14 @@
                                 Review
                               </button>
                             ) : (<>
+                            {post.status !== 'scheduled' && (<>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Publish'}
                             </button>
                             <button className="btn btn-reject" onClick={(e) => handleReject(post.id, e)}>
                               Reject
                             </button>
+                            </>)}
                             <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}
                               >
                               Edit
@@ -1959,7 +1967,7 @@
                           style={{ padding: '0.35rem 0.5rem' }}
                         />
                         <button className="btn btn-primary btn-tight" onClick={() => handleStatusChange('scheduled')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>
-                          {loading.statusChange ? <span className="loading-spinner"></span> : 'Confirm time'}
+                          {loading.statusChange ? <span className="loading-spinner"></span> : 'Confirm Time'}
                         </button>
                         <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.statusChange}>
                           Cancel

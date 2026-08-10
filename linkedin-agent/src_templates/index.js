@@ -243,7 +243,12 @@ export function createApp(ctx) {
       `);
     }
     const state = generateOAuthState();
-    const loginUrl = provider.getLoginUrl(state);
+    // Self-service signup (2.5.111 line): /auth/login?signup=1 asks
+    // the provider for its SIGNUP screen. Only the presence of the
+    // flag travels; no caller value reaches the provider.
+    const loginUrl = req.query.signup === "1"
+      ? provider.getLoginUrl(state, { screenHint: "signup" })
+      : provider.getLoginUrl(state);
     res.redirect(loginUrl);
   });
 

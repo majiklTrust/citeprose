@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v3.25110.1
+// v3.25110.7
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -243,7 +243,12 @@ export function createApp(ctx) {
       `);
     }
     const state = generateOAuthState();
-    const loginUrl = provider.getLoginUrl(state);
+    // Self-service signup (2.5.111 line): /auth/login?signup=1 asks
+    // the provider for its SIGNUP screen. Only the presence of the
+    // flag travels; no caller value reaches the provider.
+    const loginUrl = req.query.signup === "1"
+      ? provider.getLoginUrl(state, { screenHint: "signup" })
+      : provider.getLoginUrl(state);
     res.redirect(loginUrl);
   });
 
@@ -1090,7 +1095,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  3.25110.1
+║           LinkedIn AI Content Agent  3.25110.7
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

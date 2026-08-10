@@ -414,7 +414,7 @@ const auth0Provider = {
 
   // ── getLoginUrl ────────────────────────────────────────────
 
-  getLoginUrl(state) {
+  getLoginUrl(state, opts) {
     const config = getConfig();
     const params = new URLSearchParams({
       response_type: "code",
@@ -424,6 +424,14 @@ const auth0Provider = {
       audience: config.audience,
       state: state || generateState()
     });
+    // Self-service signup (2.5.111 line): Auth0 Universal Login
+    // honors screen_hint=signup by opening the SIGNUP screen
+    // instead of the login screen. Optional second argument keeps
+    // every existing call site byte-compatible; only the literal
+    // value "signup" is ever emitted, never caller input.
+    if (opts && opts.screenHint === "signup") {
+      params.set("screen_hint", "signup");
+    }
     return `${config.authorizationUrl}?${params.toString()}`;
   },
 

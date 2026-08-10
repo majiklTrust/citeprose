@@ -869,6 +869,20 @@
       // 2.5.54: the topic-filtered Research Monitor view. A separate
       // override so the unfiltered status poll can never stomp it.
       const [researchStatsOverride, setResearchStatsOverride] = useState(null);
+      // Self-service workspace setup (2.5.111 line): state for the
+      // no-membership panel's CTA. Declared with the other hooks so
+      // the conditional returns below never skip a hook call.
+      const [selfServe, setSelfServe] = useState({ busy: false, msg: '' });
+      const selfServeSetup = () => {
+        setSelfServe({ busy: true, msg: '' });
+        fetch(`${API}/api/register/self-invite`, { method: 'POST', credentials: 'include', headers: { 'Accept': 'application/json' } })
+          .then(r => r.json().then(d => ({ ok: r.ok, d })))
+          .then(({ ok, d }) => {
+            if (ok && d.registerUrl) { window.location.href = d.registerUrl; return; }
+            setSelfServe({ busy: false, msg: d.error || 'Setup could not start. Please try again.' });
+          })
+          .catch(() => setSelfServe({ busy: false, msg: 'Setup could not start. Please try again.' }));
+      };
       useEffect(() => {
         if (!selectedTopic) { setResearchStatsOverride(null); return; }
         let dead = false;
@@ -1375,9 +1389,23 @@
                 No Membership - Workspace Unassigned
               </div>
               <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0 auto' }}>
-                Your account is authenticated but isn't yet assigned to a workspace.
-                Contact your administrator to be added to one, then log out and back in.
+                Your workspace has not been assigned. You may need to check your inbox for
+                an email from our security and identity partner to validate.
+                If your organization invited you, contact your administrator to be
+                added, then log out and back in.
+                <br/>Setting up on your own? Create your workspace now; you'll name it, 
+                connect your AI vendor key, and pick a plan on the billing page.
               </div>
+              <div style={{ marginTop: '1rem' }}>
+                <button className="btn btn-primary" onClick={selfServeSetup} disabled={selfServe.busy}>
+                  {selfServe.busy ? 'Starting setup...' : 'Set Up My Workspace'}
+                </button>
+              </div>
+              {selfServe.msg && (
+                <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0.75rem auto 0', color: '#e65100' }}>
+                  {selfServe.msg}
+                </div>
+              )}
             </div>
           </div>
         );

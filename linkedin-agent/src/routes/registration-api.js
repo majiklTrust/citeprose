@@ -203,6 +203,113 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
 });
 
 // ══════════════════════════════════════════════════════════════
+// Authenticated: SELF-SERVICE registration invite (2.5.111 line)
+// ══════════════════════════════════════════════════════════════
+// The self-service trigger for the SAME New Tenant Registration
+// workflow the platform-admin card starts, with the trust model
+// inverted: the admin's authority is replaced by the visitor's own
+// IDP-verified identity.
+//
+// Security posture by category (ruled with the design):
+//   Resource abuse   no anonymous surface; the DURABLE bounds (one
+//                    live registration per email, lifetime cap per
+//                    subject) are adjudicated ATOMICALLY in the
+//                    database by self-registration-store, so they
+//                    hold across instances, restarts, and races.
+//                    The in-memory counter below is only a cheap
+//                    local burst filter, never the real bound.
+//   Money exposure   unchanged: a shell tenant; checkout still
+//                    binds to the tenant the wizard creates.
+//   Identity trust   the email comes ONLY from the verified
+//                    session; unverified email or a synthetic
+//                    dev-bypass identity is refused outright.
+//   Surface area     the admin key path is structurally
+//                    unreachable, the route reads NO body fields,
+//                    and a kill switch closes the whole surface.
+function isSelfRegistrationEnabled() {
+  return (process.env.SELF_REGISTRATION || "on") !== "off";
+}
+// Hardcoded default flagged per project convention; env-overridable.
+function getSelfInviteBurstCap() {
+  const n = parseInt(process.env.SELF_REGISTRATION_BURST_CAP, 10);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+}
+const selfInviteAttempts = new Map();
+
+router.post("/self-invite", requireAuth, async (req, res) => {
+  try {
+    if (!isSelfRegistrationEnabled()) {
+      return res.status(403).json({ error: "Self-service setup is not available.", code: "SELF_REGISTRATION_DISABLED" });
+    }
+    // Zero Trust: a synthetic identity (dev bypass, no-provider
+    // mode) can never mint a tenant; only a real IDP session can.
+    if (req.devBypass || req.authSkipped) {
+      return safeError(res, 403, "Self-service setup requires a real login");
+    }
+    if (!req.user || !req.user.sub) {
+      return safeError(res, 401, "Sign in before setting up a workspace");
+    }
+    const sub = req.user.sub;
+
+    // Local burst filter (per instance, resets on restart). The
+    // durable caps live in the atomic statement below.
+    const attempts = selfInviteAttempts.get(sub) || 0;
+    if (attempts >= getSelfInviteBurstCap()) {
+      return safeError(res, 429, "Too many setup attempts. Please try again later.");
+    }
+    selfInviteAttempts.set(sub, attempts + 1);
+
+    // Identity trust: verified email from the SESSION, never the body.
+    if (req.user.emailVerified !== true) {
+      return safeError(res, 403, "Verify your email address first, then log in again to set up your workspace.");
+    }
+    const email = typeof req.user.email === "string" ? req.user.email.trim() : "";
+    if (!email || !email.includes("@")) {
+      return safeError(res, 403, "Your login carries no email address; a workspace cannot be set up for it.");
+    }
+
+    // One atomic adjudication: eligibility and mint in a single
+    // statement (no check-then-insert race, instance-independent).
+    const { attemptSelfRegistration, SELF_REG_OUTCOME } = await import("../tenant/self-registration-store.js");
+    const verdict = await attemptSelfRegistration(email, sub);
+
+    const emailDomain = email.split("@")[1] || null;
+    if (verdict.outcome === SELF_REG_OUTCOME.CREATED || verdict.outcome === SELF_REG_OUTCOME.REISSUED) {
+      const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
+      platformLog("info", "self_registration_invite_created", {
+        sub, emailDomain, reissued: verdict.outcome === SELF_REG_OUTCOME.REISSUED, expiresAt: verdict.expiresAt
+      });
+      // The URL returns ONLY to the verified owner of the email, in
+      // the same authenticated response. No email body is composed.
+      return res.status(verdict.outcome === SELF_REG_OUTCOME.CREATED ? 201 : 200).json({
+        registerUrl: `${origin}/app/register#token=${verdict.token}`,
+        expiresAt: verdict.expiresAt,
+        reissued: verdict.outcome === SELF_REG_OUTCOME.REISSUED
+      });
+    }
+
+    platformLog("info", "self_registration_refused", { sub, emailDomain, code: verdict.outcome });
+    // Every refusal describes only the CALLER'S own state.
+    if (verdict.outcome === SELF_REG_OUTCOME.ALREADY_MEMBER) {
+      return res.status(409).json({ error: "This login already belongs to a workspace.", code: "ALREADY_MEMBER" });
+    }
+    if (verdict.outcome === SELF_REG_OUTCOME.INVITE_PENDING) {
+      return res.status(409).json({ error: "An invitation is already waiting for this email address. Log out and back in to accept it.", code: "INVITE_PENDING" });
+    }
+    if (verdict.outcome === SELF_REG_OUTCOME.REGISTRATION_EXISTS) {
+      return res.status(409).json({ error: "A setup link for this email was already issued by your administrator. Use that link, or wait for it to expire.", code: "REGISTRATION_EXISTS" });
+    }
+    if (verdict.outcome === SELF_REG_OUTCOME.RATE_LIMITED) {
+      return res.status(429).json({ error: "This login has reached its workspace setup limit. Contact support.", code: "RATE_LIMITED" });
+    }
+    return safeError(res, 500, "Workspace setup could not start");
+  } catch (err) {
+    platformLog("error", "self_registration_invite_failed", { error: err.message });
+    safeError(res, 500, "Workspace setup could not start");
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
 // Unauthenticated: Initialize registration (validate + activate)
 // ══════════════════════════════════════════════════════════════
 

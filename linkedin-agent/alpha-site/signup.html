@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Set up your workspace: create your login, verify your email, name your workspace, and pick a plan." />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <title>Get Started</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    /* The billing page's about idiom: one quiet column, serif
+       display headings, kicker labels, ruled sections, accent-left
+       cards, linear reading. Self-contained; no app stylesheets. */
+    :root {
+      --ink: #0f0f0f; --paper: #f7f5f0; --rule: #d6d0c4;
+      --accent: #1a3a5c; --accent-lt: #e8edf2; --muted: #6b6659;
+      --gap: 1.5rem;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; font-size: 1rem; line-height: 1.55; }
+    main { max-width: 52rem; margin: 0 auto; padding: 1.75rem 1.5rem 2.5rem; }
+    .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.78rem; font-weight: 500; margin: 0 0 0.75rem; }
+    h1 { font-family: 'Playfair Display', serif; font-weight: 600; font-size: clamp(1.6rem, 4vw, 2.1rem); line-height: 1.15; margin: 0 0 0.35rem; }
+    .byline { color: var(--muted); font-size: 0.95rem; margin: 0 0 var(--gap); }
+    h2 { font-family: 'Playfair Display', serif; font-weight: 600; font-size: 1.3rem; margin: var(--gap) 0 0.6rem; padding-top: var(--gap); border-top: 1px solid var(--rule); }
+    p { margin: 0; }
+    p + p { margin-top: 1rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .steps { list-style: none; margin: 0.9rem 0 0; padding: 0; display: grid; gap: 0.8rem; }
+    .step { background: var(--accent-lt); border-left: 3px solid var(--accent); padding: 0.85rem 1rem; }
+    .step .tag { display: block; font-weight: 500; color: var(--accent); margin-bottom: 0.2rem; letter-spacing: 0.03em; }
+    .step .num { font-family: 'Playfair Display', serif; font-size: 1.15rem; margin-right: 0.35rem; }
+    .btn { font: inherit; font-weight: 500; padding: 0.35rem 0.8rem; border: 1px solid var(--accent); background: var(--accent); color: #fffdf9; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 0.6rem; }
+    .btn:hover { background: #142e49; }
+    .btn.ghost { background: transparent; color: var(--accent); }
+    a { color: var(--accent); }
+    .topbar { max-width: 52rem; margin: 0 auto; padding: 1rem 1.5rem 0; display: flex; justify-content: space-between; align-items: baseline; }
+    .topbar a { text-decoration: none; font-size: 0.9rem; }
+    .note { border: 1px solid var(--rule); background: #fffdf9; padding: 0.9rem 1.1rem; margin-top: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/">Home</a>
+    <a href="/auth/login">Already have a login? Sign in</a>
+  </div>
+  <main>
+    <p class="kicker">Get started</p>
+    <h1>Set up your workspace in three steps.</h1>
+    <p class="byline">Create your login, name your workspace, pick your plan. You are publishing-ready in minutes.</p>
+
+    <ul class="steps">
+      <li class="step">
+        <span class="tag"><span class="num">1.</span>Create your login and verify your email</span>
+        Create your account with our identity provider, then click the verification
+        link it emails you. Verification is required: your workspace can only be
+        created for an email address you have proven is yours.
+        <br />
+        <a class="btn" href="/auth/login?signup=1">Create your account</a>
+      </li>
+      <li class="step">
+        <span class="tag"><span class="num">2.</span>Name your workspace</span>
+        After you verify and sign in, the dashboard offers one button: Set Up My
+        Workspace. It walks you through naming your workspace and connecting your
+        AI vendor API key. That key is yours, is encrypted at rest, and powers all
+        content generation for your workspace.
+      </li>
+      <li class="step">
+        <span class="tag"><span class="num">3.</span>Pick your plan</span>
+        With the workspace created, the dashboard takes you to the billing page to
+        choose a plan. Your subscription activates at checkout and your workspace
+        unlocks immediately.
+      </li>
+    </ul>
+
+    <h2>What you will need</h2>
+    <p>An email address you can verify, and an AI vendor API key for language
+    generation. Anthropic keys are supported today; you can create one at
+    <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>.
+    Image generation vendors can be added later from your workspace's management page.</p>
+
+    <h2>Invited by your organization?</h2>
+    <p>If an administrator invited you, use the link in your invitation email
+    instead; it carries your workspace assignment. If you signed in and see
+    "No Membership", your invitation may be waiting: log out and back in after
+    verifying your email, and it will be accepted automatically.</p>
+
+    <h2>Questions</h2>
+    <p class="muted">Billing, plans, or a custom arrangement:
+    <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>.</p>
+  </main>
+</body>
+</html>

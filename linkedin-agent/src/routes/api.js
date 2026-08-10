@@ -193,8 +193,11 @@ router.get("/api/status", optionalAuth, async (req, res) => {
           // tenant context on purpose (subscriptions carry no RLS).
           try {
             const { subscriptionStatus } = await import("../services/entitlements.js");
-            subscription = await subscriptionStatus(tenant.id, user ? user.sub : null);
-          } catch {
+            subscription = await subscriptionStatus(tenant.id, req.user ? req.user.sub : null);
+          } catch (statusErr) {
+            // 2.4.23: this catch swallowed a ReferenceError for days.
+            // A swallowed failure is a diagnostic hole; log the truth.
+            platformLog("error", "subscription_status_failed", { tenantId: tenant.id, error: statusErr.message });
             // AUDIT F2 (2.4.2): a transient read failure must NEVER
             // paint the paywall over a paying tenant's dashboard.
             // "unknown" renders the dashboard; the server gates stay

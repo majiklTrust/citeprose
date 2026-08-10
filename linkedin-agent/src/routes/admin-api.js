@@ -77,7 +77,7 @@ router.use(createAiConfigRoutes());
 
 // ── Email validation ─────────────────────────────────────────
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VALID_INVITE_ROLES = ["editor", "viewer"];
+const VALID_INVITE_ROLES = ["editor", "viewer", "owner"];
 
 // ══════════════════════════════════════════════════════════════
 // Invites

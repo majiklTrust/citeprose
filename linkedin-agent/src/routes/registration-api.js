@@ -241,8 +241,7 @@ router.post("/self-invite", requireAuth, async (req, res) => {
     if (!isSelfRegistrationEnabled()) {
       return res.status(403).json({ error: "Self-service setup is not available.", code: "SELF_REGISTRATION_DISABLED" });
     }
-    // Zero Trust: a synthetic identity (dev bypass, no-provider
-    // mode) can never mint a tenant; only a real IDP session can.
+    // Zero Trust: synthetic identities never mint tenants.
     if (req.devBypass || req.authSkipped) {
       return safeError(res, 403, "Self-service setup requires a real login");
     }
@@ -251,15 +250,14 @@ router.post("/self-invite", requireAuth, async (req, res) => {
     }
     const sub = req.user.sub;
 
-    // Local burst filter (per instance, resets on restart). The
-    // durable caps live in the atomic statement below.
+    // Local burst filter only; durable caps live in the atomic store.
     const attempts = selfInviteAttempts.get(sub) || 0;
     if (attempts >= getSelfInviteBurstCap()) {
       return safeError(res, 429, "Too many setup attempts. Please try again later.");
     }
     selfInviteAttempts.set(sub, attempts + 1);
 
-    // Identity trust: verified email from the SESSION, never the body.
+    // Verified email from the SESSION, never the body.
     if (req.user.emailVerified !== true) {
       return safeError(res, 403, "Verify your email address first, then log in again to set up your workspace.");
     }
@@ -268,24 +266,30 @@ router.post("/self-invite", requireAuth, async (req, res) => {
       return safeError(res, 403, "Your login carries no email address; a workspace cannot be set up for it.");
     }
 
-    // One atomic adjudication: eligibility and mint in a single
-    // statement (no check-then-insert race, instance-independent).
+    // One atomic adjudication: eligibility and mint in ONE statement
+    // (no check-then-insert race, instance-independent).
     const { attemptSelfRegistration, SELF_REG_OUTCOME } = await import("../tenant/self-registration-store.js");
     const verdict = await attemptSelfRegistration(email, sub);
 
     const emailDomain = email.split("@")[1] || null;
-    if (verdict.outcome === SELF_REG_OUTCOME.CREATED || verdict.outcome === SELF_REG_OUTCOME.REISSUED) {
+    const granting = [SELF_REG_OUTCOME.CREATED, SELF_REG_OUTCOME.REISSUED, SELF_REG_OUTCOME.ROTATED];
+    if (granting.includes(verdict.outcome)) {
       const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
       platformLog("info", "self_registration_invite_created", {
-        sub, emailDomain, reissued: verdict.outcome === SELF_REG_OUTCOME.REISSUED, expiresAt: verdict.expiresAt
+        sub, emailDomain, mode: verdict.outcome, expiresAt: verdict.expiresAt
       });
-      // The URL returns ONLY to the verified owner of the email, in
-      // the same authenticated response. No email body is composed.
-      return res.status(verdict.outcome === SELF_REG_OUTCOME.CREATED ? 201 : 200).json({
+      // URL returns ONLY to the verified email owner, in the same
+      // authenticated response. ROTATED = a stale self link for the
+      // same verified email was atomically revoked and replaced.
+      return res.status(verdict.outcome === SELF_REG_OUTCOME.REISSUED ? 200 : 201).json({
         registerUrl: `${origin}/app/register#token=${verdict.token}`,
         expiresAt: verdict.expiresAt,
         reissued: verdict.outcome === SELF_REG_OUTCOME.REISSUED
       });
+    }
+    if (verdict.outcome === SELF_REG_OUTCOME.RETRY) {
+      platformLog("info", "self_registration_refused", { sub, emailDomain, code: verdict.outcome });
+      return res.status(409).json({ error: "Setup is being prepared in another window. Try the button again.", code: "SETUP_RACE" });
     }
 
     platformLog("info", "self_registration_refused", { sub, emailDomain, code: verdict.outcome });

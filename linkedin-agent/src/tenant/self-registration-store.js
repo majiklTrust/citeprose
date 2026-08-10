@@ -42,10 +42,12 @@ async function defaultQuery(sql, params) {
 export const SELF_REG_OUTCOME = Object.freeze({
   CREATED: "created",
   REISSUED: "reissued",
+  ROTATED: "rotated",
   ALREADY_MEMBER: "already_member",
   INVITE_PENDING: "invite_pending",
   REGISTRATION_EXISTS: "registration_exists",
-  RATE_LIMITED: "rate_limited"
+  RATE_LIMITED: "rate_limited",
+  RETRY: "retry"
 });
 
 // Mirrors platform-db.js getRegistrationTTL (not exported there);
@@ -76,15 +78,37 @@ export function getMaxSelfRegistrations() {
  * @param {object} deps  - { query } injectable for DB-free tests
  * @returns {Promise<{outcome: string, token: string|null, expiresAt: string|null}>}
  *
- * REISSUED (idempotent retry): a live registration THIS subject
- * already minted for this email returns its existing token again,
- * so a client retry after a timeout converges instead of erroring.
- * A live registration minted by anyone else (a platform admin)
- * refuses with REGISTRATION_EXISTS: an admin-issued link may carry
- * provisioning intent and is never re-routed through self-service.
+ * Live-link policy, ruled for the recreated-account case:
+ *   REISSUED  same subject, same live self link: the identical
+ *             token returns again, so a client retry after a
+ *             timeout converges instead of erroring. No row is
+ *             minted; the lifetime cap is not consumed.
+ *   ROTATED   a DIFFERENT subject who has verified the SAME email
+ *             (account deleted and recreated, address reassigned)
+ *             holds strictly sufficient authority for a fresh
+ *             mint, so the stale self link is atomically expired
+ *             and a new token minted IN THE SAME STATEMENT. The
+ *             old token, wherever it is still remembered, dies.
+ *             Rotation mints a row and therefore consumes the
+ *             lifetime cap; at the cap it refuses RATE_LIMITED.
+ *   REGISTRATION_EXISTS  only for ADMIN-issued live links, which
+ *             may carry provisioning intent (an encrypted key)
+ *             and are never re-routed through self-service. The
+ *             'self:' provenance prefix is reserved: subjects
+ *             arriving with it are refused before any SQL.
+ *   RETRY     the rotation race loser (two sessions, same email,
+ *             same instant): the statement updated zero rows, so
+ *             nothing was minted; the caller simply tries again
+ *             and converges on the winner's link.
  */
 export async function attemptSelfRegistration(email, sub, deps = {}) {
   const q = deps.query || defaultQuery;
+  // Defense in depth: 'self:' is this module's reserved provenance
+  // namespace. No IDP issues such subjects; one arriving here is
+  // forged input and is refused before any SQL runs.
+  if (typeof sub !== "string" || sub.length === 0 || sub.startsWith("self:")) {
+    throw new Error("self-registration requires a non-reserved IDP subject");
+  }
   const token = randomBytes(32).toString("base64url");
   const invitedBy = `self:${sub}`;
   const ttl = String(getRegistrationTTL());
@@ -100,7 +124,7 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
         LIMIT 1
      ),
      live_reg AS (
-       SELECT token, invited_by_sub, expires_at
+       SELECT id, token, invited_by_sub, expires_at
          FROM tenant_registrations
         WHERE lower(email) = lower($1)
           AND status IN ('pending', 'active')
@@ -112,13 +136,26 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
        SELECT count(*)::int AS n FROM tenant_registrations
         WHERE invited_by_sub = $3
      ),
+     rot AS (
+       UPDATE tenant_registrations
+          SET status = 'expired', api_key_enc = NULL
+        WHERE id = (SELECT id FROM live_reg
+                     WHERE invited_by_sub LIKE 'self:%'
+                       AND invited_by_sub <> $3)
+          AND status IN ('pending', 'active')
+          AND NOT EXISTS (SELECT 1 FROM me)
+          AND NOT EXISTS (SELECT 1 FROM pending_invite)
+          AND (SELECT n FROM minted) < $6
+       RETURNING id
+     ),
      ins AS (
        INSERT INTO tenant_registrations (token, email, invited_by_sub, expires_at)
        SELECT $4, lower($1), $3, now() + ($5 || ' minutes')::interval
         WHERE NOT EXISTS (SELECT 1 FROM me)
           AND NOT EXISTS (SELECT 1 FROM pending_invite)
-          AND NOT EXISTS (SELECT 1 FROM live_reg)
           AND (SELECT n FROM minted) < $6
+          AND (NOT EXISTS (SELECT 1 FROM live_reg)
+               OR EXISTS (SELECT 1 FROM rot))
        RETURNING token, expires_at
      )
      SELECT
@@ -127,6 +164,7 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
        (SELECT token FROM live_reg)          AS live_token,
        (SELECT invited_by_sub FROM live_reg) AS live_invited_by,
        (SELECT expires_at FROM live_reg)     AS live_expires_at,
+       EXISTS (SELECT 1 FROM rot)            AS rotated,
        (SELECT n FROM minted)                AS minted_count,
        (SELECT token FROM ins)               AS created_token,
        (SELECT expires_at FROM ins)          AS created_expires_at`,
@@ -137,7 +175,8 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
   if (!r) throw new Error("self-registration adjudication returned no verdict row");
 
   if (r.created_token) {
-    return { outcome: SELF_REG_OUTCOME.CREATED, token: r.created_token, expiresAt: r.created_expires_at };
+    const outcome = r.rotated ? SELF_REG_OUTCOME.ROTATED : SELF_REG_OUTCOME.CREATED;
+    return { outcome, token: r.created_token, expiresAt: r.created_expires_at };
   }
   if (r.already_member) {
     return { outcome: SELF_REG_OUTCOME.ALREADY_MEMBER, token: null, expiresAt: null };
@@ -146,11 +185,20 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
     return { outcome: SELF_REG_OUTCOME.INVITE_PENDING, token: null, expiresAt: null };
   }
   if (r.live_token) {
-    // Idempotent convergence, but ONLY onto a link this same
-    // subject minted; an admin-issued live link is not re-routed.
     if (r.live_invited_by === invitedBy) {
+      // Same subject: pure idempotency, nothing minted, cap untouched.
       return { outcome: SELF_REG_OUTCOME.REISSUED, token: r.live_token, expiresAt: r.live_expires_at };
     }
+    if (typeof r.live_invited_by === "string" && r.live_invited_by.startsWith("self:")) {
+      // A rotatable link existed but nothing was minted: either the
+      // lifetime cap refused the rotation, or a concurrent rotation
+      // won the row. Both are named states, never a silent fallback.
+      if (typeof r.minted_count === "number" && r.minted_count >= cap) {
+        return { outcome: SELF_REG_OUTCOME.RATE_LIMITED, token: null, expiresAt: null };
+      }
+      return { outcome: SELF_REG_OUTCOME.RETRY, token: null, expiresAt: null };
+    }
+    // Not self-provenance: an ADMIN-issued live link, never re-routed.
     return { outcome: SELF_REG_OUTCOME.REGISTRATION_EXISTS, token: null, expiresAt: null };
   }
   if (typeof r.minted_count === "number" && r.minted_count >= cap) {

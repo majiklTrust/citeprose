@@ -234,11 +234,44 @@ function getSelfInviteBurstCap() {
   const n = parseInt(process.env.SELF_REGISTRATION_BURST_CAP, 10);
   return Number.isFinite(n) && n > 0 ? n : 5;
 }
-const selfInviteAttempts = new Map();
+// Burst filter (F1 resolution, optimized): a DECAYING sliding
+// window, consulted only after every in-memory gate has passed,
+// so a slot is consumed exclusively by a request that would
+// otherwise reach the database. Refusals that cost nothing
+// (unverified email, synthetic identity, kill switch) consume
+// nothing, so a confused user can never lock themselves out; the
+// window self-heals in BURST_WINDOW_MS, and the table is bounded
+// so it can never become a slow leak. Per-instance by design; the
+// durable caps live in the store's atomic adjudication.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+const BURST_TABLE_MAX = 5000;
+const selfInviteAttempts = new Map(); // sub -> [attempt timestamps]
+function overSelfInviteBurst(sub) {
+  const now = Date.now();
+  const prior = selfInviteAttempts.get(sub);
+  const seen = prior ? prior.filter((t) => now - t < BURST_WINDOW_MS) : [];
+  if (seen.length >= getSelfInviteBurstCap()) {
+    selfInviteAttempts.set(sub, seen);
+    return true; // over cap: refuse WITHOUT extending the window
+  }
+  seen.push(now);
+  if (!prior && selfInviteAttempts.size >= BURST_TABLE_MAX) {
+    selfInviteAttempts.delete(selfInviteAttempts.keys().next().value);
+  }
+  selfInviteAttempts.set(sub, seen);
+  return false;
+}
 
 router.post("/self-invite", requireAuth, async (req, res) => {
   try {
     if (!isSelfRegistrationEnabled()) {
+      // F5 resolution: the kill switch is an incident-response
+      // control; every refusal it issues must be visible in the
+      // platform log, or "disabled and quiet" reads like "broken".
+      platformLog("info", "self_registration_refused", {
+        sub: (req.user && req.user.sub) || null,
+        code: "SELF_REGISTRATION_DISABLED"
+      });
       return res.status(403).json({ error: "Self-service setup is not available.", code: "SELF_REGISTRATION_DISABLED" });
     }
     // Zero Trust: synthetic identities never mint tenants.
@@ -250,13 +283,6 @@ router.post("/self-invite", requireAuth, async (req, res) => {
     }
     const sub = req.user.sub;
 
-    // Local burst filter only; durable caps live in the atomic store.
-    const attempts = selfInviteAttempts.get(sub) || 0;
-    if (attempts >= getSelfInviteBurstCap()) {
-      return safeError(res, 429, "Too many setup attempts. Please try again later.");
-    }
-    selfInviteAttempts.set(sub, attempts + 1);
-
     // Verified email from the SESSION, never the body.
     if (req.user.emailVerified !== true) {
       return safeError(res, 403, "Verify your email address first, then log in again to set up your workspace.");
@@ -264,6 +290,13 @@ router.post("/self-invite", requireAuth, async (req, res) => {
     const email = typeof req.user.email === "string" ? req.user.email.trim() : "";
     if (!email || !email.includes("@")) {
       return safeError(res, 403, "Your login carries no email address; a workspace cannot be set up for it.");
+    }
+
+    // Burst filter LAST among the gates (F1): only a request that
+    // passed every check above and would now reach the database
+    // consumes a slot from the decaying window.
+    if (overSelfInviteBurst(sub)) {
+      return safeError(res, 429, "Too many setup attempts. Please try again in a few minutes.");
     }
 
     // One atomic adjudication: eligibility and mint in ONE statement

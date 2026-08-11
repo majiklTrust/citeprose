@@ -7,10 +7,18 @@
 //
 // DISTRIBUTED-CORRECTNESS RULE (the reason this module exists):
 // every eligibility predicate and the INSERT ride ONE SQL
-// statement, so two concurrent requests, on one instance or on
-// two instances behind the load balancer, can never both pass a
-// read check and double-mint. The database, the single shared
-// authority, adjudicates; the statement is the transaction.
+// statement, so no request can pass a read check and then act on
+// it later (no check-then-insert window WITHIN a request). The
+// database, the single shared authority, adjudicates; the
+// statement is the transaction.
+//
+// KNOWN LIMIT (review finding F6, open): one statement does not
+// serialize CONCURRENT requests against each other. Under READ
+// COMMITTED, two simultaneous requests can each see no live row
+// and both insert. Closing this requires a database-level
+// uniqueness backstop (partial unique index on lower(email) over
+// live statuses) plus a named 23505 mapping here; that is a
+// schema change and ships only on an explicit ruling.
 //
 // Zero Trust posture:
 //   - callers pass an email and a subject the ROUTE has already
@@ -94,8 +102,11 @@ export function getMaxSelfRegistrations() {
  *   REGISTRATION_EXISTS  only for ADMIN-issued live links, which
  *             may carry provisioning intent (an encrypted key)
  *             and are never re-routed through self-service. The
- *             'self:' provenance prefix is reserved: subjects
- *             arriving with it are refused before any SQL.
+ *             adjudicating row is chosen admin-first, so a live
+ *             admin link takes precedence over any coexisting
+ *             self link regardless of expiry order. The 'self:'
+ *             provenance prefix is reserved: subjects arriving
+ *             with it are refused before any SQL.
  *   RETRY     the rotation race loser (two sessions, same email,
  *             same instant): the statement updated zero rows, so
  *             nothing was minted; the caller simply tries again
@@ -124,12 +135,18 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
         LIMIT 1
      ),
      live_reg AS (
+       -- F2 resolution: admin-issued links sort FIRST (false sorts
+       -- before true), so a live admin link ALWAYS wins
+       -- adjudication and can never be shadowed out of the verdict
+       -- by a longer-lived self link. The policy "admin links are
+       -- never re-routed" is now structural, not an accident of
+       -- equal TTLs.
        SELECT id, token, invited_by_sub, expires_at
          FROM tenant_registrations
         WHERE lower(email) = lower($1)
           AND status IN ('pending', 'active')
           AND expires_at > now()
-        ORDER BY expires_at DESC
+        ORDER BY (invited_by_sub LIKE 'self:%') ASC, expires_at DESC
         LIMIT 1
      ),
      minted AS (

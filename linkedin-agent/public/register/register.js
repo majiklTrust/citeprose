@@ -43,8 +43,24 @@
   function initRegistration() {
     registrationToken = extractToken();
     if (!registrationToken) {
+      // F4 resolution: a MISSING token is its own named state, not
+      // an invalid link. Fragments never leave the browser, so
+      // bookmarks, typed URLs, and redirect chains arrive here
+      // bare; that is an ordinary arrival, not an error. Recovery
+      // routes to the dashboard CTA, which converges on the
+      // caller's live link (REISSUED) or mints one (CREATED)
+      // through the store's atomic adjudication: the authoritative,
+      // idempotent endpoint recovers, never client-side state.
+      // The page stays stateless and the CTA is same-origin
+      // relative, so behavior is identical on every instance
+      // behind the balancer. Explicit click, never an auto
+      // redirect: no loop risk if /app/ ever bounces back here.
+      // Version-skew guard: this file and the HTML deploy as
+      // separate static assets; during a rolling deploy the older
+      // page may lack the no-token panel, so fall back to the
+      // invalid panel rather than render nothing.
       $('loading').style.display = 'none';
-      $('invalid').style.display = 'block';
+      ($('no-token') || $('invalid')).style.display = 'block';
       return;
     }
 

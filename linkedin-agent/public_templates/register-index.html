@@ -52,7 +52,29 @@
       <div class="card">
         <h1>Registration Link Invalid</h1>
         <p class="subtitle">This link is expired, already used, or invalid.</p>
-        <p style="color:#888; font-size:0.85rem;">Contact your administrator for a new registration link.</p>
+        <p style="color:#888; font-size:0.85rem;">Invited by an administrator? Ask them for a new registration link.
+        Setting up on your own? The dashboard can issue you a fresh link.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/app/" style="text-decoration:none; display:inline-block;">Go to the Dashboard</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- F4: a missing token is its OWN state, not a broken link.
+         Bookmarks, typed addresses, and redirect chains drop the
+         part of the address after the # sign (it never leaves the
+         browser), so arriving here without a token is ordinary. -->
+    <div id="no-token" style="display:none;">
+      <div class="card">
+        <h1>No Setup Link Here</h1>
+        <p class="subtitle">This page opens from a personal setup link, and this
+        address does not carry one. Bookmarks and redirects often drop it.</p>
+        <p style="color:#888; font-size:0.85rem;">Nothing is lost. The dashboard's
+        Set Up My Workspace button issues your link, or re-issues the one you
+        already have.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/app/" style="text-decoration:none; display:inline-block;">Go to the Dashboard</a>
+        </div>
       </div>
     </div>
 

@@ -472,8 +472,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "clear-tenant-posts": {
     label: "Clear Tenant Posts",
-    description: "Removes all posts for a tenant.",
-    capability: "Remove all of a tenant's posts — useful for resetting a demo or test tenant.",
+    description: "Removes all posts for a tenant — useful for resetting a demo or test tenant.",
+    capability: "REMOVETENANT.",
     sql: `DELETE FROM posts WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -485,7 +485,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-tenant-topics": {
     label: "Clear Tenant Topics",
     description: "Removes all topics and their feed mappings for a tenant.",
-    capability: "Remove a tenant's topics and their feed mappings.",
+    capability: "REMOVETENANT.",
     sql: `WITH deleted_mappings AS (
             DELETE FROM feed_topics WHERE tenant_id = $1::uuid
           )
@@ -500,7 +500,19 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-tenant-invites": {
     label: "Clear Tenant Member Invites (all users)",
     description: "Removes all member invites (pending and claimed) for a tenant.",
-    capability: "INVITES.",
+    capability: "REMOVETENANT INVITES.",
+    sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "clear-tenant-invites": {
+    label: "Clear Tenant Member Invites (all users)",
+    description: "Removes all member invites (pending and claimed) for a tenant.",
+    capability: "REMOVETENANT INVITES.",
     sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -510,15 +522,16 @@ export const QUERY_REGISTRY = Object.freeze({
   },
 
   "select-tenant-invites": {
-    label: "Shows Tenant Member Invites (all users)",
-    description: "Shows all member invites (pending and claimed) for a tenant.",
-    capability: "INVITES.",
-    sql: `select tr.email,i.status Invite,i.created_at Created,i.claimed_at Claimed,t.name Tenant,s.state Subscription, s.comp
-            from tenant_registrations tr
-            left join invites i on i.tenant_id = tr.tenant_id
-            left join tenants t on t.id = i.tenant_id
-            left join subscriptions s on s.tenant_id = i.tenant_id
-            order by s.state,s.comp,i.status`,
+    label: "Shows Tenant Registration Invites (all users)",
+    description: "Shows all invites (pending and claimed) for a tenant.",
+    capability: "REGISTER INVITES.",
+    sql: `select tr.email, i.status Invite, tr.invited_by_sub InvitedBy, i.created_at CreatedAt
+              ,i.claimed_at Claimed, t.name Tenant, s.state Subscription, s.comp
+          from tenant_registrations tr
+          left join invites i on i.tenant_id = tr.tenant_id
+          left join tenants t on t.id = i.tenant_id
+          left join subscriptions s on s.tenant_id = i.tenant_id
+          order by s.state,s.comp,i.status`,
     params: [],
     destructive: false,
     readOnly: true
@@ -527,7 +540,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "clear-tenant-memberships": {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",
-    capability: "MEMBERSHIPS",
+    capability: "REMOVETENANT MEMBERSHIPS",
     sql: `DELETE FROM memberships WHERE tenant_id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -536,10 +549,10 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: false
   },
 
-  "clear-tenant-main": {
+  "clear-tenant-master": {
     label: "Clear Tenant",
-    description: "Deletes the tenant row itself. Run the other clear-tenant queries first to remove dependent data.",
-    capability: "Final teardown step — remove the tenant shell after its data is cleared.",
+    description: "Deletes the tenant - Final teardown step. Run the other REMOVETENANT queries first to remove dependent data.",
+    capability: "REMOVETENANT.",
     sql: `DELETE FROM tenants WHERE id = $1::uuid`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
@@ -1029,7 +1042,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-view-by-tenant": {
     label: "Subscription (By Tenant)",
     description: "The full subscription row for one tenant. Read one workspace's commercial state: tier, state, comp, period, pending.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `SELECT tenant_id, tier, state, comp, pending_tier,
                  period_start, period_end, created_at, updated_at
@@ -1044,7 +1057,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-list-all": {
     label: "Subscriptions (All Tenants)",
     description: "Every subscription with its tenant, newest change first. The whole commercial ledger at a glance.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `SELECT t.slug, s.tier, s.state, s.comp, s.pending_tier,
                  s.period_end, s.updated_at
@@ -1058,7 +1071,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-audit-by-tenant": {
     label: "Payment Audit (By Tenant)",
     description: "The immutable payment_events trail for one tenant. Every billing transition this workspace ever made, with provider refs.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `SELECT recorded_at, event_type, prev_state, next_state,
                  provider, provider_event_ref
@@ -1074,7 +1087,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-set-tier": {
     label: "Set Tier (Immediate)",
     description: "Immediately set a tenant's tier; clears any pending tier. Audited. Operator tier override, atomic with its audit row. The CHECK constraint refuses unknown tiers.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `WITH upd AS (
             UPDATE subscriptions
@@ -1099,7 +1112,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-add-or-change-no-comp": {
     label: "Add Or Change Subscription",
     description: "Immediately add or update a tenant's subscription tier; clears any pending tier. Audited. Operator tier override, atomic with its audit row. The CHECK constraint refuses unknown tiers.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `WITH upd AS (
             insert into subscriptions (tenant_id,tier,state,comp)
@@ -1124,7 +1137,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-extend-period": {
     label: "Extend Period",
     description: "Push a tenant's period_end forward by N days. Audited. Grace extension without touching the state machine: renewals stay anchored to the new period_end.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `WITH upd AS (
             UPDATE subscriptions
@@ -1150,7 +1163,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-clear-pending": {
     label: "Clear Pending Tier",
     description: "Remove a queued tier change before it applies. Audited. Cancel a scheduled tier flip while the current cycle stays untouched.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `WITH upd AS (
             UPDATE subscriptions
@@ -1173,7 +1186,7 @@ export const QUERY_REGISTRY = Object.freeze({
   "sub-delete": {
     label: "Delete Subscription",
     description: "Remove a tenant's subscription row entirely: the tenant returns to the paywall. The payment audit trail is kept. Audited. The full reset: unsubscribed, halted, repurchasable. payment_events history survives by design.",
-    capability: "TENANT SUBSCRIPTION MANAGEMENT",
+    capability: "SUBSCRIPTION",
     group: "subscriptions",
     sql: `WITH del AS (
             DELETE FROM subscriptions

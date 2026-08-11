@@ -109,6 +109,10 @@
       <h1 class="page-title">Platform Admin</h1>
       <p class="subtitle">server-side query execution for platform operations</p>
 
+      <div id="query-grid" class="query-grid">
+        <span style="color:#999;">Loading queries...</span>
+      </div>
+
       <!-- Content Generator Genre — insert a new genre template.
            Encryption happens server-side (AES-256-GCM); the template
            text is sent over the authenticated admin request and only
@@ -143,10 +147,6 @@
           <button class="btn-genre" id="genre-submit">Save Genre Template</button>
           <span class="genre-result" id="genre-result"></span>
         </div>
-      </div>
-
-      <div id="query-grid" class="query-grid">
-        <span style="color:#999;">Loading queries...</span>
       </div>
     </div>
   </div>

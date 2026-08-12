@@ -537,6 +537,38 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: true
   },
 
+  "clear-self-service-registrations": {
+    label: "Clear Self-Serfice Registracions",
+    description: "Removes the tenant registrations for self-service signups using the email address.",
+    capability: "REMOVETENANT SELFSERVICE REGISTER",
+    sql: `DELETE FROM tenant_registrations
+            WHERE invited_by_sub
+            LIKE 'self:%'
+              AND email = $1`,
+    params: [
+      { name: "email", label: "Email Address", type: "text", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "show-self-service-registrations": {
+    label: "Show Self-Serfice Registracions",
+    description: "Finds the self-service tenant registrations for the email address.",
+    capability: "TENANT SELFSERVICE REGISTER",
+    sql: `SELECT tr.email, tr.status Registration, t.name Tenant, tr.created_at RegCreated, expires_at RegExpires, tr.invited_by_sub InvitedBy
+            FROM tenant_registrations tr
+              LEFT JOIN tenants t ON tr.tenant_id = t.id
+            WHERE invited_by_sub
+            LIKE 'self:%'
+              AND email = $1`,
+    params: [
+      { name: "email", label: "Email Address", type: "text", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
   "clear-tenant-memberships": {
     label: "Clear Tenant Membership",
     description: "Removes all memberships for a tenant, revoking every user's access.",

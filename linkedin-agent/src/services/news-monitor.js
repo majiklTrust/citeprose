@@ -26,6 +26,7 @@ import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } f
 import { extractArticleImage } from "./article-image.js";
 import { resolvePollSchedule } from "../config/poll-schedule.js";
 import { currentClient } from "../db/with-tenant.js";
+import { withSavepoint, tryBookkeeping } from "../db/savepoint.js";
 import { withTenant } from "../db/with-tenant.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
@@ -95,164 +96,191 @@ function coerceString(val) {
 
 async function fetchFeed(feedRow) {
   let httpStatus = null;
+  // Failure containment (increment 1). Every statement below runs
+  // inside a savepoint on the caller's transaction, so a failure
+  // here rolls back THIS feed only. Before this, one bad row
+  // aborted the whole tenant sweep: PostgreSQL rejected every
+  // later statement with 25P02, the COMMIT degraded to ROLLBACK,
+  // and the sibling feeds' articles were discarded while their
+  // failure counters could not be written either.
+  //
+  // The savepoint wraps the try body rather than sitting inside
+  // it, so the existing catch below runs with the transaction
+  // already restored to a usable state. That is what makes the
+  // bookkeeping in the catch able to succeed at all.
+  const txClient = client();
   try {
-    // Fetch RSS manually to capture HTTP status code.
-    // parser.parseURL() hides the status — we need it for logging.
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    return await withSavepoint(txClient, `feed:${feedRow.id}`, async () => {
+      // Fetch RSS manually to capture HTTP status code.
+      // parser.parseURL() hides the status — we need it for logging.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
-    let response;
-    try {
-      response = await fetch(feedRow.url, {
-        headers: {
-          "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)",
-          "Accept": "application/rss+xml, application/xml, text/xml"
-        },
-        signal: controller.signal
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+      let response;
+      try {
+        response = await fetch(feedRow.url, {
+          headers: {
+            "User-Agent": "LinkedInAIAgent/1.5 (RSS Reader)",
+            "Accept": "application/rss+xml, application/xml, text/xml"
+          },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
-    httpStatus = response.status;
+      httpStatus = response.status;
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
-    }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
 
-    const xml = await response.text();
+      const xml = await response.text();
 
-    // Fix malformed XML: replace bare & with &amp; while preserving
-    // valid entities (&amp; &lt; &gt; &quot; &apos; &#123; &#xAB;).
-    // Common in feeds that embed unescaped URLs like ?a=1&b=2.
-    var sanitizedXml = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/gi, '&amp;');
+      // Fix malformed XML: replace bare & with &amp; while preserving
+      // valid entities (&amp; &lt; &gt; &quot; &apos; &#123; &#xAB;).
+      // Common in feeds that embed unescaped URLs like ?a=1&b=2.
+      var sanitizedXml = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/gi, '&amp;');
 
-    const feed = await parser.parseString(sanitizedXml);
-    let newArticles = 0;
-    let linked = 0;
-    const c = client();
+      const feed = await parser.parseString(sanitizedXml);
+      let newArticles = 0;
+      let linked = 0;
+      const c = client();
 
-    // Capture channel-level metadata from RSS XML
-    const channelDescription = coerceString(feed.description).substring(0, 1000).trim();
-    const channelCategories = Array.isArray(feed.categories)
-      ? feed.categories.map(c => coerceString(c).trim()).filter(Boolean)
-      : [];
+      // Capture channel-level metadata from RSS XML
+      const channelDescription = coerceString(feed.description).substring(0, 1000).trim();
+      const channelCategories = Array.isArray(feed.categories)
+        ? feed.categories.map(c => coerceString(c).trim()).filter(Boolean)
+        : [];
 
-    // Collect item-level categories across all articles in this poll
-    const itemCategorySet = new Set(channelCategories);
+      // Collect item-level categories across all articles in this poll
+      const itemCategorySet = new Set(channelCategories);
 
-    for (const item of feed.items || []) {
-      // Aggregate item categories for feed-level classification
-      if (Array.isArray(item.categories)) {
-        for (const cat of item.categories) {
-          const trimmed = coerceString(cat).trim();
-          if (trimmed && itemCategorySet.size < 50) {
-            itemCategorySet.add(trimmed);
+      for (const item of feed.items || []) {
+        // Aggregate item categories for feed-level classification
+        if (Array.isArray(item.categories)) {
+          for (const cat of item.categories) {
+            const trimmed = coerceString(cat).trim();
+            if (trimmed && itemCategorySet.size < 50) {
+              itemCategorySet.add(trimmed);
+            }
           }
         }
+
+        const link = sanitizeLink(coerceString(item.link) || coerceString(item.guid));
+        if (!link) continue;
+
+        const rawSummary = coerceString(item.contentSnippet) || coerceString(item.content) || coerceString(item.summary) || "";
+        const cleanSummary = sanitizeSummary(rawSummary);
+        const cleanTitle = sanitizeTitle(coerceString(item.title) || "Untitled");
+
+        // Prompt-injection screening — reject poisoned content at ingest
+        const titleInjection = detectPromptInjection(cleanTitle);
+        const summaryInjection = detectPromptInjection(cleanSummary);
+
+        if (titleInjection.detected || summaryInjection.detected) {
+          await logActivity("warn", "prompt_injection_detected", {
+            feed: feedRow.name,
+            link,
+            titlePatterns: titleInjection.patterns,
+            summaryPatterns: summaryInjection.patterns
+          });
+          platformLog("warn", "prompt_injection_detected", {
+            feed: feedRow.name, link,
+            titlePatterns: titleInjection.patterns,
+            summaryPatterns: summaryInjection.patterns
+          });
+          continue;
+        }
+
+        const published = coerceString(item.isoDate) || coerceString(item.pubDate) || null;
+        const hash = simpleHash(link + cleanTitle);
+        const imageUrl = extractArticleImage(item);
+
+        // Step 1: Insert into global articles_v2.
+        // No tenant_id, no RLS. ON CONFLICT updates image_url
+        // if the article exists but had no image previously.
+        const articleResult = await c.query(
+          `INSERT INTO articles_v2 (title, link, summary, published_at, content_hash, image_url)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (link) DO UPDATE
+             SET image_url = COALESCE(articles_v2.image_url, EXCLUDED.image_url)
+           RETURNING id, (xmax = 0) AS is_new`,
+          [cleanTitle, link, cleanSummary, published, hash, imageUrl]
+        );
+
+        const articleId = articleResult.rows[0].id;
+        if (articleResult.rows[0].is_new) newArticles++;
+
+        // Step 2: Link article to this tenant's feed.
+        // ON CONFLICT means this feed already fetched this article.
+        const linkResult = await c.query(
+          `INSERT INTO feed_articles (tenant_id, feed_id, article_id)
+           VALUES (current_tenant_id(), $1, $2)
+           ON CONFLICT (feed_id, article_id) DO NOTHING`,
+          [feedRow.id, articleId]
+        );
+
+        if (linkResult.rowCount > 0) linked++;
       }
 
-      const link = sanitizeLink(coerceString(item.link) || coerceString(item.guid));
-      if (!link) continue;
-
-      const rawSummary = coerceString(item.contentSnippet) || coerceString(item.content) || coerceString(item.summary) || "";
-      const cleanSummary = sanitizeSummary(rawSummary);
-      const cleanTitle = sanitizeTitle(coerceString(item.title) || "Untitled");
-
-      // Prompt-injection screening — reject poisoned content at ingest
-      const titleInjection = detectPromptInjection(cleanTitle);
-      const summaryInjection = detectPromptInjection(cleanSummary);
-
-      if (titleInjection.detected || summaryInjection.detected) {
-        await logActivity("warn", "prompt_injection_detected", {
-          feed: feedRow.name,
-          link,
-          titlePatterns: titleInjection.patterns,
-          summaryPatterns: summaryInjection.patterns
-        });
-        platformLog("warn", "prompt_injection_detected", {
-          feed: feedRow.name, link,
-          titlePatterns: titleInjection.patterns,
-          summaryPatterns: summaryInjection.patterns
-        });
-        continue;
-      }
-
-      const published = coerceString(item.isoDate) || coerceString(item.pubDate) || null;
-      const hash = simpleHash(link + cleanTitle);
-      const imageUrl = extractArticleImage(item);
-
-      // Step 1: Insert into global articles_v2.
-      // No tenant_id, no RLS. ON CONFLICT updates image_url
-      // if the article exists but had no image previously.
-      const articleResult = await c.query(
-        `INSERT INTO articles_v2 (title, link, summary, published_at, content_hash, image_url)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (link) DO UPDATE
-           SET image_url = COALESCE(articles_v2.image_url, EXCLUDED.image_url)
-         RETURNING id, (xmax = 0) AS is_new`,
-        [cleanTitle, link, cleanSummary, published, hash, imageUrl]
+      // Update feed poll status, validation tracking, + metadata
+      const categories = [...itemCategorySet];
+      await c.query(
+        `UPDATE feeds_v2
+         SET last_polled_at = now(),
+             last_error = NULL,
+             consecutive_failures = 0,
+             last_validation_grade = $2,
+             last_validated_at = now(),
+             feed_description = COALESCE(NULLIF($3, ''), feed_description),
+             feed_categories = CASE
+               WHEN $4::jsonb != '[]'::jsonb THEN $4::jsonb
+               ELSE feed_categories
+             END
+         WHERE id = $1`,
+        [feedRow.id, newArticles > 0 ? "A" : "B", channelDescription, JSON.stringify(categories)]
       );
 
-      const articleId = articleResult.rows[0].id;
-      if (articleResult.rows[0].is_new) newArticles++;
+      await logActivity("info", "feed_fetched", {
+        feed: feedRow.name,
+        status: httpStatus,
+        newArticles,
+        linked,
+        totalItems: feed.items?.length || 0
+      });
+      platformLog("info", "feed_fetched", {
+        feed: feedRow.name, status: httpStatus,
+        newArticles, linked, totalItems: feed.items?.length || 0
+      });
 
-      // Step 2: Link article to this tenant's feed.
-      // ON CONFLICT means this feed already fetched this article.
-      const linkResult = await c.query(
-        `INSERT INTO feed_articles (tenant_id, feed_id, article_id)
-         VALUES (current_tenant_id(), $1, $2)
-         ON CONFLICT (feed_id, article_id) DO NOTHING`,
-        [feedRow.id, articleId]
-      );
-
-      if (linkResult.rowCount > 0) linked++;
-    }
-
-    // Update feed poll status, validation tracking, + metadata
-    const categories = [...itemCategorySet];
-    await c.query(
-      `UPDATE feeds_v2
-       SET last_polled_at = now(),
-           last_error = NULL,
-           consecutive_failures = 0,
-           last_validation_grade = $2,
-           last_validated_at = now(),
-           feed_description = COALESCE(NULLIF($3, ''), feed_description),
-           feed_categories = CASE
-             WHEN $4::jsonb != '[]'::jsonb THEN $4::jsonb
-             ELSE feed_categories
-           END
-       WHERE id = $1`,
-      [feedRow.id, newArticles > 0 ? "A" : "B", channelDescription, JSON.stringify(categories)]
-    );
-
-    await logActivity("info", "feed_fetched", {
-      feed: feedRow.name,
-      status: httpStatus,
-      newArticles,
-      linked,
-      totalItems: feed.items?.length || 0
+      return { newArticles, linked };
     });
-    platformLog("info", "feed_fetched", {
-      feed: feedRow.name, status: httpStatus,
-      newArticles, linked, totalItems: feed.items?.length || 0
-    });
-
-    return { newArticles, linked };
   } catch (err) {
-    // Log to console FIRST — database may be in an aborted
-    // transaction state, so platformLog (console) must run
-    // before any SQL attempts.
+    // Console first: this path must produce a record even if every
+    // database write below is refused.
     platformLog("warn", "feed_fetch_failed", {
       status: httpStatus, error: err.message.substring(0, 300),
       feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
     });
 
-    // Best-effort: record error + increment failure count
-    const c = client();
-    try {
-      await c.query(
+    // Failure bookkeeping. Each write takes its OWN savepoint,
+    // because a bookkeeping statement that fails (a CHECK
+    // violation on the grade, a permissions error) must not abort
+    // the transaction and take the sibling feeds down with it.
+    // That would recreate the exact defect this increment removes,
+    // from the error path.
+    //
+    // These two writes were previously wrapped in a catch with an
+    // empty body, justified by the transaction being aborted. With
+    // the savepoint above, the transaction is NO LONGER aborted
+    // when control reaches here, so these writes are expected to
+    // SUCCEED and a failure is real news. tryBookkeeping reports
+    // every failure with its SQLSTATE instead of discarding it.
+    const failureRecorded = await tryBookkeeping(
+      txClient,
+      `feed-failure:${feedRow.id}`,
+      () => txClient.query(
         `UPDATE feeds_v2
          SET last_error = $1,
              consecutive_failures = consecutive_failures + 1,
@@ -260,16 +288,31 @@ async function fetchFeed(feedRow) {
              last_validated_at = now()
          WHERE id = $2`,
         [err.message.substring(0, 500), feedRow.id]
-      );
-    } catch { /* transaction may be aborted — expected */ }
+      )
+    );
 
-    // Best-effort: log to activity log
-    try {
-      await logActivity("warn", "feed_fetch_failed", {
+    const activityRecorded = await tryBookkeeping(
+      txClient,
+      `feed-activity:${feedRow.id}`,
+      () => logActivity("warn", "feed_fetch_failed", {
         status: httpStatus, error: err.message.substring(0, 300),
         feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
+      })
+    );
+
+    // A feed that failed AND could not record that it failed is
+    // invisible to every health surface in the product: its grade
+    // stays stale, consecutive_failures never climbs, and nothing
+    // ever disables it. Surface that rather than returning a
+    // clean-looking zero.
+    if (!failureRecorded || !activityRecorded) {
+      platformLog("error", "feed_failure_bookkeeping_incomplete", {
+        feed: feedRow.id, feedName: feedRow.name,
+        gradeRecorded: failureRecorded, activityRecorded,
+        consequence: "feed health data is stale for this feed"
       });
-    } catch { /* transaction may be aborted — expected */ }
+    }
+
     return { newArticles: 0, linked: 0 };
   }
 }

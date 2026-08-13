@@ -62,6 +62,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { pool } from "./pool.js";
+import { resetSavepointScope } from "./savepoint.js";
 import {
   noteTransactionOpen,
   recordTransaction,
@@ -143,6 +144,16 @@ export async function withTenant(tenantId, fn) {
   noteTransactionOpen();
   let committed = false;
   let broken = null; // non-null: connection must not go back to the pool
+
+  // Savepoints do not survive COMMIT or ROLLBACK, so the count of
+  // savepoints taken must not survive either. A pooled client is
+  // handed out again for the NEXT transaction, and carrying the
+  // count forward would walk it into the per-transaction cap and
+  // silently disable failure isolation for the remaining life of
+  // that connection. Reset BEFORE the opener rather than after, so
+  // the scope is clean even if BEGIN itself fails and the client is
+  // later reused.
+  resetSavepointScope(client);
 
   try {
     if (typeof tenantId === "string" && UUID_RE.test(tenantId)) {

@@ -125,7 +125,27 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
   const ttl = String(getRegistrationTTL());
   const cap = getMaxSelfRegistrations();
 
-  const { rows } = await q(
+  // 3.25111.1 (F6, code half): a unique-violation from the mint
+  // INSERT means a CONCURRENT request won the race after this
+  // statement took its snapshot. Nothing was minted here (the
+  // whole statement rolled back), so RETRY is the exact truth:
+  // the caller tries again and converges on the winner's link via
+  // REISSUED. The raising constraint is DDL 09.2's partial unique
+  // index uq_tenant_registrations_live_email (one live registration
+  // per address); on a database without 09.2 applied this mapping
+  // is inert and safe, because no other constraint can raise 23505
+  // from this INSERT (token is 32 random bytes).
+  //
+  // Rotation stays safe UNDER that index because ins references
+  // rot in its WHERE clause, and a CTE that reads another CTE's
+  // output forces the referenced CTE to complete first: the old
+  // row is physically expired (leaving the index predicate) before
+  // the replacement row is inserted, and a delete-then-insert of
+  // the same key within one transaction does not conflict.
+  // Verified empirically by scripts/dbtest/savepoint-selfreg-test.mjs.
+  let rows;
+  try {
+    ({ rows } = await q(
     `WITH me AS (
        SELECT 1 FROM memberships WHERE auth_sub = $2 LIMIT 1
      ),
@@ -186,7 +206,13 @@ export async function attemptSelfRegistration(email, sub, deps = {}) {
        (SELECT token FROM ins)               AS created_token,
        (SELECT expires_at FROM ins)          AS created_expires_at`,
     [email, sub, invitedBy, token, ttl, cap]
-  );
+    ));
+  } catch (err) {
+    if (err && err.code === "23505") {
+      return { outcome: SELF_REG_OUTCOME.RETRY, token: null, expiresAt: null };
+    }
+    throw err;
+  }
 
   const r = rows[0];
   if (!r) throw new Error("self-registration adjudication returned no verdict row");

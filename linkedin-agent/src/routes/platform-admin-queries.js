@@ -509,18 +509,6 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: false
   },
 
-  "clear-tenant-invites": {
-    label: "Clear Tenant Member Invites (all users)",
-    description: "Removes all member invites (pending and claimed) for a tenant.",
-    capability: "REMOVETENANT INVITES.",
-    sql: `DELETE FROM invites WHERE tenant_id = $1::uuid`,
-    params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
-    ],
-    destructive: true,
-    readOnly: false
-  },
-
   "select-tenant-invites": {
     label: "Shows Tenant Registration Invites (all users)",
     description: "Shows all invites (pending and claimed) for a tenant.",
@@ -538,13 +526,16 @@ export const QUERY_REGISTRY = Object.freeze({
   },
 
   "clear-self-service-registrations": {
-    label: "Clear Self-Serfice Registracions",
+    label: "Clear Self-Service Registrations",
     description: "Removes the tenant registrations for self-service signups using the email address.",
     capability: "REMOVETENANT SELFSERVICE REGISTER",
+    // lower() on BOTH sides: the store INSERTs lower(email), so a
+    // mixed-case address typed here must still match (a bare
+    // email = $1 silently deleted nothing).
     sql: `DELETE FROM tenant_registrations
             WHERE invited_by_sub
             LIKE 'self:%'
-              AND email = $1`,
+              AND lower(email) = lower($1)`,
     params: [
       { name: "email", label: "Email Address", type: "text", required: true }
     ],
@@ -553,15 +544,16 @@ export const QUERY_REGISTRY = Object.freeze({
   },
 
   "show-self-service-registrations": {
-    label: "Show Self-Serfice Registracions",
+    label: "Show Self-Service Registrations",
     description: "Finds the self-service tenant registrations for the email address.",
     capability: "TENANT SELFSERVICE REGISTER",
+    // lower() on BOTH sides: matches the store's lower(email) writes.
     sql: `SELECT tr.email, tr.status Registration, t.name Tenant, tr.created_at RegCreated, expires_at RegExpires, tr.invited_by_sub InvitedBy
             FROM tenant_registrations tr
               LEFT JOIN tenants t ON tr.tenant_id = t.id
             WHERE invited_by_sub
             LIKE 'self:%'
-              AND email = $1`,
+              AND lower(tr.email) = lower($1)`,
     params: [
       { name: "email", label: "Email Address", type: "text", required: true }
     ],

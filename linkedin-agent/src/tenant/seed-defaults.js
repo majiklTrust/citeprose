@@ -23,6 +23,7 @@
 
 import { currentClient } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
+import { tryBookkeeping } from "../db/savepoint.js";
 
 // ── Catchall Feeds ───────────────────────────────────────────
 // Broad-coverage feeds chosen for:
@@ -161,16 +162,24 @@ export async function seedTenantDefaults() {
         const v = await validateFeed(row.url);
         grades[v.grade]++;
 
-        try {
-          await c.query(
+        // 3.25111.1: was a bare catch with an empty body. In
+        // PostgreSQL a failed statement ABORTS the enclosing
+        // transaction, so swallowing the error here left every
+        // later statement in this registration seed failing with
+        // 25P02 while looking like a success. Same containment the
+        // feed poll adopted (savepoint.js increment 1): the write
+        // is isolated so it can actually succeed, and a real
+        // failure is recorded instead of discarded.
+        await tryBookkeeping(c, `seed-validate:${row.id}`, () =>
+          c.query(
             `UPDATE feeds_v2
              SET last_validation_grade = $1,
                  last_validated_at = now(),
                  consecutive_failures = CASE WHEN $1 = 'F' THEN 1 ELSE 0 END
              WHERE id = $2`,
             [v.grade, row.id]
-          );
-        } catch { /* best-effort */ }
+          )
+        );
 
         platformLog("info", "seed_feed_validated", {
           feed: row.name, message: formatValidationMessage(v)

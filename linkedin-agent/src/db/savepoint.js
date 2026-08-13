@@ -151,7 +151,17 @@ export async function withSavepoint(dbClient, label, fn) {
     return fn();
   }
 
-  const ordinal = acct.issued + 1;
+  // The slot is RESERVED before the first await (3.25111.1
+  // hardening): incrementing after the SAVEPOINT round trip left a
+  // window where two withSavepoint calls racing on the same client
+  // (parallel promises inside one transaction) would both read the
+  // same count and mint the same name, and ROLLBACK TO that shared
+  // name would then contain the wrong work. Today's only caller
+  // iterates sequentially, so this closes a latent hazard, not a
+  // live bug. A failed SAVEPOINT wastes one reserved slot, which
+  // only makes the cap more conservative.
+  acct.issued += 1;
+  const ordinal = acct.issued;
   // Name is derived from the internal counter alone. No caller
   // input reaches the SQL text, so no escaping is required and
   // none is relied upon.
@@ -160,7 +170,6 @@ export async function withSavepoint(dbClient, label, fn) {
   let isolated = false;
   try {
     await dbClient.query(`SAVEPOINT ${name}`);
-    acct.issued = ordinal;
     isolated = true;
   } catch (spErr) {
     // Could not isolate. Most often the transaction was ALREADY

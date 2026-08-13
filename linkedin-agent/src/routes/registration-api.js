@@ -117,9 +117,28 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       validatedModel = model_id.trim();
     }
 
-    const invite = await createRegistrationInvite(
-      email.trim(), req.user.sub, validatedKey, validatedModel
-    );
+    // 3.25111.2: DDL 09.2 enforces one LIVE registration per email
+    // at the storage engine, and that invariant binds this admin
+    // path too. A duplicate is a named 409 describing the caller's
+    // own state, never an opaque 500 (the mapping 09.2's deployment
+    // note calls for).
+    let invite;
+    try {
+      invite = await createRegistrationInvite(
+        email.trim(), req.user.sub, validatedKey, validatedModel
+      );
+    } catch (err) {
+      if (err && err.code === "23505") {
+        platformLog("info", "registration_invite_duplicate", {
+          admin: req.user.sub, emailDomain: email.trim().split("@")[1] || null
+        });
+        return res.status(409).json({
+          error: "A live registration link already exists for this email address. Wait for it to expire, or clear it with the platform-admin registration tools, then reissue.",
+          code: "REGISTRATION_EXISTS"
+        });
+      }
+      throw err;
+    }
 
     // Build the registration URL and email template
     const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;

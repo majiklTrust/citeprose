@@ -384,6 +384,22 @@ async function runTickForAllTenants() {
     console.error("[scheduler] platform log prune failed:", err.message);
   }
 
+  // 3.25111.1: registration expiry sweep. expireStaleRegistrations
+  // was written for "a cleanup job" (platform-db.js) but no job ever
+  // called it, so expired pending/active rows lingered forever and,
+  // worse, their encrypted admin-provided API keys were never NULLed
+  // as the 09.1 DDL design requires. Platform-level, once per cron
+  // fire, same posture as the prune above.
+  try {
+    const { expireStaleRegistrations } = await import("../tenant/platform-db.js");
+    const expired = await expireStaleRegistrations();
+    if (expired > 0) {
+      console.log(`[scheduler] registration sweep expired ${expired} stale registration(s)`);
+    }
+  } catch (err) {
+    console.error("[scheduler] registration expiry sweep failed:", err.message);
+  }
+
   // Payments (2.3.1.1): lazy import per the module-loads-DB-free
   // discipline; automated processing halts outside good standing.
   const { isTenantProcessingAllowed } = await import("./entitlements.js");

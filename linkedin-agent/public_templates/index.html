@@ -16,80 +16,26 @@
   <div id="root"></div>
 
   <!-- Blocking overlay for content generation -->
-  <div id="generate-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
-    <div style="background:#fff; border-radius:8px; padding:2rem 3rem; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.3); max-width:400px;">
-      <div style="margin-bottom:1rem;">
-        <div style="width:40px; height:40px; border:3px solid #e0e0e0; border-top-color:#0073b1; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+  <div id="generate-overlay" class="overlay-backdrop">
+    <div class="overlay-card">
+      <div class="overlay-spinner-row">
+        <div class="overlay-spinner"></div>
       </div>
-      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating Content</div>
-      <div style="font-size:0.85rem; color:#888;">Researching sources and composing your post. This may take a moment.</div>
-      <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;">Your draft is saved automatically.</div>
+      <div class="overlay-title">Generating Content</div>
+      <div class="overlay-sub">Researching sources and composing your post. This may take a moment.</div>
+      <div class="overlay-fine">Your draft is saved automatically.</div>
     </div>
   </div>
-  <div id="keygate-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:center;">
-    <div style="background:#fff; border-radius:8px; padding:2rem 3rem; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.3); max-width:400px;">
-      <div style="margin-bottom:1rem;">
-        <div style="width:40px; height:40px; border:3px solid #e0e0e0; border-top-color:#0073b1; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+  <div id="keygate-overlay" class="overlay-backdrop">
+    <div class="overlay-card">
+      <div class="overlay-spinner-row">
+        <div class="overlay-spinner"></div>
       </div>
-      <div style="font-size:1.1rem; font-weight:600; color:#333; margin-bottom:0.5rem;">Generating content needs a valid LLM Provider API key to activate.</div>
-      <div style="font-size:0.85rem; color:#888;">Redirecting to the Management page.</div>
-      <div style="font-size:0.75rem; color:#aaa; margin-top:1rem;"></div>
+      <div class="overlay-title">Generating content needs a valid LLM Provider API key to activate.</div>
+      <div class="overlay-sub">Redirecting to the Management page.</div>
+      <div class="overlay-fine"></div>
     </div>
   </div>
-  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-  <style>
-    .composer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; justify-content: center; align-items: flex-start; padding: 2rem 1rem; overflow-y: auto; }
-    .composer-modal { background: #fff; border-radius: 8px; width: 100%; max-width: 640px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
-    .composer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    .composer-title { font-size: 1.2rem; font-weight: 700; color: #222; margin: 0; }
-    .composer-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #666; line-height: 1; }
-    .composer-label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.8rem 0 0.3rem; }
-    .composer-note { font-size: 0.78rem; color: #666; background: #f5f7fa; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
-    .composer-genres { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
-    .composer-genre { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; }
-    .composer-genre.selected { border-color: #2563eb; background: #eff5ff; }
-    .composer-genre.disabled { opacity: 0.55; cursor: not-allowed; background: #fafafa; }
-    .composer-genre input { margin-top: 0.2rem; }
-    .composer-genre-main { display: flex; flex-direction: column; gap: 0.1rem; }
-    .composer-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
-    .composer-genre-desc { font-size: 0.76rem; color: #777; }
-    .composer-genre-reason { font-size: 0.72rem; color: #b45309; font-style: italic; }
-    .composer-model-note { font-size: 0.72rem; letter-spacing: 0.3px; color: #64748b; text-align: center; margin-top: 0.4rem; }
-    .composer-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
-    .composer-metrics { margin: 0.6rem 0; border: 1px solid #e2e8f0; border-radius: 6px; background: #fbfdff; padding: 0.7rem 0.8rem; }
-    .composer-metrics-head { font-size: 0.78rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem; }
-    .composer-metrics-warn { font-size: 0.8rem; color: #b45309; background: #fffbeb; border-radius: 4px; padding: 0.4rem 0.6rem; }
-    .composer-metric-group { margin-bottom: 0.5rem; }
-    .composer-metric-group-label { font-size: 0.74rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.25rem; }
-    .composer-metric { padding: 0.35rem 0 0.35rem 0.6rem; border-left: 2px solid #cbd5e1; margin-bottom: 0.35rem; }
-    .composer-metric-value { font-size: 0.88rem; font-weight: 700; color: #1e293b; }
-    .composer-metric-key { font-size: 0.72rem; font-weight: 400; color: #94a3b8; }
-    .composer-metric-source { font-size: 0.76rem; color: #475569; margin-top: 0.1rem; }
-    .composer-metric-quote { font-size: 0.76rem; color: #64748b; font-style: italic; margin-top: 0.15rem; line-height: 1.4; }
-    .composer-actions { display: flex; flex-direction: column; gap: 0.4rem; }
-    .composer-cancel { align-self: center; }
-    .composer-block { margin-top: 0.8rem; border: 1px solid #fecaca; border-radius: 6px; background: #fef2f2; overflow: hidden; }
-    .composer-block-head { font-size: 0.82rem; font-weight: 700; color: #b91c1c; padding: 0.6rem 0.8rem; background: #fee2e2; }
-    .composer-block-body { padding: 0.7rem 0.8rem; }
-    .composer-block-line { font-size: 0.82rem; color: #7f1d1d; margin-bottom: 0.45rem; line-height: 1.5; }
-    .composer-block-note { font-size: 0.76rem; color: #9a3412; background: #fff7ed; border-radius: 4px; padding: 0.45rem 0.6rem; margin-top: 0.5rem; line-height: 1.45; }
-    .composer-fidelity-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 0.45rem 0.6rem; margin-bottom: 0.6rem; }
-    .composer-fidelity-keys { font-size: 0.72rem; font-weight: 400; color: #4d7c5a; margin-top: 0.2rem; word-break: break-word; }
-    .image-studio-panel { margin-top: 0.7rem; border: 1px solid #dbe4f0; border-radius: 6px; background: #f8fbff; padding: 0.7rem 0.8rem; }
-    .image-studio-head { font-size: 0.82rem; font-weight: 700; color: #1e40af; margin-bottom: 0.5rem; }
-    .image-studio-lens-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-    .image-studio-lens-label { font-size: 0.78rem; color: #475569; }
-    .image-studio-lens { font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.3rem 0.4rem; background: #fff; }
-    .image-studio-prompt { width: 100%; box-sizing: border-box; font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.4rem 0.5rem; resize: vertical; }
-    .image-studio-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
-    .image-studio-ok { font-size: 0.8rem; font-weight: 600; color: #15803d; }
-    .image-studio-error { font-size: 0.8rem; color: #c62828; background: #ffebee; border-radius: 4px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
-    .image-studio-preview { display: block; max-width: 100%; margin-top: 0.6rem; border-radius: 6px; border: 1px solid #e2e8f0; }
-    .image-studio-lib { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-    .image-studio-lib-item { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 2px solid #e2e8f0; cursor: pointer; }
-    .image-studio-lib-item.selected { border-color: #1e40af; }
-    .image-studio-lib-note { font-size: 0.78rem; color: #64748b; }
-  </style>
 
   <script type="text/babel">
     const { useState, useEffect, useCallback } = React;
@@ -643,7 +589,7 @@
             )}
             {effectiveAttached && (
               <span className="image-studio-ok">AI image attached
-                <button type="button" className="btn btn-ghost" disabled={busy} onClick={detach} style={{marginLeft: '8px'}}>Detach</button>
+                <button type="button" className="btn btn-ghost" disabled={busy} onClick={detach}>Detach</button>
               </span>
             )}
           </div>
@@ -1359,8 +1305,8 @@
                 </div>
               </div>
             </div>
-            <div className="card" style={{ maxWidth: '640px', margin: '2rem auto', textAlign: 'center' }}>
-              <h2 style={{ marginBottom: '0.5rem' }}>Choose a plan to activate this workspace</h2>
+            <div className="card card-center-narrow">
+              <h2>Choose a plan to activate this workspace</h2>
               <p><a className="btn btn-primary" href="/app/billing">choose a plan from our billing page</a></p>
             </div>
           </div>
@@ -1388,7 +1334,7 @@
               <div className="state-warning">
                 No Membership - Workspace Unassigned
               </div>
-              <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0 auto' }}>
+              <div className="text-muted-sm no-tenant-copy">
                 Your workspace has not been assigned. You may need to check your inbox for
                 an email from our security and identity partner to validate.
                 If your organization invited you, contact your administrator to be
@@ -1396,13 +1342,13 @@
                 <br/>Setting up on your own? Create your workspace now; you'll name it, 
                 connect your AI vendor key, and pick a plan on the billing page.
               </div>
-              <div style={{ marginTop: '1rem' }}>
+              <div className="no-tenant-actions">
                 <button className="btn btn-primary" onClick={selfServeSetup} disabled={selfServe.busy}>
                   {selfServe.busy ? 'Starting setup...' : 'Set Up My Workspace'}
                 </button>
               </div>
               {selfServe.msg && (
-                <div className="text-muted-sm" style={{ maxWidth: '32rem', margin: '0.75rem auto 0', color: '#e65100' }}>
+                <div className="text-muted-sm self-serve-msg">
                   {selfServe.msg}
                 </div>
               )}
@@ -1414,13 +1360,13 @@
       return (
         <div className="app-container">
             {status.subscription && status.subscription.state === 'past_due' && (
-              <div className="card" style={{ background: '#fffbe8', border: '2px solid #8a6d00', color: '#8a6d00', fontWeight: 700, padding: '0.75rem', marginBottom: '1rem' }}>
+              <div className="card banner-past-due">
                 A payment for this workspace did not go through. Everything keeps
                 working while the charge retries; update billing to avoid a pause.
               </div>
             )}
             {status.subscription && status.subscription.readOnly && (
-              <div className="card" style={{ background: '#fff8f2', border: '2px solid #e65100', color: '#e65100', fontWeight: 700, padding: '0.75rem', marginBottom: '1rem' }}>
+              <div className="card banner-read-only">
                 This workspace is read-only: the subscription is suspended.
                 Viewing works; changes and publishing are paused until reactivation.
               </div>
@@ -1510,7 +1456,6 @@
                   {status.permissions?.includes('manage_linkedin') && status.organizationManager !== 'disabled' && (
                     <button
                       className="btn-link text-link-blue"
-                      style={{ marginLeft: '0.4rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
                       title={status.publishTarget === 'organization' ? 'Switch to personal profile' : 'Switch to organization page'}
                       onClick={async () => {
                         const next = status.publishTarget === 'organization' ? 'personal' : 'organization';
@@ -1669,19 +1614,19 @@
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
                 <div className="vstack-sm">
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="hstack-sm">
                     {/* 2.6.1: both generation CTAs check the tenant
                         meta flag at activation and warn BEFORE any
                         generation workflow is invoked without a key. */}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } handlePreview(); }} disabled={loading.preview}>
+                    <button className="btn btn-primary btn-tight btn-grow" onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } handlePreview(); }} disabled={loading.preview}>
                       {loading.preview ? <span className="loading-spinner"></span> : '✦ Generate'}
                     </button>
                     {/**
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => setShowComposer(true)}>
+                    <button className="btn btn-primary btn-tight btn-grow" onClick={() => setShowComposer(true)}>
                       ✎ Compose
                     </button>
                     **/}
-                    <button className="btn btn-primary btn-tight" style={{ flex: 1 }} onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } setShowComposer(true); }}>
+                    <button className="btn btn-primary btn-tight btn-grow" onClick={() => { if (llmKeyMissing()) { showKeyGateOverlay(); return; } setShowComposer(true); }}>
                       ✚ Create
                     </button>
                   </div>
@@ -1723,11 +1668,7 @@
                     </label>
                   </div>
                   <button
-                    className={`btn ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
-                    style={{
-                      width: '100%',
-                      ...((status.mode || 'manual') !== 'auto' ? { opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' } : {})
-                    }}
+                    className={`btn btn-force-cycle ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
                     onClick={handleForceCycle}
                     disabled={(status.mode || 'manual') !== 'auto'}
                     title={(status.mode || 'manual') !== 'auto' ? 'Switch to Agentic mode to enable' : 'Run one scheduler cycle now'}
@@ -1900,7 +1841,7 @@
                     <span className="post-status badge-draft">DRAFT</span>
                   )}
                   {!selectedPost.isPreview && selectedPost.status === 'scheduled' && (
-                    <span className="post-status" style={{ background: 'rgba(56,189,248,0.18)', color: '#38bdf8' }}>SCHEDULED</span>
+                    <span className="post-status status-scheduled-sky">SCHEDULED</span>
                   )}
                   {selectedPost.news_context && (
                     <span className={`corroboration-badge ${corrobLabel.cls}`}>
@@ -1913,7 +1854,7 @@
                 <h3 className="modal-heading">{selectedPost.title}</h3>
 
                 {!selectedPost.isPreview && selectedPost.status === 'scheduled' && selectedPost.scheduled_for && (
-                  <div className="schedule-banner" style={{ margin: '0.5rem 0', padding: '0.55rem 0.75rem', borderRadius: 6, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.35)', fontSize: '0.88rem' }}>
+                  <div className="schedule-banner">
                     🗓️ Scheduled to publish <strong>{formatDate(selectedPost.scheduled_for)}</strong> · your local time
                   </div>
                 )}
@@ -1956,7 +1897,7 @@
                 </div>
 
                 {rewritable && (
-                  <div className="modal-rewrite" style={{ margin: '0.75rem 0' }}>
+                  <div className="modal-rewrite">
                     <button className="btn btn-primary btn-tight" onClick={(e) => handleRewrite(selectedPost, e)} disabled={!!loading.rewrite || !(selectedPost.content || '').trim()}>
                       {loading.rewrite ? <span className="loading-spinner"></span> : '✦ Rewrite with AI'}
                     </button>
@@ -1964,9 +1905,9 @@
                 )}
 
                 {movable && (
-                  <div className="modal-move" style={{ margin: '0.75rem 0', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.7, marginBottom: '0.4rem' }}>Move this post to:</div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="modal-move">
+                    <div className="modal-move-label">Move this post to:</div>
+                    <div className="modal-move-row">
                       {currStatus !== 'draft' && (
                         <button className="btn btn-tight" onClick={() => handleStatusChange('draft')} disabled={!!loading.statusChange}>
                           ✎ Draft
@@ -1986,13 +1927,12 @@
                       </button>
                     </div>
                     {showSchedule && (
-                      <div className="schedule-picker" style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div className="schedule-picker">
                         <input
                           type="datetime-local"
                           value={scheduleAt}
                           min={nextHourLocal()}
                           onChange={e => setScheduleAt(e.target.value)}
-                          style={{ padding: '0.35rem 0.5rem' }}
                         />
                         <button className="btn btn-primary btn-tight" onClick={() => handleStatusChange('scheduled')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>
                           {loading.statusChange ? <span className="loading-spinner"></span> : 'Confirm Time'}
@@ -2000,7 +1940,7 @@
                         <button className="btn btn-tight" onClick={() => setShowSchedule(false)} disabled={!!loading.statusChange}>
                           Cancel
                         </button>
-                        <span style={{ fontSize: '0.78rem', opacity: 0.7, width: '100%' }}>
+                        <span className="schedule-picker-note">
                           Publishes at the time shown, in your local timezone. Saves current edits first.
                         </span>
                       </div>
@@ -2267,7 +2207,7 @@
           {/* Edit Post Modal */}
           {editingPost && (
             <div className="modal-overlay" onClick={() => setEditingPost(null)}>
-              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+              <div className="modal-content modal-narrow" onClick={e => e.stopPropagation()}>
                 <button className="modal-close" onClick={() => setEditingPost(null)}>✕</button>
                 <h3 className="modal-heading-top">Edit Post <DestBadge target={editingPost.publish_target} /></h3>
                 <div className="mb-075">
@@ -2319,7 +2259,7 @@
       render() {
         if (this.state.hasError) {
           return (
-            <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <div className="error-boundary-fallback">
               <h2>Something went wrong.</h2>
               <p>The dashboard hit an unexpected error and could not render this view.</p>
               <button className="btn btn-approve" onClick={() => window.location.reload()}>Reload dashboard</button>

@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "3.25111.2",
+  "version": "4.25111.1",
   "config": {
-    "cssversion": "105",
+    "cssversion": "106",
     "appname": "Market Intelligence"
   },
   "description": "Autonomous AI agent for Market Intelligence content creation",

@@ -185,3 +185,23 @@
     padding: 0.25rem 0.5rem;
   }
 }
+
+/* ================================================================
+   Composer modal + blocking overlays (relocated to app.css at
+   4.25111.1): small-screen affordances. The composer previously
+   had no mobile handling at all.
+   ================================================================ */
+@media (max-width: 640px) {
+  .composer-overlay {
+    padding: 1rem 0.5rem;
+  }
+
+  .composer-modal {
+    padding: 1rem;
+  }
+
+  .overlay-card {
+    padding: 1.5rem 1.25rem;
+    margin: 0 1rem;
+  }
+}

@@ -10,3 +10,5 @@ scripts/LinkedIn_Agent_Testing/
 !audit_node_project.sh
 get-prompt.mjs
 get-prompt-keys.mjs
+public/dashboard.js
+public/dashboard.js.map

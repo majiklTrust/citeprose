@@ -18,7 +18,7 @@ import { platformLog } from "./platform-log.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
-import { getAnthropicModel, callAnthropic } from "../config/ai.js";
+import { getAnthropicModel, callAnthropic, getWebSearchTools } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
@@ -103,7 +103,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     const requestParams = {
       model,
       max_tokens: 2000,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      tools: getWebSearchTools(),
       messages: [{ role: "user", content: assembledPrompt }]
     };
     platformLog("info", "llm_request_web_search",

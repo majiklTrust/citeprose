@@ -62,6 +62,46 @@ export function getModelListingPageLimit() {
   return intFromEnv("MODEL_LISTING_PAGE_LIMIT", 100);
 }
 
+// ── Web search tool ──────────────────────────────────────────
+// The Anthropic server side web search tool version used by the
+// research stage. Previously a literal inside research.js, which
+// made the version invisible to every surface that needed to report
+// it and required a code change to move.
+//
+// Env-overridable with the shipped value as the zero-configuration
+// default, matching the intFromEnv pattern above: unset or blank
+// falls back, never empty. The value is NOT validated. It is not
+// validated today either, and a curated allowlist would refuse a
+// vendor version that shipped after the list was last edited, which
+// is a worse failure than a typo the vendor rejects loudly on the
+// next call.
+const DEFAULT_WEB_SEARCH_TOOL = "web_search_20250305";
+const WEB_SEARCH_TOOL_NAME = "web_search";
+
+// The configured tool VERSION, as a plain string. Surfaces that
+// display or select the version read this.
+export function getWebSearchTool() {
+  const value = (process.env.WEB_SEARCH_TOOL || "").trim();
+  return value || DEFAULT_WEB_SEARCH_TOOL;
+}
+
+// The tools ARRAY the Anthropic request body expects, ready to
+// assign, so no caller has to know the shape of a tool entry.
+export function getWebSearchTools() {
+  return [{ type: getWebSearchTool(), name: WEB_SEARCH_TOOL_NAME }];
+}
+
+// Every version this deployment can offer: the shipped default, plus
+// the configured value when it differs. Derived rather than curated,
+// so the list cannot drift out of step with what getWebSearchTool
+// actually returns.
+export function listWebSearchTools() {
+  const configured = getWebSearchTool();
+  return configured === DEFAULT_WEB_SEARCH_TOOL
+    ? [DEFAULT_WEB_SEARCH_TOOL]
+    : [DEFAULT_WEB_SEARCH_TOOL, configured];
+}
+
 /**
  * Returns the Anthropic model string for the current tenant.
  *

@@ -478,7 +478,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   var state = {
     stages: [], cursor: -1, selected: null, pane: "assembled",
     breakpoints: {}, running: false, elapsed: 0,
-    meta: null,
+    meta: null, tenantList: [], homeApplied: false,
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -538,6 +538,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     .then(function (data) {
       $("main").style.display = "block";
       var tenants = data.tenants || [];
+      state.tenantList = tenants;
       fill($("sel-tenant"), tenants.map(function (t) {
         return { id: t.id, label: t.name + " (" + t.slug + ")" + (t.status === "active" ? "" : " [" + t.status + "]") };
       }));
@@ -576,6 +577,18 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       .then(function (meta) {
         state.meta = meta;
         clearSetupError();
+        // The admin's own tenant is the default, and it is known only
+        // once meta answers. Applying it here, once, avoids a second
+        // round trip on every page load for admins already on the
+        // first tenant in the list.
+        if (!state.homeApplied && meta.homeTenantId) {
+          state.homeApplied = true;
+          if ($("sel-tenant").value !== meta.homeTenantId) {
+            var before = $("sel-tenant").value;
+            $("sel-tenant").value = meta.homeTenantId;
+            if ($("sel-tenant").value !== before) return loadMeta();
+          }
+        }
         applyMeta(meta);
         setStatus("idle", "Ready.");
         renderInspector();

@@ -37,6 +37,7 @@
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
+import createPlatformAdminLabRoutes from "./platform-admin-lab-api.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 import { TIERS } from "../config/entitlements.js";
@@ -154,6 +155,9 @@ export default function createPlatformAdminRoutes() {
 
   router.use(requireAuth);
   router.use(requirePlatformAdmin);
+
+  // Generation Lab: sub-router inherits BOTH gates above.
+  router.use("/lab", createPlatformAdminLabRoutes());
 
   // ── Payments (2.3.1.1): complimentary entitlements ──────────
   // The deliberate, auditable, processor-free grant. Router-level

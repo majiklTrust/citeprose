@@ -379,9 +379,8 @@ table.rows tbody tr:hover { background: var(--rule-2); }
           <div class="field">
             <label for="sel-corroboration">Corroboration</label>
             <select id="sel-corroboration">
-              <option value="">Tenant Setting</option>
-              <option value="on">Force on</option>
-              <option value="off">Force off</option>
+              <option value="on">On</option>
+              <option value="off">Off</option>
             </select>
           </div>
           <div class="field">
@@ -591,6 +590,14 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   function applyMeta(meta) {
     fillTopics(meta.topics || []);
     fill($("sel-genre"), meta.genres || [], "default");
+    // Corroboration has no tri-state. The selector defaults to the
+    // tenant's own agent_state value, so what is on screen is what
+    // the tenant is actually set to. meta.corroboration is the
+    // boolean form of agent_state 'corroboration', which reads
+    // enabled unless the row says 'disabled'.
+    fill($("sel-corroboration"),
+      [{ id: "on", label: "On" }, { id: "off", label: "Off" }],
+      meta.corroboration === false ? "off" : "on");
     var providerOpts = (meta.providers || []).map(function (p) {
       var parked = p.textGeneration && p.textGeneration !== "available";
       return { id: p.id, label: p.label + (parked ? " (not yet available)" : ""),
@@ -605,7 +612,8 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   }
 
   function emptySelectors(label) {
-    ["sel-topic", "sel-angle", "sel-genre", "sel-provider", "sel-model", "sel-research"].forEach(function (id) {
+    ["sel-topic", "sel-angle", "sel-genre", "sel-corroboration",
+     "sel-provider", "sel-model", "sel-research"].forEach(function (id) {
       fill($(id), [{ id: "", label: label }]);
       $(id).disabled = true;
     });

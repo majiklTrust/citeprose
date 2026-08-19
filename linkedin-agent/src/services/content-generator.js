@@ -27,7 +27,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./pro
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
-import { generationTrace, generationVendor } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments } from "./generation-trace.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -108,6 +108,10 @@ export async function getAvailableTopics(userSub = null) {
 }
 
 export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null, genre = "default") {
+  traceArguments("generatePost",
+    'export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null, genre = "default")',
+    [["topic", topic], ["userSub", userSub], ["actionToken", actionToken],
+     ["requestedAngle", requestedAngle], ["genre", genre]]);
   if (typeof topic === "string") {
     topic = await getTopicBySlug(topic);
   }
@@ -129,6 +133,8 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   // Angle decision (Feature 2): an explicitly requested angle must be
   // an EXISTING member of topic.content_angles; otherwise fail closed.
   // No request -> the pre-existing auto-rotation, unchanged.
+  traceArguments("resolveAngle", "export function resolveAngle(topic, requested, recentPosts)",
+    [["topic", topic], ["requested", requestedAngle], ["recentPosts", recentPosts]]);
   const angleResult = resolveAngle(topic, requestedAngle, recentPosts);
   if (!angleResult.ok) {
     const reason = angleResult.reason;
@@ -234,6 +240,17 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     rbTemplate = null;
   }
 
+  // vars is rebuilt to match the branch that ACTUALLY ran. The
+  // corroborated path passes RESEARCH_CONTEXT alone, so listing a
+  // SOURCE_COUNT key there would report a parameter that was never
+  // supplied.
+  const rbVars = skipCorroboration
+    ? { RESEARCH_CONTEXT: framedContext, SOURCE_COUNT: String(researchBrief.independentSourceCount) }
+    : { RESEARCH_CONTEXT: framedContext };
+  traceArguments("researchBlock", "export function renderPrompt(template, vars)",
+    [["template", "research_brief_" + (!skipCorroboration ? "corroborated" : "uncorroborated") + " (from the vault)"],
+     ["vars", rbVars]],
+    "This row is a template render inside generatePost, not a pipeline call of its own.");
   generationTrace()?.stage("research_block", {
     corroborated: !skipCorroboration,
     promptKey: !skipCorroboration ? "research_brief_corroborated" : "research_brief_uncorroborated",
@@ -263,6 +280,8 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     metricGroups = [];
     metricsByKey.clear();
   }
+  traceArguments("metricBlock", "export function buildMetricBlock(groups)",
+    [["groups", metricGroups]]);
   const metricBlock = buildMetricBlock(metricGroups);
   // Database material assembled for generation, alongside the block
   // it becomes. An empty block with metrics present means the genre
@@ -310,6 +329,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     // pipeline never learns which vendor served the request.
     // Flag OFF (default): the pre-existing direct Anthropic path,
     // byte-for-byte unchanged.
+    traceArguments("generateContent",
+      "export async function generateWithTenantLlm(input, deps = {})",
+      [["input", { system: topic.system_context || null, user: userPrompt,
+                   maxOutputTokens: 1500, purpose: "main_post_generation", cycleId }],
+       ["deps", "(omitted, defaults)"]]);
     generationTrace()?.stage("generation_request", {
       genre,
       systemContext: topic.system_context || null,
@@ -380,6 +404,9 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     const strictFidelity = (process.env.METRIC_FIDELITY_STRICT || "").trim() === "1";
     const sub = substituteMetricTokens(parsed.body, metricsByKey);
     const allowedNumbers = strictFidelity ? extractNumericTokens(researchBlock) : [];
+    traceArguments("fidelity", "export function verifyMetricFidelity(text, byKey, options)",
+      [["text", sub.text], ["byKey", metricsByKey],
+       ["options", { strict: strictFidelity, allowedNumbers }]]);
     const fidelity = verifyMetricFidelity(sub.text, metricsByKey, { strict: strictFidelity, allowedNumbers });
     if (!fidelity.ok) {
       const reason = fidelity.unknownTokens.length
@@ -469,6 +496,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 // ── Content Quality Check ────────────────────────────────────
 
 export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null) {
+  traceArguments("qualityCheck",
+    "export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null)",
+    [["content", content], ["researchSummary", researchSummary],
+     ["cycleId", cycleId], ["actionToken", actionToken]]);
   // Grounding context has two honest shapes:
   //   object -> the org research brief (original behavior, byte
   //             identical for the org pipeline), or

@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache">
+<title>Generation Lab</title>
+<!-- =================================================================
+     Generation Lab, Phase 1 (delivery 4.250111.3)
+     =================================================================
+     FOUNDATIONAL UX AND PAGE ELEMENT DEFINITIONS. No backend, no
+     network, no vendor call. Every value on screen comes from the
+     FIXTURE constant near the bottom of this file.
+
+     The page is built against a data CONTRACT, not against a
+     pipeline. Phase 2 replaces the fixture with a live endpoint that
+     mocks only the LLM call and return; Phase 3 replaces the mock
+     with the abstraction layer. Neither phase should need to change
+     the rendering code below, and that is the point of shipping the
+     contract first.
+
+     Element ids are stable and are the wiring surface for Phase 2.
+     See the companion element inventory for the full contract.
+     ================================================================= -->
+<style>
+/* ── tokens ──────────────────────────────────────────────────────
+   paper/panel/ink/rule carry the chrome. Three signal colors, each
+   with exactly one meaning, never decorative:
+     inspect  reading, free, no cost
+     gate     a vendor boundary, the moment execution leaves the
+              building. Reserved for the three LLM crossings.
+     execute  an action that costs money or changes state
+   live/fail are status only. ------------------------------------ */
+:root {
+  --paper:   #f7f7f5;
+  --panel:   #ffffff;
+  --ink:     #1c1f23;
+  --muted:   #6b7280;
+  --faint:   #9ca3af;
+  --rule:    #e4e4e0;
+  --rule-2:  #f0f0ec;
+  --inspect: #0f5f8a;
+  --gate:    #6d28d9;
+  --execute: #b23a00;
+  --live:    #0b7a5a;
+  --fail:    #b3261e;
+  --skip:    #a1a1aa;
+
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --sp-1: 0.15rem; --sp-2: 0.3rem;  --sp-3: 0.45rem;
+  --sp-4: 0.6rem;  --sp-5: 0.85rem; --sp-6: 1.1rem;
+  --radius: 5px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The instrument speaks in monospace. Stage names, file paths,
+   timings, payloads. The chrome speaks in sans. That split is the
+   type thesis and it is applied consistently. */
+.mono { font-family: var(--mono); }
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: var(--sp-4) var(--sp-4) var(--sp-5); }
+
+/* ── nav and masthead ─────────────────────────────────────────── */
+.nav { font-size: 0.72rem; margin-bottom: var(--sp-3); }
+.nav a { color: var(--inspect); text-decoration: none; }
+.nav a:hover { text-decoration: underline; }
+.nav a + a { margin-left: var(--sp-4); }
+
+.masthead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-4); flex-wrap: wrap;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: var(--sp-2); margin-bottom: var(--sp-3);
+}
+.masthead h1 {
+  margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;
+}
+.masthead .sub { color: var(--muted); font-size: 0.72rem; margin-top: 1px; }
+
+/* mode pill states which data source is feeding the page. It is
+   never decorative: Phase 1 fixture, Phase 2 mock, Phase 3 live. */
+.mode-pill {
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: 3px;
+  border: 1px solid var(--rule); background: var(--panel); color: var(--muted);
+  white-space: nowrap;
+}
+.mode-pill[data-mode="fixture"] { border-color: var(--inspect); color: var(--inspect); }
+.mode-pill[data-mode="mock"]    { border-color: var(--gate);    color: var(--gate); }
+.mode-pill[data-mode="live"]    { border-color: var(--execute); color: var(--execute); }
+
+/* ── auth wall ────────────────────────────────────────────────── */
+#auth-wall { display: none; text-align: center; padding: 3rem 1rem; }
+#auth-wall h2 { color: var(--fail); margin: 0 0 var(--sp-2); }
+#auth-wall p { color: var(--muted); margin: 0; }
+#main { display: block; }
+
+/* ── panels ───────────────────────────────────────────────────── */
+.panel {
+  background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--radius); margin-bottom: var(--sp-3);
+}
+.panel > h2 {
+  margin: 0; padding: var(--sp-2) var(--sp-3);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  border-bottom: 1px solid var(--rule-2);
+}
+.panel-body { padding: var(--sp-3); }
+
+/* ── run setup ────────────────────────────────────────────────── */
+/* Eight selectors on ONE line at desktop width. minmax(0,1fr) lets a
+   column shrink below its content instead of forcing a wrap. Mobile
+   is exempt from the single line rule and reflows. */
+.setup-grid {
+  display: grid; gap: 0.2rem;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+@media (max-width: 1000px) {
+  .setup-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .setup-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.field label {
+  display: block; font-size: 0.55rem; font-weight: 600; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.field select, .field input {
+  width: 100%; min-width: 0; padding: 0.2rem 0.2rem; font-size: 0.6rem;
+  font-family: var(--sans); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 3px; background: var(--panel);
+}
+.field select:disabled, .field input:disabled { background: var(--rule-2); color: var(--faint); }
+/* An unset vendor selection is a real state, not an error: the pair
+   is either both set or both empty (never half). */
+.field select[data-unset="true"] { color: var(--faint); font-style: italic; }
+
+
+/* ── execution controls ───────────────────────────────────────── */
+/* Five controls, one line, no wrap. Labels are short enough that
+   shrinking is the exception, but min-width:0 keeps it honest. */
+.controls {
+  display: flex; gap: var(--sp-1); flex-wrap: nowrap; align-items: center;
+  padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2);
+}
+.btn {
+  font-family: var(--sans); font-size: 0.68rem; font-weight: 600;
+  padding: 0.2rem 0.4rem; border-radius: 3px; cursor: pointer;
+  white-space: nowrap; min-width: 0; flex: 0 1 auto;
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+}
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-inspect { border-color: var(--inspect); color: var(--inspect); }
+.btn-execute { border-color: var(--execute); color: var(--execute); }
+.btn-execute[data-armed="true"] { background: var(--execute); color: #fff; }
+.btn:focus-visible, select:focus-visible, input:focus-visible, .stage:focus-visible,
+.tab:focus-visible, .bp:focus-visible {
+  outline: 2px solid var(--inspect); outline-offset: 2px;
+}
+.ctl-sep { width: 1px; align-self: stretch; background: var(--rule); margin: 0 2px; flex: none; }
+
+/* ── the execution spine: the signature element ───────────────────
+   A real call tree, not a flat list. Depth is indentation, the rail
+   is continuous so the sequence reads as one execution, and the
+   three vendor crossings visibly interrupt it. Breakpoints live in
+   a gutter to the left, exactly where a debugger puts them. ------ */
+.panel.flush { margin-bottom: 0; }
+.console-split {
+  display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: var(--sp-3);
+  align-items: start;
+}
+@media (max-width: 900px) { .panel.flush { margin-bottom: 0; }
+.console-split { grid-template-columns: 1fr; } }
+
+.spine { padding: var(--sp-1) 0 var(--sp-2); }
+
+.stage-row { display: grid; grid-template-columns: 22px 1fr; align-items: stretch; }
+
+.bp {
+  border: 0; background: none; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.bp::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--rule); background: transparent;
+}
+.bp:hover::before { border-color: var(--execute); }
+.bp[aria-pressed="true"]::before { background: var(--execute); border-color: var(--execute); }
+
+.stage {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: 2px var(--sp-2) 2px 0; border-left: 2px solid var(--rule-2);
+  font-family: var(--mono); font-size: 0.72rem; color: var(--ink);
+}
+.stage:hover { background: var(--rule-2); }
+.stage[aria-current="true"] { background: #eef4f8; border-left-color: var(--inspect); }
+
+.stage .glyph { width: 1.1em; flex: none; color: var(--faint); }
+.stage .name  { flex: 1 1 auto; overflow-wrap: anywhere; }
+.stage .ms    { flex: none; font-size: 0.64rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.stage[data-status="running"] .glyph { color: var(--live); }
+.stage[data-status="running"] .name  { font-weight: 700; }
+.stage[data-status="done"]    .glyph { color: var(--live); }
+.stage[data-status="failed"]  .glyph, .stage[data-status="failed"] .name { color: var(--fail); }
+.stage[data-status="skipped"] .name  { color: var(--skip); text-decoration: line-through; }
+.stage[data-status="paused"]  .glyph { color: var(--execute); }
+
+/* A vendor crossing is structurally different from a local call and
+   is drawn that way: heavier rule, gate color, and an egress label. */
+.stage[data-kind="gate"] {
+  border-left: 2px solid var(--gate); color: var(--gate); font-weight: 600;
+}
+.stage[data-kind="gate"] .glyph { color: var(--gate); }
+.stage[data-kind="gate"]::after {
+  content: "egress"; font-size: 0.6rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--gate); opacity: 0.7; flex: none;
+}
+.stage[data-kind="gate"][data-status="skipped"] { opacity: 0.5; }
+
+.d0 { padding-left: var(--sp-2); }
+.d1 { padding-left: calc(var(--sp-2) + 14px); }
+.d2 { padding-left: calc(var(--sp-2) + 28px); }
+.d3 { padding-left: calc(var(--sp-2) + 42px); }
+
+/* ── stage inspector ──────────────────────────────────────────── */
+.inspector { min-height: 340px; display: flex; flex-direction: column; }
+.insp-head { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2); }
+.insp-title { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; margin: 0; }
+.insp-file  { font-family: var(--mono); font-size: 0.64rem; color: var(--faint); margin-top: 1px; }
+
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--rule); padding: 0 var(--sp-3); }
+.tab {
+  border: 0; background: none; cursor: pointer;
+  padding: var(--sp-1) var(--sp-3); margin-bottom: -1px;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+  color: var(--muted); border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--inspect); border-bottom-color: var(--inspect); }
+.tab:disabled { color: var(--faint); cursor: not-allowed; }
+
+.pane { padding: var(--sp-3); flex: 1 1 auto; }
+.pane-caption { font-size: 0.7rem; color: var(--muted); margin: 0 0 var(--sp-2); }
+
+pre.payload {
+  font-family: var(--mono); font-size: 0.68rem; line-height: 1.4;
+  background: var(--rule-2); border: 1px solid var(--rule); border-radius: 3px;
+  padding: var(--sp-2); margin: 0 0 var(--sp-2);
+  max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+table.kv { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-bottom: var(--sp-2); }
+table.kv th, table.kv td { text-align: left; padding: 2px var(--sp-2); border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+table.kv th { width: 180px; font-weight: 600; color: var(--muted); }
+table.kv td { font-family: var(--mono); font-size: 0.68rem; overflow-wrap: anywhere; }
+
+table.rows { width: 100%; border-collapse: collapse; font-size: 0.68rem; font-family: var(--mono); }
+table.rows th {
+  text-align: left; padding: 2px var(--sp-2); border-bottom: 1px solid var(--rule);
+  font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); font-family: var(--sans);
+}
+table.rows td { padding: 2px var(--sp-2); border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+table.rows tbody tr:hover { background: var(--rule-2); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll-x { overflow-x: auto; }
+
+.empty {
+  padding: var(--sp-5) var(--sp-3); text-align: center; color: var(--muted); font-size: 0.78rem;
+}
+.empty strong { display: block; color: var(--ink); margin-bottom: var(--sp-1); }
+
+/* ── status bar ───────────────────────────────────────────────── */
+.statusbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  font-family: var(--mono); font-size: 0.68rem;
+  padding: var(--sp-1) var(--sp-3);
+  border-top: 1px solid var(--rule-2); color: var(--muted);
+}
+.statusbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.statusbar[data-state="running"] .dot { background: var(--live); }
+.statusbar[data-state="paused"]  .dot { background: var(--execute); }
+.statusbar[data-state="failed"]  .dot { background: var(--fail); }
+.statusbar[data-state="done"]    .dot { background: var(--inspect); }
+.statusbar .spacer { margin-left: auto; }
+
+.badge {
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.05em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.badge-gate { color: var(--gate); }
+.badge-free { color: var(--inspect); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage[data-status="running"] .glyph { animation: pulse 1.1s ease-in-out infinite; }
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="nav">
+    <a href="../">&larr; Platform Admin</a>
+    <a href="/app">Dashboard</a>
+  </nav>
+
+  <div id="auth-wall">
+    <h2>Access denied</h2>
+    <p>The Generation Lab is available to platform administrators.</p>
+  </div>
+
+  <div id="main">
+
+    <header class="masthead">
+      <div>
+        <h1>Generation Lab</h1>
+        <div class="sub">Step the content pipeline one call at a time and inspect what crosses each boundary.</div>
+      </div>
+      <span class="mode-pill" id="mode-pill" data-mode="fixture">Phase 1 fixture</span>
+    </header>
+
+    <!-- ══ RUN SETUP ═══════════════════════════════════════════ -->
+    <section class="panel">
+      <h2>Run setup</h2>
+      <div class="panel-body">
+        <div class="setup-grid">
+          <div class="field">
+            <label for="sel-tenant">Tenant</label>
+            <select id="sel-tenant"></select>
+          </div>
+          <div class="field">
+            <label for="sel-topic">Topic</label>
+            <select id="sel-topic"></select>
+          </div>
+          <div class="field">
+            <label for="sel-angle">Angle</label>
+            <select id="sel-angle"></select>
+          </div>
+          <div class="field">
+            <label for="sel-genre">Genre</label>
+            <select id="sel-genre"></select>
+          </div>
+          <div class="field">
+            <label for="sel-corroboration">Corroboration</label>
+            <select id="sel-corroboration">
+              <option value="">Tenant Setting</option>
+              <option value="on">Force on</option>
+              <option value="off">Force off</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sel-provider">Provider</label>
+            <select id="sel-provider"></select>
+          </div>
+          <div class="field">
+            <label for="sel-model">Model</label>
+            <select id="sel-model"></select>
+          </div>
+          <div class="field">
+            <label for="sel-research">Research</label>
+            <select id="sel-research"></select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ CONSOLE ═════════════════════════════════════════════ -->
+    <div class="console-split">
+
+      <section class="panel flush">
+        <h2>Call sequence</h2>
+        <div class="controls">
+          <button class="btn btn-inspect" id="btn-step">Step</button>
+          <button class="btn btn-inspect" id="btn-run-to">Run To Breakpoint</button>
+          <div class="ctl-sep"></div>
+          <button class="btn btn-execute" id="btn-run-all">Run All</button>
+          <button class="btn" id="btn-pause" disabled>Pause</button>
+          <button class="btn" id="btn-reset">Reset</button>
+        </div>
+        <div class="spine" id="spine"></div>
+        <div class="statusbar" id="statusbar" data-state="idle">
+          <span class="dot"></span>
+          <span id="status-text">Idle. Step or run to begin.</span>
+          <span class="spacer"></span>
+          <span id="status-elapsed">0 ms</span>
+        </div>
+      </section>
+
+      <section class="panel inspector flush">
+        <div class="insp-head">
+          <h3 class="insp-title" id="insp-title">No stage selected</h3>
+          <div class="insp-file" id="insp-file">Select a call in the sequence to inspect it.</div>
+        </div>
+        <div class="tabs" role="tablist" id="tabs">
+          <button class="tab" role="tab" id="tab-assembled" data-pane="assembled" aria-selected="true">Assembled from</button>
+          <button class="tab" role="tab" id="tab-request"   data-pane="request"   aria-selected="false">Request</button>
+          <button class="tab" role="tab" id="tab-response"  data-pane="response"  aria-selected="false">Response</button>
+        </div>
+        <div class="pane" id="pane"></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ══ FIXTURE ══════════════════════════════════════════════════
+  // Phase 1 only. Shapes are taken from the real pipeline so the
+  // rendering code written here survives Phase 2 and Phase 3
+  // unchanged. Phase 2 swaps this constant for a fetch.
+  var FIXTURE = {
+    mode: "fixture",
+
+    // homeTenantId is the tenant the signed in platform admin holds
+    // a membership in (findTenantByAuthIdentity). It is the default
+    // selection, NOT a filter: every tenant stays selectable.
+    homeTenantId: "t-2",
+    tenants: [{ id: "t-1", label: "Northwind Security (northwind)" },
+              { id: "t-2", label: "Beacon Analytics (beacon)" }],
+
+    // Angles ride on the topic: selecting a topic repopulates them
+    // and lands on the first content angle. There is no auto option.
+    topics: [
+      { id: "cyber-incidents", label: "Cybersecurity incidents",
+        angles: ["Supply chain compromise patterns", "Identity as the new perimeter", "Detection engineering economics"] },
+      { id: "zero-trust", label: "Zero Trust architecture",
+        angles: ["Least agency for AI agents", "Segmentation without downtime"] }
+    ],
+
+    genres: ["default", "analysis", "briefing"],
+
+    // listProviders(env) filtered on configured. textGeneration and
+    // its notice travel WITH the option so a parked vendor tells its
+    // own story from server data.
+    providers: [
+      { id: "anthropic", label: "Anthropic", textGeneration: "available" },
+      { id: "openai",    label: "OpenAI",    textGeneration: "available" },
+      { id: "grok",      label: "xAI Grok",  textGeneration: "coming_soon",
+        textGenerationNotice: "Text generation for this vendor is not yet enabled." }
+    ],
+    // listModels(providerId, env), keyed by provider.
+    models: {
+      anthropic: [{ id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
+                  { id: "claude-haiku-4-5-20251001",  label: "Claude Haiku 4.5" }],
+      openai:    [{ id: "gpt-5",  label: "GPT-5" },
+                  { id: "gpt-4o", label: "GPT-4o" }],
+      grok:      [{ id: "grok-4", label: "Grok 4" }]
+    },
+
+    // agent_state llm_provider / llm_model for the selected tenant,
+    // read through the resolveTenantLlmSelection pattern. Both set
+    // or both empty: never half a selection.
+    current: { provider: "anthropic", model: "claude-sonnet-4-5-20250929" },
+
+    // getAnthropicWebSearchTool() from src/config/ai.js.
+    research: { tools: ["web_search_20250305"], current: "web_search_20250305" },
+
+    stages: [
+      { id: "generatePost", depth: 0, kind: "call", fn: "generatePost()",
+        file: "src/services/content-generator.js", durMs: 0 },
+
+      { id: "resolveAngle", depth: 1, kind: "pure", fn: "resolveAngle()",
+        file: "src/services/angle-select.js", durMs: 3,
+        assembled: { caption: "Topic angles and the recent post window the rotation reads.",
+          kv: [["topic.content_angles", "3 entries"], ["recentPosts window", "14 days, 6 posts"], ["requested angle", "(none)"]] },
+        response: { caption: "The rotation's decision.",
+          kv: [["angle", "Supply chain compromise patterns"], ["mode", "auto-rotated"], ["ok", "true"]] } },
+
+      { id: "conductResearch", depth: 1, kind: "call", fn: "conductResearch()",
+        file: "src/services/research.js", durMs: 0 },
+
+      { id: "gatherRSSMaterial", depth: 2, kind: "db", fn: "gatherRSSMaterial()",
+        file: "src/services/research.js", durMs: 41,
+        assembled: { caption: "Database assembly before any vendor call. Drop accounting is explicit: no silent caps.",
+          kv: [["window", "20 days"], ["fetched from db", "27"], ["kept", "8"],
+               ["dropped, no angle overlap", "17"], ["dropped by top ten cap", "2"]],
+          table: { cols: ["Feed", "Tier", "Published", "Score", "Title"], rows: [
+            ["CISA", "authoritative", "2026-08-14", "3", "Advisory on managed file transfer exploitation"],
+            ["The Record", "primary", "2026-08-13", "2", "Vendor breach cascades to 40 downstream firms"],
+            ["BleepingComputer", "primary", "2026-08-11", "2", "Build server compromise traced to signing key"]] } } },
+
+      { id: "buildQueries", depth: 2, kind: "pure", fn: "buildQueriesForTopicDetailed()",
+        file: "src/services/search-queries.js", durMs: 1,
+        assembled: { caption: "Template provenance and the values that filled the placeholders.",
+          kv: [["source", "templates"], ["TOPIC_NAME", "Cybersecurity incidents"],
+               ["ANGLE", "Supply chain compromise patterns"], ["KEYWORDS", "supply chain compromise patterns"],
+               ["YEAR_RANGE", "2025 2026"]] },
+        response: { caption: "Rendered queries, sanitized to one plain line each.",
+          text: "1. \"supply chain compromise patterns 2025 2026\"\n2. \"software supply chain incident case study analysis\"\n3. \"build system compromise expert report\"" } },
+
+      { id: "webSearch", depth: 2, kind: "gate", fn: "gatherWebSearchMaterial()",
+        file: "src/services/research.js", durMs: 6120, vendor: "anthropic",
+        assembled: { caption: "Everything the request is built from, before assembly.",
+          kv: [["prompt template", "research_assistant (vault, genre default)"],
+               ["placeholders", "{{TOPIC_NAME}} {{ANGLE}} {{SEARCH_QUERIES}}"],
+               ["queries injected", "3"], ["tool", "web_search_20250305"]] },
+        request: { caption: "The exact bytes handed to the vendor. Placeholders already resolved.",
+          kv: [["model", "(phase 3)"], ["max_tokens", "2000"], ["tool", "web_search_20250305"]],
+          text: "You are a research assistant. Run each search query below and\nreturn ONLY a JSON array of claims.\n\nTOPIC: Cybersecurity incidents\nANGLE: Supply chain compromise patterns\n\nSEARCH QUERIES:\n1. \"supply chain compromise patterns 2025 2026\"\n2. \"software supply chain incident case study analysis\"\n3. \"build system compromise expert report\"\n\n[fixture: abbreviated]" },
+        response: { caption: "Parsed claims. The raw text is kept beneath the parse so a bad parse is diagnosable.",
+          kv: [["claims found", "5"], ["distinct sources", "4"], ["parse", "ok"]],
+          table: { cols: ["Source", "Date", "Confidence", "Claim"], rows: [
+            ["CISA", "2026-08-14", "high", "Exploitation of the managed file transfer flaw began before disclosure"],
+            ["Reuters", "2026-08-12", "high", "At least 40 organizations were affected downstream"],
+            ["The Record", "2026-08-13", "medium", "Initial access was traced to a compromised build server"]] } } },
+
+      { id: "assembleSources", depth: 2, kind: "pure", fn: "assembleAllSources()",
+        file: "src/services/research.js", durMs: 2,
+        assembled: { caption: "Web claims and database articles merged into one tiered source list.",
+          kv: [["web claims", "5"], ["rss articles", "8"], ["total source items", "13"],
+               ["authoritative", "2"], ["primary", "6"], ["secondary", "5"]] } },
+
+      { id: "corroborate", depth: 2, kind: "gate", fn: "corroborateClaims()",
+        file: "src/services/research.js", durMs: 4880, vendor: "anthropic",
+        assembled: { caption: "The full source list as the corroboration prompt will see it. This is the database assembly the corroboration call is built from.",
+          kv: [["prompt template", "corroboration_analyst (vault, genre default)"],
+               ["placeholder", "{{SOURCE_MATERIALS}}"], ["source items injected", "13"],
+               ["min trust weight", "from SOURCE_RULES"]] },
+        request: { caption: "Assembled corroboration prompt.",
+          kv: [["model", "(phase 3)"], ["max_tokens", "2000"]],
+          text: "Identify claims corroborated by two or more INDEPENDENT sources.\n\nSOURCE MATERIALS:\n[1] CISA (authoritative, 2026-08-14): Exploitation began before disclosure\n[2] Reuters (primary, 2026-08-12): At least 40 organizations affected\n[3] The Record (primary, 2026-08-13): Initial access via build server\n\n[fixture: abbreviated]" },
+        response: { caption: "Scored verdict. Trust weight decides what reaches the writer.",
+          kv: [["verified", "2"], ["below threshold", "1"], ["uncorroborated", "2"]],
+          table: { cols: ["Verdict", "Weight", "Sources", "Claim"], rows: [
+            ["verified", "5", "1, 2", "Exploitation preceded public disclosure"],
+            ["verified", "4", "2, 3", "Initial access was a compromised build server"],
+            ["below threshold", "1", "4", "A second threat actor reused the same access"]] } } },
+
+      { id: "buildBrief", depth: 2, kind: "pure", fn: "buildVerifiedBrief()",
+        file: "src/services/research.js", durMs: 2,
+        response: { caption: "The brief the writer will receive, with the citation map.",
+          kv: [["verified claims", "2"], ["independent sources", "4"], ["has enough material", "true"]],
+          text: "VERIFIED FACTS (corroborated by 2+ independent sources):\n- Exploitation preceded public disclosure [Sources: 1, 2] (confidence: high)\n- Initial access was a compromised build server [Sources: 2, 3] (confidence: high)\n\nUNCORROBORATED (DO NOT state as fact):\n- A second threat actor reused the same access\n\nSOURCE LIST:\n[1] CISA (2026-08-14, tier: authoritative)\n[2] Reuters (2026-08-12, tier: primary)\n[3] The Record (2026-08-13, tier: primary)" } },
+
+      { id: "metricBlock", depth: 1, kind: "db", fn: "buildMetricBlock()",
+        file: "src/services/metric-content.js", durMs: 18,
+        assembled: { caption: "Verified metrics for this topic, injected as {{METRIC_BLOCK}} only when the genre template carries the placeholder.",
+          kv: [["metric groups", "2"], ["metrics", "5"], ["genre template metric bearing", "false"],
+               ["block injected", "no"]] } },
+
+      { id: "generateContent", depth: 1, kind: "gate", fn: "generateWithTenantLlm()",
+        file: "src/llm/client.js", durMs: 9340, vendor: "(selected)",
+        assembled: { caption: "Every input the generation prompt is built from, before rendering.",
+          kv: [["prompt template", "content_generator (vault, genre default)"],
+               ["placeholders", "{{TOPIC_NAME}} {{ANGLE}} {{RESEARCH_BLOCK}} {{METRIC_BLOCK}} {{RECENT_SUMMARIES}}"],
+               ["research block", "corroborated variant, 412 words"],
+               ["metric block", "empty, template is not metric bearing"],
+               ["recent summaries", "6 posts"], ["system context", "present"]] },
+        request: { caption: "The assembled generation prompt.",
+          kv: [["max output tokens", "1500"], ["purpose", "main_post_generation"]],
+          text: "Write a LinkedIn post about Cybersecurity incidents from the\nangle: Supply chain compromise patterns.\n\nRESEARCH BLOCK:\nVERIFIED FACTS (corroborated by 2+ independent sources):\n- Exploitation preceded public disclosure [Sources: 1, 2]\n- Initial access was a compromised build server [Sources: 2, 3]\n\nAVOID REPEATING:\n- [zero-trust] \"Identity is the control plane\"\n\n[fixture: abbreviated]" },
+        response: { caption: "Parsed generation result.",
+          kv: [["parse", "ok"], ["word count", "214"], ["hashtags", "4"], ["sources used", "3"]],
+          text: "{\n  \"title\": \"The build server was the front door\",\n  \"body\": \"[fixture: 214 words]\",\n  \"hashtags\": [\"CyberSecurity\", \"SupplyChain\", \"ZeroTrust\", \"DevSecOps\"],\n  \"sources_used\": [1, 2, 3]\n}" } },
+
+      { id: "fidelity", depth: 1, kind: "pure", fn: "verifyMetricFidelity()",
+        file: "src/services/metric-content.js", durMs: 4,
+        response: { caption: "Token integrity gate. Unknown tokens always block.",
+          kv: [["unknown tokens", "0"], ["strict number policing", "off"], ["verified", "true"]] } },
+
+      { id: "qualityCheck", depth: 0, kind: "gate", fn: "qualityCheck()",
+        file: "src/services/content-generator.js", durMs: 5210, vendor: "(selected)",
+        assembled: { caption: "The post and its grounding context, as the reviewer will see them.",
+          kv: [["prompt template", "quality_reviewer (vault, genre default)"],
+               ["placeholders", "{{CONTENT}} {{SOURCE_CONTEXT}}"],
+               ["grounding shape", "research brief object"], ["verified claims cited", "2"]] },
+        request: { caption: "Assembled review prompt.",
+          kv: [["max output tokens", "800"], ["purpose", "quality_check"]],
+          text: "Review the post below against the sources provided.\n\n[fixture: abbreviated]" },
+        response: { caption: "Reviewer verdict.",
+          kv: [["verdict", "pass"], ["unsupported claims", "0"], ["tone", "consistent"]] } }
+    ]
+  };
+
+  // ══ STATE ════════════════════════════════════════════════════
+  var state = {
+    stages: [], cursor: -1, selected: null, pane: "assembled",
+    breakpoints: {}, running: false, elapsed: 0, timer: null
+  };
+
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+
+  // ══ SETUP POPULATION ═════════════════════════════════════════
+  // items: strings, or { id, label, disabled?, note? }. selectedId
+  // picks the default; absent or unmatched falls to the first item.
+  function fill(sel, items, selectedId) {
+    sel.innerHTML = "";
+    items.forEach(function (it) {
+      var o = typeof it === "string" ? { id: it, label: it } : it;
+      var opt = new Option(o.label, o.id);
+      if (o.disabled) opt.disabled = true;
+      if (o.note) opt.title = o.note;
+      sel.appendChild(opt);
+    });
+    if (selectedId !== undefined && selectedId !== null) sel.value = String(selectedId);
+    if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+    sel.dataset.unset = sel.value === "" ? "true" : "false";
+  }
+
+  function initSetup() {
+    // Tenant defaults to the admin's own tenant. Every tenant stays
+    // selectable; the default is a convenience, not a restriction.
+    fill($("sel-tenant"), FIXTURE.tenants, FIXTURE.homeTenantId);
+    fill($("sel-topic"),  FIXTURE.topics);
+    fillAngles();
+    fill($("sel-genre"),  FIXTURE.genres, "default");
+
+    // A parked vendor is shown and disabled, carrying its own notice,
+    // rather than hidden: hiding it makes the absence unexplainable.
+    var providerOpts = FIXTURE.providers.map(function (p) {
+      var parked = p.textGeneration && p.textGeneration !== "available";
+      return { id: p.id, label: p.label + (parked ? " (not yet available)" : ""),
+               disabled: parked, note: parked ? p.textGenerationNotice : null };
+    });
+    // A tenant with no stored vendor gets an explicit Not Set option
+    // rather than a blank box, so "unset" reads as a state instead of
+    // looking like a rendering fault.
+    if (!FIXTURE.current.provider) providerOpts.unshift({ id: "", label: "Not Set" });
+    fill($("sel-provider"), providerOpts, FIXTURE.current.provider);
+
+    fillModels(FIXTURE.current.model);
+    fill($("sel-research"), FIXTURE.research.tools, FIXTURE.research.current);
+    $("mode-pill").dataset.mode = FIXTURE.mode;
+  }
+
+  // Angles belong to the topic. No auto rotation option: the first
+  // content angle IS the default, so a Lab run always states the
+  // perspective it is writing from.
+  function fillAngles() {
+    var topic = FIXTURE.topics.filter(function (t) { return t.id === $("sel-topic").value; })[0];
+    var angles = (topic && topic.angles) || [];
+    if (angles.length === 0) {
+      fill($("sel-angle"), [{ id: "", label: "No content angles on this topic" }]);
+      $("sel-angle").disabled = true;
+      return;
+    }
+    $("sel-angle").disabled = false;
+    fill($("sel-angle"), angles);
+  }
+
+  // Models are per provider. Provider and Model are BOTH set or BOTH
+  // empty by ruling, so an unset provider empties the model list, and
+  // a stored model the new provider does not offer is cleared rather
+  // than carried forward as an invalid id.
+  function fillModels(preferredId) {
+    var provider = $("sel-provider").value;
+    var list = (provider && FIXTURE.models[provider]) || [];
+    if (!provider || list.length === 0) {
+      fill($("sel-model"), [{ id: "", label: provider ? "No models registered" : "Select a provider" }]);
+      $("sel-model").disabled = true;
+      $("sel-model").dataset.unset = "true";
+      return;
+    }
+    $("sel-model").disabled = false;
+    var offered = list.some(function (m) { return m.id === preferredId; });
+    fill($("sel-model"), list, offered ? preferredId : list[0].id);
+  }
+
+  // ══ SPINE ════════════════════════════════════════════════════
+  var GLYPH = { pending: "\u25CB", running: "\u25D0", done: "\u25CF",
+                failed: "\u2715", skipped: "\u2013", paused: "\u25A0" };
+
+  function loadStages() {
+    var skipCorroboration = $("sel-corroboration").value === "off";
+    state.stages = FIXTURE.stages.map(function (s) {
+      return Object.assign({}, s, {
+        status: (skipCorroboration && s.id === "corroborate") ? "skipped" : "pending",
+        atMs: null
+      });
+    });
+    state.cursor = -1; state.elapsed = 0; state.selected = null;
+    renderSpine(); renderInspector(); setStatus("idle", "Idle. Step or run to begin.");
+  }
+
+  function renderSpine() {
+    var spine = $("spine");
+    spine.innerHTML = "";
+    state.stages.forEach(function (s, i) {
+      var row = el("div", "stage-row");
+
+      var bp = el("button", "bp");
+      bp.type = "button";
+      bp.setAttribute("aria-pressed", state.breakpoints[s.id] ? "true" : "false");
+      bp.setAttribute("aria-label", "Breakpoint on " + s.fn);
+      bp.addEventListener("click", function () { toggleBreakpoint(s.id); });
+      row.appendChild(bp);
+
+      var btn = el("button", "stage d" + s.depth);
+      btn.type = "button";
+      btn.dataset.status = s.status;
+      btn.dataset.kind = s.kind;
+      btn.setAttribute("aria-current", state.selected === s.id ? "true" : "false");
+      btn.appendChild(el("span", "glyph", GLYPH[s.status] || GLYPH.pending));
+      btn.appendChild(el("span", "name", s.fn));
+      btn.appendChild(el("span", "ms", s.status === "done" ? s.durMs + " ms" : ""));
+      btn.addEventListener("click", function () { select(s.id); });
+      row.appendChild(btn);
+
+      spine.appendChild(row);
+    });
+  }
+
+  function toggleBreakpoint(id) {
+    state.breakpoints[id] = !state.breakpoints[id];
+    renderSpine();
+  }
+
+  // ══ INSPECTOR ════════════════════════════════════════════════
+  function select(id) {
+    state.selected = id;
+    var s = find(id);
+    // Land the operator on a tab that actually has content.
+    if (!s || !s[state.pane]) {
+      state.pane = ["assembled", "request", "response"].filter(function (p) { return s && s[p]; })[0] || "assembled";
+    }
+    renderSpine(); renderInspector();
+  }
+
+  function find(id) {
+    for (var i = 0; i < state.stages.length; i++) if (state.stages[i].id === id) return state.stages[i];
+    return null;
+  }
+
+  function renderInspector() {
+    var s = find(state.selected);
+    var pane = $("pane");
+    pane.innerHTML = "";
+
+    ["assembled", "request", "response"].forEach(function (p) {
+      var t = $("tab-" + p);
+      t.setAttribute("aria-selected", state.pane === p ? "true" : "false");
+      t.disabled = !s || !s[p];
+    });
+
+    if (!s) {
+      $("insp-title").textContent = "No stage selected";
+      $("insp-file").textContent = "Select a call in the sequence to inspect it.";
+      pane.appendChild(emptyState("Nothing selected", "Pick any call in the sequence to the left. Calls that crossed to a vendor are marked egress."));
+      return;
+    }
+
+    $("insp-title").textContent = s.fn;
+    var meta = s.file + (s.vendor ? "   vendor: " + s.vendor : "");
+    $("insp-file").textContent = meta;
+
+    if (s.status === "pending") {
+      pane.appendChild(emptyState("Not executed yet", "Step or run the sequence to populate this call."));
+      return;
+    }
+    if (s.status === "skipped") {
+      pane.appendChild(emptyState("Skipped this run", "Corroboration is forced off, so this call was not made."));
+      return;
+    }
+
+    var data = s[state.pane];
+    if (!data) {
+      pane.appendChild(emptyState("Nothing recorded here", "This call records no " + state.pane + " payload."));
+      return;
+    }
+
+    if (data.caption) pane.appendChild(el("p", "pane-caption", data.caption));
+    if (data.kv) pane.appendChild(kvTable(data.kv));
+    if (data.table) pane.appendChild(rowsTable(data.table));
+    if (data.text) pane.appendChild(el("pre", "payload", data.text));
+  }
+
+  function emptyState(title, body) {
+    var d = el("div", "empty");
+    d.appendChild(el("strong", null, title));
+    d.appendChild(document.createTextNode(body));
+    return d;
+  }
+
+  function kvTable(pairs) {
+    var t = el("table", "kv"), tb = el("tbody");
+    pairs.forEach(function (p) {
+      var tr = el("tr");
+      tr.appendChild(el("th", null, p[0]));
+      tr.appendChild(el("td", null, p[1]));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    return t;
+  }
+
+  function rowsTable(spec) {
+    var wrap = el("div", "scroll-x"), t = el("table", "rows");
+    var thead = el("thead"), htr = el("tr");
+    spec.cols.forEach(function (c) { htr.appendChild(el("th", null, c)); });
+    thead.appendChild(htr); t.appendChild(thead);
+    var tb = el("tbody");
+    spec.rows.forEach(function (r) {
+      var tr = el("tr");
+      r.forEach(function (cell, i) {
+        tr.appendChild(el("td", /^[0-9.]+$/.test(String(cell)) ? "num" : null, cell));
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); wrap.appendChild(t);
+    return wrap;
+  }
+
+  // ══ EXECUTION CONTROL ════════════════════════════════════════
+  function nextIndex() {
+    for (var i = state.cursor + 1; i < state.stages.length; i++) {
+      if (state.stages[i].status === "skipped") continue;
+      return i;
+    }
+    return -1;
+  }
+
+  function step(cb) {
+    var i = nextIndex();
+    if (i === -1) { finish(); if (cb) cb(false); return; }
+    // Mark every skipped stage we passed over.
+    state.cursor = i;
+    var s = state.stages[i];
+    s.status = "running";
+    s.atMs = state.elapsed;
+    setStatus("running", "Running " + s.fn);
+    renderSpine();
+    select(s.id);
+
+    // Phase 1 simulates elapsed time so the control semantics are
+    // demonstrable. Phase 2 replaces this with real stage timings.
+    var delay = s.kind === "gate" ? 420 : 120;
+    window.setTimeout(function () {
+      s.status = "done";
+      state.elapsed += s.durMs;
+      renderSpine(); renderInspector(); updateElapsed();
+      if (state.breakpoints[s.id]) {
+        setStatus("paused", "Paused at breakpoint: " + s.fn);
+        state.running = false; syncButtons();
+        if (cb) cb(false);
+        return;
+      }
+      if (cb) cb(true);
+      else { setStatus("done", "Stopped after " + s.fn); syncButtons(); }
+    }, delay);
+  }
+
+  function runLoop() {
+    if (!state.running) return;
+    step(function (cont) {
+      if (cont && state.running) runLoop();
+      else if (!cont) { state.running = false; syncButtons(); }
+    });
+  }
+
+  function finish() {
+    state.running = false;
+    setStatus("done", "Sequence complete. " + state.stages.filter(function (s) { return s.status === "done"; }).length + " calls executed.");
+    syncButtons();
+  }
+
+  function runAll() {
+    state.running = true; syncButtons(); runLoop();
+  }
+
+  function runToBreakpoint() {
+    var any = Object.keys(state.breakpoints).some(function (k) { return state.breakpoints[k]; });
+    if (!any) { setStatus("idle", "Set a breakpoint on the left."); return; }
+    state.running = true; syncButtons(); runLoop();
+  }
+
+  function pause() { state.running = false; setStatus("paused", "Paused."); syncButtons(); }
+
+  function reset() { state.running = false; loadStages(); syncButtons(); }
+
+  function setStatus(kind, text) {
+    $("statusbar").dataset.state = kind;
+    $("status-text").textContent = text;
+  }
+
+  function updateElapsed() { $("status-elapsed").textContent = state.elapsed + " ms"; }
+
+  function syncButtons() {
+    $("btn-pause").disabled = !state.running;
+    $("btn-step").disabled = state.running;
+    $("btn-run-all").disabled = state.running;
+    $("btn-run-to").disabled = state.running;
+    $("btn-run-all").dataset.armed = state.running ? "true" : "false";
+  }
+
+  // ══ WIRING ═══════════════════════════════════════════════════
+  function bind() {
+    $("btn-step").addEventListener("click", function () { step(null); });
+    $("btn-run-all").addEventListener("click", runAll);
+    $("btn-run-to").addEventListener("click", runToBreakpoint);
+    $("btn-pause").addEventListener("click", pause);
+    $("btn-reset").addEventListener("click", reset);
+    $("sel-topic").addEventListener("change", function () { fillAngles(); reset(); });
+    $("sel-provider").addEventListener("change", function () { fillModels(null); reset(); });
+    $("sel-corroboration").addEventListener("change", reset);
+    ["sel-tenant", "sel-angle", "sel-genre", "sel-model", "sel-research"].forEach(function (id) {
+      $(id).addEventListener("change", reset);
+    });
+    ["assembled", "request", "response"].forEach(function (p) {
+      $("tab-" + p).addEventListener("click", function () { state.pane = p; renderInspector(); });
+    });
+  }
+
+  initSetup();
+  bind();
+  loadStages();
+  syncButtons();
+})();
+</script>
+</body>
+</html>

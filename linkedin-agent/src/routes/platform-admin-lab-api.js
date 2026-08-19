@@ -65,7 +65,7 @@ import { createLabVendorMock } from "../services/lab-vendor-mock.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { getAgentState } from "../services/database.js";
-import { listGenresForKey, getPromptProvenance } from "../services/prompt-vault.js";
+import { listGenresForKey, getPromptProvenance, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { listProviders, listModels } from "../llm/registry.js";
 import { resolveTenantLlmSelection } from "../llm/client.js";
 import { listWebSearchTools, getWebSearchTool } from "../config/ai.js";
@@ -132,6 +132,10 @@ const GENRE_RE = /^(default|[a-z][a-z0-9_]{1,31})$/;
 // pipeline function each belongs to. The page renders its spine from
 // its own static structure; this is how an announced record finds
 // the row it belongs to.
+// An id ending in _arguments belongs to whichever row its prefix
+// names, so this map needs no entry per row for them.
+const ARGUMENTS_SUFFIX = "_arguments";
+
 const STAGE_TO_CALL = Object.freeze({
   angle_resolved:         "resolveAngle",
   db_articles:            "gatherRSSMaterial",
@@ -163,45 +167,185 @@ const STAGE_TO_CALL = Object.freeze({
 function indexStages(trace) {
   const byCall = {};
   for (const record of trace.toJSON().stages) {
+    // Argument records name their own row in the id prefix, so they
+    // are resolved directly rather than through the map.
+    if (record.id.endsWith(ARGUMENTS_SUFFIX)) {
+      const argRow = record.id.slice(0, -ARGUMENTS_SUFFIX.length);
+      const argSlot = byCall[argRow] || (byCall[argRow] = { status: "done", durMs: 0 });
+      argSlot.args = { data: record.data };
+      continue;
+    }
     const callId = STAGE_TO_CALL[record.id];
     if (!callId) continue;
     const slot = byCall[callId] || (byCall[callId] = { status: "done", durMs: 0 });
-    if (record.id.endsWith("_request")) slot.request = { caption: "What this call was sent.", data: record.data };
-    else if (record.id.endsWith("_response")) slot.response = { caption: "What came back, raw and parsed.", data: record.data };
-    else slot.assembled = { caption: "What this call was assembled from.", data: record.data };
+    if (record.id.endsWith("_request")) slot.request = { data: record.data };
+    else if (record.id.endsWith("_response")) slot.response = { data: record.data };
+    else slot.assembled = { data: record.data };
     slot.durMs = record.atMs;
   }
+  crossReference(byCall);
   return byCall;
+}
+
+// A parameter whose value is byte identical to something already
+// shown elsewhere on the SAME row is replaced by a pointer to it.
+// Without this, the Arguments tab for a generation call becomes a
+// second full copy of the assembled prompt already on the Request
+// tab, which is the largest payload on the page.
+function crossReference(byCall) {
+  for (const row of Object.values(byCall)) {
+    const args = row.args && row.args.data;
+    if (!args || !Array.isArray(args.params)) continue;
+    for (const param of args.params) {
+      if (typeof param.value === "string" && param.value.length > 200) {
+        const where = findElsewhere(row, param.value);
+        if (where) { param.value = null; param.sameAs = where; }
+        continue;
+      }
+      if (param.value && typeof param.value === "object") {
+        for (const key of Object.keys(param.value)) {
+          const inner = param.value[key];
+          if (typeof inner !== "string" || inner.length <= 200) continue;
+          const where = findElsewhere(row, inner);
+          if (where) param.value[key] = `[identical to the ${where} tab, not repeated]`;
+        }
+      }
+    }
+  }
+}
+
+function findElsewhere(row, text) {
+  for (const [slot, label] of [["request", "Request"], ["response", "Response"], ["assembled", "Assembled From"]]) {
+    const data = row[slot] && row[slot].data;
+    if (data && typeof data === "object" && Object.values(data).some((v) => v === text)) return label;
+  }
+  return null;
 }
 
 // The vault rows this run's prompts actually came from. Genre applies
 // only to content_generator; every other key is genre invariant, which
 // is exactly how the pipeline reads them.
-async function collectPromptSlots(genre, generated) {
-  const corroborated = !(generated && generated.researchSummary && generated.researchSummary.corroborationSkipped);
-  const wanted = [
-    ["research_assistant", "default"],
-    ["corroboration_analyst", "default"],
-    [corroborated ? "research_brief_corroborated" : "research_brief_uncorroborated", "default"],
-    ["content_generator", genre],
-    ["quality_reviewer", "default"]
+// Which call sequence row each vault key belongs to. Every key the
+// slot plan lists appears here exactly once, so a prompt is always
+// attributable to the call that read it and no prompt is orphaned.
+//
+// researchBlock carries three: the brief template plus the two
+// framing prompts, because frameUntrustedContent wraps the research
+// context immediately before that render.
+const PROMPT_TO_CALL = Object.freeze({
+  research_assistant:            "webSearch",
+  corroboration_analyst:         "corroborate",
+  untrusted_content_prefix:      "researchBlock",
+  untrusted_content_suffix:      "researchBlock",
+  research_brief_corroborated:   "researchBlock",
+  research_brief_uncorroborated: "researchBlock",
+  content_generator:             "generateContent",
+  quality_reviewer:              "qualityCheck"
+});
+
+// Hang each slot's identity on the row that read it. Only identity:
+// key, genres and the fallback flag. The template itself stays in the
+// Prompt Slots panel, so the inspector says WHICH prompt without
+// duplicating the panel that shows it.
+function attachPromptsToCalls(byCall, slots) {
+  for (const slot of slots || []) {
+    const callId = PROMPT_TO_CALL[slot.key];
+    if (!callId) continue;
+    const row = byCall[callId] || (byCall[callId] = { status: "done", durMs: 0 });
+    (row.prompts || (row.prompts = [])).push({
+      key: slot.key,
+      present: slot.present,
+      requestedGenre: slot.requestedGenre,
+      resolvedGenre: slot.resolvedGenre || null,
+      fallback: !!slot.fallback
+    });
+  }
+  return byCall;
+}
+
+// The vault keys a run reads, in pipeline order.
+//
+// HARDCODED, and therefore the one thing here that can go stale. A
+// prompt added to the pipeline is invisible in this panel until this
+// list is updated. When adding a prompt, check all THREE files that
+// read the vault during a run:
+//   src/services/research.js          research_assistant,
+//                                     corroboration_analyst
+//   src/services/prompt-framing.js    untrusted_content_prefix,
+//                                     untrusted_content_suffix
+//   src/services/content-generator.js research_brief_*,
+//                                     content_generator, quality_reviewer
+//
+// Only content_generator is genre-aware; every other key is read at
+// the default genre because that is what the pipeline requests.
+function slotPlan(genre, corroborated) {
+  const plan = [
+    ["research_assistant", "default"]
   ];
+  // corroboration_analyst is read ONLY when corroboration runs.
+  // Listing it unconditionally presented a prompt that had no part
+  // in the run.
+  if (corroborated) plan.push(["corroboration_analyst", "default"]);
+  // The injection boundary frameUntrustedContent wraps around all
+  // untrusted external content before it reaches generation.
+  plan.push(["untrusted_content_prefix", "default"]);
+  plan.push(["untrusted_content_suffix", "default"]);
+  plan.push([corroborated ? "research_brief_corroborated" : "research_brief_uncorroborated", "default"]);
+  plan.push(["content_generator", genre]);
+  plan.push(["quality_reviewer", "default"]);
+  return plan;
+}
+
+/**
+ * The vault rows this run's prompts actually came from.
+ *
+ * Whether corroboration ran is taken from the TRACE, not inferred
+ * from the result object. The trace records what the pipeline did;
+ * an inference can be wrong, and was: reading
+ * researchSummary.corroborationSkipped fails on a blocked run, where
+ * researchSummary is absent and the panel would silently claim the
+ * corroborated path had run.
+ */
+async function collectPromptSlots(genre, trace) {
+  const stages = trace.toJSON().stages;
+  const corroborated = stages.some((s) => s.id === "corroboration_request");
+
   const slots = [];
-  for (const [key, g] of wanted) {
+  for (const [key, g] of slotPlan(genre, corroborated)) {
     let provenance = null;
+    let liveMetricBearing = null;
     try {
       provenance = await getPromptProvenance(key, g);
+      if (provenance) {
+        // The STORED metric_bearing column is written at save time and
+        // drifts: storePrompt, which the seed script uses, never sets
+        // it. templateUsesMetricBlock inspects the template the
+        // pipeline reads NOW, through the same genre resolution, and
+        // is the answer the Lab must show.
+        liveMetricBearing = await templateUsesMetricBlock(key, g);
+      }
     } catch (err) {
       platformLog("warn", "lab_prompt_slot_failed", { key, genre: g, error: err.message });
     }
-    slots.push(provenance
-      ? { key, requestedGenre: g, present: true,
-          resolvedGenre: provenance.resolvedGenre, fallback: provenance.fallback,
-          description: provenance.description, updatedAt: provenance.updatedAt,
-          metricBearing: provenance.metricBearing, fingerprint: provenance.fingerprint,
-          placeholders: [...new Set(provenance.template.match(/{{[A-Z_]+}}/g) || [])],
-          template: provenance.template }
-      : { key, requestedGenre: g, present: false });
+    if (!provenance) {
+      slots.push({ key, requestedGenre: g, present: false });
+      continue;
+    }
+    slots.push({
+      key,
+      requestedGenre: g,
+      present: true,
+      resolvedGenre: provenance.resolvedGenre,
+      fallback: provenance.fallback,
+      description: provenance.description,
+      updatedAt: provenance.updatedAt,
+      metricBearing: liveMetricBearing === null ? provenance.metricBearing : liveMetricBearing,
+      metricBearingStored: provenance.metricBearing,
+      metricBearingDrift: liveMetricBearing !== null && liveMetricBearing !== provenance.metricBearing,
+      fingerprint: provenance.fingerprint,
+      placeholders: [...new Set(provenance.template.match(/{{[A-Z_]+}}/g) || [])],
+      template: provenance.template
+    });
   }
   return slots;
 }
@@ -383,7 +527,7 @@ export default function createPlatformAdminLabRoutes() {
         // Which vault row served each prompt this run used. Read
         // AFTER the run so a genre fallback is reported as it
         // actually resolved.
-        const promptSlots = await collectPromptSlots(genre, result.generated);
+        const promptSlots = await collectPromptSlots(genre, trace);
         return { ...result, promptSlots };
       });
 
@@ -396,7 +540,7 @@ export default function createPlatformAdminLabRoutes() {
         result: out.generated,
         quality: out.quality,
         promptSlots: out.promptSlots,
-        stages: indexStages(trace),
+        stages: attachPromptsToCalls(indexStages(trace), out.promptSlots),
         trace: trace.toJSON()
       });
     } catch (err) {

@@ -373,6 +373,16 @@ export default function createPlatformAdminRoutes() {
     // ── Restricted table protection ──────────────────────────
     // Prevent admin queries from reading encrypted prompt content.
     // Metadata queries (key, description, updated_at) are allowed.
+    //
+    // EXCEPTION: an exception is made for the guarded
+    // platform-admin/lab traceability routine. The Generation Lab
+    // returns decrypted prompt templates in its run response so an
+    // operator can see which vault row served each prompt. That path
+    // is gated by requireAuth + requirePlatformAdmin, decrypts
+    // server-side, and is read only. This firewall still stands for
+    // the /execute path, which must never reach value_enc: raw
+    // registry SQL cannot decrypt, and encryption must never happen
+    // client-side.
     var RESTRICTED_COLUMNS = [
       { table: "prompt_vault", columns: ["value_enc"] }
     ];
@@ -428,7 +438,10 @@ export default function createPlatformAdminRoutes() {
   //
   // Why separate: the /execute path runs raw registry SQL and is
   // firewalled from prompt_vault.value_enc by design (encryption
-  // must never happen client-side). Inserting a genre template
+  // must never happen client-side). That firewall governs /execute
+  // only; an exception is made for the guarded platform-admin/lab
+  // traceability routine, which decrypts server-side behind the same
+  // admin gate and returns templates for display. Inserting a genre template
   // requires server-side AES-256-GCM encryption, so it goes
   // through storePromptGenre() in prompt-vault.js — the same
   // encrypt() the default prompt uses. Plaintext is received over

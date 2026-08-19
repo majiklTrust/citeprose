@@ -154,6 +154,7 @@ body {
    shrinking is the exception, but min-width:0 keeps it honest. */
 .controls {
   display: flex; gap: var(--sp-1); flex-wrap: nowrap; align-items: center;
+  justify-content: flex-end;
   padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2);
 }
 .btn {
@@ -166,12 +167,16 @@ body {
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-inspect { border-color: var(--inspect); color: var(--inspect); }
 .btn-execute { border-color: var(--execute); color: var(--execute); }
+/* The armed state follows the RUNNING button, whichever colour it
+   carries, so the fill can never disagree with the border. */
+.btn[data-armed="true"] { background: currentColor; }
+.btn[data-armed="true"] { color: #fff; }
+.btn-inspect[data-armed="true"] { background: var(--inspect); color: #fff; }
 .btn-execute[data-armed="true"] { background: var(--execute); color: #fff; }
 .btn:focus-visible, select:focus-visible, input:focus-visible, .stage:focus-visible,
-.tab:focus-visible, .bp:focus-visible {
+.tab:focus-visible {
   outline: 2px solid var(--inspect); outline-offset: 2px;
 }
-.ctl-sep { width: 1px; align-self: stretch; background: var(--rule); margin: 0 2px; flex: none; }
 
 /* ── the execution spine: the signature element ───────────────────
    A real call tree, not a flat list. Depth is indentation, the rail
@@ -180,7 +185,7 @@ body {
    a gutter to the left, exactly where a debugger puts them. ------ */
 .panel.flush { margin-bottom: 0; }
 .console-split {
-  display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: var(--sp-3);
+  display: grid; grid-template-columns: minmax(380px, 440px) 1fr; gap: var(--sp-3);
   align-items: start;
 }
 @media (max-width: 900px) { .panel.flush { margin-bottom: 0; }
@@ -188,19 +193,8 @@ body {
 
 .spine { padding: var(--sp-1) 0 var(--sp-2); }
 
-.stage-row { display: grid; grid-template-columns: 22px 1fr; align-items: stretch; }
-
-.bp {
-  border: 0; background: none; cursor: pointer; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.bp::before {
-  content: ""; width: 8px; height: 8px; border-radius: 50%;
-  border: 1px solid var(--rule); background: transparent;
-}
-.bp:hover::before { border-color: var(--execute); }
-.bp[aria-pressed="true"]::before { background: var(--execute); border-color: var(--execute); }
-
+/* One button per row. The breakpoint gutter is gone, so the row has
+   no second column to reserve. */
 .stage {
   display: flex; align-items: baseline; gap: var(--sp-2);
   width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
@@ -210,9 +204,35 @@ body {
 .stage:hover { background: var(--rule-2); }
 .stage[aria-current="true"] { background: #eef4f8; border-left-color: var(--inspect); }
 
+/* A fixed width column on the LEFT carries the egress marker. It is
+   present on every row, empty on most, so that every function name
+   starts at the same x whether or not its call leaves the building.
+   That is also what pushes the names as far right as the panel
+   allows while the depth offset still reads. */
+.stage .egress {
+  flex: none; width: 2.9rem; text-align: right;
+  font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gate); opacity: 0.7;
+}
 .stage .glyph { width: 1.1em; flex: none; color: var(--faint); }
-.stage .name  { flex: 1 1 auto; overflow-wrap: anywhere; }
-.stage .ms    { flex: none; font-size: 0.64rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* One line, always. A wrapped name breaks the alignment the egress
+   column and the depth offset exist to create, so a name too long
+   for the panel is truncated rather than folded. The full text is on
+   the row's title attribute.
+   min-width:0 is required: a flex item defaults to min-width:auto,
+   which refuses to shrink below its content and makes ellipsis
+   impossible. */
+.stage .name  {
+  flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The timing column reserves its width from the start. Left to size
+   itself it is empty before a run and occupied after one, and that
+   change alone was enough to push a long name onto a second line. */
+.stage .ms    {
+  flex: none; min-width: 3rem; text-align: right;
+  font-size: 0.64rem; color: var(--faint); font-variant-numeric: tabular-nums;
+}
 
 .stage[data-status="running"] .glyph { color: var(--live); }
 .stage[data-status="running"] .name  { font-weight: 700; }
@@ -222,27 +242,34 @@ body {
 .stage[data-status="paused"]  .glyph { color: var(--execute); }
 
 /* A vendor crossing is structurally different from a local call and
-   is drawn that way: heavier rule, gate color, and an egress label. */
+   is drawn that way: heavier rule, gate colour, and the egress
+   marker in the left column. */
 .stage[data-kind="gate"] {
   border-left: 2px solid var(--gate); color: var(--gate); font-weight: 600;
 }
 .stage[data-kind="gate"] .glyph { color: var(--gate); }
-.stage[data-kind="gate"]::after {
-  content: "egress"; font-size: 0.6rem; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--gate); opacity: 0.7; flex: none;
-}
 .stage[data-kind="gate"][data-status="skipped"] { opacity: 0.5; }
 
-.d0 { padding-left: var(--sp-2); }
-.d1 { padding-left: calc(var(--sp-2) + 14px); }
-.d2 { padding-left: calc(var(--sp-2) + 28px); }
-.d3 { padding-left: calc(var(--sp-2) + 42px); }
+/* Depth is carried by the NAME, not the row, so the egress column
+   stays aligned across every depth. */
+.stage .name.d0 { padding-left: 0; }
+.stage .name.d1 { padding-left: 12px; }
+.stage .name.d2 { padding-left: 24px; }
+.stage .name.d3 { padding-left: 36px; }
 
 /* ── stage inspector ──────────────────────────────────────────── */
 .inspector { min-height: 340px; display: flex; flex-direction: column; }
 .insp-head { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2); }
 .insp-title { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; margin: 0; }
 .insp-file  { font-family: var(--mono); font-size: 0.64rem; color: var(--faint); margin-top: 1px; }
+/* Which vault prompt this call read. Set in the GATE colour, the same
+   one the egress marker carries in the call sequence, so the vault
+   and the vendor boundary read as one family of "this call reached
+   outside itself" rather than as two unrelated highlights. */
+.insp-prompt { font-family: var(--mono); font-size: 0.64rem; color: var(--gate); margin-top: 2px; }
+.insp-prompt:empty { display: none; }
+.insp-prompt .warn { color: var(--execute); }
+.insp-prompt .miss { color: var(--fail); }
 
 .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--rule); padding: 0 var(--sp-3); }
 .tab {
@@ -332,28 +359,95 @@ table.rows tbody tr:hover { background: var(--rule-2); }
 #setup-error { display: none; margin-top: var(--sp-2); }
 #setup-error.visible { display: block; }
 
+/* The signature is a DECLARATION, so it is set in a fixed pitch face
+   where the parameter list lines up as written in source. */
+.sig-line {
+  font-family: "Courier New", Courier, ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* A parameter that has an expanded block below is bold in all three
+   places it appears: the signature, its row in the value table, and
+   the heading of its block. One weight and ONE COLOUR, three
+   sightings, so the eye can follow a single parameter down the pane.
+   The three selectors share a rule rather than repeating a value,
+   because a repeated colour is a colour that eventually disagrees
+   with itself: the signature's name previously inherited the muted
+   caption colour while the other two were ink. */
+.sig-line strong,
+table.kv th.param-expanded,
+.pane-caption.group-heading {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sig-note { font-size: 0.68rem; color: var(--muted); margin: 0 0 var(--sp-2); font-style: italic; }
+.param-redacted { color: var(--execute); }
+.param-ref { color: var(--inspect); }
+
 /* ── Prompt Slots ──────────────────────────────────────────────
    One accordion row per vault key this run read. The summary line
    carries the verdict (which row served, and whether the requested
    genre fell back); the body carries the template itself. */
-.slots { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
-.slot { border: 1px solid var(--rule); border-radius: 3px; margin-bottom: var(--sp-2); background: var(--panel); }
-.slot > summary {
-  cursor: pointer; padding: var(--sp-2) var(--sp-3); list-style: none;
-  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
-  font-family: var(--mono); font-size: 0.72rem;
+/* Master and detail, the same shape as the call sequence and its
+   inspector. The list is deliberately narrow: a prompt KEY is short,
+   and the width it does not need is width the template can use. */
+.slots {
+  display: grid; grid-template-columns: minmax(190px, 250px) 1fr;
+  gap: var(--sp-3); align-items: start;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
-.slot > summary::-webkit-details-marker { display: none; }
-.slot > summary::before { content: "\25B8"; color: var(--faint); flex: none; }
-.slot[open] > summary::before { content: "\25BE"; }
-.slot[open] > summary { border-bottom: 1px solid var(--rule-2); }
-.slot .slot-key { font-weight: 700; }
-.slot .slot-body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+@media (max-width: 760px) { .slots { grid-template-columns: 1fr; } }
+
+.slot-column { display: flex; flex-direction: column; }
+.slot-list { border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+/* Right aligned, matching the Run and Reset controls above. */
+.slot-actions { display: flex; justify-content: flex-end; margin-top: var(--sp-2); }
+.slot-item {
+  display: flex; align-items: center; gap: var(--sp-2);
+  width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: 3px var(--sp-2); border-left: 2px solid transparent;
+  font-family: var(--mono); font-size: 0.7rem; color: var(--ink);
+}
+.slot-item + .slot-item { border-top: 1px solid var(--rule-2); }
+.slot-item:hover { background: var(--rule-2); }
+.slot-item[aria-current="true"] { background: #eef4f8; border-left-color: var(--inspect); font-weight: 700; }
+.slot-item .slot-key {
+  flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* One character carries the exception, because the list is too narrow
+   for a badge and an exception must still be visible before the slot
+   is opened. */
+.slot-item .slot-flag { flex: none; font-size: 0.72rem; }
+.slot-item .slot-flag.warn    { color: var(--execute); }
+.slot-item .slot-flag.missing { color: var(--fail); }
+
+/* The remaining width, scrolling independently of the list.
+   This is the ONLY scroller in the panel: pre.payload carries its own
+   max-height everywhere else on the page, and left alone it would put
+   a second vertical scrollbar inside this one. A scrollbar inside a
+   scrollbar means the wheel acts on whichever the pointer happens to
+   be over, so the override below turns the inner one off HERE and
+   nowhere else. */
+.slot-view {
+  border: 1px solid var(--rule); border-radius: 3px;
+  padding: var(--sp-2) var(--sp-3);
+  max-height: 22rem; overflow: auto;
+}
+.slot-view pre.payload { max-height: none; overflow: visible; }
+.slot-view .slot-title {
+  font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+  margin: 0 0 var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+}
 .slot-prov { font-size: 0.68rem; color: var(--muted); margin: 0 0 var(--sp-2); }
 .slot-warn {
   font-size: 0.68rem; color: var(--execute); margin: 0 0 var(--sp-2);
   border-left: 2px solid var(--execute); padding-left: var(--sp-2);
 }
+
 
 @media (prefers-reduced-motion: no-preference) {
   .stage[data-status="running"] .glyph { animation: pulse 1.1s ease-in-out infinite; }
@@ -379,7 +473,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     <header class="masthead">
       <div>
         <h1>Generation Lab</h1>
-        <div class="sub">Step the content pipeline one call at a time and inspect what crosses each boundary.</div>
+        <div class="sub">Run the content pipeline and inspect what crosses each boundary.</div>
       </div>
     </header>
 
@@ -431,23 +525,25 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       </div>
     </section>
 
+    <!-- ══ PROMPT SLOTS ══════════════════════════════════════════ -->
+    <section class="panel" id="prompt-slots-panel">
+      <h2>Prompt Slots</h2>
+      <div class="slots" id="prompt-slots"></div>
+    </section>
+
     <!-- ══ CONSOLE ═════════════════════════════════════════════ -->
     <div class="console-split">
 
       <section class="panel flush">
         <h2>Call sequence</h2>
         <div class="controls">
-          <button class="btn btn-inspect" id="btn-step">Step</button>
-          <button class="btn btn-inspect" id="btn-run-to">Run To Breakpoint</button>
-          <div class="ctl-sep"></div>
-          <button class="btn btn-execute" id="btn-run-all">Run All</button>
-          <button class="btn" id="btn-pause" disabled>Pause</button>
+          <button class="btn btn-inspect" id="btn-run">Run</button>
           <button class="btn" id="btn-reset">Reset</button>
         </div>
         <div class="spine" id="spine"></div>
         <div class="statusbar" id="statusbar" data-state="idle">
           <span class="dot"></span>
-          <span id="status-text">Idle. Step or run to begin.</span>
+          <span id="status-text">Idle. Run to begin.</span>
           <span class="spacer"></span>
           <span id="status-elapsed">0 ms</span>
         </div>
@@ -457,9 +553,11 @@ table.rows tbody tr:hover { background: var(--rule-2); }
         <div class="insp-head">
           <h3 class="insp-title" id="insp-title">No stage selected</h3>
           <div class="insp-file" id="insp-file">Select a call in the sequence to inspect it.</div>
+          <div class="insp-prompt" id="insp-prompt"></div>
         </div>
         <div class="tabs" role="tablist" id="tabs">
-          <button class="tab" role="tab" id="tab-assembled" data-pane="assembled" aria-selected="true">Assembled From</button>
+          <button class="tab" role="tab" id="tab-assembled" data-pane="assembled" aria-selected="true">Assembled from</button>
+          <button class="tab" role="tab" id="tab-args"      data-pane="args"      aria-selected="false">Arguments</button>
           <button class="tab" role="tab" id="tab-request"   data-pane="request"   aria-selected="false">Request</button>
           <button class="tab" role="tab" id="tab-response"  data-pane="response"  aria-selected="false">Response</button>
         </div>
@@ -467,12 +565,6 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       </section>
 
     </div>
-
-    <!-- ══ PROMPT SLOTS ══════════════════════════════════════════ -->
-    <section class="panel" id="prompt-slots-panel">
-      <h2>Prompt Slots</h2>
-      <div class="slots" id="prompt-slots"></div>
-    </section>
 
   </div>
 </div>
@@ -513,8 +605,8 @@ table.rows tbody tr:hover { background: var(--rule-2); }
 
   var state = {
     stages: [], cursor: -1, selected: null, pane: "assembled",
-    breakpoints: {}, running: false, elapsed: 0,
-    meta: null, tenantList: [],
+    running: false, elapsed: 0,
+    meta: null, tenantList: [], slots: null, selectedSlot: null,
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -752,7 +844,8 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     state.stages = SEQUENCE.map(function (s) {
       return Object.assign({}, s, {
         status: (skip && s.id === "corroborate") ? "skipped" : "pending",
-        assembled: null, request: null, response: null, error: null, durMs: null
+        assembled: null, args: null, request: null, response: null,
+        prompts: null, error: null, durMs: null
       });
     });
     state.cursor = -1; state.elapsed = 0; state.selected = null;
@@ -763,28 +856,21 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     var spine = $("spine");
     spine.innerHTML = "";
     state.stages.forEach(function (s) {
-      var row = el("div", "stage-row");
-      var bp = el("button", "bp");
-      bp.type = "button";
-      bp.setAttribute("aria-pressed", state.breakpoints[s.id] ? "true" : "false");
-      bp.setAttribute("aria-label", "Breakpoint on " + s.fn);
-      bp.addEventListener("click", function () {
-        state.breakpoints[s.id] = !state.breakpoints[s.id];
-        renderSpine();
-      });
-      row.appendChild(bp);
-
-      var btn = el("button", "stage d" + s.depth);
+      var btn = el("button", "stage");
       btn.type = "button";
       btn.dataset.status = s.status;
       btn.dataset.kind = s.kind;
       btn.setAttribute("aria-current", state.selected === s.id ? "true" : "false");
+      // The egress column is present on EVERY row, empty on most, so
+      // that every function name starts at the same x.
+      btn.appendChild(el("span", "egress", s.kind === "gate" ? "egress" : ""));
       btn.appendChild(el("span", "glyph", GLYPH[s.status] || GLYPH.pending));
-      btn.appendChild(el("span", "name", s.fn));
+      // Truncated names stay readable on hover.
+      btn.title = s.fn;
+      btn.appendChild(el("span", "name d" + s.depth, s.fn));
       btn.appendChild(el("span", "ms", s.durMs === null ? "" : s.durMs + " ms"));
       btn.addEventListener("click", function () { select(s.id); });
-      row.appendChild(btn);
-      spine.appendChild(row);
+      spine.appendChild(btn);
     });
   }
 
@@ -793,7 +879,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     state.selected = id;
     var s = find(id);
     if (!s || !s[state.pane]) {
-      state.pane = ["assembled", "request", "response"].filter(function (p) { return s && s[p]; })[0] || state.pane;
+      state.pane = ["assembled", "args", "request", "response"].filter(function (p) { return s && s[p]; })[0] || state.pane;
     }
     renderSpine(); renderInspector();
   }
@@ -808,11 +894,13 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     var pane = $("pane");
     pane.innerHTML = "";
 
-    ["assembled", "request", "response"].forEach(function (p) {
+    ["assembled", "args", "request", "response"].forEach(function (p) {
       var t = $("tab-" + p);
       t.setAttribute("aria-selected", state.pane === p ? "true" : "false");
       t.disabled = !s || !s[p];
     });
+
+    renderCallPrompts(s);
 
     if (!s) {
       $("insp-title").textContent = "No stage selected";
@@ -826,7 +914,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
 
     if (s.error) { pane.appendChild(errorBox("This call failed", s.error)); return; }
     if (s.status === "pending") {
-      pane.appendChild(emptyState("Not executed yet", "Step or run the sequence to populate this call."));
+      pane.appendChild(emptyState("Not executed yet", "Run the sequence to populate this call."));
       return;
     }
     if (s.status === "skipped") {
@@ -839,8 +927,133 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       pane.appendChild(emptyState("Nothing recorded here", "This call records no " + state.pane + " payload."));
       return;
     }
-    if (data.caption) pane.appendChild(el("p", "pane-caption", data.caption));
-    renderRecord(pane, data.data);
+    if (state.pane === "args") renderArguments(pane, data.data);
+    else renderRecord(pane, data.data);
+  }
+
+  // ══ ARGUMENTS ════════════════════════════════════════════════
+  // The declaration, then one row per parameter in DECLARATION
+  // ORDER, then the compound values expanded beneath. Order is
+  // preserved because the server sends an array, not an object.
+  //
+  //   [redacted]   a capability parameter, hidden by NAME so it stays
+  //                hidden whether or not this run passed null
+  //   sameAs       the value is byte identical to another tab on this
+  //                row and is pointed at rather than repeated
+  function renderArguments(pane, record) {
+    if (!record || !Array.isArray(record.params)) {
+      pane.appendChild(emptyState("No arguments recorded", "This call did not announce how it was invoked."));
+      return;
+    }
+
+    // A parameter earns an expanded block when its value cannot be
+    // read from a single table row. Those are the ones that become
+    // group headings, and therefore the ones set in bold everywhere.
+    var expanded = record.params.filter(function (param) {
+      if (param.type === "redacted" || param.sameAs) return false;
+      if (param.value === null || param.value === undefined) return false;
+      return param.type === "object" || param.type === "array"
+        || param.type === "map" || param.type === "set"
+        || (param.type === "string" && String(param.value).length > 60);
+    });
+    var expandedNames = expanded.map(function (param) { return param.name; });
+
+    renderSignature(pane, record.signature || "(signature unavailable)", expandedNames);
+    if (record.note) pane.appendChild(el("p", "sig-note", record.note));
+
+    if (record.params.length === 0) {
+      pane.appendChild(el("p", "panel-sub", "(no parameters)"));
+      return;
+    }
+
+    var table = el("table", "kv"), body = el("tbody");
+    record.params.forEach(function (param) {
+      var tr = el("tr");
+      tr.appendChild(el("th", expandedNames.indexOf(param.name) >= 0 ? "param-expanded" : null, param.name));
+      var td = el("td", param.type === "redacted" ? "param-redacted"
+                      : param.sameAs ? "param-ref" : null);
+      td.textContent = param.sameAs
+        ? "identical to the " + param.sameAs + " tab, not repeated"
+        : param.summary;
+      tr.appendChild(td);
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    pane.appendChild(table);
+
+    // Compound values expand below the table. Scalars already read in
+    // full on their own row, so repeating them would be noise.
+    expanded.forEach(function (param) {
+      pane.appendChild(el("p", "pane-caption group-heading", param.name));
+      renderRecord(pane, param.value);
+    });
+  }
+
+  // The signature is emitted as text with the expanded parameter
+  // names lifted into <strong>. Matching is on whole words only, so a
+  // name cannot bold a fragment of a longer identifier or of a
+  // default value that happens to contain it.
+  // Default VALUES are dropped from the displayed signature. The
+  // emitted string stays verbatim from source, so a signature that
+  // drifts from its function is still spottable at the emit site;
+  // what the operator needs here is the parameter NAMES, in order,
+  // and a wall of "= null" buries them.
+  //
+  // Splitting on top level commas only: a default can itself contain
+  // commas or parentheses, and a naive split would cut one in half.
+  function stripDefaults(signature) {
+    var open = signature.indexOf("(");
+    var close = signature.lastIndexOf(")");
+    if (open < 0 || close < open) return signature;
+    var inner = signature.slice(open + 1, close);
+    if (!inner.trim()) return signature;
+
+    var params = [];
+    var buf = "", depth = 0, quote = null;
+    for (var i = 0; i < inner.length; i++) {
+      var ch = inner[i];
+      if (quote) {
+        buf += ch;
+        if (ch === quote && inner[i - 1] !== "\\") quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") { quote = ch; buf += ch; continue; }
+      if (ch === "(" || ch === "[" || ch === "{") depth++;
+      if (ch === ")" || ch === "]" || ch === "}") depth--;
+      if (ch === "," && depth === 0) { params.push(buf); buf = ""; continue; }
+      buf += ch;
+    }
+    params.push(buf);
+
+    var names = params.map(function (raw) {
+      var eq = raw.indexOf("=");
+      return (eq >= 0 ? raw.slice(0, eq) : raw).trim();
+    }).filter(function (n) { return n.length > 0; });
+
+    return signature.slice(0, open) + "(" + names.join(", ") + ")";
+  }
+
+  function renderSignature(pane, rawSignature, boldNames) {
+    var signature = stripDefaults(rawSignature);
+    var p = el("p", "pane-caption sig-line");
+    if (!boldNames.length) {
+      p.textContent = signature;
+      pane.appendChild(p);
+      return;
+    }
+    var pattern = boldNames
+      .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); })
+      .sort(function (a, b) { return b.length - a.length; })
+      .join("|");
+    var re = new RegExp("\\b(" + pattern + ")\\b", "g");
+    var last = 0, m;
+    while ((m = re.exec(signature)) !== null) {
+      if (m.index > last) p.appendChild(document.createTextNode(signature.slice(last, m.index)));
+      p.appendChild(el("strong", null, m[1]));
+      last = m.index + m[1].length;
+    }
+    if (last < signature.length) p.appendChild(document.createTextNode(signature.slice(last)));
+    pane.appendChild(p);
   }
 
   // ══ RECORD RENDERING ═════════════════════════════════════════
@@ -857,6 +1070,41 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   //   arrays of scalars           a single joined row
   //   nested scalar objects       flattened into key.subkey rows
   //   anything else               pretty printed JSON
+  // Mirrors the summary rule applied server side to argument values:
+  // a NUMERIC identifier, then the name in its JSON quoting. This is
+  // what lets an operator recognise WHICH record a nested value is
+  // without expanding it, and a bare dump of every field does not.
+  var ID_KEY_RE = /^(id|.*_id|index|citationIndex)$/i;
+
+  function identifyValue(value) {
+    if (!value || typeof value !== "object" || value instanceof Array) return null;
+    var parts = [];
+    var keys = Object.keys(value);
+    for (var i = 0; i < keys.length; i++) {
+      if (ID_KEY_RE.test(keys[i]) && typeof value[keys[i]] === "number") {
+        parts.push(keys[i] + "=" + value[keys[i]]);
+        break;
+      }
+    }
+    if (typeof value.name === "string" && value.name) parts.push("name=" + JSON.stringify(value.name));
+    return parts.length ? "{ " + parts.join(", ") + " }" : null;
+  }
+
+  // The single entry point for showing a compound value in ONE line,
+  // wherever that happens: a table cell, a Map entry, a Set member.
+  // Identified objects read as { id=1, name="..." }; anything with no
+  // identifier falls back to JSON rather than hiding its content.
+  function describeInline(value) {
+    if (value === null || value === undefined) return "";
+    if (typeof value !== "object") return String(value);
+    if (value instanceof Array) {
+      if (value.length === 0) return "[]";
+      var first = identifyValue(value[0]);
+      return first ? value.length + " items, first: " + first : JSON.stringify(value);
+    }
+    return identifyValue(value) || JSON.stringify(value);
+  }
+
   function renderRecord(pane, record) {
     if (record === null || record === undefined) {
       pane.appendChild(el("p", "panel-sub", "(no detail recorded)"));
@@ -868,6 +1116,29 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     }
     if (Array.isArray(record)) {
       pane.appendChild(rowsTable(tableFrom(record)));
+      return;
+    }
+    // Map and Set are converted at capture, because both serialize
+    // to {} and would otherwise read as empty. Render them as what
+    // they are rather than exposing the conversion's own shape.
+    if (record.__kind === "map") {
+      if (!record.size) { pane.appendChild(el("p", "panel-sub", "Map, empty")); return; }
+      pane.appendChild(rowsTable({
+        cols: ["key", "value"],
+        rows: (record.entries || []).map(function (e) {
+          return [e.key, describeInline(e.value)];
+        })
+      }));
+      if (record.size > (record.entries || []).length) {
+        pane.appendChild(el("p", "panel-sub", "Showing " + record.entries.length + " of " + record.size + " entries."));
+      }
+      return;
+    }
+    if (record.__kind === "set") {
+      if (!record.size) { pane.appendChild(el("p", "panel-sub", "Set, empty")); return; }
+      pane.appendChild(kvTable((record.values || []).map(function (v, i) {
+        return [String(i), describeInline(v)];
+      })));
       return;
     }
 
@@ -918,7 +1189,11 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       pane.appendChild(el("p", "pane-caption", block[0]));
       if (block[1] === "table") pane.appendChild(rowsTable(tableFrom(block[2])));
       else if (block[1] === "text") pane.appendChild(el("pre", "payload", block[2]));
-      else pane.appendChild(el("pre", "payload", JSON.stringify(block[2], null, 2)));
+      else {
+        var ident = identifyValue(block[2]);
+        if (ident) pane.appendChild(el("p", "panel-sub", ident));
+        pane.appendChild(el("pre", "payload", JSON.stringify(block[2], null, 2)));
+      }
     });
 
     if (!scalars.length && !blocks.length) {
@@ -936,7 +1211,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       }
     });
     if (cols.length === 0) {
-      return { cols: ["value"], rows: rows.map(function (r) { return [typeof r === "object" ? JSON.stringify(r) : String(r)]; }) };
+      return { cols: ["value"], rows: rows.map(function (r) { return [describeInline(r)]; }) };
     }
     return {
       cols: cols,
@@ -944,7 +1219,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
         return cols.map(function (c) {
           var v = (row || {})[c];
           if (v === null || v === undefined) return "";
-          if (typeof v === "object") return JSON.stringify(v);
+          if (typeof v === "object") return describeInline(v);
           return String(v);
         });
       })
@@ -952,53 +1227,142 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   }
 
   // ══ PROMPT SLOTS ═════════════════════════════════════════════
-  // One accordion row per vault key the run read. The summary states
-  // which row SERVED the slot; a genre that fell back to default says
-  // so loudly, because a slot must never wear a genre it did not load.
+  // Master and detail. The list names the vault keys this run read;
+  // the pane shows which ROW served the selected key and the template
+  // it holds. A key that fell back to another genre, or that no row
+  // answered, must be visible in the LIST as well as the pane, so an
+  // exception is never hidden behind a selection.
   function renderPromptSlots(slots) {
     var host = $("prompt-slots");
     host.innerHTML = "";
+
+    // A NEW payload clears the selection; re-rendering the SAME
+    // payload keeps it. That is what lets a click redraw the list
+    // without losing the slot the operator just opened, while a fresh
+    // run still starts empty.
+    if (slots !== state.slots) state.selectedSlot = null;
+    state.slots = slots || null;
+
     if (!slots || !slots.length) {
+      state.selectedSlot = null;
       host.appendChild(emptyState("No prompts read yet",
         "Run the pipeline to see which vault row served each prompt."));
       return;
     }
+
+    // No slot is opened for the operator. A template is only shown
+    // because it was asked for.
+    var keys = slots.map(function (s) { return s.key; });
+    if (keys.indexOf(state.selectedSlot) < 0) state.selectedSlot = null;
+
+    var list = el("div", "slot-list");
     slots.forEach(function (slot) {
-      var d = document.createElement("details");
-      d.className = "slot";
+      var item = el("button", "slot-item");
+      item.type = "button";
+      item.setAttribute("aria-current", slot.key === state.selectedSlot ? "true" : "false");
+      item.title = slot.key;
+      item.appendChild(el("span", "slot-key", slot.key));
+      if (!slot.present) item.appendChild(el("span", "slot-flag missing", "\u2715"));
+      else if (slot.fallback || slot.metricBearingDrift) item.appendChild(el("span", "slot-flag warn", "\u25B2"));
+      item.addEventListener("click", function () {
+        state.selectedSlot = slot.key;
+        renderPromptSlots(state.slots);
+      });
+      list.appendChild(item);
+    });
 
-      var sum = document.createElement("summary");
-      sum.appendChild(el("span", "slot-key", slot.key));
-      if (!slot.present) {
-        sum.appendChild(el("span", "badge badge-missing", "missing"));
-      } else {
-        sum.appendChild(el("span", "badge badge-vault", "vault: " + slot.resolvedGenre));
-        if (slot.fallback) sum.appendChild(el("span", "badge badge-fallback", "fell back to default"));
-        if (slot.metricBearing) sum.appendChild(el("span", "badge badge-source", "metric"));
-      }
-      d.appendChild(sum);
+    var column = el("div", "slot-column");
+    column.appendChild(list);
 
-      var body = el("div", "slot-body");
-      if (!slot.present) {
-        body.appendChild(el("p", "slot-warn",
-          "No vault row answered for this key. Generation would fail here."));
-      } else {
-        body.appendChild(el("p", "slot-prov",
-          "Served from vault row genre '" + slot.resolvedGenre + "'"
-          + " | fingerprint " + (slot.fingerprint || "n/a")
-          + (slot.updatedAt ? " | updated " + slot.updatedAt : "")
-          + (slot.description ? " | " + slot.description : "")));
-        if (slot.fallback) {
-          body.appendChild(el("p", "slot-warn",
-            "Genre '" + slot.requestedGenre + "' has no vault row. The template below is the "
-            + "DEFAULT genre's, and it is what the run generated from."));
-        }
-        body.appendChild(el("p", "pane-caption",
-          "Placeholders: " + ((slot.placeholders || []).join(" ") || "(none)")));
-        body.appendChild(el("pre", "payload", slot.template));
+    var actions = el("div", "slot-actions");
+    var clear = el("button", "btn", "Clear");
+    clear.type = "button";
+    clear.disabled = !state.selectedSlot;
+    clear.addEventListener("click", function () {
+      state.selectedSlot = null;
+      renderPromptSlots(state.slots);
+    });
+    actions.appendChild(clear);
+    column.appendChild(actions);
+    host.appendChild(column);
+
+    var view = el("div", "slot-view");
+    renderSlotDetail(view, slots.filter(function (s) { return s.key === state.selectedSlot; })[0]);
+    host.appendChild(view);
+  }
+
+  function renderSlotDetail(view, slot) {
+    if (!slot) {
+      view.appendChild(emptyState("No prompt selected",
+        "Pick a prompt key on the left to see the template the run used."));
+      return;
+    }
+
+    var title = el("p", "slot-title");
+    title.appendChild(el("span", null, slot.key));
+    if (!slot.present) {
+      title.appendChild(el("span", "badge badge-missing", "missing"));
+    } else {
+      title.appendChild(el("span", "badge badge-vault", "vault: " + slot.resolvedGenre));
+      if (slot.fallback) title.appendChild(el("span", "badge badge-fallback", "fell back to default"));
+      if (slot.metricBearing) title.appendChild(el("span", "badge badge-source", "metric"));
+      if (slot.metricBearingDrift) title.appendChild(el("span", "badge badge-fallback", "metric flag stale"));
+    }
+    view.appendChild(title);
+
+    if (!slot.present) {
+      view.appendChild(el("p", "slot-warn",
+        "No vault row answered for this key. Generation would fail here."));
+      return;
+    }
+
+    view.appendChild(el("p", "slot-prov",
+      "Served from vault row genre '" + slot.resolvedGenre + "'"
+      + " | fingerprint " + (slot.fingerprint || "n/a")
+      + (slot.updatedAt ? " | updated " + slot.updatedAt : "")
+      + (slot.description ? " | " + slot.description : "")));
+
+    if (slot.fallback) {
+      view.appendChild(el("p", "slot-warn",
+        "Genre '" + slot.requestedGenre + "' has no vault row. The template below is the "
+        + "DEFAULT genre's, and it is what the run generated from."));
+    }
+    if (slot.metricBearingDrift) {
+      view.appendChild(el("p", "slot-warn",
+        "The stored metric_bearing column says " + (slot.metricBearingStored ? "true" : "false")
+        + ", but this template " + (slot.metricBearing ? "DOES" : "does NOT")
+        + " carry the metric block placeholder. The column is written at save time and is not "
+        + "updated by storePrompt, which the seed script uses. The badge above reflects the "
+        + "template, which is what generation actually reads."));
+    }
+
+    view.appendChild(el("p", "pane-caption",
+      "Placeholders: " + ((slot.placeholders || []).join(" ") || "(none)")));
+    view.appendChild(el("pre", "payload", slot.template));
+  }
+
+  // The vault prompts a call read, named in the inspector so the
+  // operator can tell WHICH prompt drove a call without cross
+  // referencing the Prompt Slots panel by memory. Identity only; the
+  // template stays in that panel.
+  function renderCallPrompts(s) {
+    var host = $("insp-prompt");
+    host.innerHTML = "";
+    var prompts = (s && s.prompts) || [];
+    if (!prompts.length) return;
+    prompts.forEach(function (p) {
+      var line = el("div");
+      if (!p.present) {
+        line.appendChild(el("span", "miss", "prompt: " + p.key + " (no vault row)"));
+        host.appendChild(line);
+        return;
       }
-      d.appendChild(body);
-      host.appendChild(d);
+      line.appendChild(el("span", null, "prompt: " + p.key + " | genre: " + p.resolvedGenre));
+      if (p.fallback) {
+        line.appendChild(el("span", "warn",
+          "  (requested " + p.requestedGenre + ", fell back)"));
+      }
+      host.appendChild(line);
     });
   }
 
@@ -1092,8 +1456,13 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       return true;
     }
     s.assembled = record.assembled || null;
+    s.args = record.args || null;
     s.request = record.request || null;
     s.response = record.response || null;
+    // Which vault prompts this call read. Copied like every other
+    // field the server sends: a field the server fills and applyStage
+    // does not copy is a field the page can never show.
+    s.prompts = record.prompts || null;
     s.durMs = typeof record.durMs === "number" ? record.durMs : 0;
     state.elapsed += s.durMs;
     if (record.status === "failed") { s.status = "failed"; s.error = record.error || "(no detail)"; return false; }
@@ -1125,11 +1494,6 @@ table.rows tbody tr:hover { background: var(--rule-2); }
         state.running = false; syncButtons();
         return false;
       }
-      if (state.breakpoints[s.id]) {
-        setStatus("paused", "Paused at breakpoint: " + s.fn);
-        state.running = false; syncButtons();
-        return false;
-      }
       setStatus(state.running ? "running" : "done", state.running ? ("Running " + s.fn) : ("Stopped after " + s.fn));
       return true;
     }).catch(function (err) {
@@ -1156,15 +1520,12 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     syncButtons();
   }
 
-  function runAll() { state.running = true; syncButtons(); runLoop(); }
-
-  function runToBreakpoint() {
-    var any = Object.keys(state.breakpoints).some(function (k) { return state.breakpoints[k]; });
-    if (!any) { setStatus("idle", "Set a breakpoint on the left."); return; }
-    state.running = true; syncButtons(); runLoop();
-  }
-
-  function pause() { state.running = false; setStatus("paused", "Paused."); syncButtons(); }
+  // Run, and CONTINUE. nextIndex resumes from the cursor, so a run
+  // that stopped short carries on when Run is pressed again, and
+  // requestRun returns the cached result so continuing never
+  // re-executes the pipeline. Reset is the only way to start a
+  // genuinely new run.
+  function run() { state.running = true; syncButtons(); runLoop(); }
 
   function reset() {
     state.running = false;
@@ -1172,7 +1533,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     state.runError = null;
     renderPromptSlots(null);
     loadSequence();
-    setStatus("idle", "Idle. Step or run to begin.");
+    setStatus("idle", "Idle. Run to begin.");
     syncButtons();
   }
 
@@ -1200,19 +1561,13 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   function updateElapsed() { $("status-elapsed").textContent = state.elapsed + " ms"; }
 
   function syncButtons() {
-    $("btn-pause").disabled = !state.running;
-    $("btn-step").disabled = state.running;
-    $("btn-run-all").disabled = state.running;
-    $("btn-run-to").disabled = state.running;
-    $("btn-run-all").dataset.armed = state.running ? "true" : "false";
+    $("btn-run").disabled = state.running;
+    $("btn-run").dataset.armed = state.running ? "true" : "false";
   }
 
   // ══ WIRING ═══════════════════════════════════════════════════
   function bind() {
-    $("btn-step").addEventListener("click", function () { advance(); });
-    $("btn-run-all").addEventListener("click", runAll);
-    $("btn-run-to").addEventListener("click", runToBreakpoint);
-    $("btn-pause").addEventListener("click", pause);
+    $("btn-run").addEventListener("click", run);
     $("btn-reset").addEventListener("click", reset);
     $("sel-tenant").addEventListener("change", function () { reset(); loadMeta(); });
     $("sel-topic").addEventListener("change", function () { fillAngles(); reset(); });
@@ -1220,7 +1575,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     ["sel-angle", "sel-genre", "sel-corroboration", "sel-model", "sel-research"].forEach(function (id) {
       $(id).addEventListener("change", reset);
     });
-    ["assembled", "request", "response"].forEach(function (p) {
+    ["assembled", "args", "request", "response"].forEach(function (p) {
       $("tab-" + p).addEventListener("click", function () { state.pane = p; renderInspector(); });
     });
   }

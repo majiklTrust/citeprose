@@ -23,7 +23,7 @@ import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
-import { generationTrace, generationVendor } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments } from "./generation-trace.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -39,6 +39,8 @@ async function newAnthropicClient() {
 // ═══════════════════════════════════════════════════════════════
 
 async function gatherRSSMaterial(topic, angle) {
+  traceArguments("gatherRSSMaterial", "async function gatherRSSMaterial(topic, angle)",
+    [["topic", topic], ["angle", angle]]);
   const maxAge = topic.max_age_days || 20;
   const articles = await getArticlesForTopic(topic.slug, maxAge, 30);
 
@@ -79,8 +81,12 @@ async function gatherRSSMaterial(topic, angle) {
 // ═══════════════════════════════════════════════════════════════
 
 async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
+  traceArguments("webSearch", "async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken)",
+    [["topic", topic], ["angle", angle], ["cycleId", cycleId], ["actionToken", actionToken]]);
   const topicId = topic.slug;
   const topicName = topic.name || topicId;
+  traceArguments("buildQueries", "export function buildQueriesForTopicDetailed(topic, angle)",
+    [["topic", topic], ["angle", angle]]);
   const queryPlan = buildQueriesForTopicDetailed(topic, angle);
   const searchQueries = queryPlan.queries;
 
@@ -244,6 +250,8 @@ function assembleAllSources(webClaims, rssArticles) {
 // ═══════════════════════════════════════════════════════════════
 
 async function corroborateClaims(allSources, cycleId, actionToken) {
+  traceArguments("corroborate", "async function corroborateClaims(allSources, cycleId, actionToken)",
+    [["allSources", allSources], ["cycleId", cycleId], ["actionToken", actionToken]]);
   if (allSources.length === 0) {
     await logActivity("warn", "corroboration_no_sources", { cycleId });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
@@ -478,6 +486,10 @@ function buildDirectBrief(allSources) {
 // ═══════════════════════════════════════════════════════════════
 
 export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false, actionToken = null) {
+  traceArguments("conductResearch",
+    "export async function conductResearch(topicId, angle, cycleId = null, skipCorroboration = false, actionToken = null)",
+    [["topicId", topicId], ["angle", angle], ["cycleId", cycleId],
+     ["skipCorroboration", skipCorroboration], ["actionToken", actionToken]]);
   await logActivity("info", "research_started", { cycleId, topicId, angle, corroboration: !skipCorroboration });
 
   // Resolve topic from DB once — both gather functions use it
@@ -541,6 +553,8 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
       link: a.link
     }));
 
+  traceArguments("assembleSources", "function assembleAllSources(webClaims, rssArticles)",
+    [["webClaims", webClaims], ["rssArticles", rssArticles]]);
   const allSources = assembleAllSources(webClaims, rssArticles);
 
   let brief;
@@ -548,6 +562,8 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   if (skipCorroboration) {
     // Path B: Skip corroboration — build brief directly from raw sources
     await logActivity("info", "corroboration_skipped", { cycleId, message: "Corroboration disabled via dashboard toggle" });
+    traceArguments("buildBrief", "function buildDirectBrief(allSources)",
+      [["allSources", allSources]]);
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
@@ -560,6 +576,8 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
 
     const corrobStart = Date.now();
     const corroboration = await corroborateClaims(allSources, cycleId, actionToken);
+    traceArguments("buildBrief", "function buildVerifiedBrief(corroboration, allSources)",
+      [["corroboration", corroboration], ["allSources", allSources]]);
     brief = buildVerifiedBrief(corroboration, allSources);
     brief._corrobDurationMs = Date.now() - corrobStart;
   }

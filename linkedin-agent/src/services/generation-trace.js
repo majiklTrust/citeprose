@@ -40,17 +40,65 @@ const als = new AsyncLocalStorage();
 // mistaken for a complete one.
 const STRING_CLAMP = 200000;
 
-function clamp(value) {
-  if (typeof value === "string" && value.length > STRING_CLAMP) {
-    return value.slice(0, STRING_CLAMP) + `\n[trace clamp: ${value.length - STRING_CLAMP} more chars]`;
+// Values a trace can legitimately meet that JSON cannot carry. Left
+// unconverted each one lies in a DIFFERENT way, and every one of
+// these appears somewhere in the pipeline's argument lists:
+//   Map, Set        serialize to {} and enumerate to zero keys, so a
+//                   populated collection reads as empty
+//   BigInt          JSON.stringify throws
+//   circular        JSON.stringify throws, and the walk below would
+//                   recurse forever before it got the chance
+//   NaN, Infinity   become null, indistinguishable from a real null
+//   function        serializes to {}
+//   undefined       disappears from objects entirely
+// Conversion has to happen HERE, at capture: by the time a record
+// reaches the response it is already wrong.
+function clamp(value, seen) {
+  const visited = seen || new Set();
+
+  if (value === undefined) return "[undefined]";
+  if (value === null) return null;
+
+  const t = typeof value;
+  if (t === "string") {
+    return value.length > STRING_CLAMP
+      ? value.slice(0, STRING_CLAMP) + `\n[trace clamp: ${value.length - STRING_CLAMP} more chars]`
+      : value;
   }
-  if (Array.isArray(value)) return value.map(clamp);
-  if (value && typeof value === "object") {
+  if (t === "number") {
+    if (Number.isNaN(value)) return "[NaN]";
+    if (!Number.isFinite(value)) return value > 0 ? "[Infinity]" : "[-Infinity]";
+    return value;
+  }
+  if (t === "boolean") return value;
+  if (t === "bigint") return `[bigint ${value.toString()}]`;
+  if (t === "function") return `[function ${value.name || "anonymous"}]`;
+  if (t === "symbol") return `[symbol ${String(value)}]`;
+  if (t !== "object") return String(value);
+
+  // Cycle guard. Removed again on the way out so a value that merely
+  // repeats in two branches is still shown in both.
+  if (visited.has(value)) return "[circular reference]";
+  visited.add(value);
+  try {
+    if (value instanceof Date) return value.toISOString();
+    if (value instanceof Map) {
+      return {
+        __kind: "map", size: value.size,
+        entries: [...value.entries()].slice(0, 200)
+          .map(([k, v]) => ({ key: String(k), value: clamp(v, visited) }))
+      };
+    }
+    if (value instanceof Set) {
+      return { __kind: "set", size: value.size, values: [...value].slice(0, 200).map((v) => clamp(v, visited)) };
+    }
+    if (Array.isArray(value)) return value.map((v) => clamp(v, visited));
     const out = {};
-    for (const key of Object.keys(value)) out[key] = clamp(value[key]);
+    for (const key of Object.keys(value)) out[key] = clamp(value[key], visited);
     return out;
+  } finally {
+    visited.delete(value);
   }
-  return value;
 }
 
 export function createGenerationTrace() {
@@ -95,4 +143,128 @@ export function generationTrace() {
 export function generationVendor() {
   const frame = als.getStore();
   return (frame && frame.vendor) || null;
+}
+
+// ── Arguments ────────────────────────────────────────────────
+// Parameter names that carry a CAPABILITY and must never be shown.
+// Redaction is keyed on the NAME, not on the value, so a token stays
+// hidden whether or not this particular run happened to pass null.
+// The parameter still appears in the list, so its presence in the
+// signature is never in doubt.
+//
+// Matching is on WORDS, not substrings. A substring test on "key"
+// would redact byKey, promptKey and cacheKey, all of which carry
+// pipeline data an operator needs; a fixed list of exact names would
+// miss the next parameter someone calls bearer or authHeader. So the
+// name is split on camelCase and separator boundaries and each word
+// is tested, with a few two-word compounds for the cases where the
+// first word is what makes the second one sensitive.
+const SENSITIVE_WORDS = Object.freeze(new Set([
+  "token", "secret", "password", "passwd", "passphrase",
+  "credential", "credentials", "bearer", "jwt", "cookie",
+  "session", "sessionid", "authorization", "auth", "signature", "nonce"
+]));
+
+// "key" alone is not sensitive. These pairings are.
+const SENSITIVE_PAIRS = Object.freeze([
+  "api key", "private key", "signing key", "access key",
+  "secret key", "encryption key", "shared key", "master key"
+]);
+
+// actionToken -> "action token"; api_key -> "api key"; APIKey -> "api key"
+function nameWords(name) {
+  return String(name || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/[_\-.]+/g, " ")
+    .toLowerCase()
+    .trim();
+}
+
+function isSensitiveName(name) {
+  const phrase = nameWords(name);
+  if (!phrase) return false;
+  if (SENSITIVE_PAIRS.some((pair) => phrase.indexOf(pair) >= 0)) return true;
+  return phrase.split(/\s+/).some((word) => SENSITIVE_WORDS.has(word));
+}
+
+// A one line label for a compound value. The rule: show the name
+// when one exists, and a numeric identifier when one exists, because
+// those are what let an operator recognise WHICH record they are
+// looking at without expanding it.
+const ID_KEY_RE = /^(id|.*_id|index|citationIndex)$/i;
+
+// Values keep their JSON quoting. A bare name=Some Long Title makes
+// the boundary between one field and the next ambiguous the moment a
+// value contains a comma or an equals sign, and hides an empty
+// string entirely. JSON.stringify quotes strings and leaves numbers
+// bare, which is exactly the distinction wanted here.
+function identify(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const parts = [];
+  const idKey = Object.keys(value).find((k) => ID_KEY_RE.test(k) && typeof value[k] === "number");
+  if (idKey) parts.push(idKey + "=" + value[idKey]);
+  if (typeof value.name === "string" && value.name) parts.push("name=" + JSON.stringify(value.name));
+  return parts.length ? parts.join(", ") : null;
+}
+
+function summarise(value) {
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  const t = typeof value;
+  if (t === "string") return value.length > 60 ? `string, ${value.length} chars` : JSON.stringify(value);
+  if (t === "number" || t === "boolean" || t === "bigint") return String(value);
+  if (t === "function") return `function ${value.name || "anonymous"}`;
+  if (t === "symbol") return String(value);
+  if (t !== "object") return String(value);
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Map) return `Map, ${value.size} entries`;
+  if (value instanceof Set) return `Set, ${value.size} values`;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "array, empty";
+    const first = identify(value[0]);
+    return first ? `array, ${value.length} items, first: ${first}` : `array, ${value.length} items`;
+  }
+  const id = identify(value);
+  const fields = Object.keys(value).length;
+  return id ? `{ ${id} }` : `object, ${fields} field${fields === 1 ? "" : "s"}`;
+}
+
+function typeOf(value) {
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (value instanceof Date) return "date";
+  if (value instanceof Map) return "map";
+  if (value instanceof Set) return "set";
+  return typeof value;
+}
+
+/**
+ * Announce the arguments a pipeline function was called with.
+ *
+ * The signature is written at the call site rather than derived,
+ * because Function.prototype.toString yields the implementation
+ * rather than a readable declaration, and module private functions
+ * are not reachable from the observer at all.
+ *
+ * @param {string} rowId      call sequence row this belongs to
+ * @param {string} signature  the declaration, verbatim from source
+ * @param {Array<[string, *]>} params  ordered [name, value] pairs.
+ *        An ARRAY, not an object, so declaration order survives and
+ *        two parameters can never collide on a duplicate key.
+ * @param {string} [note]     for rows that are a step, not a call
+ */
+export function traceArguments(rowId, signature, params, note) {
+  const trace = generationTrace();
+  if (!trace) return;
+  const described = (params || []).map((pair) => {
+    const name = String((pair || [])[0]);
+    if (isSensitiveName(name)) {
+      return { name, type: "redacted", summary: "[redacted]", value: null };
+    }
+    const raw = (pair || [])[1];
+    return { name, type: typeOf(raw), summary: summarise(raw), value: clamp(raw, new Set()) };
+  });
+  trace.stage(rowId + "_arguments", { signature, note: note || null, params: described });
 }

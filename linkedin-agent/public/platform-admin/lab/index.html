@@ -188,6 +188,10 @@ body {
   display: grid; grid-template-columns: minmax(380px, 440px) 1fr; gap: var(--sp-3);
   align-items: start;
 }
+/* The left column stacks: the call sequence, then the result it
+   produced. Both share the column's width, so the Result panel is
+   exactly as wide as the Call sequence panel above it. */
+.console-left { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 @media (max-width: 900px) { .panel.flush { margin-bottom: 0; }
 .console-split { grid-template-columns: 1fr; } }
 
@@ -390,6 +394,40 @@ table.kv th.param-expanded,
    One accordion row per vault key this run read. The summary line
    carries the verdict (which row served, and whether the requested
    genre fell back); the body carries the template itself. */
+/* The post the run produced, and the verdict on it. The post is
+   given the wider column because it is the thing being judged; the
+   verdict is compact by nature. */
+/* One column. The panel now sits in the call sequence column, which
+   is far too narrow for the post and the verdict side by side, so
+   they stack. */
+.result { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.result-full { display: block; }
+.post-title {
+  font-size: 0.92rem; font-weight: 700; margin: 0 0 var(--sp-2);
+  overflow-wrap: anywhere;
+}
+/* The post reads as prose, not as a payload: normal text colour, no
+   monospace, and the ONLY scroller on this path. */
+pre.post-body {
+  font-family: var(--sans); font-size: 0.78rem; line-height: 1.5;
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 3px;
+  padding: var(--sp-3); margin: 0 0 var(--sp-3);
+  max-height: 22rem; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.result-sub {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 var(--sp-2);
+}
+.blocked-box {
+  border: 1px solid var(--execute); border-left: 3px solid var(--execute);
+  border-radius: 0 3px 3px 0; background: #fdf6f2;
+  padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-2);
+}
+.blocked-box h4 { margin: 0 0 var(--sp-1); font-size: 0.75rem; color: var(--execute); }
+.blocked-box p  { margin: 0; font-size: 0.72rem; }
+
 /* Master and detail, the same shape as the call sequence and its
    inspector. The list is deliberately narrow: a prompt KEY is short,
    and the width it does not need is width the template can use. */
@@ -534,6 +572,8 @@ table.kv th.param-expanded,
     <!-- ══ CONSOLE ═════════════════════════════════════════════ -->
     <div class="console-split">
 
+      <div class="console-left">
+
       <section class="panel flush">
         <h2>Call sequence</h2>
         <div class="controls">
@@ -548,6 +588,14 @@ table.kv th.param-expanded,
           <span id="status-elapsed">0 ms</span>
         </div>
       </section>
+
+      <!-- ══ RESULT ══════════════════════════════════════════ -->
+      <section class="panel flush" id="result-panel">
+        <h2>Result</h2>
+        <div class="result" id="result"></div>
+      </section>
+
+      </div>
 
       <section class="panel inspector flush">
         <div class="insp-head">
@@ -683,6 +731,7 @@ table.kv th.param-expanded,
       bind();
       loadSequence();
       renderPromptSlots(null);
+      renderResult(null, null);
 
       if (tenants.length === 0) {
         $("sel-tenant").disabled = true;
@@ -1226,6 +1275,72 @@ table.kv th.param-expanded,
     };
   }
 
+  // ══ RESULT ═══════════════════════════════════════════════════
+  // The post the run produced and the reviewer's verdict on it. Every
+  // field rendered here comes from generatePost's own return shape;
+  // nothing is derived or inferred, so what is on screen is what the
+  // pipeline handed back.
+  //
+  // researchSummary and fidelity are NOT repeated here. Both are
+  // already inspectable on their own rows in the call sequence, and a
+  // second copy would be a second thing to keep in step.
+  function renderResult(result, quality) {
+    var host = $("result");
+    host.innerHTML = "";
+
+    if (!result) {
+      host.appendChild(withClass(emptyState("No result yet",
+        "Run the pipeline to see the post it produces."), "result-full"));
+      return;
+    }
+
+    // A blocked run produced no post. Say why, and say nothing else:
+    // there is no partial post to show and inventing one would be a
+    // lie about what the pipeline did.
+    if (result.blocked) {
+      var box = el("div", "blocked-box result-full");
+      box.appendChild(el("h4", null, "Blocked before publication"));
+      box.appendChild(el("p", null, result.reason || "(no reason given)"));
+      host.appendChild(box);
+      var facts = [];
+      if (result.topicId) facts.push(["topic", result.topicId]);
+      if (result.angle) facts.push(["angle", result.angle]);
+      if (result.cycleId) facts.push(["cycle", result.cycleId]);
+      if (facts.length) host.appendChild(withClass(kvTable(facts), "result-full"));
+      return;
+    }
+
+    var post = el("div");
+    post.appendChild(el("p", "post-title", result.title || "(untitled)"));
+    post.appendChild(el("pre", "post-body", result.content || "(empty body)"));
+    var meta = [];
+    if (result.angle) meta.push(["angle", result.angle]);
+    if (result.genre) meta.push(["genre", result.genre]);
+    if (result.topicId) meta.push(["topic", result.topicId]);
+    if (result.hashtags && result.hashtags.length) meta.push(["hashtags", result.hashtags.join(" ")]);
+    if (result.sourcesUsed && result.sourcesUsed.length) meta.push(["sources cited", result.sourcesUsed.join(", ")]);
+    if (result.cycleId) meta.push(["cycle", result.cycleId]);
+    if (meta.length) post.appendChild(kvTable(meta));
+    host.appendChild(post);
+
+    var verdict = el("div");
+    verdict.appendChild(el("p", "result-sub", "Quality review"));
+    if (!quality) {
+      verdict.appendChild(emptyState("Not reviewed",
+        "The quality reviewer did not run for this post."));
+    } else {
+      // The reviewer's shape is whatever its vault prompt asks for, so
+      // it is walked generically rather than assumed.
+      renderRecord(verdict, quality);
+    }
+    host.appendChild(verdict);
+  }
+
+  function withClass(node, cls) {
+    node.className = (node.className ? node.className + " " : "") + cls;
+    return node;
+  }
+
   // ══ PROMPT SLOTS ═════════════════════════════════════════════
   // Master and detail. The list names the vault keys this run read;
   // the pane shows which ROW served the selected key and the template
@@ -1439,6 +1554,7 @@ table.kv th.param-expanded,
       state.run = data;
       state.runError = null;
       renderPromptSlots(data.promptSlots);
+      renderResult(data.result, data.quality);
       return data;
     }, function (err) {
       state.runError = err;
@@ -1532,6 +1648,7 @@ table.kv th.param-expanded,
     state.run = null;
     state.runError = null;
     renderPromptSlots(null);
+    renderResult(null, null);
     loadSequence();
     setStatus("idle", "Idle. Run to begin.");
     syncButtons();

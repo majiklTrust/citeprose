@@ -142,7 +142,12 @@ const STAGE_TO_CALL = Object.freeze({
   corroboration_request:  "corroborate",
   corroboration_response: "corroborate",
   research_brief:         "buildBrief",
-  research_block:         "buildBrief",
+  // research_block belongs to the GENERATION side: it is the brief
+  // rendered through the research_brief_* vault template, which is
+  // what the generator actually receives. Mapping it to buildBrief
+  // silently overwrote the finished brief, so it lands on its own
+  // row instead.
+  research_block:         "researchBlock",
   metric_block:           "metricBlock",
   generation_request:     "generateContent",
   generation_response:    "generateContent",

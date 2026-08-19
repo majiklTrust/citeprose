@@ -504,6 +504,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     { id: "assembleSources",   depth: 2, kind: "pure", fn: "assembleAllSources()",              file: "src/services/research.js" },
     { id: "corroborate",       depth: 2, kind: "gate", fn: "corroborateClaims()",               file: "src/services/research.js" },
     { id: "buildBrief",        depth: 2, kind: "pure", fn: "buildVerifiedBrief()",              file: "src/services/research.js" },
+    { id: "researchBlock",     depth: 1, kind: "pure", fn: "renderPrompt(research_brief)",      file: "src/services/content-generator.js" },
     { id: "metricBlock",       depth: 1, kind: "db",   fn: "buildMetricBlock()",                file: "src/services/metric-content.js" },
     { id: "generateContent",   depth: 1, kind: "gate", fn: "generateWithTenantLlm()",           file: "src/llm/client.js" },
     { id: "fidelity",          depth: 1, kind: "pure", fn: "verifyMetricFidelity()",            file: "src/services/metric-content.js" },
@@ -839,17 +840,115 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       return;
     }
     if (data.caption) pane.appendChild(el("p", "pane-caption", data.caption));
-    if (data.kv) pane.appendChild(kvTable(data.kv));
-    if (data.table) pane.appendChild(rowsTable(data.table));
-    // Raw vendor text sits BENEATH the parsed result in the same
-    // tab. web_search and corroboration both parse JSON out of
-    // prose and return empty on a parse miss, so without the raw
-    // text a parse failure is invisible.
-    if (data.text) pane.appendChild(el("pre", "payload", data.text));
-    if (data.raw) {
-      pane.appendChild(el("p", "pane-caption", "Raw vendor response, before parsing."));
-      pane.appendChild(el("pre", "payload", data.raw));
+    renderRecord(pane, data.data);
+  }
+
+  // ══ RECORD RENDERING ═════════════════════════════════════════
+  // The pipeline announces DOMAIN data and says nothing about how it
+  // should look. Shaping it for display is the page's job, so a new
+  // stage needs no display code anywhere: this walks whatever object
+  // arrives and picks a presentation per field.
+  //
+  //   scalars and short strings   one row of the key/value table
+  //   long or multiline strings   their own labelled block, which is
+  //                               how assembled prompts and raw
+  //                               vendor text stay readable
+  //   arrays of objects           a table, columns unioned across rows
+  //   arrays of scalars           a single joined row
+  //   nested scalar objects       flattened into key.subkey rows
+  //   anything else               pretty printed JSON
+  function renderRecord(pane, record) {
+    if (record === null || record === undefined) {
+      pane.appendChild(el("p", "panel-sub", "(no detail recorded)"));
+      return;
     }
+    if (typeof record !== "object") {
+      pane.appendChild(el("pre", "payload", String(record)));
+      return;
+    }
+    if (Array.isArray(record)) {
+      pane.appendChild(rowsTable(tableFrom(record)));
+      return;
+    }
+
+    var scalars = [];
+    var blocks = [];
+
+    Object.keys(record).forEach(function (key) {
+      var value = record[key];
+
+      if (value === null || value === undefined) { scalars.push([key, "(null)"]); return; }
+
+      if (typeof value === "string") {
+        if (value.indexOf("\n") >= 0 || value.length > 110) blocks.push([key, "text", value]);
+        else scalars.push([key, value === "" ? "(empty string)" : value]);
+        return;
+      }
+
+      if (typeof value === "number" || typeof value === "boolean") {
+        scalars.push([key, String(value)]);
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) { scalars.push([key, "(empty)"]); return; }
+        var hasObjects = value.some(function (v) { return v && typeof v === "object"; });
+        if (hasObjects) blocks.push([key, "table", value]);
+        else scalars.push([key, value.join(", ")]);
+        return;
+      }
+
+      // Plain object. All scalar values flatten into the table so a
+      // small map like a tier breakdown reads as rows, not as JSON.
+      var keys = Object.keys(value);
+      var allScalar = keys.length > 0 && keys.every(function (k) {
+        var v = value[k];
+        return v === null || (typeof v !== "object");
+      });
+      if (allScalar) {
+        keys.forEach(function (k) { scalars.push([key + "." + k, String(value[k])]); });
+      } else {
+        blocks.push([key, "json", value]);
+      }
+    });
+
+    if (scalars.length) pane.appendChild(kvTable(scalars));
+
+    blocks.forEach(function (block) {
+      pane.appendChild(el("p", "pane-caption", block[0]));
+      if (block[1] === "table") pane.appendChild(rowsTable(tableFrom(block[2])));
+      else if (block[1] === "text") pane.appendChild(el("pre", "payload", block[2]));
+      else pane.appendChild(el("pre", "payload", JSON.stringify(block[2], null, 2)));
+    });
+
+    if (!scalars.length && !blocks.length) {
+      pane.appendChild(el("p", "panel-sub", "(recorded, but empty)"));
+    }
+  }
+
+  // Columns are the UNION of every row's keys, so a field present on
+  // only some rows is still shown rather than silently dropped.
+  function tableFrom(rows) {
+    var cols = [];
+    rows.forEach(function (row) {
+      if (row && typeof row === "object" && !Array.isArray(row)) {
+        Object.keys(row).forEach(function (c) { if (cols.indexOf(c) < 0) cols.push(c); });
+      }
+    });
+    if (cols.length === 0) {
+      return { cols: ["value"], rows: rows.map(function (r) { return [typeof r === "object" ? JSON.stringify(r) : String(r)]; }) };
+    }
+    return {
+      cols: cols,
+      rows: rows.map(function (row) {
+        return cols.map(function (c) {
+          var v = (row || {})[c];
+          if (v === null || v === undefined) return "";
+          if (typeof v === "object") return JSON.stringify(v);
+          return String(v);
+        });
+      })
+    };
   }
 
   // ══ PROMPT SLOTS ═════════════════════════════════════════════

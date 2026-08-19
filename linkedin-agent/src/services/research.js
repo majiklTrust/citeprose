@@ -23,6 +23,7 @@ import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
+import { generationTrace, generationVendor } from "./generation-trace.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -49,10 +50,28 @@ async function gatherRSSMaterial(topic, angle) {
     return { ...article, relevanceScore: matchCount };
   });
 
-  return scored
+  const kept = scored
     .filter(a => a.relevanceScore > 0)
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 10);
+
+  // Announce the database assembly with full drop accounting: an
+  // observer must be able to see WHY an article did not make it,
+  // not merely that it is absent.
+  generationTrace()?.stage("db_articles", {
+    topic: topic.slug,
+    windowDays: maxAge,
+    fetchedFromDb: articles.length,
+    keptForResearch: kept.length,
+    droppedNoAngleOverlap: scored.filter(a => a.relevanceScore === 0).length,
+    droppedByTopTenCap: Math.max(0, scored.filter(a => a.relevanceScore > 0).length - 10),
+    kept: kept.map(a => ({
+      id: a.id, feed: a.feed_name, tier: a.feed_tier, published: a.published_at,
+      relevanceScore: a.relevanceScore, title: a.title, link: a.link
+    }))
+  });
+
+  return kept;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -76,6 +95,15 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   });
 
   await logActivity("info", "web_search_started", { cycleId, topicId, queries: searchQueries });
+
+  // The Research Instruction effect made visible: stored templates
+  // beside the values that filled them and the queries that resulted.
+  generationTrace()?.stage("search_queries", {
+    source: queryPlan.source,
+    placeholderContext: queryPlan.context,
+    searchTemplates: topic.search_templates || [],
+    renderedQueries: searchQueries
+  });
 
   try {
     const client = await newAnthropicClient();
@@ -112,7 +140,17 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       platformLog("debug", "llm_payload_web_search",
         buildLlmPayloadDebug("web_search", requestParams, cycleId));
     }
-    const response = await callAnthropic(client, requestParams);
+    generationTrace()?.stage("web_search_request", {
+      model, maxTokens: requestParams.max_tokens, tools: requestParams.tools,
+      assembledPrompt
+    });
+    // The vendor substitute receives the SAME fully assembled request
+    // the network would have received. Everything below this line
+    // runs identically either way.
+    const vendor = generationVendor();
+    const response = vendor
+      ? vendor.anthropic("web_search", requestParams)
+      : await callAnthropic(client, requestParams);
     assembledPrompt = null;
 
     const textBlocks = response.content.filter(b => b.type === "text");
@@ -121,11 +159,20 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
 
     if (!jsonMatch) {
+      generationTrace()?.stage("web_search_response", {
+        rawText, parseFailed: true,
+        note: "No JSON array found in the response. The stage returns no claims and the run continues."
+      });
       await logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
 
     const claims = JSON.parse(jsonMatch[0]);
+    // Raw text travels with the parsed result. A parse that succeeds
+    // on the wrong bytes is invisible without it.
+    generationTrace()?.stage("web_search_response", {
+      rawText, claimCount: claims.length, claims
+    });
 
     // Console mirror: the direct effect of the queries above —
     // how much citable material this cycle's retrieval produced.
@@ -204,6 +251,19 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
 
   await logActivity("info", "corroboration_started", { cycleId, sourceCount: allSources.length });
 
+  // Everything corroboration will weigh, before a prompt exists:
+  // the merged web and database material with its tier mix.
+  generationTrace()?.stage("corroboration_sources", {
+    totalSourceItems: allSources.length,
+    fromWebSearch: allSources.filter(s => s.type === "web_search").length,
+    fromDatabase: allSources.filter(s => s.type === "rss").length,
+    byTier: allSources.reduce((acc, s) => { acc[s.tier] = (acc[s.tier] || 0) + 1; return acc; }, {}),
+    minTrustWeightToVerify: SOURCE_RULES.minTrustWeight,
+    sources: allSources.map((s, i) => ({
+      index: i + 1, name: s.name, tier: s.tier, type: s.type, date: s.date, url: s.url
+    }))
+  });
+
   try {
     const client = await newAnthropicClient();
     const model = await getAnthropicModel();
@@ -233,7 +293,14 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       platformLog("debug", "llm_payload_corroboration",
         buildLlmPayloadDebug("corroboration", requestParams, cycleId));
     }
-    const response = await callAnthropic(client, requestParams);
+    generationTrace()?.stage("corroboration_request", {
+      model, maxTokens: requestParams.max_tokens, sourceCount: allSources.length,
+      assembledPrompt
+    });
+    const vendor = generationVendor();
+    const response = vendor
+      ? vendor.anthropic("corroboration", requestParams)
+      : await callAnthropic(client, requestParams);
     assembledPrompt = null;
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
@@ -241,6 +308,10 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
+      generationTrace()?.stage("corroboration_response", {
+        rawText, parseFailed: true,
+        note: "No JSON object found in the response. No claims are verified and the run continues."
+      });
       await logActivity("warn", "corroboration_parse_failed", { cycleId });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
@@ -259,6 +330,19 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
 
     const verified = scoredCorroborated.filter(c => c.meetsThreshold);
     const belowThreshold = scoredCorroborated.filter(c => !c.meetsThreshold);
+    // Raw text, plus the trust weight arithmetic that decided which
+    // claims survive. The scoring is where claims are actually won
+    // or lost, so it is shown rather than summarised.
+    generationTrace()?.stage("corroboration_response", {
+      rawText,
+      verified: verified.length,
+      belowThreshold: belowThreshold.length,
+      uncorroborated: (result.uncorroborated_claims || []).length,
+      scored: scoredCorroborated.map(c => ({
+        claim: c.claim, trustWeight: c.trustWeight, meetsThreshold: c.meetsThreshold,
+        confidence: c.confidence, sources: c.sources
+      }))
+    });
 
     await logActivity("info", "corroboration_complete", {
       cycleId,
@@ -467,8 +551,12 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
-    await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${getCooldownMs() / 1000}s before corroboration call` });
-    await new Promise(resolve => setTimeout(resolve, getCooldownMs()));
+    // The cooldown exists to pace REAL vendor traffic. A substituted
+    // vendor makes no network call, so waiting would only make the
+    // observation slower without making it truer.
+    const cooldownMs = generationVendor() ? 0 : getCooldownMs();
+    await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldownMs / 1000}s before corroboration call` });
+    if (cooldownMs > 0) await new Promise(resolve => setTimeout(resolve, cooldownMs));
 
     const corrobStart = Date.now();
     const corroboration = await corroborateClaims(allSources, cycleId, actionToken);
@@ -491,6 +579,16 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
 
   // Attach article images to the brief for the content generator
   brief.articleImages = articleImages;
+
+  // The finished brief, which is the only thing generation sees of
+  // all the work above.
+  generationTrace()?.stage("research_brief", {
+    corroborationSkipped: skipCorroboration,
+    hasEnoughMaterial: brief.hasEnoughMaterial,
+    summary: brief.summary,
+    sourceList: brief.sourceList,
+    briefContext: brief.context
+  });
 
   return brief;
 }

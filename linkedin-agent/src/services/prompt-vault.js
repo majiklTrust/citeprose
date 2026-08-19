@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import {
-  createCipheriv, createDecipheriv, randomBytes, hkdfSync
+  createCipheriv, createDecipheriv, createHash, randomBytes, hkdfSync
 } from "node:crypto";
 import { query } from "../db/pool.js";
 import { platformLog } from "./platform-log.js";
@@ -361,6 +361,58 @@ export async function listGenresForKey(key) {
     description: r.description,
     metricBearing: r.metric_bearing === true
   }));
+}
+
+/**
+ * Provenance-truthful read: the decrypted template PLUS which row
+ * actually served it.
+ *
+ * The plain read path resolves (key, genre) with a SILENT fallback
+ * to the default genre, so a display built from the REQUESTED genre
+ * can label one row's text with another row's name. This read
+ * reports the row that answered, so an observer can tell "the wrong
+ * row loaded" apart from "this row contains this text".
+ *
+ * fingerprint is a DISPLAY identity, the first 12 hex characters of
+ * the plaintext's sha256. Two slots showing the same fingerprint
+ * hold byte-identical templates. It is computed in memory for the
+ * response only and is never persisted.
+ *
+ * @param {string} key - prompt identifier
+ * @param {string} [genre="default"] - genre variant requested
+ * @returns {Promise<{template, requestedGenre, resolvedGenre, fallback,
+ *           description, updatedAt, metricBearing, fingerprint}|null>}
+ */
+export async function getPromptProvenance(key, genre = "default") {
+  let resolvedGenre = genre;
+  let fallback = false;
+  let result = await query(
+    "SELECT value_enc, description, updated_at, metric_bearing FROM prompt_vault WHERE key = $1 AND genre = $2",
+    [key, genre]
+  );
+  if (result.rows.length === 0 && genre !== "default") {
+    // The same fallback the production read performs, but REPORTED.
+    platformLog("info", "prompt_genre_fallback", { key, requestedGenre: genre });
+    resolvedGenre = "default";
+    fallback = true;
+    result = await query(
+      "SELECT value_enc, description, updated_at, metric_bearing FROM prompt_vault WHERE key = $1 AND genre = $2",
+      [key, "default"]
+    );
+  }
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  const template = decrypt(row.value_enc);
+  return {
+    template,
+    requestedGenre: genre,
+    resolvedGenre,
+    fallback,
+    description: row.description || null,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+    metricBearing: row.metric_bearing === true,
+    fingerprint: createHash("sha256").update(template, "utf8").digest("hex").slice(0, 12)
+  };
 }
 
 /**

@@ -307,6 +307,11 @@ table.rows tbody tr:hover { background: var(--rule-2); }
 }
 .badge-gate { color: var(--gate); }
 .badge-free { color: var(--inspect); }
+.badge-vault { color: var(--inspect); }
+.badge-override { color: var(--execute); }
+.badge-fallback { color: var(--execute); }
+.badge-missing { color: var(--fail); }
+.badge-source { color: var(--gate); }
 
 /* A failure is content, not chrome: it renders with the same weight
    as a successful payload. Newlines are preserved because the
@@ -326,6 +331,29 @@ table.rows tbody tr:hover { background: var(--rule-2); }
    failure be visible at the same time. */
 #setup-error { display: none; margin-top: var(--sp-2); }
 #setup-error.visible { display: block; }
+
+/* ── Prompt Slots ──────────────────────────────────────────────
+   One accordion row per vault key this run read. The summary line
+   carries the verdict (which row served, and whether the requested
+   genre fell back); the body carries the template itself. */
+.slots { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.slot { border: 1px solid var(--rule); border-radius: 3px; margin-bottom: var(--sp-2); background: var(--panel); }
+.slot > summary {
+  cursor: pointer; padding: var(--sp-2) var(--sp-3); list-style: none;
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-family: var(--mono); font-size: 0.72rem;
+}
+.slot > summary::-webkit-details-marker { display: none; }
+.slot > summary::before { content: "\25B8"; color: var(--faint); flex: none; }
+.slot[open] > summary::before { content: "\25BE"; }
+.slot[open] > summary { border-bottom: 1px solid var(--rule-2); }
+.slot .slot-key { font-weight: 700; }
+.slot .slot-body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.slot-prov { font-size: 0.68rem; color: var(--muted); margin: 0 0 var(--sp-2); }
+.slot-warn {
+  font-size: 0.68rem; color: var(--execute); margin: 0 0 var(--sp-2);
+  border-left: 2px solid var(--execute); padding-left: var(--sp-2);
+}
 
 @media (prefers-reduced-motion: no-preference) {
   .stage[data-status="running"] .glyph { animation: pulse 1.1s ease-in-out infinite; }
@@ -439,6 +467,13 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       </section>
 
     </div>
+
+    <!-- ══ PROMPT SLOTS ══════════════════════════════════════════ -->
+    <section class="panel" id="prompt-slots-panel">
+      <h2>Prompt Slots</h2>
+      <div class="slots" id="prompt-slots"></div>
+    </section>
+
   </div>
 </div>
 
@@ -478,7 +513,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   var state = {
     stages: [], cursor: -1, selected: null, pane: "assembled",
     breakpoints: {}, running: false, elapsed: 0,
-    meta: null, tenantList: [], homeApplied: false,
+    meta: null, tenantList: [],
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -534,8 +569,18 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   // ══ BOOT ═════════════════════════════════════════════════════
   // Tenants is a real endpoint in this baseline, so it also serves
   // as the authorization probe: 401 or 403 raises the wall.
-  call(API + "/tenants")
-    .then(function (data) {
+  // The tenant list and the setup payload do not depend on each
+  // other, so they go out TOGETHER. /meta is called with no tenantId,
+  // which tells the route to use the caller's own tenant and report
+  // which one that was. One round trip, and no guessed tenant to
+  // correct afterwards.
+  Promise.all([
+    call(API + "/tenants"),
+    call(LAB + "/meta").catch(function (err) { return { __error: err }; })
+  ])
+    .then(function (results) {
+      var data = results[0];
+      var meta = results[1];
       $("main").style.display = "block";
       var tenants = data.tenants || [];
       state.tenantList = tenants;
@@ -544,16 +589,34 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       }));
       bind();
       loadSequence();
-      // No tenants is a real answer, not a reason to sit idle. Saying
-      // nothing here would leave the page looking like it is still
-      // loading forever.
+      renderPromptSlots(null);
+
       if (tenants.length === 0) {
         $("sel-tenant").disabled = true;
         emptySelectors("No tenant selected");
         fail("No tenants available", "The platform returned an empty tenant list, so there is nothing to run against.");
         return;
       }
-      return loadMeta();
+
+      // The route could not default for an admin with no membership.
+      // Select the first tenant and ask once, explicitly.
+      if (meta.__error) {
+        if (meta.__error instanceof LabError && meta.__error.status === 400
+            && meta.__error.body && meta.__error.body.code === "NO_HOME_TENANT") {
+          return loadMeta($("sel-tenant").value);
+        }
+        emptySelectors("Unavailable");
+        fail("Could not load run setup", meta.__error);
+        return;
+      }
+
+      // The route says which tenant it described. Select that.
+      if (meta.tenantId) $("sel-tenant").value = meta.tenantId;
+      state.meta = meta;
+      clearSetupError();
+      applyMeta(meta);
+      setStatus("idle", "Ready.");
+      renderInspector();
     })
     .catch(function (err) {
       if (err instanceof LabError && (err.status === 401 || err.status === 403)) {
@@ -570,25 +633,16 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   // Meta feeds seven of the eight selectors. It does not exist in
   // this baseline. The 404 is the point: it is reported here, in
   // full, rather than hidden behind placeholder options.
-  function loadMeta() {
-    var tenantId = $("sel-tenant").value;
-    if (!tenantId) return Promise.resolve();
-    return call(LAB + "/meta?tenantId=" + encodeURIComponent(tenantId))
+  // Called only when the operator switches tenant. The tenantId is
+  // always explicit here, so there is nothing for the route to
+  // default and nothing for the page to correct.
+  function loadMeta(tenantId) {
+    var id = tenantId || $("sel-tenant").value;
+    if (!id) return Promise.resolve();
+    return call(LAB + "/meta?tenantId=" + encodeURIComponent(id))
       .then(function (meta) {
         state.meta = meta;
         clearSetupError();
-        // The admin's own tenant is the default, and it is known only
-        // once meta answers. Applying it here, once, avoids a second
-        // round trip on every page load for admins already on the
-        // first tenant in the list.
-        if (!state.homeApplied && meta.homeTenantId) {
-          state.homeApplied = true;
-          if ($("sel-tenant").value !== meta.homeTenantId) {
-            var before = $("sel-tenant").value;
-            $("sel-tenant").value = meta.homeTenantId;
-            if ($("sel-tenant").value !== before) return loadMeta();
-          }
-        }
         applyMeta(meta);
         setStatus("idle", "Ready.");
         renderInspector();
@@ -798,6 +852,57 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     }
   }
 
+  // ══ PROMPT SLOTS ═════════════════════════════════════════════
+  // One accordion row per vault key the run read. The summary states
+  // which row SERVED the slot; a genre that fell back to default says
+  // so loudly, because a slot must never wear a genre it did not load.
+  function renderPromptSlots(slots) {
+    var host = $("prompt-slots");
+    host.innerHTML = "";
+    if (!slots || !slots.length) {
+      host.appendChild(emptyState("No prompts read yet",
+        "Run the pipeline to see which vault row served each prompt."));
+      return;
+    }
+    slots.forEach(function (slot) {
+      var d = document.createElement("details");
+      d.className = "slot";
+
+      var sum = document.createElement("summary");
+      sum.appendChild(el("span", "slot-key", slot.key));
+      if (!slot.present) {
+        sum.appendChild(el("span", "badge badge-missing", "missing"));
+      } else {
+        sum.appendChild(el("span", "badge badge-vault", "vault: " + slot.resolvedGenre));
+        if (slot.fallback) sum.appendChild(el("span", "badge badge-fallback", "fell back to default"));
+        if (slot.metricBearing) sum.appendChild(el("span", "badge badge-source", "metric"));
+      }
+      d.appendChild(sum);
+
+      var body = el("div", "slot-body");
+      if (!slot.present) {
+        body.appendChild(el("p", "slot-warn",
+          "No vault row answered for this key. Generation would fail here."));
+      } else {
+        body.appendChild(el("p", "slot-prov",
+          "Served from vault row genre '" + slot.resolvedGenre + "'"
+          + " | fingerprint " + (slot.fingerprint || "n/a")
+          + (slot.updatedAt ? " | updated " + slot.updatedAt : "")
+          + (slot.description ? " | " + slot.description : "")));
+        if (slot.fallback) {
+          body.appendChild(el("p", "slot-warn",
+            "Genre '" + slot.requestedGenre + "' has no vault row. The template below is the "
+            + "DEFAULT genre's, and it is what the run generated from."));
+        }
+        body.appendChild(el("p", "pane-caption",
+          "Placeholders: " + ((slot.placeholders || []).join(" ") || "(none)")));
+        body.appendChild(el("pre", "payload", slot.template));
+      }
+      d.appendChild(body);
+      host.appendChild(d);
+    });
+  }
+
   function errorBox(title, err) {
     var d = el("div", "errbox");
     d.appendChild(el("h4", null, title));
@@ -857,10 +962,10 @@ table.rows tbody tr:hover { background: var(--rule-2); }
       topicId: $("sel-topic").value,
       angle: $("sel-angle").value,
       genre: $("sel-genre").value,
-      corroboration: $("sel-corroboration").value,
-      provider: $("sel-provider").value,
-      model: $("sel-model").value,
-      webSearchTool: $("sel-research").value
+      corroboration: $("sel-corroboration").value
+      // Provider, model and research tool are deliberately NOT sent.
+      // Phase 2 substitutes the vendor entirely, so sending them
+      // would imply a routing decision that is not being made.
     };
     setStatus("running", "Requesting pipeline run");
     return call(LAB + "/run", {
@@ -870,6 +975,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     }).then(function (data) {
       state.run = data;
       state.runError = null;
+      renderPromptSlots(data.promptSlots);
       return data;
     }, function (err) {
       state.runError = err;
@@ -911,6 +1017,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     return requestRun().then(function (run) {
       state.cursor = i;
       var s = state.stages[i];
+      // The pipeline announced these; the page did not compute them.
       var record = ((run && run.stages) || {})[s.id];
       var ok = applyStage(s, record);
       renderSpine(); updateElapsed(); select(s.id);
@@ -964,6 +1071,7 @@ table.rows tbody tr:hover { background: var(--rule-2); }
     state.running = false;
     state.run = null;
     state.runError = null;
+    renderPromptSlots(null);
     loadSequence();
     setStatus("idle", "Idle. Step or run to begin.");
     syncButtons();

@@ -27,6 +27,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./pro
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
+import { generationTrace, generationVendor } from "./generation-trace.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -142,6 +143,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     cycleId, topicId: topic.slug, angle,
     mode: angleResult.selected ? "user-selected" : "auto-rotated"
   });
+  generationTrace()?.stage("angle_resolved", {
+    angle, mode: angleResult.selected ? "operator-selected" : "auto-rotated",
+    availableAngles: topic.content_angles || [],
+    recentPostsConsidered: recentPosts.length
+  });
 
   // ── Research phase ─────────────────────────────────────────
   let researchBrief = null;
@@ -190,9 +196,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   }
 
   // ── Rate limit cooldown before generation ──────────────────
-  const cooldown = getCooldownMs();
+  // Paces real vendor traffic only; a substituted vendor waits for
+  // nothing.
+  const cooldown = generationVendor() ? 0 : getCooldownMs();
   await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldown / 1000}s before content generation` });
-  await new Promise(resolve => setTimeout(resolve, cooldown));
+  if (cooldown > 0) await new Promise(resolve => setTimeout(resolve, cooldown));
 
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
@@ -226,6 +234,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     rbTemplate = null;
   }
 
+  generationTrace()?.stage("research_block", {
+    corroborated: !skipCorroboration,
+    promptKey: !skipCorroboration ? "research_brief_corroborated" : "research_brief_uncorroborated",
+    renderedBlock: researchBlock
+  });
+
   const topicHashtags = topic.hashtags || [];
 
   // ── Verified metrics (METRICS FIDELITY) ────────────────────
@@ -250,6 +264,15 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     metricsByKey.clear();
   }
   const metricBlock = buildMetricBlock(metricGroups);
+  // Database material assembled for generation, alongside the block
+  // it becomes. An empty block with metrics present means the genre
+  // template carries no {{METRIC_BLOCK}} placeholder.
+  generationTrace()?.stage("metric_block", {
+    metricGroups: metricGroups.length,
+    metricsAvailable: metricsByKey.size,
+    metricKeys: [...metricsByKey.keys()],
+    renderedBlock: metricBlock
+  });
   platformLog("info", "metrics_loaded", { cycleId, topicId: topic.slug, groups: metricGroups.length, metrics: metricsByKey.size });
 
   // Genre applies ONLY to the content_generator template — never to
@@ -287,9 +310,23 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     // pipeline never learns which vendor served the request.
     // Flag OFF (default): the pre-existing direct Anthropic path,
     // byte-for-byte unchanged.
+    generationTrace()?.stage("generation_request", {
+      genre,
+      systemContext: topic.system_context || null,
+      maxOutputTokens: 1500,
+      assembledPrompt: userPrompt
+    });
     let generatedText;
     let generationModel;
-    if (isLlmAbstractionEnabled()) {
+    const genVendor = generationVendor();
+    if (genVendor) {
+      // Substituted vendor. The prompt above is exactly what a real
+      // call would have carried; parsing, metric substitution and the
+      // fidelity gate below all run unchanged.
+      const mocked = genVendor.orchestrated("main_post_generation");
+      generatedText = mocked.text;
+      generationModel = `${mocked.provider}/${mocked.model}`;
+    } else if (isLlmAbstractionEnabled()) {
       const orchestrated = await generateWithTenantLlm({
         system: topic.system_context || null,
         user: userPrompt,
@@ -324,6 +361,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     }
     userPrompt = null;
 
+    generationTrace()?.stage("generation_response", {
+      model: generationModel, rawText: generatedText
+    });
+
     const raw = generatedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
@@ -357,6 +398,13 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
           unverifiedNumbers: fidelity.unverifiedNumbers
         } };
     }
+    generationTrace()?.stage("fidelity", {
+      strict: strictFidelity,
+      verified: fidelity.ok,
+      metricTokensSubstituted: sub.substituted,
+      unknownTokens: fidelity.unknownTokens,
+      unverifiedNumbers: fidelity.unverifiedNumbers
+    });
     parsed.body = sub.text;
     if (sub.substituted.length) {
       platformLog("info", "metric_tokens_substituted", { cycleId, topicId: topic.slug, count: sub.substituted.length, keys: sub.substituted });
@@ -454,8 +502,14 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
 
   // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
   // the pre-existing direct Anthropic path, unchanged.
+  generationTrace()?.stage("quality_request", {
+    maxOutputTokens: 800, assembledPrompt
+  });
   let reviewText;
-  if (isLlmAbstractionEnabled()) {
+  const qVendor = generationVendor();
+  if (qVendor) {
+    reviewText = qVendor.orchestrated("quality_check").text;
+  } else if (isLlmAbstractionEnabled()) {
     const orchestrated = await generateWithTenantLlm({
       system: null,
       user: assembledPrompt,
@@ -485,6 +539,8 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     reviewText = response.content[0].text;
   }
   assembledPrompt = null;
+
+  generationTrace()?.stage("quality_response", { rawText: reviewText });
 
   const raw = reviewText.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();

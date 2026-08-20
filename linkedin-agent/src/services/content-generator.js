@@ -27,7 +27,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./pro
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
-import { generationTrace, generationVendor, traceArguments } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments, promptOverride } from "./generation-trace.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -305,6 +305,22 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   if (!cgTemplate) {
     platformLog("error", "prompt_vault_miss", { key: "content_generator" });
     throw new Error("Content generation prompt not configured");
+  }
+  // Applied AFTER the vault read, so it replaces whichever row served,
+  // including a genre that fell back to default. Null in production,
+  // where no frame is ambient. The trace records the substitution so a
+  // run can never claim it generated from vault text when it did not.
+  const cgOverride = promptOverride("content_generator");
+  if (cgOverride) {
+    generationTrace()?.stage("prompt_override", {
+      key: "content_generator",
+      resolvedGenre: genre,
+      vaultChars: cgTemplate.length,
+      overrideChars: cgOverride.length,
+      vaultPlaceholders: [...new Set(cgTemplate.match(/{{[A-Z_]+}}/g) || [])],
+      overridePlaceholders: [...new Set(cgOverride.match(/{{[A-Z_]+}}/g) || [])]
+    });
+    cgTemplate = cgOverride;
   }
   let userPrompt = renderPrompt(cgTemplate, {
     TOPIC_NAME: topic.name,

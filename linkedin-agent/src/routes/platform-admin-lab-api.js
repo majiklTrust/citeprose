@@ -128,6 +128,13 @@ async function resolveCurrentSelection() {
 
 const GENRE_RE = /^(default|[a-z][a-z0-9_]{1,31})$/;
 
+// Prompt keys the pipeline knows how to substitute. Adding a key here
+// without adding the matching substitution in the pipeline would make
+// the Lab accept an override it then ignores, so the two move
+// together.
+const OVERRIDABLE_PROMPTS = Object.freeze(new Set(["content_generator"]));
+const MAX_OVERRIDE_CHARS = 100000;
+
 // The stage ids the page's call sequence knows about, mapped to the
 // pipeline function each belongs to. The page renders its spine from
 // its own static structure; this is how an announced record finds
@@ -306,9 +313,11 @@ function slotPlan(genre, corroborated) {
  * researchSummary is absent and the panel would silently claim the
  * corroborated path had run.
  */
-async function collectPromptSlots(genre, trace) {
-  const stages = trace.toJSON().stages;
-  const corroborated = stages.some((s) => s.id === "corroboration_request");
+// corroborated: from the TRACE after a run, because the trace records
+// what the pipeline actually did. On /meta there is no run yet, so the
+// caller passes the tenant's own setting as the best prediction of
+// which brief prompt will serve.
+async function collectPromptSlots(genre, corroborated) {
 
   const slots = [];
   for (const [key, g] of slotPlan(genre, corroborated)) {
@@ -393,6 +402,8 @@ export default function createPlatformAdminLabRoutes() {
   // ── GET /lab/meta ─────────────────────────────────────────────
   router.get("/meta", async (req, res) => {
     const requested = String(req.query.tenantId || "");
+    // The content_generator slot resolves against the selected genre.
+    const requestedGenre = String(req.query.genre || "default");
     if (requested && !UUID_RE.test(requested)) {
       return res.status(400).json({ error: "A valid tenantId is required", code: "INVALID_TENANT_ID" });
     }
@@ -448,11 +459,19 @@ export default function createPlatformAdminLabRoutes() {
         models[p.id] = listModels(p.id, process.env).map((m) => ({ id: m.id, label: m.label }));
       }
 
+      // Returned here so a template can be read and edited BEFORE the
+      // first run, which matters once a run costs money.
+      const promptSlots = await collectPromptSlots(
+        GENRE_RE.test(requestedGenre) ? requestedGenre : "default",
+        scoped.corroboration
+      );
+
       res.json({
         // Which tenant this payload actually describes, and which one
         // the caller belongs to. They differ whenever the operator
         // has switched away from their own.
         tenantId,
+        promptSlots,
         homeTenantId,
         topics: scoped.topics,
         genres: genres.length ? genres : ["default"],
@@ -490,6 +509,26 @@ export default function createPlatformAdminLabRoutes() {
       return res.status(400).json({ error: "The refine genre is a rewrite instruction, not a content style", code: "RESERVED_GENRE" });
     }
     const angle = typeof body.angle === "string" && body.angle.trim() ? body.angle.trim() : null;
+
+    // Prompt overrides. Request scoped and NEVER persisted: they ride
+    // the ambient frame for the run and are gone when it returns. Only
+    // keys the pipeline substitutes are accepted, so an override for
+    // an unwired key is refused rather than silently ignored.
+    const promptOverrides = {};
+    const raw = body.promptOverrides && typeof body.promptOverrides === "object" ? body.promptOverrides : {};
+    for (const key of Object.keys(raw)) {
+      if (!OVERRIDABLE_PROMPTS.has(key)) {
+        return res.status(400).json({ error: `Prompt '${key}' is not overridable`, code: "PROMPT_NOT_OVERRIDABLE" });
+      }
+      const text = raw[key];
+      if (typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: `Override for '${key}' must be non-empty text`, code: "EMPTY_OVERRIDE" });
+      }
+      if (text.length > MAX_OVERRIDE_CHARS) {
+        return res.status(400).json({ error: `Override for '${key}' exceeds ${MAX_OVERRIDE_CHARS} characters`, code: "OVERRIDE_TOO_LONG" });
+      }
+      promptOverrides[key] = text;
+    }
     const forceCorroboration = body.corroboration === "on" ? true
       : body.corroboration === "off" ? false : null;
 
@@ -515,7 +554,7 @@ export default function createPlatformAdminLabRoutes() {
 
         // The pipeline sequences itself. The Lab supplies a collector
         // and a stand in vendor, then reads what was announced.
-        const result = await runWithGenerationTrace({ trace, vendor }, async () => {
+        const result = await runWithGenerationTrace({ trace, vendor, promptOverrides }, async () => {
           const generated = await generatePost(topicId, req.user?.sub || null, null, angle, genre);
           let quality = null;
           if (!generated.blocked) {
@@ -527,7 +566,10 @@ export default function createPlatformAdminLabRoutes() {
         // Which vault row served each prompt this run used. Read
         // AFTER the run so a genre fallback is reported as it
         // actually resolved.
-        const promptSlots = await collectPromptSlots(genre, trace);
+        const promptSlots = await collectPromptSlots(
+          genre,
+          trace.toJSON().stages.some((st) => st.id === "corroboration_request")
+        );
         return { ...result, promptSlots };
       });
 

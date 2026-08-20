@@ -136,6 +136,24 @@ export function generationTrace() {
   return (frame && frame.trace) || null;
 }
 
+// A request scoped replacement for a vault prompt TEMPLATE, or null.
+//
+// Applied after the vault read, so it replaces the row that resolved
+// whatever genre served it. Never written anywhere: the frame is gone
+// when the request returns.
+//
+// A TEMPLATE, not an assembled prompt. Placeholder substitution still
+// runs over the override, so {{RESEARCH_BLOCK}} and the rest fill from
+// THIS run. An override that drops a placeholder drops that material,
+// which is a legitimate thing to test.
+export function promptOverride(key) {
+  const frame = als.getStore();
+  const overrides = frame && frame.promptOverrides;
+  if (!overrides) return null;
+  const text = overrides[key];
+  return typeof text === "string" && text.length > 0 ? text : null;
+}
+
 // The vendor substitute, or null when the run should call the real
 // vendor. Its presence is also what marks a run as observed, which
 // is how the pipeline knows to skip inter-call rate limit cooldowns

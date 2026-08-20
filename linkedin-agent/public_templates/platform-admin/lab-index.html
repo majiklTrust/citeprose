@@ -462,16 +462,22 @@ pre.post-body {
 .slot-actions { display: flex; justify-content: flex-end; margin-top: var(--sp-2); }
 .slot-item {
   display: flex; align-items: center; gap: var(--sp-2);
-  width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  width: 100%; cursor: pointer;
   padding: 3px var(--sp-2); border-left: 2px solid transparent;
   font-family: var(--mono); font-size: 0.7rem; color: var(--ink);
 }
+/* A label, not a button: a checkbox cannot live inside a button, and
+   the label makes the whole row a hit target while the checkbox stays
+   the focusable, keyboard operable control. */
+.slot-item input.slot-check { flex: none; margin: 0; cursor: pointer; }
+.slot-item:focus-within { background: #eef4f8; }
 .slot-item + .slot-item { border-top: 1px solid var(--rule-2); }
 .slot-item:hover { background: var(--rule-2); }
 /* Selection in the EGRESS purple, matching the vault badge and the
    prompt line in the inspector: everything that says "this came from
    the vault" now reads as one family. */
-.slot-item[aria-current="true"] { background: #f2ecfb; border-left-color: var(--gate); font-weight: 700; }
+/* Checked, not selected: the checkbox is the state now. */
+.slot-item.is-checked { background: #f2ecfb; border-left-color: var(--gate); font-weight: 700; }
 .slot-item .slot-key {
   flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -493,6 +499,22 @@ pre.post-body {
   max-height: 22rem; overflow: auto;
 }
 .slot-view pre.payload { max-height: none; overflow: visible; }
+/* One block per checked slot, stacked in slot order. */
+.slot-block + .slot-block { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--rule); }
+/* The editor never scrolls: .slot-view is the panel's only scroller,
+   so the textarea is sized to its own line count and the panel scrolls
+   around it. Sized by ROWS rather than by measuring scrollHeight,
+   because a node that is not yet in the document measures zero and
+   would collapse the field to nothing. */
+textarea.slot-edit {
+  display: block; width: 100%; box-sizing: border-box;
+  font-family: var(--mono); font-size: 0.68rem; line-height: 1.4;
+  color: var(--ink); background: var(--rule-2);
+  border: 1px solid var(--rule); border-radius: 3px;
+  padding: var(--sp-2); margin: 0 0 var(--sp-2);
+  overflow: hidden; resize: vertical;
+}
+textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; }
 .slot-view .slot-title {
   font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
   margin: 0 0 var(--sp-2);
@@ -672,7 +694,8 @@ pre.post-body {
   var state = {
     stages: [], cursor: -1, selected: null, pane: "assembled",
     running: false, elapsed: 0,
-    meta: null, tenantList: [], slots: null, selectedSlot: null,
+    meta: null, tenantList: [], slots: null,
+    checkedSlots: {}, promptEdits: {},
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -775,6 +798,7 @@ pre.post-body {
       state.meta = meta;
       clearSetupError();
       applyMeta(meta);
+      renderPromptSlots(meta.promptSlots || null);
       setStatus("idle", "Ready.");
       renderInspector();
     })
@@ -799,11 +823,13 @@ pre.post-body {
   function loadMeta(tenantId) {
     var id = tenantId || $("sel-tenant").value;
     if (!id) return Promise.resolve();
-    return call(LAB + "/meta?tenantId=" + encodeURIComponent(id))
+    return call(LAB + "/meta?tenantId=" + encodeURIComponent(id)
+        + "&genre=" + encodeURIComponent($("sel-genre").value || "default"))
       .then(function (meta) {
         state.meta = meta;
         clearSetupError();
         applyMeta(meta);
+        renderPromptSlots(meta.promptSlots || null);
         setStatus("idle", "Ready.");
         renderInspector();
       })
@@ -1381,60 +1407,105 @@ pre.post-body {
   function renderPromptSlots(slots) {
     var host = $("prompt-slots");
     host.innerHTML = "";
-
-    // A NEW payload clears the selection; re-rendering the SAME
-    // payload keeps it. That is what lets a click redraw the list
-    // without losing the slot the operator just opened, while a fresh
-    // run still starts empty.
-    if (slots !== state.slots) state.selectedSlot = null;
     state.slots = slots || null;
 
     if (!slots || !slots.length) {
-      state.selectedSlot = null;
       host.appendChild(emptyState("No prompts read yet",
         "Run the pipeline to see which vault row served each prompt."));
       return;
     }
 
-    // No slot is opened for the operator. A template is only shown
-    // because it was asked for.
-    var keys = slots.map(function (s) { return s.key; });
-    if (keys.indexOf(state.selectedSlot) < 0) state.selectedSlot = null;
-
     var list = el("div", "slot-list");
     slots.forEach(function (slot) {
-      var item = el("button", "slot-item");
-      item.type = "button";
-      item.setAttribute("aria-current", slot.key === state.selectedSlot ? "true" : "false");
+      var checked = !!state.checkedSlots[slot.key];
+      // A LABEL, so the whole row toggles, with the checkbox as the
+      // focusable control. A checkbox cannot live inside a button,
+      // which is why this is no longer one.
+      var item = document.createElement("label");
+      item.className = "slot-item" + (checked ? " is-checked" : "");
       item.title = slot.key;
+
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.className = "slot-check";
+      box.checked = checked;
+      box.disabled = !slot.present;
+      box.addEventListener("change", function () {
+        state.checkedSlots[slot.key] = box.checked;
+        // A parked edit becoming live, or ceasing to be, changes what
+        // the next run would send, so the cached run must die.
+        if (isEditable(slot.key) && isEdited(slot.key)) invalidateRun();
+        renderPromptSlots(state.slots);
+      });
+      item.appendChild(box);
       item.appendChild(el("span", "slot-key", slot.key));
       if (!slot.present) item.appendChild(el("span", "slot-flag missing", "\u2715"));
       else if (slot.fallback || slot.metricBearingDrift) item.appendChild(el("span", "slot-flag warn", "\u25B2"));
-      item.addEventListener("click", function () {
-        state.selectedSlot = slot.key;
-        renderPromptSlots(state.slots);
-      });
+      if (isEdited(slot.key)) item.appendChild(el("span", "slot-flag warn", "\u270E"));
       list.appendChild(item);
     });
 
     var column = el("div", "slot-column");
     column.appendChild(list);
-
     var actions = el("div", "slot-actions");
     var clear = el("button", "btn", "Clear");
     clear.type = "button";
-    clear.disabled = !state.selectedSlot;
-    clear.addEventListener("click", function () {
-      state.selectedSlot = null;
-      renderPromptSlots(state.slots);
-    });
+    clear.disabled = !anyChecked() && !anyEdit();
+    clear.addEventListener("click", clearPrompts);
     actions.appendChild(clear);
     column.appendChild(actions);
     host.appendChild(column);
 
     var view = el("div", "slot-view");
-    renderSlotDetail(view, slots.filter(function (s) { return s.key === state.selectedSlot; })[0]);
+    var shown = slots.filter(function (s) { return state.checkedSlots[s.key] && s.present; });
+    if (!shown.length) {
+      view.appendChild(emptyState("No prompt selected",
+        "Tick a prompt on the left to see the template the run will use."));
+    } else {
+      shown.forEach(function (slot) {
+        var block = el("div", "slot-block");
+        renderSlotDetail(block, slot);
+        view.appendChild(block);
+      });
+    }
     host.appendChild(view);
+  }
+
+  // ── Override state ───────────────────────────────────────────
+  // Unchecking PARKS an edit; only Clear discards it. And an unchecked
+  // slot always runs on the vault template, never on the last edit:
+  // without that, comparing an edit against vault text would be
+  // impossible after the first run.
+  function isEditable(key) { return key === "content_generator"; }
+  function isEdited(key) { return typeof state.promptEdits[key] === "string"; }
+  function anyEdit() { return Object.keys(state.promptEdits).length > 0; }
+  function anyChecked() {
+    return Object.keys(state.checkedSlots).some(function (k) { return state.checkedSlots[k]; });
+  }
+
+  // What Run sends: the edit for a slot that is both checked and
+  // editable. Nothing else.
+  function activeOverrides() {
+    var out = {};
+    Object.keys(state.promptEdits).forEach(function (key) {
+      if (state.checkedSlots[key] && isEditable(key)) out[key] = state.promptEdits[key];
+    });
+    return out;
+  }
+
+  function clearPrompts() {
+    state.checkedSlots = {};
+    state.promptEdits = {};
+    invalidateRun();
+    renderPromptSlots(state.slots);
+  }
+
+  // A completed run is cached so that walking the sequence does not
+  // re-execute the pipeline. That cache has to die whenever the
+  // override set changes, or pressing Run after an edit would replay
+  // the OLD run and appear to do nothing.
+  function invalidateRun() {
+    if (state.run || state.runError) reset();
   }
 
   function renderSlotDetail(view, slot) {
@@ -1450,6 +1521,7 @@ pre.post-body {
       title.appendChild(el("span", "badge badge-missing", "missing"));
     } else {
       title.appendChild(el("span", "badge badge-vault", "vault: " + slot.resolvedGenre));
+      if (isEdited(slot.key)) title.appendChild(el("span", "badge badge-fallback", "edited"));
       if (slot.fallback) title.appendChild(el("span", "badge badge-fallback", "fell back to default"));
       if (slot.metricBearing) title.appendChild(el("span", "badge badge-source", "metric"));
       if (slot.metricBearingDrift) title.appendChild(el("span", "badge badge-fallback", "metric flag stale"));
@@ -1484,7 +1556,36 @@ pre.post-body {
 
     view.appendChild(el("p", "pane-caption",
       "Placeholders: " + ((slot.placeholders || []).join(" ") || "(none)")));
-    view.appendChild(el("pre", "payload", slot.template));
+
+    if (!isEditable(slot.key)) {
+      view.appendChild(el("pre", "payload", slot.template));
+      return;
+    }
+
+    // The one editable slot. Shows the parked edit when there is one,
+    // the vault template otherwise. Typing parks immediately, so
+    // unchecking never loses work.
+    var text = isEdited(slot.key) ? state.promptEdits[slot.key] : slot.template;
+    var area = document.createElement("textarea");
+    area.className = "slot-edit";
+    area.spellcheck = false;
+    area.value = text;
+    // Sized by line count, not by measuring: this node is not in the
+    // document yet, and a detached element measures zero.
+    area.rows = Math.min(40, Math.max(8, String(text).split("\n").length + 1));
+    area.addEventListener("input", function () {
+      if (area.value === slot.template) delete state.promptEdits[slot.key];
+      else state.promptEdits[slot.key] = area.value;
+      area.rows = Math.min(40, Math.max(8, area.value.split("\n").length + 1));
+      invalidateRun();
+    });
+    view.appendChild(area);
+
+    if (isEdited(slot.key)) {
+      view.appendChild(el("p", "slot-warn",
+        "Edited. This replaces the vault template on the next Run, whatever genre "
+        + "resolves. It is not saved anywhere. Untick to run the vault template instead."));
+    }
   }
 
   // The vault prompts a call read, named in the inspector so the
@@ -1571,7 +1672,8 @@ pre.post-body {
       topicId: $("sel-topic").value,
       angle: $("sel-angle").value,
       genre: $("sel-genre").value,
-      corroboration: $("sel-corroboration").value
+      corroboration: $("sel-corroboration").value,
+      promptOverrides: activeOverrides()
       // Provider, model and research tool are deliberately NOT sent.
       // Phase 2 substitutes the vendor entirely, so sending them
       // would imply a routing decision that is not being made.
@@ -1678,7 +1780,9 @@ pre.post-body {
     state.running = false;
     state.run = null;
     state.runError = null;
-    renderPromptSlots(null);
+    // The slot list belongs to meta, not to the run, so it survives a
+    // reset along with checked state and parked edits. Only Clear
+    // discards those.
     renderResult(null, null);
     loadSequence();
     setStatus("idle", "Idle. Run to begin.");
@@ -1717,10 +1821,19 @@ pre.post-body {
   function bind() {
     $("btn-run").addEventListener("click", run);
     $("btn-reset").addEventListener("click", reset);
-    $("sel-tenant").addEventListener("change", function () { reset(); loadMeta(); });
+    // A different tenant means different vault rows, so a checked box
+    // or a parked edit from the previous tenant must not carry over.
+    $("sel-tenant").addEventListener("change", function () {
+      state.checkedSlots = {}; state.promptEdits = {};
+      reset(); loadMeta();
+    });
     $("sel-topic").addEventListener("change", function () { fillAngles(); reset(); });
     $("sel-provider").addEventListener("change", function () { fillModels(null); reset(); });
-    ["sel-angle", "sel-genre", "sel-corroboration", "sel-model", "sel-research"].forEach(function (id) {
+    // Genre selects which content_generator row serves, so the slots
+    // are re-resolved. Parked edits survive: an override replaces
+    // whatever row resolved, by ruling.
+    $("sel-genre").addEventListener("change", function () { reset(); loadMeta(); });
+    ["sel-angle", "sel-corroboration", "sel-model", "sel-research"].forEach(function (id) {
       $(id).addEventListener("change", reset);
     });
     ["assembled", "args", "request", "response"].forEach(function (p) {

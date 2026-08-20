@@ -57,7 +57,9 @@
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --sp-1: 0.15rem; --sp-2: 0.3rem;  --sp-3: 0.45rem;
+  /* Not monotonic on purpose: sp-3 insets content from a border and
+     is tuned for density, sp-2 separates panels, columns and tabs. */
+  --sp-1: 0.15rem; --sp-2: 0.3rem;  --sp-3: 0.2rem;
   --sp-4: 0.6rem;  --sp-5: 0.85rem; --sp-6: 1.1rem;
   --radius: 5px;
 }
@@ -90,7 +92,7 @@ body {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: var(--sp-4); flex-wrap: wrap;
   border-bottom: 2px solid var(--ink);
-  padding-bottom: var(--sp-2); margin-bottom: var(--sp-3);
+  padding-bottom: var(--sp-2); margin-bottom: var(--sp-2);
 }
 .masthead h1 {
   margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;
@@ -109,7 +111,7 @@ body {
 /* ── panels ───────────────────────────────────────────────────── */
 .panel {
   background: var(--panel); border: 1px solid var(--rule);
-  border-radius: var(--radius); margin-bottom: var(--sp-3);
+  border-radius: var(--radius); margin-bottom: var(--sp-2);
 }
 .panel > h2 {
   margin: 0; padding: var(--sp-2) var(--sp-3);
@@ -120,14 +122,22 @@ body {
 .panel-body { padding: var(--sp-3); }
 
 /* ── run setup ────────────────────────────────────────────────── */
-/* Eight selectors on ONE line at desktop width. minmax(0,1fr) lets a
-   column shrink below its content instead of forcing a wrap. Mobile
-   is exempt from the single line rule and reflows. */
+/* Eight selectors on ONE line. minmax(0,1fr) lets a column shrink
+   below its content instead of forcing a wrap, so the row never
+   overflows; a narrow window truncates option text rather than
+   breaking the layout. Truncation is the normal state anyway: the
+   longest option, an angle at 32 characters, does not fit even at
+   the 1400px cap.
+   The first step is at 760px, not 1000px, because eight columns
+   still show about 12 characters there, which is enough to tell one
+   model or tenant from another. The prompt slots rule uses the same
+   760px and the same range form, so both reflow on the same pixel:
+   mixing width< with max-width would put them 1px out of step. */
 .setup-grid {
   display: grid; gap: 0.2rem;
   grid-template-columns: repeat(8, minmax(0, 1fr));
 }
-@media (max-width: 1000px) {
+@media (width < 760px) {
   .setup-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
@@ -185,13 +195,13 @@ body {
    a gutter to the left, exactly where a debugger puts them. ------ */
 .panel.flush { margin-bottom: 0; }
 .console-split {
-  display: grid; grid-template-columns: minmax(380px, 440px) 1fr; gap: var(--sp-3);
+  display: grid; grid-template-columns: minmax(380px, 440px) 1fr; gap: var(--sp-2);
   align-items: start;
 }
 /* The left column stacks: the call sequence, then the result it
    produced. Both share the column's width, so the Result panel is
    exactly as wide as the Call sequence panel above it. */
-.console-left { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.console-left { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
 @media (max-width: 900px) { .panel.flush { margin-bottom: 0; }
 .console-split { grid-template-columns: 1fr; } }
 
@@ -278,7 +288,7 @@ body {
 .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--rule); padding: 0 var(--sp-3); }
 .tab {
   border: 0; background: none; cursor: pointer;
-  padding: var(--sp-1) var(--sp-3); margin-bottom: -1px;
+  padding: var(--sp-1) var(--sp-2); margin-bottom: -1px;
   font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
   color: var(--muted); border-bottom: 2px solid transparent;
 }
@@ -332,14 +342,20 @@ table.rows tbody tr:hover { background: var(--rule-2); }
 .statusbar .spacer { margin-left: auto; }
 
 .badge {
+  /* inline-flex, not inline: an inline box sits on the text baseline,
+     which leaves the label riding high inside its border. Centring on
+     both axes puts the text in the middle of the box it is drawn in. */
+  display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.05em;
-  text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+  line-height: 1;
+  text-transform: uppercase; padding: 3px 6px; border-radius: 3px;
   border: 1px solid currentColor;
 }
-.badge-gate { color: var(--gate); }
-.badge-free { color: var(--inspect); }
-.badge-vault { color: var(--inspect); }
-.badge-override { color: var(--execute); }
+/* Only the four classes a renderer actually applies. badge-gate,
+   badge-free and badge-override were defined but never rendered;
+   badge-free was also the last blue left in this panel, which made
+   the stylesheet read as though the panel still used it. */
+.badge-vault { color: var(--gate); }
 .badge-fallback { color: var(--execute); }
 .badge-missing { color: var(--fail); }
 .badge-source { color: var(--gate); }
@@ -371,14 +387,11 @@ table.rows tbody tr:hover { background: var(--rule-2); }
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-/* A parameter that has an expanded block below is bold in all three
-   places it appears: the signature, its row in the value table, and
-   the heading of its block. One weight and ONE COLOUR, three
-   sightings, so the eye can follow a single parameter down the pane.
-   The three selectors share a rule rather than repeating a value,
-   because a repeated colour is a colour that eventually disagrees
-   with itself: the signature's name previously inherited the muted
-   caption colour while the other two were ink. */
+/* A parameter with an expanded block below is bold in all three
+   places it appears, so the eye can follow it down the pane. One
+   shared rule, not three copies: a repeated colour is one that
+   eventually disagrees with itself, which is how the signature's
+   name ended up muted while the other two were ink. */
 .sig-line strong,
 table.kv th.param-expanded,
 .pane-caption.group-heading {
@@ -412,8 +425,13 @@ pre.post-body {
   font-family: var(--sans); font-size: 0.78rem; line-height: 1.5;
   color: var(--ink); background: var(--panel);
   border: 1px solid var(--rule); border-radius: 3px;
-  padding: var(--sp-3); margin: 0 0 var(--sp-3);
-  max-height: 22rem; overflow: auto;
+  padding: var(--sp-2); margin: 0 0 var(--sp-3);
+  /* Nine lines, then scroll. Stated as 9 x the 1.5 line-height in em
+     so it tracks the font-size above rather than drifting from it,
+     plus the padding and border because box-sizing is border-box.
+     overflow:auto shows the bar only when the text actually exceeds
+     that, so a short post has no scrollbar at all. */
+  max-height: calc(13.5em + 0.6rem + 2px); overflow: auto;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .result-sub {
@@ -433,10 +451,10 @@ pre.post-body {
    and the width it does not need is width the template can use. */
 .slots {
   display: grid; grid-template-columns: minmax(190px, 250px) 1fr;
-  gap: var(--sp-3); align-items: start;
+  gap: var(--sp-2); align-items: start;
   padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
-@media (max-width: 760px) { .slots { grid-template-columns: 1fr; } }
+@media (width < 760px) { .slots { grid-template-columns: 1fr; } }
 
 .slot-column { display: flex; flex-direction: column; }
 .slot-list { border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
@@ -450,7 +468,10 @@ pre.post-body {
 }
 .slot-item + .slot-item { border-top: 1px solid var(--rule-2); }
 .slot-item:hover { background: var(--rule-2); }
-.slot-item[aria-current="true"] { background: #eef4f8; border-left-color: var(--inspect); font-weight: 700; }
+/* Selection in the EGRESS purple, matching the vault badge and the
+   prompt line in the inspector: everything that says "this came from
+   the vault" now reads as one family. */
+.slot-item[aria-current="true"] { background: #f2ecfb; border-left-color: var(--gate); font-weight: 700; }
 .slot-item .slot-key {
   flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -462,13 +483,10 @@ pre.post-body {
 .slot-item .slot-flag.warn    { color: var(--execute); }
 .slot-item .slot-flag.missing { color: var(--fail); }
 
-/* The remaining width, scrolling independently of the list.
-   This is the ONLY scroller in the panel: pre.payload carries its own
-   max-height everywhere else on the page, and left alone it would put
-   a second vertical scrollbar inside this one. A scrollbar inside a
-   scrollbar means the wheel acts on whichever the pointer happens to
-   be over, so the override below turns the inner one off HERE and
-   nowhere else. */
+/* The remaining width, scrolling independently of the list, and the
+   ONLY scroller in the panel. pre.payload scrolls everywhere else, so
+   the override below turns it off HERE: nested scrollbars leave the
+   wheel acting on whichever the pointer happens to be over. */
 .slot-view {
   border: 1px solid var(--rule); border-radius: 3px;
   padding: var(--sp-2) var(--sp-3);
@@ -1310,17 +1328,14 @@ pre.post-body {
       return;
     }
 
+    // Reading order: the post, then the judgement on it, then the
+    // facts about how it was made. Nothing sits between the body and
+    // the review, because the review is ABOUT the body and anything
+    // in between makes the reader hold the text in their head across
+    // a table.
     var post = el("div");
     post.appendChild(el("p", "post-title", result.title || "(untitled)"));
     post.appendChild(el("pre", "post-body", result.content || "(empty body)"));
-    var meta = [];
-    if (result.angle) meta.push(["angle", result.angle]);
-    if (result.genre) meta.push(["genre", result.genre]);
-    if (result.topicId) meta.push(["topic", result.topicId]);
-    if (result.hashtags && result.hashtags.length) meta.push(["hashtags", result.hashtags.join(" ")]);
-    if (result.sourcesUsed && result.sourcesUsed.length) meta.push(["sources cited", result.sourcesUsed.join(", ")]);
-    if (result.cycleId) meta.push(["cycle", result.cycleId]);
-    if (meta.length) post.appendChild(kvTable(meta));
     host.appendChild(post);
 
     var verdict = el("div");
@@ -1334,6 +1349,22 @@ pre.post-body {
       renderRecord(verdict, quality);
     }
     host.appendChild(verdict);
+
+    // The run's own facts, last. They describe the post rather than
+    // being part of it.
+    var meta = [];
+    if (result.angle) meta.push(["angle", result.angle]);
+    if (result.genre) meta.push(["genre", result.genre]);
+    if (result.topicId) meta.push(["topic", result.topicId]);
+    if (result.hashtags && result.hashtags.length) meta.push(["hashtags", result.hashtags.join(" ")]);
+    if (result.sourcesUsed && result.sourcesUsed.length) meta.push(["sources cited", result.sourcesUsed.join(", ")]);
+    if (result.cycleId) meta.push(["cycle", result.cycleId]);
+    if (meta.length) {
+      var facts = el("div");
+      facts.appendChild(el("p", "result-sub", "Run facts"));
+      facts.appendChild(kvTable(meta));
+      host.appendChild(facts);
+    }
   }
 
   function withClass(node, cls) {

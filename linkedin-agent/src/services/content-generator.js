@@ -358,6 +358,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     });
     let generatedText;
     let generationModel;
+    let genVendorMeta = null;
     const genVendor = generationVendor();
     if (genVendor) {
       // Substituted vendor. The prompt above is exactly what a real
@@ -378,6 +379,14 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       });
       generatedText = orchestrated.text;
       generationModel = `${orchestrated.provider}/${orchestrated.model}`;
+      // The orchestrator returns usage, stop reason and a cost
+      // estimate alongside the text. The pipeline needs only the text,
+      // so an observer has to take the rest here or it is lost.
+      genVendorMeta = {
+        usage: orchestrated.usage || null,
+        stopReason: orchestrated.stopReason || null,
+        costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
+      };
     } else {
       warnLegacyPathOnce();
       const client = await newAnthropicClient();
@@ -401,9 +410,9 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     }
     userPrompt = null;
 
-    generationTrace()?.stage("generation_response", {
+    generationTrace()?.stage("generation_response", Object.assign({
       model: generationModel, rawText: generatedText
-    });
+    }, genVendorMeta || {}));
 
     const raw = generatedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
@@ -553,6 +562,7 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     maxOutputTokens: 800, assembledPrompt
   });
   let reviewText;
+  let qVendorMeta = null;
   const qVendor = generationVendor();
   if (qVendor) {
     reviewText = qVendor.orchestrated("quality_check").text;
@@ -567,6 +577,12 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
       cycleId: cycleId || null
     });
     reviewText = orchestrated.text;
+    qVendorMeta = {
+      model: `${orchestrated.provider}/${orchestrated.model}`,
+      usage: orchestrated.usage || null,
+      stopReason: orchestrated.stopReason || null,
+      costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
+    };
   } else {
     warnLegacyPathOnce();
     const client = await newAnthropicClient();
@@ -587,7 +603,8 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   }
   assembledPrompt = null;
 
-  generationTrace()?.stage("quality_response", { rawText: reviewText });
+  generationTrace()?.stage("quality_response",
+    Object.assign({ rawText: reviewText }, qVendorMeta || {}));
 
   const raw = reviewText.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();

@@ -159,6 +159,13 @@ export const PROVIDERS = Object.freeze([
     })
   })
 ]);
+// | Model                        | `web_search_20250305` | `web_search_20260209` | `web_search_20260318` |
+// | `claude-sonnet-5`            | optional              | optional              | optional |
+// | `claude-sonnet-4-6`          | optional              | optional              | optional |
+// | `claude-opus-4-6`            | optional              | optional              | optional |
+// | `claude-opus-4-5-20251101`   | optional              | **necessary**         | **necessary** |
+// | `claude-sonnet-4-5-20250929` | optional              | **necessary**         | **necessary** |
+// | `claude-haiku-4-5-20251001`  | optional              | **necessary**         | **necessary** |
 
 // Curated model entries shown in the admin UI. `profile` holds
 // overrides merged over the owning provider's defaultProfile.
@@ -168,13 +175,64 @@ export const MODELS = Object.freeze([
     provider: "anthropic",
     id: "claude-haiku-4-5-20251001",
     label: "Claude Haiku 4.5",
-    pricing: Object.freeze({ inputPerMTokUsd: 1, outputPerMTokUsd: 5 })
+    pricing: Object.freeze({ inputPerMTokUsd: 1, outputPerMTokUsd: 5 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
   }),
   Object.freeze({
     provider: "anthropic",
     id: "claude-sonnet-4-5-20250929",
     label: "Claude Sonnet 4.5",
-    pricing: Object.freeze({ inputPerMTokUsd: 3, outputPerMTokUsd: 15 })
+    pricing: Object.freeze({ inputPerMTokUsd: 3, outputPerMTokUsd: 15 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-5-20251101",
+    label: "Claude Opus 4.5",
+    pricing: Object.freeze({ inputPerMTokUsd: 5, outputPerMTokUsd: 25 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-sonnet-4-6",
+    label: "Claude Sonnet 4.6",
+    pricing: Object.freeze({ inputPerMTokUsd: 3, outputPerMTokUsd: 15 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-6",
+    label: "Claude Opus 4.6",
+    pricing: Object.freeze({ inputPerMTokUsd: 5, outputPerMTokUsd: 25 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-sonnet-5",
+    label: "Claude Sonnet 5",
+    pricing: Object.freeze({ inputPerMTokUsd: 2, outputPerMTokUsd: 10 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
   }),
   Object.freeze({
     provider: "openai",

@@ -18,18 +18,62 @@ import { platformLog } from "./platform-log.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
-import { getAnthropicModel, callAnthropic, getWebSearchTools } from "../config/ai.js";
+import { getAnthropicModel, callAnthropic, MODELS } from "../config/ai.js";
 import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
-import { generationTrace, generationVendor, traceArguments } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments, labRun } from "./generation-trace.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
+//
+// EXCEPT on an observed Lab run, which uses the PLATFORM key by
+// ruling. The research stage is Anthropic-fixed regardless of the
+// provider selected for generation, because web_search is an
+// Anthropic server side tool, so this is the only key it needs.
 async function newAnthropicClient() {
+  const lab = labRun();
+  if (lab && lab.apiKey) return new Anthropic({ apiKey: lab.apiKey });
   const apiKey = await getAnthropicApiKey();
   return new Anthropic({ apiKey });
+}
+
+// What the vendor actually returned, beyond the model's own words.
+//
+// A web_search response is not one text block. The vendor interleaves
+// server_tool_use blocks, each carrying the query the MODEL chose to
+// issue, and web_search_tool_result blocks carrying the pages that
+// came back. The pipeline needs only the text, so it filters the rest
+// away; an observer needs all of it, because the discarded blocks are
+// the only evidence of what the search actually did. Without them a
+// fabricated claim and a well sourced one look identical.
+//
+// Reads blocks that already arrive. Nothing extra is requested and
+// no pipeline behaviour changes.
+function describeVendorResponse(response) {
+  const blocks = (response && response.content) || [];
+  const counts = {};
+  blocks.forEach((b) => { counts[b.type] = (counts[b.type] || 0) + 1; });
+
+  const searchesIssued = blocks
+    .filter((b) => b.type === "server_tool_use")
+    .map((b) => (b.input && b.input.query) || "(no query)");
+
+  const searchResults = blocks
+    .filter((b) => b.type === "web_search_tool_result")
+    .flatMap((b) => Array.isArray(b.content) ? b.content : [])
+    .map((r) => ({ title: r.title || null, url: r.url || null, pageAge: r.page_age || null }));
+
+  return {
+    blockTypes: counts,
+    searchesIssued,
+    searchResults,
+    // server_tool_use.web_search_requests is the BILLABLE search
+    // count, which token totals alone do not reveal.
+    usage: (response && response.usage) || null,
+    stopReason: (response && response.stop_reason) || null
+  };
 }
 
 // Cooldown between API calls — read from getCooldownMs() at call time
@@ -111,9 +155,36 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     renderedQueries: searchQueries
   });
 
+  // Resolved OUTSIDE the try so the catch can name it. A const inside
+  // the try is not in scope in the catch, and the failure record reads
+  // it: the first refusal below would have thrown a ReferenceError
+  // that replaced the real error with a broken one.
+  //
+  // A Lab run uses the model the operator selected, the SAME one
+  // generation uses, so the Lab reports on the selection in front of
+  // the operator. Falling through to the tenant's agent_state value
+  // would pair the PLATFORM key with a TENANT's model, two different
+  // accounts, and the platform account has no obligation to serve a
+  // model a tenant configured.
+  const lab = labRun();
+  const model = lab ? lab.model : await getAnthropicModel();
+  const webSearchEntry = MODELS.find((m) => m.id === model);
+
   try {
     const client = await newAnthropicClient();
-    const model = await getAnthropicModel();
+
+    // No row means this deployment has not configured web search for
+    // the selected model. Refuse HERE.
+    //
+    // The danger is NOT that the vendor would reject the request. With
+    // no tools key the vendor accepts it and returns an ordinary
+    // completion, and the stage reports a successful search that found
+    // nothing. A silent empty result is worse than a loud refusal,
+    // because the run continues and the post is built from RSS alone
+    // with nothing on the page saying why.
+    if (!webSearchEntry || !webSearchEntry.tool) {
+      throw new Error("no web search tool configured for this model");
+    }
 
     var vaultGet = actionToken
       ? (key) => getAuthorizedPrompt(key, actionToken)
@@ -121,6 +192,14 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
 
     let template = await vaultGet("research_assistant");
     if (!template) {
+      // Announce the refusal. Returning silently left the call
+      // sequence row marked done with nothing on it, which reads as
+      // "this call produced nothing" rather than "this call never
+      // ran".
+      generationTrace()?.stage("web_search_response", {
+        failed: true, reason: "prompt_vault_miss",
+        note: "No research_assistant prompt in the vault. No search was performed."
+      });
       platformLog("error", "prompt_vault_miss", { key: "research_assistant" });
       return [];
     }
@@ -137,7 +216,9 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     const requestParams = {
       model,
       max_tokens: 2000,
-      tools: getWebSearchTools(),
+      // The MODEL decides the tool. Resolved above, so a model with no
+      // web search row refuses before the request is assembled.
+      tools: [webSearchEntry.tool],
       messages: [{ role: "user", content: assembledPrompt }]
     };
     platformLog("info", "llm_request_web_search",
@@ -165,10 +246,10 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
 
     if (!jsonMatch) {
-      generationTrace()?.stage("web_search_response", {
+      generationTrace()?.stage("web_search_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON array found in the response. The stage returns no claims and the run continues."
-      });
+      }, describeVendorResponse(response)));
       await logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
@@ -176,9 +257,9 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     const claims = JSON.parse(jsonMatch[0]);
     // Raw text travels with the parsed result. A parse that succeeds
     // on the wrong bytes is invisible without it.
-    generationTrace()?.stage("web_search_response", {
+    generationTrace()?.stage("web_search_response", Object.assign({
       rawText, claimCount: claims.length, claims
-    });
+    }, describeVendorResponse(response)));
 
     // Console mirror: the direct effect of the queries above —
     // how much citable material this cycle's retrieval produced.
@@ -195,7 +276,29 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
 
     return claims;
   } catch (err) {
-    await logActivity("error", "web_search_failed", { cycleId, error: err.message });
+    // Name the MODEL and the TOOL. This call is the only one in the
+    // pipeline that sends a tool block, so when it alone fails the
+    // tool is the first thing to compare against a working run.
+    //
+    // model and webSearchEntry are in scope because both are resolved
+    // above the try. A model with no row reports a null tool, which is
+    // the accurate answer rather than a guess.
+    const attempted = {
+      model: model || null,
+      webSearchTool: (webSearchEntry && webSearchEntry.tool && webSearchEntry.tool.type) || null
+    };
+    // The trace is the ONLY surviving record on a Lab run: logActivity
+    // writes inside the tenant transaction, which the Lab rolls back,
+    // so an error recorded only there is destroyed. platformLog writes
+    // on its own connection and survives.
+    generationTrace()?.stage("web_search_response", Object.assign({
+      failed: true, reason: err && err.name ? err.name : "Error",
+      error: err && err.message ? err.message : String(err)
+    }, attempted));
+    platformLog("error", "web_search_failed",
+      Object.assign({ cycleId, error: err && err.message }, attempted));
+    await logActivity("error", "web_search_failed",
+      Object.assign({ cycleId, error: err.message }, attempted));
     return [];
   }
 }
@@ -274,7 +377,14 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
 
   try {
     const client = await newAnthropicClient();
-    const model = await getAnthropicModel();
+    // A Lab run uses the model the operator selected, the SAME one
+    // generation uses. Falling through to the tenant's agent_state
+    // value would pair the platform key with a model from a different
+    // account, which is what produced "model does not exist".
+    // This stage sends NO tool block, so the web_search notes on
+    // the stage above do not apply here.
+    const lab = labRun();
+    const model = lab ? lab.model : await getAnthropicModel();
 
     var vaultGet = actionToken
       ? (key) => getAuthorizedPrompt(key, actionToken)
@@ -282,6 +392,10 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
 
     let template = await vaultGet("corroboration_analyst");
     if (!template) {
+      generationTrace()?.stage("corroboration_response", {
+        failed: true, reason: "prompt_vault_miss",
+        note: "No corroboration_analyst prompt in the vault. Nothing was verified."
+      });
       platformLog("error", "prompt_vault_miss", { key: "corroboration_analyst" });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
@@ -316,10 +430,10 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      generationTrace()?.stage("corroboration_response", {
+      generationTrace()?.stage("corroboration_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON object found in the response. No claims are verified and the run continues."
-      });
+      }, describeVendorResponse(response)));
       await logActivity("warn", "corroboration_parse_failed", { cycleId });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
@@ -341,7 +455,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     // Raw text, plus the trust weight arithmetic that decided which
     // claims survive. The scoring is where claims are actually won
     // or lost, so it is shown rather than summarised.
-    generationTrace()?.stage("corroboration_response", {
+    generationTrace()?.stage("corroboration_response", Object.assign(describeVendorResponse(response), {
       rawText,
       verified: verified.length,
       belowThreshold: belowThreshold.length,
@@ -350,7 +464,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
         claim: c.claim, trustWeight: c.trustWeight, meetsThreshold: c.meetsThreshold,
         confidence: c.confidence, sources: c.sources
       }))
-    });
+    }));
 
     await logActivity("info", "corroboration_complete", {
       cycleId,
@@ -362,6 +476,11 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
 
     return { verified, belowThreshold, uncorroborated: result.uncorroborated_claims || [] };
   } catch (err) {
+    generationTrace()?.stage("corroboration_response", {
+      failed: true, reason: err && err.name ? err.name : "Error",
+      error: err && err.message ? err.message : String(err)
+    });
+    platformLog("error", "corroboration_failed", { cycleId, error: err && err.message });
     await logActivity("error", "corroboration_failed", { cycleId, error: err.message });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }

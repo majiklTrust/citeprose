@@ -62,45 +62,81 @@ export function getModelListingPageLimit() {
   return intFromEnv("MODEL_LISTING_PAGE_LIMIT", 100);
 }
 
-// ── Web search tool ──────────────────────────────────────────
-// The Anthropic server side web search tool version used by the
-// research stage. Previously a literal inside research.js, which
-// made the version invisible to every surface that needed to report
-// it and required a code change to move.
+// ── Models ───────────────────────────────────────────────────
+// Per model wire facts, found by id. Each row carries the web search
+// tool this deployment sends for that model: the version and its
+// allowed_callers together, because the pair is constrained.
 //
-// Env-overridable with the shipped value as the zero-configuration
-// default, matching the intFromEnv pattern above: unset or blank
-// falls back, never empty. The value is NOT validated. It is not
-// validated today either, and a curated allowlist would refuse a
-// vendor version that shipped after the list was last edited, which
-// is a worse failure than a typo the vendor rejects loudly on the
-// next call.
-const DEFAULT_WEB_SEARCH_TOOL = "web_search_20250305";
-const WEB_SEARCH_TOOL_NAME = "web_search";
-
-// The configured tool VERSION, as a plain string. Surfaces that
-// display or select the version read this.
-export function getWebSearchTool() {
-  const value = (process.env.WEB_SEARCH_TOOL || "").trim();
-  return value || DEFAULT_WEB_SEARCH_TOOL;
-}
-
-// The tools ARRAY the Anthropic request body expects, ready to
-// assign, so no caller has to know the shape of a tool entry.
-export function getWebSearchTools() {
-  return [{ type: getWebSearchTool(), name: WEB_SEARCH_TOOL_NAME }];
-}
-
-// Every version this deployment can offer: the shipped default, plus
-// the configured value when it differs. Derived rather than curated,
-// so the list cannot drift out of step with what getWebSearchTool
-// actually returns.
-export function listWebSearchTools() {
-  const configured = getWebSearchTool();
-  return configured === DEFAULT_WEB_SEARCH_TOOL
-    ? [DEFAULT_WEB_SEARCH_TOOL]
-    : [DEFAULT_WEB_SEARCH_TOOL, configured];
-}
+// Every published web_search version works on every model here. The
+// constraint runs one way only: web_search_20260209 and later default
+// allowed_callers to ["code_execution_20260120"], and per Anthropic's
+// documentation a model that cannot call tools from inside code
+// execution is then refused with a 400. Those rows pin ["direct"].
+// Rows for models that can are left unpinned.
+//
+// A model with no row here is NOT a model that cannot search. It is a
+// model this table has not been configured for. Absence is a
+// configuration fact, not a capability one, and the caller refuses
+// rather than guessing a tool on its behalf.
+export const MODELS = Object.freeze([
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-haiku-4-5-20251001",
+    label: "Claude Haiku 4.5",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-sonnet-4-5-20250929",
+    label: "Claude Sonnet 4.5",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-5-20251101",
+    label: "Claude Opus 4.5",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-sonnet-4-6",
+    label: "Claude Sonnet 4.6",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-6",
+    label: "Claude Opus 4.6",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-sonnet-5",
+    label: "Claude Sonnet 5",
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  })
+]);
 
 /**
  * Returns the Anthropic model string for the current tenant.
@@ -152,18 +188,43 @@ export async function callAnthropic(client, params) {
   } catch (err) {
     // The Anthropic SDK surfaces HTTP errors with a status property.
     // A 404 with 'not_found_error' means the model doesn't exist.
-    // A 400 that mentions 'model' in the message is also a model
-    // rejection (some API versions return 400 instead of 404).
+    //
+    // WHICH FIELD did the vendor reject? A rejected request names the
+    // offending path, "tools.0.type" or "model". The old test was
+    // `status === 400 && message includes "model"`, which claimed ANY
+    // 400 mentioning the word. An unusable web_search tool version
+    // returns exactly that, so a tool problem was reported as a
+    // non-existent model, sending the operator to agent_state to fix
+    // a model that was working perfectly well on every other call.
     const status = err?.status || err?.statusCode;
     const errType = err?.error?.type || "";
     const errMsg = (err?.message || "").toLowerCase();
+    const modelValue = String(params.model || "").toLowerCase();
 
-    const isModelError =
-      (status === 404 && errType === "not_found_error") ||
-      (status === 404 && errMsg.includes("model")) ||
-      (status === 400 && errMsg.includes("model"));
+    // Matches a JSON field path at a word boundary: "tools.0.type",
+    // "model:", but not "modelling" or a model id embedded in prose.
+    const namesField = (field) =>
+      new RegExp("(^|[^a-z_])" + field + "(\\.[a-z0-9_]+)*\\s*[:.]").test(errMsg);
 
-    if (isModelError) {
+    const blamesTools = namesField("tools");
+    const blamesModel = !blamesTools
+      && (namesField("model") || (modelValue.length > 0 && errMsg.includes(modelValue)));
+
+    if (blamesTools) {
+      // Name the tool types actually sent. Without them the operator
+      // cannot tell which value the vendor refused.
+      const sent = Array.isArray(params.tools)
+        ? params.tools.map((t) => t && t.type).filter(Boolean).join(", ")
+        : "(none)";
+      throw new Error(
+        `The vendor rejected a tool in this request. Tool types sent: ${sent}. ` +
+        `The tool is chosen by the selected model in ` +
+        `config/ai.js MODELS; check that row. ` +
+        `Vendor said: ${err?.message || "(no detail)"}`
+      );
+    }
+
+    if (blamesModel && (status === 404 || status === 400 || errType === "not_found_error")) {
       const model = params.model || "(unknown)";
       throw new Error(
         `Model "${model}" does not exist at ${ANTHROPIC_API_URL}. ` +

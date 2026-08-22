@@ -135,7 +135,7 @@ body {
    mixing width< with max-width would put them 1px out of step. */
 .setup-grid {
   display: grid; gap: 0.2rem;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 @media (width < 760px) {
   .setup-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -253,6 +253,9 @@ body {
 .stage[data-status="done"]    .glyph { color: var(--live); }
 .stage[data-status="failed"]  .glyph, .stage[data-status="failed"] .name { color: var(--fail); }
 .stage[data-status="skipped"] .name  { color: var(--skip); text-decoration: line-through; }
+/* Ran, but announced nothing. Distinct from done, which announced. */
+.stage[data-status="norecord"] .glyph { color: var(--faint); }
+.stage[data-status="norecord"] .name  { color: var(--muted); }
 .stage[data-status="paused"]  .glyph { color: var(--execute); }
 
 /* A vendor crossing is structurally different from a local call and
@@ -446,38 +449,50 @@ pre.post-body {
 .blocked-box h4 { margin: 0 0 var(--sp-1); font-size: 0.75rem; color: var(--execute); }
 .blocked-box p  { margin: 0; font-size: 0.72rem; }
 
-/* Master and detail, the same shape as the call sequence and its
-   inspector. The list is deliberately narrow: a prompt KEY is short,
-   and the width it does not need is width the template can use. */
+/* Names on the left, the template they name on the right.
+   align-items:end bottom aligns the two columns: the key list is
+   short and the template is tall, and hanging the short column from
+   the top left a ragged gap under it. */
 .slots {
   display: grid; grid-template-columns: minmax(190px, 250px) 1fr;
-  gap: var(--sp-2); align-items: start;
+  gap: var(--sp-2); align-items: end;
   padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 @media (width < 760px) { .slots { grid-template-columns: 1fr; } }
 
-.slot-column { display: flex; flex-direction: column; }
+/* Clear sits ABOVE the names inside the left column. */
+.slot-column { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
 .slot-list { border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
 /* Right aligned, matching the Run and Reset controls above. */
-.slot-actions { display: flex; justify-content: flex-end; margin-top: var(--sp-2); }
+.slot-actions { display: flex; justify-content: flex-end; }
 .slot-item {
   display: flex; align-items: center; gap: var(--sp-2);
-  width: 100%; cursor: pointer;
+  width: 100%;
   padding: 3px var(--sp-2); border-left: 2px solid transparent;
   font-family: var(--mono); font-size: 0.7rem; color: var(--ink);
 }
-/* A label, not a button: a checkbox cannot live inside a button, and
-   the label makes the whole row a hit target while the checkbox stays
-   the focusable, keyboard operable control. */
+/* TWO controls per row, deliberately separate. The checkbox decides
+   whether the slot's override applies on Run, and any number may be
+   ticked. The name is a button deciding which single prompt is
+   DISPLAYED. A label wrapping the checkbox would make every click on
+   the name toggle the tick, which is why the row is no longer one. */
 .slot-item input.slot-check { flex: none; margin: 0; cursor: pointer; }
+.slot-item .slot-key {
+  flex: 1 1 auto; min-width: 0; text-align: left;
+  border: 0; background: none; cursor: pointer; padding: 0;
+  font-family: inherit; font-size: inherit; color: inherit;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .slot-item:focus-within { background: #eef4f8; }
 .slot-item + .slot-item { border-top: 1px solid var(--rule-2); }
 .slot-item:hover { background: var(--rule-2); }
 /* Selection in the EGRESS purple, matching the vault badge and the
    prompt line in the inspector: everything that says "this came from
    the vault" now reads as one family. */
-/* Checked, not selected: the checkbox is the state now. */
-.slot-item.is-checked { background: #f2ecfb; border-left-color: var(--gate); font-weight: 700; }
+/* Checked and active are different things, shown differently: the
+   tick colours the rail, being displayed fills the row. */
+.slot-item.is-checked { border-left-color: var(--gate); }
+.slot-item.is-active  { background: #f2ecfb; font-weight: 700; }
 .slot-item .slot-key {
   flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -499,8 +514,6 @@ pre.post-body {
   max-height: 22rem; overflow: auto;
 }
 .slot-view pre.payload { max-height: none; overflow: visible; }
-/* One block per checked slot, stacked in slot order. */
-.slot-block + .slot-block { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--rule); }
 /* The editor never scrolls: .slot-view is the panel's only scroller,
    so the textarea is sized to its own line count and the panel scrolls
    around it. Sized by ROWS rather than by measuring scrollHeight,
@@ -551,7 +564,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     <header class="masthead">
       <div>
         <h1>Generation Lab</h1>
-        <div class="sub">Run the content pipeline and inspect what crosses each boundary.</div>
+        <div class="sub">Run the content pipeline against live models on the platform key. Nothing is saved or published.</div>
       </div>
     </header>
 
@@ -591,10 +604,6 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
             <label for="sel-model">Model</label>
             <select id="sel-model"></select>
           </div>
-          <div class="field">
-            <label for="sel-research">Research</label>
-            <select id="sel-research"></select>
-          </div>
         </div>
         <div class="errbox" id="setup-error">
           <h4 id="setup-error-title"></h4>
@@ -617,7 +626,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       <section class="panel flush">
         <h2>Call sequence</h2>
         <div class="controls">
-          <button class="btn btn-inspect" id="btn-run">Run</button>
+          <button class="btn btn-execute" id="btn-run">Run</button>
           <button class="btn" id="btn-reset">Reset</button>
         </div>
         <div class="spine" id="spine"></div>
@@ -695,7 +704,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     stages: [], cursor: -1, selected: null, pane: "assembled",
     running: false, elapsed: 0,
     meta: null, tenantList: [], slots: null,
-    checkedSlots: {}, promptEdits: {},
+    checkedSlots: {}, activeSlot: null, promptEdits: {},
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -861,12 +870,11 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     fill($("sel-provider"), providerOpts, cur.provider);
     fillModels(cur.model);
     var research = meta.research || {};
-    fill($("sel-research"), research.tools || [], research.current);
   }
 
   function emptySelectors(label) {
     ["sel-topic", "sel-angle", "sel-genre", "sel-corroboration",
-     "sel-provider", "sel-model", "sel-research"].forEach(function (id) {
+     "sel-provider", "sel-model"].forEach(function (id) {
       fill($(id), [{ id: "", label: label }]);
       $(id).disabled = true;
     });
@@ -930,7 +938,8 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
 
   // ══ SPINE ════════════════════════════════════════════════════
   var GLYPH = { pending: "\u25CB", running: "\u25D0", done: "\u25CF",
-                failed: "\u2715", skipped: "\u2013", paused: "\u25A0" };
+                failed: "\u2715", skipped: "\u2013", paused: "\u25A0",
+                norecord: "\u25CC" };
 
   function loadSequence() {
     var skip = $("sel-corroboration").value === "off";
@@ -1008,6 +1017,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     if (s.error) { pane.appendChild(errorBox("This call failed", s.error)); return; }
     if (s.status === "pending") {
       pane.appendChild(emptyState("Not executed yet", "Run the sequence to populate this call."));
+      return;
+    }
+    if (s.status === "norecord") {
+      pane.appendChild(emptyState("Nothing was recorded for this call",
+        "The run completed without this call announcing anything. Either it returned "
+        + "early, or it is an orchestrating function with no boundary of its own."));
       return;
     }
     if (s.status === "skipped") {
@@ -1262,18 +1277,14 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
         return;
       }
 
-      // Plain object. All scalar values flatten into the table so a
-      // small map like a tier breakdown reads as rows, not as JSON.
-      var keys = Object.keys(value);
-      var allScalar = keys.length > 0 && keys.every(function (k) {
-        var v = value[k];
-        return v === null || (typeof v !== "object");
-      });
-      if (allScalar) {
-        keys.forEach(function (k) { scalars.push([key + "." + k, String(value[k])]); });
-      } else {
-        blocks.push([key, "json", value]);
-      }
+      // Plain object. If every leaf is a scalar it flattens into the
+      // table as dotted rows, RECURSIVELY, so a tier breakdown and a
+      // usage record with a nested tool-use count both read as rows.
+      // Nesting one level used to be enough to force the whole thing
+      // into a JSON block, which buried the billable search count.
+      var flat = flattenScalars(value, key, 0);
+      if (flat) flat.forEach(function (pair) { scalars.push(pair); });
+      else blocks.push([key, "json", value]);
     });
 
     if (scalars.length) pane.appendChild(kvTable(scalars));
@@ -1292,6 +1303,29 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     if (!scalars.length && !blocks.length) {
       pane.appendChild(el("p", "panel-sub", "(recorded, but empty)"));
     }
+  }
+
+  // Returns [path, value] pairs when EVERY leaf under this object is a
+  // scalar, or null when anything else is in there, in which case the
+  // caller falls back to JSON rather than printing a half flattened
+  // shape. Depth capped so a pathological structure cannot run away.
+  function flattenScalars(value, prefix, depth) {
+    if (depth > 3) return null;
+    var keys = Object.keys(value);
+    if (!keys.length) return null;
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var v = value[k];
+      var path = prefix + "." + k;
+      if (v === null || v === undefined) { out.push([path, "(null)"]); continue; }
+      if (typeof v !== "object") { out.push([path, String(v)]); continue; }
+      if (Array.isArray(v)) return null;
+      var nested = flattenScalars(v, path, depth + 1);
+      if (!nested) return null;
+      nested.forEach(function (pair) { out.push(pair); });
+    }
+    return out;
   }
 
   // Columns are the UNION of every row's keys, so a field present on
@@ -1409,6 +1443,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     host.innerHTML = "";
     state.slots = slots || null;
 
+    // An active slot that is no longer in the list, after a tenant or
+    // genre change, cannot stay active.
+    if (state.activeSlot && slots && !slots.some(function (sl) { return sl.key === state.activeSlot; })) {
+      state.activeSlot = null;
+    }
+
     if (!slots || !slots.length) {
       host.appendChild(emptyState("No prompts read yet",
         "Run the pipeline to see which vault row served each prompt."));
@@ -1418,56 +1458,80 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     var list = el("div", "slot-list");
     slots.forEach(function (slot) {
       var checked = !!state.checkedSlots[slot.key];
-      // A LABEL, so the whole row toggles, with the checkbox as the
-      // focusable control. A checkbox cannot live inside a button,
-      // which is why this is no longer one.
-      var item = document.createElement("label");
-      item.className = "slot-item" + (checked ? " is-checked" : "");
-      item.title = slot.key;
+      var active = state.activeSlot === slot.key;
+      var item = el("div", "slot-item" + (checked ? " is-checked" : "") + (active ? " is-active" : ""));
 
+      // Control 1: apply this override on Run. Any number ticked.
       var box = document.createElement("input");
       box.type = "checkbox";
       box.className = "slot-check";
       box.checked = checked;
       box.disabled = !slot.present;
+      box.setAttribute("aria-label", "Apply override for " + slot.key);
       box.addEventListener("change", function () {
         state.checkedSlots[slot.key] = box.checked;
-        // A parked edit becoming live, or ceasing to be, changes what
-        // the next run would send, so the cached run must die.
+        // A parked edit going live, or stopping, changes what the next
+        // run would send, so the cached run must die.
         if (isEditable(slot.key) && isEdited(slot.key)) invalidateRun();
         renderPromptSlots(state.slots);
       });
       item.appendChild(box);
-      item.appendChild(el("span", "slot-key", slot.key));
+
+      // Control 2: display this prompt. Exactly one, or none. Pressing
+      // the active one again clears the panel.
+      var name = el("button", "slot-key", slot.key);
+      name.type = "button";
+      name.title = slot.key;
+      name.disabled = !slot.present;
+      name.setAttribute("aria-pressed", active ? "true" : "false");
+      name.addEventListener("click", function () {
+        state.activeSlot = active ? null : slot.key;
+        // Selecting a prompt also selects the CALL that reads it, so
+        // the inspector above shows the boundary this template feeds.
+        // The mapping comes from the server, which owns it, rather
+        // than a second copy here that could disagree.
+        if (state.activeSlot) {
+          var map = (state.meta && state.meta.promptToCall) || {};
+          var callId = map[slot.key];
+          if (callId && find(callId)) select(callId);
+        }
+        renderPromptSlots(state.slots);
+      });
+      item.appendChild(name);
+
       if (!slot.present) item.appendChild(el("span", "slot-flag missing", "\u2715"));
       else if (slot.fallback || slot.metricBearingDrift) item.appendChild(el("span", "slot-flag warn", "\u25B2"));
       if (isEdited(slot.key)) item.appendChild(el("span", "slot-flag warn", "\u270E"));
       list.appendChild(item);
     });
 
-    var column = el("div", "slot-column");
-    column.appendChild(list);
     var actions = el("div", "slot-actions");
     var clear = el("button", "btn", "Clear");
     clear.type = "button";
-    clear.disabled = !anyChecked() && !anyEdit();
+    clear.disabled = !anyChecked() && !anyEdit() && !state.activeSlot;
     clear.addEventListener("click", clearPrompts);
     actions.appendChild(clear);
-    column.appendChild(actions);
-    host.appendChild(column);
 
     var view = el("div", "slot-view");
-    var shown = slots.filter(function (s) { return state.checkedSlots[s.key] && s.present; });
-    if (!shown.length) {
-      view.appendChild(emptyState("No prompt selected",
-        "Tick a prompt on the left to see the template the run will use."));
+    // ONE prompt, or none. The panel shows the ACTIVE slot, which is
+    // independent of which boxes are ticked: a slot can be applied on
+    // Run without being on screen, and read without being applied.
+    var current = state.activeSlot
+      ? slots.filter(function (sl) { return sl.key === state.activeSlot && sl.present; })[0]
+      : null;
+    if (!current) {
+      view.appendChild(emptyState("No prompt displayed",
+        "Select a prompt name on the left to read it. Tick its box to apply it on the next Run."));
     } else {
-      shown.forEach(function (slot) {
-        var block = el("div", "slot-block");
-        renderSlotDetail(block, slot);
-        view.appendChild(block);
-      });
+      renderSlotDetail(view, current);
     }
+
+    // Template first, then the controls, then the key list.
+    // Left column: Clear, then the names. Right column: the template.
+    var column = el("div", "slot-column");
+    column.appendChild(actions);
+    column.appendChild(list);
+    host.appendChild(column);
     host.appendChild(view);
   }
 
@@ -1495,6 +1559,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
 
   function clearPrompts() {
     state.checkedSlots = {};
+    state.activeSlot = null;
     state.promptEdits = {};
     invalidateRun();
     renderPromptSlots(state.slots);
@@ -1673,10 +1738,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       angle: $("sel-angle").value,
       genre: $("sel-genre").value,
       corroboration: $("sel-corroboration").value,
+      // Live routing: the run reaches a real model on the platform
+      // key, so these now decide where it goes.
+      provider: $("sel-provider").value,
+      model: $("sel-model").value,
+
       promptOverrides: activeOverrides()
-      // Provider, model and research tool are deliberately NOT sent.
-      // Phase 2 substitutes the vendor entirely, so sending them
-      // would imply a routing decision that is not being made.
     };
     setStatus("running", "Requesting pipeline run");
     return call(LAB + "/run", {
@@ -1699,8 +1766,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   // reports as failed is marked failed and the sequence STOPS,
   // because that is what the pipeline did.
   function applyStage(s, record) {
+    // NO RECORD is not the same as "ran and produced nothing", and
+    // conflating them is what hid a failed web search behind a row
+    // that looked finished. The row is marked so, and the inspector
+    // says which of the two it was.
     if (!record) {
-      s.status = "done";
+      s.status = "norecord";
       s.durMs = 0;
       return true;
     }
@@ -1824,7 +1895,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     // A different tenant means different vault rows, so a checked box
     // or a parked edit from the previous tenant must not carry over.
     $("sel-tenant").addEventListener("change", function () {
-      state.checkedSlots = {}; state.promptEdits = {};
+      state.checkedSlots = {}; state.activeSlot = null; state.promptEdits = {};
       reset(); loadMeta();
     });
     $("sel-topic").addEventListener("change", function () { fillAngles(); reset(); });
@@ -1833,7 +1904,8 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     // are re-resolved. Parked edits survive: an override replaces
     // whatever row resolved, by ruling.
     $("sel-genre").addEventListener("change", function () { reset(); loadMeta(); });
-    ["sel-angle", "sel-corroboration", "sel-model", "sel-research"].forEach(function (id) {
+    $("sel-model").addEventListener("change", reset);
+    ["sel-angle", "sel-corroboration"].forEach(function (id) {
       $(id).addEventListener("change", reset);
     });
     ["assembled", "args", "request", "response"].forEach(function (p) {

@@ -136,6 +136,21 @@ export function generationTrace() {
   return (frame && frame.trace) || null;
 }
 
+// The credential and routing an OBSERVED run must use, or null in
+// production. Presence of a frame with labRun set is what tells the
+// pipeline this is a Lab run and must not touch tenant credentials.
+//
+//   apiKey    the decrypted PLATFORM key, by ruling. A Lab run spends
+//             the platform's own key, never a tenant's BYOK key and
+//             never a trial grant: a developer tool must not bill a
+//             customer for work they did not request.
+//   provider  the provider the operator chose
+//   model     the model the operator chose
+export function labRun() {
+  const frame = als.getStore();
+  return (frame && frame.labRun) || null;
+}
+
 // A request scoped replacement for a vault prompt TEMPLATE, or null.
 //
 // Applied after the vault read, so it replaces the row that resolved

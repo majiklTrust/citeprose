@@ -43,7 +43,6 @@
 //   provider + model  resolveTenantLlmSelection (llm/client)
 //   provider catalog  listProviders          (llm/registry)
 //   model catalog     listModels             (llm/registry)
-//   research tools    listWebSearchTools     (config/ai)
 //   home tenant       findTenantByAuthIdentity (tenant/platform-db)
 //
 // Zero Trust:
@@ -61,14 +60,14 @@
 import express from "express";
 import { withTenant } from "../db/with-tenant.js";
 import { createGenerationTrace, runWithGenerationTrace } from "../services/generation-trace.js";
-import { createLabVendorMock } from "../services/lab-vendor-mock.js";
+import { getPlatformApiKey } from "../config/platform-keys.js";
+import { getProvider } from "../llm/registry.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { getAgentState } from "../services/database.js";
 import { listGenresForKey, getPromptProvenance, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { listProviders, listModels } from "../llm/registry.js";
 import { resolveTenantLlmSelection } from "../llm/client.js";
-import { listWebSearchTools, getWebSearchTool } from "../config/ai.js";
 import { findTenantByAuthIdentity } from "../tenant/platform-db.js";
 import { platformLog } from "../services/platform-log.js";
 
@@ -186,7 +185,16 @@ function indexStages(trace) {
     if (!callId) continue;
     const slot = byCall[callId] || (byCall[callId] = { status: "done", durMs: 0 });
     if (record.id.endsWith("_request")) slot.request = { data: record.data };
-    else if (record.id.endsWith("_response")) slot.response = { data: record.data };
+    else if (record.id.endsWith("_response")) {
+      slot.response = { data: record.data };
+      // A stage that announced its own failure marks the ROW failed,
+      // so the sequence shows where the run broke instead of a row
+      // that merely looks finished.
+      if (record.data && record.data.failed) {
+        slot.status = "failed";
+        slot.error = record.data.error || record.data.note || record.data.reason || "(no detail)";
+      }
+    }
     else slot.assembled = { data: record.data };
     slot.durMs = record.atMs;
   }
@@ -472,6 +480,10 @@ export default function createPlatformAdminLabRoutes() {
         // has switched away from their own.
         tenantId,
         promptSlots,
+        // Which call sequence row reads each prompt. Sent rather than
+        // duplicated in the page, so the two cannot disagree about
+        // which call a prompt belongs to.
+        promptToCall: PROMPT_TO_CALL,
         homeTenantId,
         topics: scoped.topics,
         genres: genres.length ? genres : ["default"],
@@ -479,7 +491,6 @@ export default function createPlatformAdminLabRoutes() {
         providers,
         models,
         current: scoped.current,
-        research: { tools: listWebSearchTools(), current: getWebSearchTool() }
       });
     } catch (err) {
       platformLog("error", "lab_meta_failed", { tenantId, error: err.message });
@@ -514,6 +525,58 @@ export default function createPlatformAdminLabRoutes() {
     // the ambient frame for the run and are gone when it returns. Only
     // keys the pipeline substitutes are accepted, so an override for
     // an unwired key is refused rather than silently ignored.
+    // Provider and model. Both or neither, matching how the panel
+    // presents them: a provider with no model cannot be routed to.
+    const provider = typeof body.provider === "string" ? body.provider.trim() : "";
+    const model = typeof body.model === "string" ? body.model.trim() : "";
+    if ((provider && !model) || (model && !provider)) {
+      return res.status(400).json({
+        error: "Provider and model must be selected together", code: "INCOMPLETE_SELECTION"
+      });
+    }
+    if (!provider) {
+      return res.status(400).json({
+        error: "A provider and model are required for a live run", code: "SELECTION_REQUIRED"
+      });
+    }
+    try {
+      getProvider(provider);
+    } catch (err) {
+      return res.status(400).json({ error: `Unknown provider '${provider}'`, code: "UNKNOWN_PROVIDER" });
+    }
+
+    // FAIL BEFORE SPENDING. The key is resolved and decrypted here,
+    // before the pipeline starts, so a misconfigured platform key
+    // cannot be discovered halfway through a run that has already
+    // paid for research.
+    // getPlatformApiKey resolves null for BOTH unset and
+    // undecryptable, logging platform_key_decrypt_failed loudly in the
+    // second case. One refusal covers both because the operator's
+    // action is the same either way; the platform log is where the two
+    // are told apart.
+    const platformKey = getPlatformApiKey("language");
+    if (!platformKey) {
+      return res.status(503).json({
+        error: "No usable platform language key is configured",
+        code: "PLATFORM_KEY_UNAVAILABLE"
+      });
+    }
+    // The web_search tool version, if the operator pinned one. Free
+    // text by design: the vendor ships versions faster than any
+    // allowlist here could track, and a bad value fails loudly at the
+    // vendor rather than silently.
+
+    // No separate research model. web_search is implemented for
+    // Anthropic only, and the platform key belongs to one vendor, so
+    // a run is one key, one provider, one model throughout. A run
+    // whose key and model are not Anthropic fails at the web search
+    // call and says so on that row, rather than being refused up
+    // front for a capability gap the pipeline shares.
+    // No webSearchTool on the frame: the pipeline resolves it from the
+    // model. A pinned version would let the Lab send a combination the
+    // scheduled path cannot, which is the one thing it must not do.
+    const labFrame = Object.freeze({ apiKey: platformKey, provider, model });
+
     const promptOverrides = {};
     const raw = body.promptOverrides && typeof body.promptOverrides === "object" ? body.promptOverrides : {};
     for (const key of Object.keys(raw)) {
@@ -550,11 +613,11 @@ export default function createPlatformAdminLabRoutes() {
           await setAgentStateInTransaction("corroboration", forceCorroboration ? "enabled" : "disabled");
         }
 
-        const vendor = createLabVendorMock({ topicName: topic.name || topic.slug, angle: angle || "" });
-
-        // The pipeline sequences itself. The Lab supplies a collector
-        // and a stand in vendor, then reads what was announced.
-        const result = await runWithGenerationTrace({ trace, vendor, promptOverrides }, async () => {
+        // The pipeline sequences itself. The Lab supplies a collector,
+        // the credential and routing, and any prompt override, then
+        // reads what was announced. No vendor substitute: every call
+        // reaches a real model.
+        const result = await runWithGenerationTrace({ trace, labRun: labFrame, promptOverrides }, async () => {
           const generated = await generatePost(topicId, req.user?.sub || null, null, angle, genre);
           let quality = null;
           if (!generated.blocked) {

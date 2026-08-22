@@ -33,6 +33,7 @@ import { llmError, LLM_ERROR_CODES, isLlmError, normalizeVendorHttpError } from 
 import * as anthropicAdapter from "./adapters/anthropic.js";
 import * as openAiCompatibleAdapter from "./adapters/openai-compatible.js";
 import { platformLog } from "../services/platform-log.js";
+import { labRun } from "../services/generation-trace.js";
 import { traceEnabled } from "../services/llm-trace.js";
 
 const ADAPTERS = Object.freeze({
@@ -190,14 +191,35 @@ export async function generateWithTenantLlm(input, deps = {}) {
   const cycleId = input && typeof input.cycleId === "string" ? input.cycleId : null;
 
   let selection;
+  // An observed Lab run routes to the operator's chosen provider and
+  // model on the PLATFORM key. This is NOT the resolver chain and does
+  // not disturb it: ruling 2.5.65 stands for every other caller.
+  //
+  // The selection is built with all FOUR properties the code below
+  // reads. A two-property object here threw TypeError at the adapter
+  // lookup before any wire request existed, which is how the earlier
+  // implementation failed every Lab run that reached this function.
+  // Resolving the profile here also turns an unusable model into the
+  // registry's own typed UNKNOWN_MODEL refusal instead of a crash.
+  const lab = labRun();
   try {
-    selection = await resolveTenantLlmSelection(d);
-
     let apiKey;
-    try {
-      apiKey = await d.getApiKey(selection.provider);
-    } catch (err) {
-      throw wrapMissingCredential(err, selection.provider);
+    if (lab && lab.apiKey) {
+      const labProvider = getProvider(lab.provider || "anthropic");
+      selection = {
+        provider: labProvider.id,
+        model: lab.model,
+        profile: getModelProfile(labProvider.id, lab.model, d.env),
+        providerEntry: labProvider
+      };
+      apiKey = lab.apiKey;
+    } else {
+      selection = await resolveTenantLlmSelection(d);
+      try {
+        apiKey = await d.getApiKey(selection.provider);
+      } catch (err) {
+        throw wrapMissingCredential(err, selection.provider);
+      }
     }
     if (typeof apiKey !== "string" || apiKey.length === 0) {
       throw llmError(LLM_ERROR_CODES.MISSING_CREDENTIAL,
@@ -245,7 +267,12 @@ export async function generateWithTenantLlm(input, deps = {}) {
       usage: response.usage, stopReason: response.stopReason, durationMs, costEstimateUsd
     });
 
-    try {
+    // A Lab run is UNMETERED by ruling. The gate is not cosmetic:
+    // with no activation context the recorder mints a standalone
+    // 'compose' activation and defaults provenance to key_source
+    // 'tenant', so an ungated call would file PLATFORM key spend
+    // against whichever tenant the Lab was pointed at.
+    if (!lab) try {
       const { recordSpend } = await import("../spend/spend-recorder.js");
       await recordSpend({ requestType: "text_generation", provider: selection.provider,
         model: selection.model, usage: response.usage, costEstimateUsd, status: "ok" });
@@ -272,7 +299,7 @@ export async function generateWithTenantLlm(input, deps = {}) {
       code: isLlmError(err) ? err.code : (err && err.name) || "Error"
     });
     try {
-      if (selection) {
+      if (selection && !lab) {
         const { recordSpend } = await import("../spend/spend-recorder.js");
         const timedOut = isLlmError(err) && err.code === "TIMEOUT";
         await recordSpend({ requestType: "text_generation", provider: selection.provider,

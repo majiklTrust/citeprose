@@ -27,6 +27,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./pro
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
+import { generationTrace, generationVendor, traceArguments, promptOverride } from "./generation-trace.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -107,6 +108,10 @@ export async function getAvailableTopics(userSub = null) {
 }
 
 export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null, genre = "default") {
+  traceArguments("generatePost",
+    'export async function generatePost(topic = null, userSub = null, actionToken = null, requestedAngle = null, genre = "default")',
+    [["topic", topic], ["userSub", userSub], ["actionToken", actionToken],
+     ["requestedAngle", requestedAngle], ["genre", genre]]);
   if (typeof topic === "string") {
     topic = await getTopicBySlug(topic);
   }
@@ -128,6 +133,8 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   // Angle decision (Feature 2): an explicitly requested angle must be
   // an EXISTING member of topic.content_angles; otherwise fail closed.
   // No request -> the pre-existing auto-rotation, unchanged.
+  traceArguments("resolveAngle", "export function resolveAngle(topic, requested, recentPosts)",
+    [["topic", topic], ["requested", requestedAngle], ["recentPosts", recentPosts]]);
   const angleResult = resolveAngle(topic, requestedAngle, recentPosts);
   if (!angleResult.ok) {
     const reason = angleResult.reason;
@@ -141,6 +148,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   platformLog("info", "angle_resolved", {
     cycleId, topicId: topic.slug, angle,
     mode: angleResult.selected ? "user-selected" : "auto-rotated"
+  });
+  generationTrace()?.stage("angle_resolved", {
+    angle, mode: angleResult.selected ? "operator-selected" : "auto-rotated",
+    availableAngles: topic.content_angles || [],
+    recentPostsConsidered: recentPosts.length
   });
 
   // ── Research phase ─────────────────────────────────────────
@@ -190,9 +202,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   }
 
   // ── Rate limit cooldown before generation ──────────────────
-  const cooldown = getCooldownMs();
+  // Paces real vendor traffic only; a substituted vendor waits for
+  // nothing.
+  const cooldown = generationVendor() ? 0 : getCooldownMs();
   await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldown / 1000}s before content generation` });
-  await new Promise(resolve => setTimeout(resolve, cooldown));
+  if (cooldown > 0) await new Promise(resolve => setTimeout(resolve, cooldown));
 
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
@@ -226,6 +240,23 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     rbTemplate = null;
   }
 
+  // vars is rebuilt to match the branch that ACTUALLY ran. The
+  // corroborated path passes RESEARCH_CONTEXT alone, so listing a
+  // SOURCE_COUNT key there would report a parameter that was never
+  // supplied.
+  const rbVars = skipCorroboration
+    ? { RESEARCH_CONTEXT: framedContext, SOURCE_COUNT: String(researchBrief.independentSourceCount) }
+    : { RESEARCH_CONTEXT: framedContext };
+  traceArguments("researchBlock", "export function renderPrompt(template, vars)",
+    [["template", "research_brief_" + (!skipCorroboration ? "corroborated" : "uncorroborated") + " (from the vault)"],
+     ["vars", rbVars]],
+    "This row is a template render inside generatePost, not a pipeline call of its own.");
+  generationTrace()?.stage("research_block", {
+    corroborated: !skipCorroboration,
+    promptKey: !skipCorroboration ? "research_brief_corroborated" : "research_brief_uncorroborated",
+    renderedBlock: researchBlock
+  });
+
   const topicHashtags = topic.hashtags || [];
 
   // ── Verified metrics (METRICS FIDELITY) ────────────────────
@@ -249,7 +280,18 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     metricGroups = [];
     metricsByKey.clear();
   }
+  traceArguments("metricBlock", "export function buildMetricBlock(groups)",
+    [["groups", metricGroups]]);
   const metricBlock = buildMetricBlock(metricGroups);
+  // Database material assembled for generation, alongside the block
+  // it becomes. An empty block with metrics present means the genre
+  // template carries no {{METRIC_BLOCK}} placeholder.
+  generationTrace()?.stage("metric_block", {
+    metricGroups: metricGroups.length,
+    metricsAvailable: metricsByKey.size,
+    metricKeys: [...metricsByKey.keys()],
+    renderedBlock: metricBlock
+  });
   platformLog("info", "metrics_loaded", { cycleId, topicId: topic.slug, groups: metricGroups.length, metrics: metricsByKey.size });
 
   // Genre applies ONLY to the content_generator template — never to
@@ -263,6 +305,22 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   if (!cgTemplate) {
     platformLog("error", "prompt_vault_miss", { key: "content_generator" });
     throw new Error("Content generation prompt not configured");
+  }
+  // Applied AFTER the vault read, so it replaces whichever row served,
+  // including a genre that fell back to default. Null in production,
+  // where no frame is ambient. The trace records the substitution so a
+  // run can never claim it generated from vault text when it did not.
+  const cgOverride = promptOverride("content_generator");
+  if (cgOverride) {
+    generationTrace()?.stage("prompt_override", {
+      key: "content_generator",
+      resolvedGenre: genre,
+      vaultChars: cgTemplate.length,
+      overrideChars: cgOverride.length,
+      vaultPlaceholders: [...new Set(cgTemplate.match(/{{[A-Z_]+}}/g) || [])],
+      overridePlaceholders: [...new Set(cgOverride.match(/{{[A-Z_]+}}/g) || [])]
+    });
+    cgTemplate = cgOverride;
   }
   let userPrompt = renderPrompt(cgTemplate, {
     TOPIC_NAME: topic.name,
@@ -287,9 +345,29 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     // pipeline never learns which vendor served the request.
     // Flag OFF (default): the pre-existing direct Anthropic path,
     // byte-for-byte unchanged.
+    traceArguments("generateContent",
+      "export async function generateWithTenantLlm(input, deps = {})",
+      [["input", { system: topic.system_context || null, user: userPrompt,
+                   maxOutputTokens: 1500, purpose: "main_post_generation", cycleId }],
+       ["deps", "(omitted, defaults)"]]);
+    generationTrace()?.stage("generation_request", {
+      genre,
+      systemContext: topic.system_context || null,
+      maxOutputTokens: 1500,
+      assembledPrompt: userPrompt
+    });
     let generatedText;
     let generationModel;
-    if (isLlmAbstractionEnabled()) {
+    let genVendorMeta = null;
+    const genVendor = generationVendor();
+    if (genVendor) {
+      // Substituted vendor. The prompt above is exactly what a real
+      // call would have carried; parsing, metric substitution and the
+      // fidelity gate below all run unchanged.
+      const mocked = genVendor.orchestrated("main_post_generation");
+      generatedText = mocked.text;
+      generationModel = `${mocked.provider}/${mocked.model}`;
+    } else if (isLlmAbstractionEnabled()) {
       const orchestrated = await generateWithTenantLlm({
         system: topic.system_context || null,
         user: userPrompt,
@@ -301,6 +379,14 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       });
       generatedText = orchestrated.text;
       generationModel = `${orchestrated.provider}/${orchestrated.model}`;
+      // The orchestrator returns usage, stop reason and a cost
+      // estimate alongside the text. The pipeline needs only the text,
+      // so an observer has to take the rest here or it is lost.
+      genVendorMeta = {
+        usage: orchestrated.usage || null,
+        stopReason: orchestrated.stopReason || null,
+        costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
+      };
     } else {
       warnLegacyPathOnce();
       const client = await newAnthropicClient();
@@ -324,6 +410,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     }
     userPrompt = null;
 
+    generationTrace()?.stage("generation_response", Object.assign({
+      model: generationModel, rawText: generatedText
+    }, genVendorMeta || {}));
+
     const raw = generatedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(cleaned);
@@ -339,6 +429,9 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     const strictFidelity = (process.env.METRIC_FIDELITY_STRICT || "").trim() === "1";
     const sub = substituteMetricTokens(parsed.body, metricsByKey);
     const allowedNumbers = strictFidelity ? extractNumericTokens(researchBlock) : [];
+    traceArguments("fidelity", "export function verifyMetricFidelity(text, byKey, options)",
+      [["text", sub.text], ["byKey", metricsByKey],
+       ["options", { strict: strictFidelity, allowedNumbers }]]);
     const fidelity = verifyMetricFidelity(sub.text, metricsByKey, { strict: strictFidelity, allowedNumbers });
     if (!fidelity.ok) {
       const reason = fidelity.unknownTokens.length
@@ -357,6 +450,13 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
           unverifiedNumbers: fidelity.unverifiedNumbers
         } };
     }
+    generationTrace()?.stage("fidelity", {
+      strict: strictFidelity,
+      verified: fidelity.ok,
+      metricTokensSubstituted: sub.substituted,
+      unknownTokens: fidelity.unknownTokens,
+      unverifiedNumbers: fidelity.unverifiedNumbers
+    });
     parsed.body = sub.text;
     if (sub.substituted.length) {
       platformLog("info", "metric_tokens_substituted", { cycleId, topicId: topic.slug, count: sub.substituted.length, keys: sub.substituted });
@@ -421,6 +521,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 // ── Content Quality Check ────────────────────────────────────
 
 export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null) {
+  traceArguments("qualityCheck",
+    "export async function qualityCheck(content, researchSummary = null, cycleId = null, actionToken = null)",
+    [["content", content], ["researchSummary", researchSummary],
+     ["cycleId", cycleId], ["actionToken", actionToken]]);
   // Grounding context has two honest shapes:
   //   object -> the org research brief (original behavior, byte
   //             identical for the org pipeline), or
@@ -454,8 +558,15 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
 
   // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
   // the pre-existing direct Anthropic path, unchanged.
+  generationTrace()?.stage("quality_request", {
+    maxOutputTokens: 800, assembledPrompt
+  });
   let reviewText;
-  if (isLlmAbstractionEnabled()) {
+  let qVendorMeta = null;
+  const qVendor = generationVendor();
+  if (qVendor) {
+    reviewText = qVendor.orchestrated("quality_check").text;
+  } else if (isLlmAbstractionEnabled()) {
     const orchestrated = await generateWithTenantLlm({
       system: null,
       user: assembledPrompt,
@@ -466,6 +577,12 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
       cycleId: cycleId || null
     });
     reviewText = orchestrated.text;
+    qVendorMeta = {
+      model: `${orchestrated.provider}/${orchestrated.model}`,
+      usage: orchestrated.usage || null,
+      stopReason: orchestrated.stopReason || null,
+      costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
+    };
   } else {
     warnLegacyPathOnce();
     const client = await newAnthropicClient();
@@ -485,6 +602,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
     reviewText = response.content[0].text;
   }
   assembledPrompt = null;
+
+  generationTrace()?.stage("quality_response",
+    Object.assign({ rawText: reviewText }, qVendorMeta || {}));
 
   const raw = reviewText.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.6",
+  "version": "4.250111.61",
   "config": {
     "cssversion": "111",
     "appname": "Market Intelligence"
@@ -98,7 +98,7 @@
     "batch-test-atest": "bash scripts/testing/batch-run-test.sh test-atest testing 1 2",
     "750_": "",
     "log": "curl -s http://localhost:3001/api/logs?limit=1|jq",
-    "getmodels": "if [ -z \"$APIKEY\" ];then echo export APIKEY;fi && curl https://api.anthropic.com/v1/models   -H \"x-api-key: $APIKEY\" -H \"anthropic-version: 2023-06-01\"|jq",
+    "getmodels": "curl -s https://api.anthropic.com/v1/models   -H \"x-api-key: $(cat $APIKEY)\" -H \"anthropic-version: 2023-06-01\"|jq -c",
     "authrequired": "curl -s http://localhost:3001/api/status | node -e \"process.stdin.on('data',d=>console.log(JSON.parse(d).authRequired))\"",
     "callbackfailtest": "curl -X POST http://localhost:3001/auth/callback   -H \"Content-Type: application/json\"   -d '{\"code\":\"fake\",\"state\":\"bad\"}'",
     "valid-server": "curl -sS -i http://localhost:3001/api/status;curl -sS -i http://localhost:3001/api/__nonexistent__;curl -sS -i http://localhost:3001/api/posts; curl -sS -i http://localhost:3001/auth/status;",

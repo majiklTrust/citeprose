@@ -33,6 +33,34 @@ for (const name of fs.readdirSync(SRC)) {
   console.log(`build-pages.mjs generated public/${m[1]}/index.html from ${name}`);
   built++;
 }
+// ── Nested page templates ──────────────────────────────────────
+// Same naming rule, one level down: public_templates/<dir>/<n>-index.html
+// builds to public/<dir>/<n>/index.html with the same substitutions.
+// This is how a page lives INSIDE another page's subtree, which is
+// what the Generation Lab needs: public/platform-admin/lab/ inherits
+// the platform-admin static gate because express.static is mounted
+// on the directory and is recursive.
+//
+// A bare index.html inside a template directory is deliberately NOT
+// matched: public_templates/platform-admin/index.html stays owned by
+// the build_admin script, exactly as before.
+for (const dirName of fs.readdirSync(SRC)) {
+  const dirPath = path.join(SRC, dirName);
+  if (!fs.statSync(dirPath).isDirectory()) continue;
+  for (const name of fs.readdirSync(dirPath)) {
+    const m = /^(.+)-index\.html$/.exec(name);
+    if (!m) continue;
+    const srcPath = path.join(dirPath, name);
+    if (!fs.statSync(srcPath).isFile()) continue;
+    let s = fs.readFileSync(srcPath, "utf8");
+    for (const [k, v] of Object.entries(subs)) s = s.split(k).join(v);
+    const outDir = path.join("public", dirName, m[1]);
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, "index.html"), s);
+    console.log(`build-pages.mjs generated public/${dirName}/${m[1]}/index.html from ${dirName}/${name}`);
+    built++;
+  }
+}
 if (built === 0) console.log("no page templates found (nothing to build)");
 
 // ── JSX templates: public_templates/*.jsx build to public/*.js ──

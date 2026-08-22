@@ -4,8 +4,9 @@
 // Encrypts/decrypts platform-scoped secrets (not tenant-scoped)
 // for storage in environment variables as base64 ciphertext.
 //
-// First consumer: PLATFORM_ANTHROPIC_API_KEY_ENC — the dedicated
-// key used only by the read-only model-catalog endpoint.
+// Consumer: PLATFORM_LANGUAGE_API_KEY, the platform's own vendor
+// key, read through config/platform-keys.js by the model-catalog
+// endpoint and by the Generation Lab.
 //
 // Scheme: AES-256-GCM, key = HKDF(ENCRYPTION_SECRET).
 //   Blob layout: IV (12) || AuthTag (16) || Ciphertext

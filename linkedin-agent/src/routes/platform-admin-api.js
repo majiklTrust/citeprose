@@ -37,6 +37,8 @@
 import { Router } from "express";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
+import { getPlatformApiKey } from "../config/platform-keys.js";
+import createPlatformAdminLabRoutes from "./platform-admin-lab-api.js";
 import { pool } from "../db/pool.js";
 import { platformLog } from "../services/platform-log.js";
 import { TIERS } from "../config/entitlements.js";
@@ -155,6 +157,9 @@ export default function createPlatformAdminRoutes() {
   router.use(requireAuth);
   router.use(requirePlatformAdmin);
 
+  // Generation Lab: sub-router inherits BOTH gates above.
+  router.use("/lab", createPlatformAdminLabRoutes());
+
   // ── Payments (2.3.1.1): complimentary entitlements ──────────
   // The deliberate, auditable, processor-free grant. Router-level
   // gates above already enforce platform admin.
@@ -231,34 +236,37 @@ export default function createPlatformAdminRoutes() {
   // Zero Trust:
   //   • Uses a dedicated platform key, never a tenant's BYOK key —
   //     a global lookup must not decrypt tenant secrets.
-  //   • Key is stored ENCRYPTED at rest (env PLATFORM_ANTHROPIC_API_KEY,
+  //   • Key is stored ENCRYPTED at rest (env PLATFORM_LANGUAGE_API_KEY,
   //     AES-256-GCM under HKDF(ENCRYPTION_SECRET)); decrypted at call
   //     time, held only for the request, then nulled.
+  //   • Read through config/platform-keys.js, which owns that name and
+  //     the decrypt. Reading the variable inline here is what let the
+  //     module and its only live consumer drift apart.
   //   • Key is never logged and never sent to the client.
-  //   • Fails closed if the encrypted key is unset or undecryptable (503).
+  //   • Fails closed if the encrypted key is unset or undecryptable (503),
+  //     except on a cache hit, which needs no credential at all.
   //   • Only model IDs are returned — no capabilities, pricing, or keys.
   //   • Behind the isPlatformAdmin gate (router-level).
 
   router.get("/models", async (req, res) => {
-    const encKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
-    if (!encKey || encKey.trim().length === 0) {
-      return res.status(503).json({ error: "Model listing is not configured" });
-    }
-
-    let apiKey;
-    try {
-      apiKey = decryptPlatformSecret(encKey.trim());
-    } catch (err) {
-      platformLog("error", "platform_key_decrypt_failed", { admin: req.user.sub });
-      return res.status(503).json({ error: "Model listing is not configured" });
-    }
-    if (!apiKey || apiKey.length === 0) {
-      return res.status(503).json({ error: "Model listing is not configured" });
-    }
-
+    // Cache FIRST. A cached list is already in memory, so serving it
+    // needs no credential; resolving one first would refuse a request
+    // that could have been answered without it.
     const cached = getCachedModels();
     if (cached) {
       return res.json({ optgroups: cached });
+    }
+
+    // let, NOT const: the finally below scrubs the decrypted key from
+    // this scope once the request is done with it, and a const cannot
+    // be reassigned.
+    //
+    // getPlatformApiKey returns null for BOTH "unset" and
+    // "undecryptable", logging loudly in the second case, so the
+    // fail-closed 503 is the same either way.
+    let apiKey = getPlatformApiKey("language");
+    if (!apiKey) {
+      return res.status(503).json({ error: "Model listing is not configured" });
     }
 
     try {
@@ -369,6 +377,16 @@ export default function createPlatformAdminRoutes() {
     // ── Restricted table protection ──────────────────────────
     // Prevent admin queries from reading encrypted prompt content.
     // Metadata queries (key, description, updated_at) are allowed.
+    //
+    // EXCEPTION: an exception is made for the guarded
+    // platform-admin/lab traceability routine. The Generation Lab
+    // returns decrypted prompt templates in its run response so an
+    // operator can see which vault row served each prompt. That path
+    // is gated by requireAuth + requirePlatformAdmin, decrypts
+    // server-side, and is read only. This firewall still stands for
+    // the /execute path, which must never reach value_enc: raw
+    // registry SQL cannot decrypt, and encryption must never happen
+    // client-side.
     var RESTRICTED_COLUMNS = [
       { table: "prompt_vault", columns: ["value_enc"] }
     ];
@@ -424,7 +442,10 @@ export default function createPlatformAdminRoutes() {
   //
   // Why separate: the /execute path runs raw registry SQL and is
   // firewalled from prompt_vault.value_enc by design (encryption
-  // must never happen client-side). Inserting a genre template
+  // must never happen client-side). That firewall governs /execute
+  // only; an exception is made for the guarded platform-admin/lab
+  // traceability routine, which decrypts server-side behind the same
+  // admin gate and returns templates for display. Inserting a genre template
   // requires server-side AES-256-GCM encryption, so it goes
   // through storePromptGenre() in prompt-vault.js — the same
   // encrypt() the default prompt uses. Plaintext is received over

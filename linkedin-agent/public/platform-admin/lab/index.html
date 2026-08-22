@@ -508,10 +508,18 @@ pre.post-body {
    ONLY scroller in the panel. pre.payload scrolls everywhere else, so
    the override below turns it off HERE: nested scrollbars leave the
    wheel acting on whichever the pointer happens to be over. */
+/* A FIXED height, not a maximum. The panel is the same size whether
+   it holds nothing, one short prompt or a long one, so selecting a
+   prompt fills the box instead of resizing it and pushing the rest of
+   the page down. The scrollbar appears only when a template exceeds
+   the box, which is what overflow:auto already does.
+   box-sizing is border-box, so this height includes the padding and
+   border, exactly as the old max-height did: the point at which
+   scrolling begins is unchanged. */
 .slot-view {
   border: 1px solid var(--rule); border-radius: 3px;
   padding: var(--sp-2) var(--sp-3);
-  max-height: 22rem; overflow: auto;
+  height: 22rem; overflow: auto;
 }
 .slot-view pre.payload { max-height: none; overflow: visible; }
 /* The editor never scrolls: .slot-view is the panel's only scroller,

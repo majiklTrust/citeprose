@@ -83,6 +83,7 @@ export const MODELS = Object.freeze([
     provider: "anthropic",
     id: "claude-haiku-4-5-20251001",
     label: "Claude Haiku 4.5",
+    pricing: Object.freeze({ inputPerMTokUsd: 1, outputPerMTokUsd: 5 }),
     tool: Object.freeze({
       type: "web_search_20260318",
       name: "web_search",
@@ -93,16 +94,7 @@ export const MODELS = Object.freeze([
     provider: "anthropic",
     id: "claude-sonnet-4-5-20250929",
     label: "Claude Sonnet 4.5",
-    tool: Object.freeze({
-      type: "web_search_20260318",
-      name: "web_search",
-      allowed_callers: Object.freeze(["direct"])
-    })
-  }),
-  Object.freeze({
-    provider: "anthropic",
-    id: "claude-opus-4-5-20251101",
-    label: "Claude Opus 4.5",
+    pricing: Object.freeze({ inputPerMTokUsd: 3, outputPerMTokUsd: 15 }),
     tool: Object.freeze({
       type: "web_search_20260318",
       name: "web_search",
@@ -113,15 +105,7 @@ export const MODELS = Object.freeze([
     provider: "anthropic",
     id: "claude-sonnet-4-6",
     label: "Claude Sonnet 4.6",
-    tool: Object.freeze({
-      type: "web_search_20260318",
-      name: "web_search"
-    })
-  }),
-  Object.freeze({
-    provider: "anthropic",
-    id: "claude-opus-4-6",
-    label: "Claude Opus 4.6",
+    pricing: Object.freeze({ inputPerMTokUsd: 3, outputPerMTokUsd: 15 }),
     tool: Object.freeze({
       type: "web_search_20260318",
       name: "web_search"
@@ -131,12 +115,70 @@ export const MODELS = Object.freeze([
     provider: "anthropic",
     id: "claude-sonnet-5",
     label: "Claude Sonnet 5",
+    pricing: Object.freeze({ inputPerMTokUsd: 2, outputPerMTokUsd: 10 }),
     tool: Object.freeze({
       type: "web_search_20260318",
       name: "web_search"
     })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-5-20251101",
+    label: "Claude Opus 4.5",
+    pricing: Object.freeze({ inputPerMTokUsd: 5, outputPerMTokUsd: 25 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search",
+      allowed_callers: Object.freeze(["direct"])
+    })
+  }),
+  Object.freeze({
+    provider: "anthropic",
+    id: "claude-opus-4-6",
+    label: "Claude Opus 4.6",
+    pricing: Object.freeze({ inputPerMTokUsd: 5, outputPerMTokUsd: 25 }),
+    tool: Object.freeze({
+      type: "web_search_20260318",
+      name: "web_search"
+    })
+  }),
+  Object.freeze({
+    provider: "openai",
+    id: "gpt-4o",
+    label: "GPT-4o"
+  }),
+  Object.freeze({
+    provider: "openai",
+    id: "gpt-4o-mini",
+    label: "GPT-4o mini"
+  }),
+  Object.freeze({
+    provider: "openai",
+    id: "gpt-5",
+    label: "GPT-5",
+    profile: Object.freeze({
+      // Reasoning family: fixed sampling temperature; the adapter
+      // drops temperature instead of sending a rejected parameter.
+      supportsTemperature: false,
+      reasoningEffort: "medium"
+    })
+  }),
+  Object.freeze({
+    provider: "grok",
+    id: "grok-3",
+    label: "Grok 3"
+  }),
+  Object.freeze({
+    provider: "grok",
+    id: "grok-4",
+    label: "Grok 4",
+    profile: Object.freeze({
+      // xAI reasoning models accept but do not honor stop sequences.
+      silentlyIgnored: Object.freeze(["stopSequences"])
+    })
   })
 ]);
+
 
 /**
  * Returns the Anthropic model string for the current tenant.

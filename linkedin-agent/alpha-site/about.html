@@ -16,7 +16,7 @@
       --accent:    #1a3a5c;
       --accent-lt: #e8edf2;
       --muted:     #6b6659;
-      --gap:       2.5rem;
+      --gap:       1.5rem;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -122,6 +122,27 @@
       margin-bottom: 0.2rem;
     }
 
+    .invert {
+      list-style: none;
+      margin-top: 1.25rem;
+      display: grid;
+      gap: 1.1rem;
+    }
+
+    .invert li {
+      background: var(--accent-lt);
+      border-left: 3px solid var(--accent);
+      padding: 0.5rem 1.0rem;
+    }
+
+    .invert .p-title {
+      display: block;
+      font-weight: 500;
+      color: var(--accent);
+      margin-bottom: 0.2rem;
+      /* text-align: center; */
+    }
+
     .contact-card {
       margin-top: 1.25rem;
       border: 1px solid var(--rule);
@@ -132,9 +153,14 @@
     .contact-card a {
       color: var(--accent);
       font-weight: 500;
-      text-decoration: none;
     }
-    .contact-card a:hover { text-decoration: underline; }
+    .contact-card a:hover { text-decoration: none; }
+
+    .contact-addy a {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .contact-addy a:hover { text-decoration: none; }
 
     .contact-note {
       color: var(--muted);
@@ -164,18 +190,27 @@
 
   <main>
     <p class="kicker">Contact &amp; About</p>
-    <h1>Visibility on a professional network is not won by posting more often.</h1>
+    <h1>Consistency Wins Visibility</h1>
     <p class="byline">Brandon, Founder, majiklTrust Market Intelligence, LLC. Illinois, USA.</p>
 
     <p>
-      It is won by showing up consistently with something worth reading, and
-      most businesses cannot sustain that because the research is the expensive
-      part. majikl inverts that cost.
+      Visibility is earned by showing up, week after week, with something worth reading.<br/>
+      Most businesses cannot sustain expensive quality research.<br/>
+
+    <ul class="invert">
+      <li>
+        <span class="p-title">majikl inverts this cost</span>
+        Research arrives done, attributed to named sources, and scored for quality.<br/>
+        Your team decides only what the company says.
+      </li>
+    
+    <p class="contact-addy" style="margin-top: 0.25rem;">
+      <a href="mailto:brandon@***REMOVED***">brandon@***REMOVED***</a><br/>
     </p>
 
-    <h2>Already researched before you read it</h2>
+    <h2>Researched First</h2>
     <p>
-      The platform watches the sources your market actually reads, feed by
+      The platform watches the media sources for your market, feed by
       curated feed, and turns what it finds into drafts that arrive already
       researched, already attributed to a named primary source, and already
       scored for quality. Your team's job narrows to the one decision only a
@@ -190,7 +225,7 @@
       content calendar that quietly goes empty during a busy quarter.
     </p>
 
-    <h2>Reach compounds through people your audience already trusts</h2>
+    <h2>Compound The Reach</h2>
     <p>
       The larger gain in reach comes from the people who already work there. A
       company page reaches the followers it has. An employee's profile reaches
@@ -212,7 +247,7 @@
       guesswork.
     </p>
 
-    <h2>Built by someone who does not publish what he cannot verify</h2>
+    <h2>Built On Trust</h2>
     <p>
       Our founder is the engineer who set and enforces the standard
       on every line of the platform, from the database to the page you are
@@ -244,7 +279,7 @@
       can fix it, usually the same day.
     </p>
 
-    <h2>The principles the platform is held to</h2>
+    <h2>Principles The Platform Holds To</h2>
     <ul class="principles">
       <li>
         <span class="p-title">The human has the first, last, and final word.</span>
@@ -281,7 +316,7 @@
       </p>
       <p class="contact-note">
         Direct answers, usually fast. If something is broken, include what you
-        expected and what you saw; that is the whole debugging religion here.
+        expected and what you saw; that is the mantra.
       </p>
     </div>
   </main>

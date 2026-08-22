@@ -4,7 +4,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity } from "./database.js";
+import { getLastPostedTopic, getRecentPosts, getAgentState, logActivity, logActivityBestEffort } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { frameUntrustedContent } from "./prompt-framing.js";
 import { getAnthropicApiKey } from "../tenant/credential-store.js";
@@ -178,7 +178,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       enough: researchBrief.hasEnoughMaterial
     });
   } catch (err) {
-    await logActivity("warn", "research_unavailable", {
+    // Best effort: if research failed by ABORTING the tenant
+    // transaction, a plain logActivity here would throw 25P02 and
+    // this catch would fail the run instead of degrading it.
+    await logActivityBestEffort("warn", "research_unavailable", {
       cycleId, topicId: topic.slug, error: err.message
     });
   }
@@ -506,7 +509,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       }
     };
   } catch (err) {
-    await logActivity("error", "content_generation_failed", {
+    // Best effort: this catch RETHROWS the original error below. A
+    // plain logActivity on an aborted transaction would throw 25P02
+    // first and the caller would see the logging failure instead of
+    // the real cause.
+    await logActivityBestEffort("error", "content_generation_failed", {
       cycleId, topicId: topic.slug, error: err.message
     });
     platformLog("error", "content_generation_failed", {

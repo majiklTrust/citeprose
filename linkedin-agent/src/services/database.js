@@ -569,6 +569,36 @@ export async function logActivity(level, action, details = null, userSub = null)
   );
 }
 
+// 4.25111.15 (refactor item 14). For CATCH BLOCKS only. logActivity
+// writes inside the ambient tenant transaction, and when an earlier
+// statement in that transaction has failed, PostgreSQL rejects every
+// later statement on it (25P02,
+// "current transaction is aborted"). A catch that calls plain
+// logActivity to RECORD a failure then throws its own error, and the
+// controlled degrade the catch was written to provide becomes an
+// uncontrolled propagation. Proven by execution on 2026-08-22: an
+// aborted transaction turned gatherWebSearchMaterial's return-empty
+// path into a thrown "current transaction is aborted".
+//
+// This variant never throws. The attempt is made; on failure the
+// event is preserved through platformLog, which writes on its own
+// pool connection and survives an aborted tenant transaction.
+export async function logActivityBestEffort(level, action, details = null, userSub = null) {
+  try {
+    await logActivity(level, action, details, userSub);
+  } catch (err) {
+    try {
+      const { platformLog } = await import("./platform-log.js");
+      platformLog("warn", "activity_log_write_failed",
+        { action, error: err && err.message ? err.message : String(err) });
+    } catch {
+      // Nothing left to report with. Swallowing here is the entire
+      // point of the function: a logging failure must never outrank
+      // the failure being logged.
+    }
+  }
+}
+
 export async function getActivityLog(limit = 100) {
   const c = client();
   const r = await c.query(

@@ -13,7 +13,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { getArticlesForTopic } from "./news-monitor.js";
-import { logActivity } from "./database.js";
+import { logActivity, logActivityBestEffort } from "./database.js";
 import { platformLog } from "./platform-log.js";
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { TRUST_TIERS, SOURCE_RULES } from "../config/feeds.js";
@@ -171,10 +171,8 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const webSearchEntry = MODELS.find((m) => m.id === model);
 
   try {
-    const client = await newAnthropicClient();
-
     // No row means this deployment has not configured web search for
-    // the selected model. Refuse HERE.
+    // the selected model. Refuse HERE, and refuse FIRST.
     //
     // The danger is NOT that the vendor would reject the request. With
     // no tools key the vendor accepts it and returns an ordinary
@@ -182,9 +180,17 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // nothing. A silent empty result is worse than a loud refusal,
     // because the run continues and the post is built from RSS alone
     // with nothing on the page saying why.
+    //
+    // The gate runs BEFORE client construction (4.25111.15, refactor
+    // item 14) because it is a pure map lookup that needs no
+    // credential. In the reverse order a credential failure threw
+    // first and the configuration refusal was never heard; each
+    // problem now reports as itself.
     if (!webSearchEntry || !webSearchEntry.tool) {
       throw new Error("no web search tool configured for this model");
     }
+
+    const client = await newAnthropicClient();
 
     var vaultGet = actionToken
       ? (key) => getAuthorizedPrompt(key, actionToken)
@@ -297,7 +303,10 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     }, attempted));
     platformLog("error", "web_search_failed",
       Object.assign({ cycleId, error: err && err.message }, attempted));
-    await logActivity("error", "web_search_failed",
+    // Best effort: when the error being recorded ABORTED the tenant
+    // transaction, a plain logActivity here would throw 25P02 and
+    // replace this catch's return-empty degrade with a propagation.
+    await logActivityBestEffort("error", "web_search_failed",
       Object.assign({ cycleId, error: err.message }, attempted));
     return [];
   }
@@ -380,9 +389,8 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     // A Lab run uses the model the operator selected, the SAME one
     // generation uses. Falling through to the tenant's agent_state
     // value would pair the platform key with a model from a different
-    // account, which is what produced "model does not exist".
-    // This stage sends NO tool block, so the web_search notes on
-    // the stage above do not apply here.
+    // account. This stage sends NO tool block, so the web_search
+    // notes on the stage above do not apply here.
     const lab = labRun();
     const model = lab ? lab.model : await getAnthropicModel();
 
@@ -481,7 +489,9 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       error: err && err.message ? err.message : String(err)
     });
     platformLog("error", "corroboration_failed", { cycleId, error: err && err.message });
-    await logActivity("error", "corroboration_failed", { cycleId, error: err.message });
+    // Best effort for the same reason as the web_search catch: the
+    // recorded error may itself have aborted the tenant transaction.
+    await logActivityBestEffort("error", "corroboration_failed", { cycleId, error: err.message });
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }
 }

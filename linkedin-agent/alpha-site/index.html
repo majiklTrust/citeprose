@@ -30,9 +30,9 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- Shared tokens and base styles from the dashboard -->
-  <link rel="stylesheet" href="/app/styles/app.css?v=110" />
+  <link rel="stylesheet" href="/app/styles/app.css?v=111" />
   <!-- Marketing-specific components and scoped overrides -->
-  <link rel="stylesheet" href="/styles/alpha.css?v=110" />
+  <link rel="stylesheet" href="/styles/alpha.css?v=111" />
 </head>
 <body>
   <div class="ambient-glow" aria-hidden="true"></div>
@@ -90,27 +90,27 @@
              Each shot is viewer-resizable by its corner handle. -->
         <div class="hero-shots" aria-label="Product screenshots">
           <figure class="shot">
-            <img src="/assets/editorial5.png?v=110" alt="editorial photo 2"
+            <img src="/assets/editorial5.png?v=111" alt="editorial photo 2"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
           <figure class="shot">
-            <img src="/assets/editorial4.png?v=110" alt="editorial photo 1"
+            <img src="/assets/editorial4.png?v=111" alt="editorial photo 1"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
           <figure class="shot">
-            <img src="/assets/editorial6.png?v=110" alt="editorial photo 3"
+            <img src="/assets/editorial6.png?v=111" alt="editorial photo 3"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
           <figure class="shot">
-            <img src="/assets/metaphor4.png?v=110" alt="metaphor photo 1"
+            <img src="/assets/metaphor4.png?v=111" alt="metaphor photo 1"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
           <figure class="shot">
-            <img src="/assets/metaphor5.png?v=110" alt="metaphor photo 2"
+            <img src="/assets/metaphor5.png?v=111" alt="metaphor photo 2"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
           <figure class="shot">
-            <img src="/assets/metaphor6.png?v=110" alt="metaphor photo 3"
+            <img src="/assets/metaphor6.png?v=111" alt="metaphor photo 3"
                  onerror="this.closest('.shot').style.display='none'" />
           </figure>
         </div>
@@ -304,7 +304,7 @@
                 <figure class="shot">
                   <div class="shot-window">
                     <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/topics-add.png?v=110" alt="Topic Manager with the Add Topic dialog open, naming a new subject" loading="lazy" decoding="async">
+                    <img class="shot-img" src="/assets/topics-add.png?v=111" alt="Topic Manager with the Add Topic dialog open, naming a new subject" loading="lazy" decoding="async">
                   </div>
                   <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Topics &gt; Add Topic</span></figcaption>
                 </figure>
@@ -322,7 +322,7 @@
                 <figure class="shot">
                   <div class="shot-window">
                     <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/research-gathering.png?v=110" alt="Research view showing gathered articles collecting under the chosen topic" loading="lazy" decoding="async">
+                    <img class="shot-img" src="/assets/research-gathering.png?v=111" alt="Research view showing gathered articles collecting under the chosen topic" loading="lazy" decoding="async">
                   </div>
                   <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
                 </figure>
@@ -340,7 +340,7 @@
                 <figure class="shot">
                   <div class="shot-window">
                     <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/generate-new-post.png?v=110" alt="New Post action generating a drafted LinkedIn post from the gathered research" loading="lazy" decoding="async">
+                    <img class="shot-img" src="/assets/generate-new-post.png?v=111" alt="New Post action generating a drafted LinkedIn post from the gathered research" loading="lazy" decoding="async">
                   </div>
                   <figcaption><span class="shot-pathline">Click path: Dashboard &gt; New Post &gt; Generate with AI</span></figcaption>
                 </figure>
@@ -358,7 +358,7 @@
                 <figure class="shot">
                   <div class="shot-window">
                     <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/draft-review-approve.png?v=110" alt="Review queue with a draft open for editing and the approve control visible" loading="lazy" decoding="async">
+                    <img class="shot-img" src="/assets/draft-review-approve.png?v=111" alt="Review queue with a draft open for editing and the approve control visible" loading="lazy" decoding="async">
                   </div>
                   <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit or Approve</span></figcaption>
                 </figure>
@@ -477,9 +477,9 @@
 
     <section class="alpha-section-cta">
       <div class="site-container cta-inner">
-        <h2 class="cta-title">Research Your First Post Today</h2>
+        <h2 class="cta-title">Research Your First Draft Today</h2>
         <p class="cta-lede">
-          Sign in, add a topic, and compose - the blank page ends there.
+          Sign in, add a topic, and compose. The blank page ends there.
         </p>
         <a
           class="js-auth-cta btn btn-primary btn-lg"
@@ -488,13 +488,66 @@
         >Visit Dashboard</a>
       </div>
     </section>
+
+    <!-- ══ CONTACT ══════════════════════════════════════════════
+         Deliberately LIGHT on a dark page: this is the one place
+         asking the visitor to type, and it should read as a form,
+         not as more page.
+
+         No backend. Submit composes a mailto: in the visitor's own
+         mail client, then moves them to the About page. Nothing is
+         posted anywhere and nothing is stored. -->
+    <section id="contact" class="alpha-section-contact">
+      <div class="site-container">
+        <div class="contact-panel">
+          <h2 class="contact-title">Connect With A Person</h2>
+          <p class="contact-lede">
+            Questions, access requests, or a use case you want to argue about.
+            This opens your own mail app with the message ready to send.
+          </p>
+
+          <form id="contact-form" class="contact-form" novalidate>
+            <div class="contact-field">
+              <label for="contact-name">Name</label>
+              <input id="contact-name" name="name" type="text"
+                     autocomplete="name" required maxlength="120"
+                     placeholder="Your name" />
+            </div>
+
+            <div class="contact-field">
+              <label for="contact-email">Email</label>
+              <input id="contact-email" name="email" type="email"
+                     autocomplete="email" required maxlength="200"
+                     placeholder="you@company.com" />
+            </div>
+
+            <div class="contact-field">
+              <label for="contact-message">How may we be of service to you?</label>
+              <textarea id="contact-message" name="message" rows="5"
+                        required maxlength="2000"
+                        placeholder="Let us know what you want to achieve."></textarea>
+            </div>
+
+            <p id="contact-error" class="contact-error" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg contact-submit">
+              Send message
+            </button>
+
+            <p class="contact-note">
+              Opens your mail application. Nothing is sent from this page.
+            </p>
+          </form>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
     <div class="site-container footer-inner">
       <p class="footer-copy">
         &copy; 2026 majiklTrust, Market Intelligence, LLC.
-        <span class="footer-copy-version">v4.25111.6-110</span>
+        <span class="footer-copy-version">v4.25111.6-111</span>
       </p>
       <nav class="footer-nav" aria-label="Footer">
         <a href="signup.html">Sign Up</a>

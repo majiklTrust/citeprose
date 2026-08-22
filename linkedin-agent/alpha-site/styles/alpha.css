@@ -797,3 +797,112 @@
 .footer-copy-version {
 font-size: 0.5rem;color: var(--text-muted);text-decoration: none;padding-left: 6.0rem;
 }
+/* ═══════════════════════════════════════════════════════════════
+   CONTACT
+   ═══════════════════════════════════════════════════════════════
+   The one LIGHT surface on a dark page. Every other section is a
+   dark card on a darker background, which is right for reading and
+   wrong for typing: a dark input reads as disabled, and the caret
+   is hard to find. Inverting the panel makes it unmistakably a
+   place to enter something, and gives the page a visual full stop
+   after the closing CTA.
+
+   Colours are literal rather than token based on purpose. The
+   palette in app.css defines ONE theme, a dark one; --text-primary
+   is #e8ecf4 and would be invisible here. Reusing those names for
+   an inverted surface would make the tokens mean two opposite
+   things depending on where they are read. */
+
+.alpha-section-contact {
+  padding: 0 0 6rem;
+  position: relative;
+  z-index: 1;
+}
+
+.contact-panel {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  background: #f4f6fb;
+  border: 1px solid #d7dced;
+  border-radius: 16px;
+  /* Lifted off the dark background rather than outlined, so the
+     panel reads as sitting above the page. */
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+}
+
+.contact-title {
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.contact-lede {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #4b5565;
+  margin-bottom: 1.75rem;
+}
+
+.contact-field { margin-bottom: 1.25rem; }
+
+.contact-field label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.4rem;
+}
+
+.contact-field input,
+.contact-field textarea {
+  display: block;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #c3cadb;
+  border-radius: 8px;
+  /* Vertical only: horizontal resize breaks the panel width. */
+  resize: vertical;
+}
+
+.contact-field input::placeholder,
+.contact-field textarea::placeholder { color: #98a2b3; }
+
+.contact-field input:focus,
+.contact-field textarea:focus {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+  border-color: var(--accent-blue);
+}
+
+/* Only after a submit attempt. Marking a field invalid while it is
+   still being filled in scolds the visitor mid-keystroke. */
+.contact-form.was-submitted .contact-field input:invalid,
+.contact-form.was-submitted .contact-field textarea:invalid {
+  border-color: var(--accent-red);
+}
+
+.contact-error {
+  font-size: 0.9rem;
+  color: #b42318;
+  margin-bottom: 1rem;
+}
+
+.contact-submit { width: 100%; }
+
+.contact-note {
+  font-size: 0.8125rem;
+  color: #667085;
+  text-align: center;
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .contact-panel { padding: 1.75rem 1.25rem; }
+}

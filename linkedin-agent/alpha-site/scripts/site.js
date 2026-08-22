@@ -163,7 +163,73 @@
     updateCtas('unauth');
   }
 
+  // ── Contact form ───────────────────────────────────────────
+  // No backend. Submitting composes a message in the visitor's own
+  // mail client and then moves them to the About page.
+  //
+  // Two mechanics worth knowing:
+  //
+  //   Setting location to a mailto: URL hands off to the mail
+  //   application WITHOUT unloading the page, so the redirect has to
+  //   be a second, separate navigation. Issuing both in the same tick
+  //   can cancel the handoff, hence the short delay.
+  //
+  //   encodeURIComponent is applied to every field. A raw newline,
+  //   ampersand or hash in the message would otherwise truncate the
+  //   body or forge extra mailto headers such as cc or bcc.
+  var CONTACT_TO = 'brandon@***REMOVED***';
+  var CONTACT_REDIRECT = 'about.html';
+  var CONTACT_HANDOFF_MS = 400;
+
+  function buildMailto(name, email, message) {
+    var subject = 'Website enquiry from ' + name;
+    var body =
+      'Name: ' + name + '\n' +
+      'Email: ' + email + '\n\n' +
+      'How may we be of service to you?\n' +
+      message + '\n';
+    return 'mailto:' + CONTACT_TO +
+      '?subject=' + encodeURIComponent(subject) +
+      '&body=' + encodeURIComponent(body);
+  }
+
+  function wireContactForm() {
+    var form = document.getElementById('contact-form');
+    if (!form) return;
+    var error = document.getElementById('contact-error');
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      // novalidate on the form suppresses the browser's own bubbles so
+      // one message can be shown in the panel; the constraints are
+      // still declared in the HTML and still checked here.
+      form.classList.add('was-submitted');
+      if (!form.checkValidity()) {
+        if (error) {
+          error.textContent =
+            'Please add your name, a valid email address, and a message.';
+          error.hidden = false;
+        }
+        var firstInvalid = form.querySelector(':invalid');
+        if (firstInvalid && firstInvalid.focus) firstInvalid.focus();
+        return;
+      }
+      if (error) error.hidden = true;
+
+      var name = form.elements.name.value.trim();
+      var email = form.elements.email.value.trim();
+      var message = form.elements.message.value.trim();
+
+      window.location.href = buildMailto(name, email, message);
+      window.setTimeout(function () {
+        window.location.href = CONTACT_REDIRECT;
+      }, CONTACT_HANDOFF_MS);
+    });
+  }
+
   function init() {
+    wireContactForm();
     probe().then(apply);
   }
 

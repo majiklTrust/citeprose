@@ -488,6 +488,59 @@
         >Visit Dashboard</a>
       </div>
     </section>
+
+    <!-- ══ CONTACT ══════════════════════════════════════════════
+         Deliberately LIGHT on a dark page: this is the one place
+         asking the visitor to type, and it should read as a form,
+         not as more page.
+
+         No backend. Submit composes a mailto: in the visitor's own
+         mail client, then moves them to the About page. Nothing is
+         posted anywhere and nothing is stored. -->
+    <section id="contact" class="alpha-section-contact">
+      <div class="site-container">
+        <div class="contact-panel">
+          <h2 class="contact-title">Connect With A Person</h2>
+          <p class="contact-lede">
+            Questions, access requests, or a use case you want to argue about.
+            This opens your own mail app with the message ready to send.
+          </p>
+
+          <form id="contact-form" class="contact-form" novalidate>
+            <div class="contact-field">
+              <label for="contact-name">Name</label>
+              <input id="contact-name" name="name" type="text"
+                     autocomplete="name" required maxlength="120"
+                     placeholder="Your name" />
+            </div>
+
+            <div class="contact-field">
+              <label for="contact-email">Email</label>
+              <input id="contact-email" name="email" type="email"
+                     autocomplete="email" required maxlength="200"
+                     placeholder="you@company.com" />
+            </div>
+
+            <div class="contact-field">
+              <label for="contact-message">How may we be of service to you?</label>
+              <textarea id="contact-message" name="message" rows="5"
+                        required maxlength="2000"
+                        placeholder="Let us know what you want to achieve."></textarea>
+            </div>
+
+            <p id="contact-error" class="contact-error" role="alert" hidden></p>
+
+            <button type="submit" class="btn btn-primary btn-lg contact-submit">
+              Send message
+            </button>
+
+            <p class="contact-note">
+              Opens your mail application. Nothing is sent from this page.
+            </p>
+          </form>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">

@@ -293,22 +293,37 @@ function attachPromptsToCalls(byCall, slots) {
 //
 // Only content_generator is genre-aware; every other key is read at
 // the default genre because that is what the pipeline requests.
-function slotPlan(genre, corroborated) {
-  const plan = [
-    ["research_assistant", "default"]
+// EVERY prompt the pipeline can read, in pipeline order. No
+// conditions: this is a catalogue of what exists, not a record of
+// what ran. Both brief variants appear even though only one can serve
+// a given run, because both exist in the vault and the panel lists
+// the vault.
+//
+// Which of these a RUN actually read is answered separately, by
+// usedInRun below, from the trace. Keeping the two apart is what lets
+// the page show the full set on load and mark the used ones after.
+function slotPlan(genre) {
+  return [
+    ["research_assistant", "default"],
+    ["corroboration_analyst", "default"],
+    ["untrusted_content_prefix", "default"],
+    ["untrusted_content_suffix", "default"],
+    ["research_brief_corroborated", "default"],
+    ["research_brief_uncorroborated", "default"],
+    ["content_generator", genre],
+    ["quality_reviewer", "default"]
   ];
-  // corroboration_analyst is read ONLY when corroboration runs.
-  // Listing it unconditionally presented a prompt that had no part
-  // in the run.
-  if (corroborated) plan.push(["corroboration_analyst", "default"]);
-  // The injection boundary frameUntrustedContent wraps around all
-  // untrusted external content before it reaches generation.
-  plan.push(["untrusted_content_prefix", "default"]);
-  plan.push(["untrusted_content_suffix", "default"]);
-  plan.push([corroborated ? "research_brief_corroborated" : "research_brief_uncorroborated", "default"]);
-  plan.push(["content_generator", genre]);
-  plan.push(["quality_reviewer", "default"]);
-  return plan;
+}
+
+// The subset a run read. Corroboration decides both the analyst and
+// which brief serves, so it decides this whole answer.
+function usedInRun(corroborated) {
+  return corroborated
+    ? ["research_assistant", "corroboration_analyst", "untrusted_content_prefix",
+       "untrusted_content_suffix", "research_brief_corroborated",
+       "content_generator", "quality_reviewer"]
+    : ["research_assistant", "untrusted_content_prefix", "untrusted_content_suffix",
+       "research_brief_uncorroborated", "content_generator", "quality_reviewer"];
 }
 
 /**
@@ -321,14 +336,17 @@ function slotPlan(genre, corroborated) {
  * researchSummary is absent and the panel would silently claim the
  * corroborated path had run.
  */
-// corroborated: from the TRACE after a run, because the trace records
-// what the pipeline actually did. On /meta there is no run yet, so the
-// caller passes the tenant's own setting as the best prediction of
-// which brief prompt will serve.
-async function collectPromptSlots(genre, corroborated) {
+// Reads the WHOLE catalogue. Which of these a run touched is a
+// separate question, answered by the caller with usedInRun and
+// carried on each slot as `used`, so one shape serves both the page
+// load and the post-run marking.
+//
+// usedKeys null means "not a run": every slot reports used: false.
+async function collectPromptSlots(genre, usedKeys) {
+  const used = usedKeys ? new Set(usedKeys) : null;
 
   const slots = [];
-  for (const [key, g] of slotPlan(genre, corroborated)) {
+  for (const [key, g] of slotPlan(genre)) {
     let provenance = null;
     let liveMetricBearing = null;
     try {
@@ -345,12 +363,13 @@ async function collectPromptSlots(genre, corroborated) {
       platformLog("warn", "lab_prompt_slot_failed", { key, genre: g, error: err.message });
     }
     if (!provenance) {
-      slots.push({ key, requestedGenre: g, present: false });
+      slots.push({ key, requestedGenre: g, present: false, used: used ? used.has(key) : false });
       continue;
     }
     slots.push({
       key,
       requestedGenre: g,
+      used: used ? used.has(key) : false,
       present: true,
       resolvedGenre: provenance.resolvedGenre,
       fallback: provenance.fallback,
@@ -469,9 +488,12 @@ export default function createPlatformAdminLabRoutes() {
 
       // Returned here so a template can be read and edited BEFORE the
       // first run, which matters once a run costs money.
+      //
+      // No used keys: nothing has run, so every slot reports
+      // used: false and the page lists the catalogue.
       const promptSlots = await collectPromptSlots(
         GENRE_RE.test(requestedGenre) ? requestedGenre : "default",
-        scoped.corroboration
+        null
       );
 
       res.json({
@@ -626,12 +648,16 @@ export default function createPlatformAdminLabRoutes() {
           return { generated, quality };
         });
 
-        // Which vault row served each prompt this run used. Read
-        // AFTER the run so a genre fallback is reported as it
-        // actually resolved.
+        // Which vault row served each prompt, for the WHOLE catalogue,
+        // with the ones this run read flagged. Read AFTER the run so a
+        // genre fallback is reported as it actually resolved.
+        //
+        // Whether corroboration ran comes from the TRACE, not from the
+        // setting: the trace records what the pipeline did, and an
+        // inference can be wrong.
         const promptSlots = await collectPromptSlots(
           genre,
-          trace.toJSON().stages.some((st) => st.id === "corroboration_request")
+          usedInRun(trace.toJSON().stages.some((st) => st.id === "corroboration_request"))
         );
         return { ...result, promptSlots };
       });

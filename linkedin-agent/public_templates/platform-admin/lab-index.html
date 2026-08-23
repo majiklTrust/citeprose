@@ -492,6 +492,11 @@ pre.post-body {
 /* Checked and active are different things, shown differently: the
    tick colours the rail, being displayed fills the row. */
 .slot-item.is-checked { border-left-color: var(--gate); }
+/* USED means "this run actually read it". Marked in the same gate
+   purple the egress marker carries, because both answer the question
+   "did this leave the building". Cleared by anything that discards
+   the run, since the mark describes one run and nothing else. */
+.slot-item.is-used .slot-key { color: var(--gate); font-weight: 700; }
 .slot-item.is-active  { background: #f2ecfb; font-weight: 700; }
 .slot-item .slot-key {
   flex: 1 1 auto; min-width: 0;
@@ -713,6 +718,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     running: false, elapsed: 0,
     meta: null, tenantList: [], slots: null,
     checkedSlots: {}, activeSlot: null, promptEdits: {},
+    metaSlots: null, usedSlots: {}, runStale: false,
     // Setup failure and run failure are SEPARATE. A setup failure
     // renders in the setup panel; the inspector stays free for stage
     // payloads and stage errors, so a run failure is never hidden
@@ -815,8 +821,9 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       state.meta = meta;
       clearSetupError();
       applyMeta(meta);
-      renderPromptSlots(meta.promptSlots || null);
-      setStatus("idle", "Ready.");
+      state.metaSlots = meta.promptSlots || null;
+      renderPromptSlots(state.metaSlots);
+      if (!state.runStale) setStatus("idle", "Ready.");
       renderInspector();
     })
     .catch(function (err) {
@@ -846,8 +853,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
         state.meta = meta;
         clearSetupError();
         applyMeta(meta);
-        renderPromptSlots(meta.promptSlots || null);
-        setStatus("idle", "Ready.");
+        state.metaSlots = meta.promptSlots || null;
+        renderPromptSlots(state.metaSlots);
+        // A genre or tenant change reloads meta AFTER marking the run
+        // stale. Overwriting the status here would erase the only
+        // notice that the displayed outcome no longer matches setup.
+        if (!state.runStale) setStatus("idle", "Ready.");
         renderInspector();
       })
       .catch(function (err) {
@@ -859,15 +870,25 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
 
   function applyMeta(meta) {
     fillTopics(meta.topics || []);
-    fill($("sel-genre"), meta.genres || [], "default");
-    // Corroboration has no tri-state. The selector defaults to the
-    // tenant's own agent_state value, so what is on screen is what
-    // the tenant is actually set to. meta.corroboration is the
-    // boolean form of agent_state 'corroboration', which reads
-    // enabled unless the row says 'disabled'.
+
+    // applyMeta runs on a GENRE CHANGE, not only on load, so every
+    // selector it touches must keep what the operator chose. Snapping
+    // genre back to "default" was the worst of these: the meta request
+    // had already gone out for the new genre, so the page would show
+    // one genre while holding another genre's templates.
+    var curGenre = $("sel-genre").value;
+    var genres = meta.genres || [];
+    fill($("sel-genre"), genres,
+      genres.indexOf(curGenre) >= 0 ? curGenre : "default");
+
+    // Corroboration has no tri-state. It defaults to the tenant's own
+    // agent_state value on FIRST load, so what is on screen is what
+    // the tenant is actually set to. A later reload keeps whatever the
+    // operator set, since a genre change is not a reason to revert it.
+    var curCorrob = $("sel-corroboration").value;
     fill($("sel-corroboration"),
       [{ id: "on", label: "On" }, { id: "off", label: "Off" }],
-      meta.corroboration === false ? "off" : "on");
+      curCorrob || (meta.corroboration === false ? "off" : "on"));
     var providerOpts = (meta.providers || []).map(function (p) {
       var parked = p.textGeneration && p.textGeneration !== "available";
       return { id: p.id, label: p.label + (parked ? " (not yet available)" : ""),
@@ -875,8 +896,17 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     });
     var cur = meta.current || {};
     if (!cur.provider) providerOpts.unshift({ id: "", label: "Not Set" });
-    fill($("sel-provider"), providerOpts, cur.provider);
-    fillModels(cur.model);
+    // Same rule again. The tenant's configured provider is a DEFAULT
+    // for first load; once the operator has chosen one it survives a
+    // reload, and only falls back when the new list does not offer it.
+    var curProvider = $("sel-provider").value;
+    var offersProvider = providerOpts.some(function (p) { return p.id === curProvider; });
+    fill($("sel-provider"), providerOpts, offersProvider ? curProvider : cur.provider);
+    // The OPERATOR's model wins over the server's when one is already
+    // chosen. applyMeta runs on a genre change too, and genre has
+    // nothing to do with models; passing cur.model there discarded a
+    // deliberate selection on an unrelated change.
+    fillModels($("sel-model").value || cur.model);
     var research = meta.research || {};
   }
 
@@ -903,10 +933,16 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     sel.dataset.unset = sel.value === "" ? "true" : "false";
   }
 
+  // Same preservation rule as angles and models. applyMeta runs on a
+  // GENRE change as well as on load, and genre has nothing to do with
+  // topics; repopulating unconditionally sent the operator back to
+  // the first topic, and the angle with it.
   function fillTopics(topics) {
+    var current = $("sel-topic").value;
     state.topics = {};
     topics.forEach(function (t) { state.topics[t.id] = t; });
-    fill($("sel-topic"), topics.map(function (t) { return { id: t.id, label: t.label }; }));
+    var keep = topics.some(function (t) { return t.id === current; }) ? current : null;
+    fill($("sel-topic"), topics.map(function (t) { return { id: t.id, label: t.label }; }), keep);
     $("sel-topic").disabled = topics.length === 0;
     fillAngles();
   }
@@ -914,7 +950,12 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   // Angles belong to the topic. There is no auto rotation option:
   // the first content angle is the default, so a run always states
   // the perspective it writes from.
+  // The current angle is KEPT when the new topic also offers it.
+  // Repopulating unconditionally silently replaced a deliberate
+  // choice with whatever happened to be first, which is the same
+  // defect the model list had.
   function fillAngles() {
+    var current = $("sel-angle").value;
     var topic = (state.topics || {})[$("sel-topic").value];
     var angles = (topic && topic.angles) || [];
     if (angles.length === 0) {
@@ -923,7 +964,9 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       return;
     }
     $("sel-angle").disabled = false;
-    fill($("sel-angle"), angles);
+    // angles is a list of plain strings, so an entry IS its id.
+    var keep = angles.indexOf(current) >= 0 ? current : null;
+    fill($("sel-angle"), angles, keep);
   }
 
   // Provider and Model are BOTH set or BOTH empty. Changing provider
@@ -1467,7 +1510,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     slots.forEach(function (slot) {
       var checked = !!state.checkedSlots[slot.key];
       var active = state.activeSlot === slot.key;
-      var item = el("div", "slot-item" + (checked ? " is-checked" : "") + (active ? " is-active" : ""));
+      var item = el("div", "slot-item" + (checked ? " is-checked" : "") + (active ? " is-active" : "") + (state.usedSlots[slot.key] ? " is-used" : ""));
 
       // Control 1: apply this override on Run. Any number ticked.
       var box = document.createElement("input");
@@ -1565,21 +1608,38 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     return out;
   }
 
+  // The server sends the WHOLE catalogue every time, with `used` set
+  // on the prompts a run actually read. So a run replaces the list
+  // outright rather than being merged into it: same keys, same order,
+  // fresher provenance, plus the flags.
+  //
+  // The page no longer decides what was used. It did briefly, by
+  // diffing two lists, and that could only ever be a guess about a
+  // decision the pipeline had already made.
+  function applyRunSlots(runSlots) {
+    state.usedSlots = {};
+    (runSlots || []).forEach(function (r) {
+      if (r && r.used) state.usedSlots[r.key] = true;
+    });
+    renderPromptSlots(runSlots || state.metaSlots);
+  }
+
   function clearPrompts() {
     state.checkedSlots = {};
     state.activeSlot = null;
     state.promptEdits = {};
-    invalidateRun();
-    renderPromptSlots(state.slots);
+    // Clear discards the OUTCOME as well, by ruling. It is the one
+    // control that throws work away, so it throws all of it away
+    // rather than leaving a run on screen that its overrides shaped.
+    clearOutcomes();
+    renderPromptSlots(state.metaSlots || state.slots);
   }
 
   // A completed run is cached so that walking the sequence does not
   // re-execute the pipeline. That cache has to die whenever the
   // override set changes, or pressing Run after an edit would replay
   // the OLD run and appear to do nothing.
-  function invalidateRun() {
-    if (state.run || state.runError) reset();
-  }
+  function invalidateRun() { markRunStale(); }
 
   function renderSlotDetail(view, slot) {
     if (!slot) {
@@ -1734,12 +1794,17 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   // stage records. Step and Run To Breakpoint replay those records
   // locally, which is why a run is requested once and only once.
   function requestRun() {
-    if (state.run) return Promise.resolve(state.run);
+    // The cache is what stops walking the sequence from re-executing
+    // the pipeline. It is dropped when the SETUP changes, not when the
+    // display changes: a stale run stays on screen for reading, but is
+    // never replayed as though it described the current selection.
+    if (state.run && !state.runStale) return Promise.resolve(state.run);
+    if (state.runError && state.runStale) state.runError = null;
     // A FAILED run is remembered too. Without this, every Step press
     // after a failure fires another POST at an endpoint that already
     // refused, which is noise at best and duplicate work at worst.
     // Reset is how the operator asks for a fresh attempt.
-    if (state.runError) return Promise.reject(state.runError);
+    if (state.runError && !state.runStale) return Promise.reject(state.runError);
     var body = {
       tenantId: $("sel-tenant").value,
       topicId: $("sel-topic").value,
@@ -1761,7 +1826,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     }).then(function (data) {
       state.run = data;
       state.runError = null;
-      renderPromptSlots(data.promptSlots);
+      applyRunSlots(data.promptSlots);
       renderResult(data.result, data.quality);
       return data;
     }, function (err) {
@@ -1853,19 +1918,52 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   // requestRun returns the cached result so continuing never
   // re-executes the pipeline. Reset is the only way to start a
   // genuinely new run.
-  function run() { state.running = true; syncButtons(); runLoop(); }
+  // Run discards the previous outcome before producing a new one, so
+  // the panels never show two runs mixed together. Continuing after a
+  // stop is NOT a new run and must not clear: nextIndex resumes from
+  // the cursor and the cached result is replayed.
+  function run() {
+    if (!state.run || state.runStale) clearOutcomes();
+    state.running = true;
+    syncButtons();
+    runLoop();
+  }
 
-  function reset() {
+  // Everything a completed run put on screen: the sequence rows, the
+  // inspector, the Result panel, and the used marks in Prompt Slots.
+  // Reset, Run and Clear call this. A selector change does NOT.
+  function clearOutcomes() {
     state.running = false;
     state.run = null;
     state.runError = null;
+    state.runStale = false;
+    // The used marks describe ONE run. Discarding the run discards
+    // them, or the page would claim a prompt was used by a run that
+    // no longer exists.
+    state.usedSlots = {};
     // The slot list belongs to meta, not to the run, so it survives a
     // reset along with checked state and parked edits. Only Clear
     // discards those.
+    if (state.metaSlots) renderPromptSlots(state.metaSlots);
     renderResult(null, null);
     loadSequence();
     setStatus("idle", "Idle. Run to begin.");
     syncButtons();
+  }
+
+  // The Reset CTA.
+  function reset() { clearOutcomes(); }
+
+  // A setup change makes the displayed run no longer describe the
+  // current selection. The run is marked STALE rather than discarded:
+  // it stays readable, and the next Run re-executes instead of
+  // replaying it. This is why changing a selector no longer wipes the
+  // panels.
+  function markRunStale() {
+    if (state.run || state.runError) {
+      state.runStale = true;
+      setStatus("idle", "Setup changed. Run to execute with the new selection.");
+    }
   }
 
   // Setup failures render in the setup panel they belong to.
@@ -1902,19 +2000,29 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     $("btn-reset").addEventListener("click", reset);
     // A different tenant means different vault rows, so a checked box
     // or a parked edit from the previous tenant must not carry over.
+    // Selector changes MARK the run stale. They no longer clear the
+    // sequence, the inspector or the Result panel: an outcome stays
+    // readable while the operator lines up the next run.
     $("sel-tenant").addEventListener("change", function () {
+      // A different tenant means a different vault, so an edit written
+      // against one tenant's row must not follow to another.
       state.checkedSlots = {}; state.activeSlot = null; state.promptEdits = {};
-      reset(); loadMeta();
+      markRunStale(); loadMeta();
     });
-    $("sel-topic").addEventListener("change", function () { fillAngles(); reset(); });
-    $("sel-provider").addEventListener("change", function () { fillModels(null); reset(); });
+    $("sel-topic").addEventListener("change", function () { fillAngles(); markRunStale(); });
+    // Pass the CURRENT model, not null. A provider that offers the
+    // same model keeps it; one that does not falls to its first, which
+    // is the only case where a replacement is unavoidable.
+    $("sel-provider").addEventListener("change", function () {
+      fillModels($("sel-model").value); markRunStale();
+    });
     // Genre selects which content_generator row serves, so the slots
     // are re-resolved. Parked edits survive: an override replaces
     // whatever row resolved, by ruling.
-    $("sel-genre").addEventListener("change", function () { reset(); loadMeta(); });
-    $("sel-model").addEventListener("change", reset);
+    $("sel-genre").addEventListener("change", function () { markRunStale(); loadMeta(); });
+    $("sel-model").addEventListener("change", markRunStale);
     ["sel-angle", "sel-corroboration"].forEach(function (id) {
-      $(id).addEventListener("change", reset);
+      $(id).addEventListener("change", markRunStale);
     });
     ["assembled", "args", "request", "response"].forEach(function (p) {
       $("tab-" + p).addEventListener("click", function () { state.pane = p; renderInspector(); });

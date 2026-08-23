@@ -844,12 +844,19 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   // Called only when the operator switches tenant. The tenantId is
   // always explicit here, so there is nothing for the route to
   // default and nothing for the page to correct.
+  // 4.25111.18 (refactor item 5): responses apply only if no newer
+  // request has been issued since. Two quick tenant or genre changes
+  // fire two fetches, and without this the LAST response to land won,
+  // which could describe a selection the operator had already left.
+  var metaRequestSeq = 0;
   function loadMeta(tenantId) {
     var id = tenantId || $("sel-tenant").value;
     if (!id) return Promise.resolve();
+    var seq = ++metaRequestSeq;
     return call(LAB + "/meta?tenantId=" + encodeURIComponent(id)
         + "&genre=" + encodeURIComponent($("sel-genre").value || "default"))
       .then(function (meta) {
+        if (seq !== metaRequestSeq) return;
         state.meta = meta;
         clearSetupError();
         applyMeta(meta);
@@ -862,6 +869,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
         renderInspector();
       })
       .catch(function (err) {
+        if (seq !== metaRequestSeq) return;
         state.meta = null;
         emptySelectors("Unavailable");
         fail("Could not load run setup", err);
@@ -1517,7 +1525,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       box.type = "checkbox";
       box.className = "slot-check";
       box.checked = checked;
-      box.disabled = !slot.present;
+      box.disabled = !slot.present || state.running;
       box.setAttribute("aria-label", "Apply override for " + slot.key);
       box.addEventListener("change", function () {
         state.checkedSlots[slot.key] = box.checked;
@@ -1559,7 +1567,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     var actions = el("div", "slot-actions");
     var clear = el("button", "btn", "Clear");
     clear.type = "button";
-    clear.disabled = !anyChecked() && !anyEdit() && !state.activeSlot;
+    clear.disabled = state.running || (!anyChecked() && !anyEdit() && !state.activeSlot);
     clear.addEventListener("click", clearPrompts);
     actions.appendChild(clear);
 
@@ -1701,6 +1709,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     var text = isEdited(slot.key) ? state.promptEdits[slot.key] : slot.template;
     var area = document.createElement("textarea");
     area.className = "slot-edit";
+    area.disabled = state.running;
     area.spellcheck = false;
     area.value = text;
     // Sized by line count, not by measuring: this node is not in the
@@ -1834,6 +1843,13 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     }, function (err) {
       state.runError = err;
       throw err;
+    }).finally(function () {
+      // 4.25111.18: the arrived response corresponds to the setup it
+      // was sent with, so it is fresh by definition. Without this, a
+      // staleness set while the POST was in flight made every later
+      // advance of the SAME walk re-issue a paid run. In a finally so
+      // a failed run cannot leave the flag armed either.
+      state.runStale = false;
     });
   }
 
@@ -1902,9 +1918,36 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     });
   }
 
+  // Returns a promise that settles when the walk stops for ANY
+  // reason (finished, stopped short, or a rejected advance), so the
+  // caller can hang cleanup on finally.
   function runLoop() {
-    if (!state.running) return;
-    advance().then(function (cont) { if (cont && state.running) runLoop(); });
+    if (!state.running) return Promise.resolve();
+    return advance().then(function (cont) {
+      if (cont && state.running) return runLoop();
+    });
+  }
+
+  // 4.25111.18 (refactor item 5). While a run is executing, every
+  // control that can change WHAT the run means is disabled: the
+  // setup selects, the override checkboxes, the template editor and
+  // Clear. A mid-run change used to mark the cached run stale, and a
+  // stale cache made every remaining advance issue a fresh PAID
+  // pipeline POST. The slot controls are rebuilt by renderPromptSlots
+  // mid-run, so their creation sites also consult state.running;
+  // this function covers whatever is in the document right now.
+  var SETUP_SELECT_IDS = ["sel-tenant", "sel-topic", "sel-angle",
+    "sel-genre", "sel-corroboration", "sel-provider", "sel-model"];
+  function setSetupLocked(locked) {
+    SETUP_SELECT_IDS.forEach(function (id) {
+      var elx = $(id);
+      if (elx) elx.disabled = locked;
+    });
+    document.querySelectorAll(".slot-check, .slot-edit, .slot-actions .btn")
+      .forEach(function (elx) { if (locked) elx.disabled = true; });
+    // Unlocking does not blanket-enable: checkbox and Clear disabled
+    // state depends on slot presence and edit state, so the unlock
+    // path re-renders the slots instead (see run()'s finally).
   }
 
   function finish() {
@@ -1927,7 +1970,17 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     if (!state.run || state.runStale) clearOutcomes();
     state.running = true;
     syncButtons();
-    runLoop();
+    setSetupLocked(true);
+    // The unlock lives in a finally so no failure path, rejected
+    // advance included, can leave the page locked.
+    runLoop()
+      .catch(function () { /* the failing row already reported it */ })
+      .finally(function () {
+        state.running = false;
+        setSetupLocked(false);
+        if (state.slots) renderPromptSlots(state.slots);
+        syncButtons();
+      });
   }
 
   // Everything a completed run put on screen: the sequence rows, the

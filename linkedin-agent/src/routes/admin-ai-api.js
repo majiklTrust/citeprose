@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// src/routes/admin-ai-api.js - owner AI vendor/model/key config
+// src/routes/admin-ai-api.js - owner AI Model Provider/model/key config
 // ═══════════════════════════════════════════════════════════════
 // Factory router mounted INSIDE admin-api.js, so every request has
 // already passed requireAuth -> resolveTenant -> requireNoDevBypass
@@ -7,15 +7,15 @@
 // check runs here as well: even mounted bare, these endpoints fail
 // closed for anyone but a clean tenant owner.
 //
-//   GET /ai-config  vendor + model choices (from the registry, so
+//   GET /ai-config  Model Provider + model choices (from the registry, so
 //                   the options track what the abstraction actually
 //                   supports) plus the tenant's current selection
 //                   and whether a key is stored (never the key).
 //   PUT /ai-config  save provider + model (+ apiKey). The key is
-//                   validated against the SELECTED vendor through
+//                   validated against the SELECTED Model Provider through
 //                   the provider abstraction BEFORE it is stored;
 //                   a key that fails validation is never persisted.
-//                   Switching vendor without a stored or supplied
+//                   Switching Model Provider without a stored or supplied
 //                   key fails closed.
 //
 // Factory + injectable deps (project convention): defaults reach
@@ -30,6 +30,7 @@ import { listProviders, listModels, getProvider, getModelProfile,
          textGenerationAvailability, textGenerationNotice,
          TEXT_GENERATION_NOTICE } from "../llm/registry.js";
 import { validateProviderKey, resolveTenantLlmSelection } from "../llm/client.js";
+import { validateModelProviderSelection, isModelProviderSelectionError } from "../llm/model-provider-selection.js";
 
 async function defaultWithTenant(tenantId, fn) {
   const { withTenant } = await import("../db/with-tenant.js");
@@ -96,16 +97,16 @@ export function createAiConfigRoutes(overrides = {}) {
   });
 
   // ── Read the choices and the current selection ──────────────
-  // Payments (2.3.5), ruling 2026-07-14: vendor management is an
+  // Payments (2.3.5), ruling 2026-07-14: Model Provider management is an
   // owner-only capability, explicit (manage_llm_vendor) rather
   // than inherited through the parent chain's manage_users.
   router.use(async (req, res, next) => {
     try {
       const role = req.tenant && req.tenant.role;
       if (role && await d.hasPermission(role, "manage_llm_vendor")) return next();
-      return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
+      return res.status(403).json({ error: "Managing the AI Model Provider requires owner access" });
     } catch {
-      return res.status(403).json({ error: "Managing the AI vendor requires owner access" });
+      return res.status(403).json({ error: "Managing the AI Model Provider requires owner access" });
     }
   });
 
@@ -119,7 +120,7 @@ export function createAiConfigRoutes(overrides = {}) {
           // 2.6.1: availability travels with the option so the page
           // renders the coming-soon note from server data, never from
           // a hardcoded client list. 2.6.5: the notice itself is
-          // per-vendor data too, so each parked vendor tells its own
+          // per-Model Provider data too, so each parked Model Provider tells its own
           // true story on the page.
           textGeneration: p.textGeneration || "available",
           textGenerationNotice: p.textGenerationNotice || TEXT_GENERATION_NOTICE,
@@ -157,7 +158,7 @@ export function createAiConfigRoutes(overrides = {}) {
     }
   });
 
-  // ── Save vendor + model (+ key), validate-before-store ──────
+  // ── Save Model Provider + model (+ key), validate-before-store ──────
   router.put("/ai-config", async (req, res) => {
     try {
       const body = req.body && typeof req.body === "object" ? req.body : {};
@@ -165,50 +166,57 @@ export function createAiConfigRoutes(overrides = {}) {
       const model = body.model;
       const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
 
-      // Zero Trust boundary: the selection must resolve in the
-      // registry or the request dies here, before any side effect.
+      // Zero Trust boundary, now enforced through the shared
+      // validator (4.25111.17, closing refactor item 8) so this card
+      // and the registration workflow can never diverge on what a
+      // storable selection is. Check order is unchanged: provider
+      // and model resolve in the registry, then the 2.6.1
+      // availability gate (a Model Provider whose text generation is
+      // not yet available can never become the workspace text
+      // provider, and the 2.6.5 refusal carries that provider's OWN
+      // notice), then validate-before-store on the key, so no Model
+      // Provider call is spent on a refused selection. Key
+      // validation stays authoritative here; the client-side check
+      // is UX only. This does NOT gate key storage for the image
+      // seam (Image Model section).
       let providerEntry;
       let profile;
       try {
-        providerEntry = d.getProvider(provider);
-        profile = d.getModelProfile(providerEntry.id, typeof model === "string" ? model.trim() : "", d.env);
-      } catch {
-        d.log("warn", "ai_config_rejected", { reason: "unknown_provider_or_model" });
-        return res.status(400).json({ error: "Unknown provider or model selection" });
-      }
-
-      // 2.6.1 Zero Trust gate: a provider whose text generation is
-      // not yet available can never become the workspace text vendor,
-      // no matter what the client sent. Runs BEFORE key validation so
-      // no vendor call is spent on a refused selection. This does NOT
-      // gate key storage for the image seam (Image Model section).
-      // 2.6.5: the refusal carries the vendor's OWN notice.
-      if (textGenerationAvailability(providerEntry.id) !== "available") {
-        d.log("warn", "ai_config_rejected", {
-          reason: "text_provider_coming_soon", provider: providerEntry.id
+        const validated = await validateModelProviderSelection({
+          providerId: provider,
+          modelId: typeof model === "string" ? model : "",
+          apiKey: apiKey || null,
+          env: d.env,
+          validateKey: d.validateKey,
+          getProviderFn: d.getProvider,
+          getModelProfileFn: d.getModelProfile
         });
-        return res.status(409).json({
-          error: textGenerationNotice(providerEntry.id) || TEXT_GENERATION_NOTICE,
-          code: "TEXT_PROVIDER_COMING_SOON"
-        });
-      }
-
-      // Authoritative validate-before-store. The client-side check
-      // is UX only; this is the gate that counts.
-      if (apiKey) {
-        let verdict;
-        try {
-          verdict = await d.validateKey(providerEntry.id, apiKey);
-        } catch (err) {
+        providerEntry = validated.providerEntry;
+        profile = validated.profile;
+      } catch (err) {
+        if (!isModelProviderSelectionError(err)) throw err;
+        if (err.code === "UNKNOWN_PROVIDER" || err.code === "UNKNOWN_MODEL") {
+          d.log("warn", "ai_config_rejected", { reason: "unknown_provider_or_model" });
+          return res.status(400).json({ error: "Unknown provider or model selection" });
+        }
+        if (err.code === "TEXT_PROVIDER_COMING_SOON") {
+          d.log("warn", "ai_config_rejected", {
+            reason: "text_provider_coming_soon", provider: provider
+          });
+          return res.status(409).json({
+            error: err.message,
+            code: "TEXT_PROVIDER_COMING_SOON"
+          });
+        }
+        if (err.code === "KEY_VALIDATION_UNAVAILABLE") {
           d.log("warn", "ai_config_key_validation_unavailable", {
-            provider: providerEntry.id, code: err && err.code ? err.code : null
+            provider: provider, code: err.causeCode
           });
           return res.status(502).json({ error: "Unable to verify API key with the selected provider" });
         }
-        if (!verdict || verdict.valid !== true) {
-          d.log("warn", "ai_config_rejected", { reason: "key_invalid_for_provider", provider: providerEntry.id });
-          return res.status(400).json({ error: "API key is not valid for the selected provider" });
-        }
+        // KEY_INVALID
+        d.log("warn", "ai_config_rejected", { reason: "key_invalid_for_provider", provider: provider });
+        return res.status(400).json({ error: "API key is not valid for the selected provider" });
       }
 
       const outcome = await d.withTenant(req.tenant.id, async () => {
@@ -253,7 +261,7 @@ export function createAiConfigRoutes(overrides = {}) {
     }
   });
 
-  // ── Remove the vendor selection (2.3.5) ─────────────────────
+  // ── Remove the Model Provider selection (2.3.5) ─────────────────────
   // Clears the selection states so resolution falls back to the
   // platform default chain; removeKey=true also deletes the
   // stored credential for the removed provider. Honest outcome
@@ -276,7 +284,7 @@ export function createAiConfigRoutes(overrides = {}) {
                  nowUsing: "platform default (anthropic chain) if configured" });
     } catch (err) {
       d.log("error", "ai_config_remove_failed", { error: err.message });
-      res.status(500).json({ error: "Failed to remove the vendor selection" });
+      res.status(500).json({ error: "Failed to remove the Model Provider selection" });
     }
   });
 

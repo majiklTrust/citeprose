@@ -33,6 +33,7 @@ import {
 } from "../tenant/platform-db.js";
 import { validateProviderKey } from "../llm/client.js";
 import { isTextProviderAvailable, textGenerationNotice, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
+import { validateModelProviderSelection, isModelProviderSelectionError } from "../llm/model-provider-selection.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
@@ -93,24 +94,36 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
       return safeError(res, 400, "Valid email address required");
     }
 
-    // If admin is providing an API key, validate it first.
-    // Routed through the provider abstraction (registry, auth
-    // scheme, egress allowlist): registration provisioning stays
-    // on the platform default vendor, anthropic. Zero token cost.
+    // If admin is providing an API key, validate the WHOLE selection
+    // first, through the same shared validator the /app/admin card
+    // uses (4.25111.17, closing refactor item 8). Before this, the
+    // key was verified with the Model Provider but the model string
+    // was stored with a trim and nothing else, so a typo accepted on
+    // this form surfaced days later inside the new tenant's first
+    // scheduled runs. Registration provisioning stays on the
+    // platform default Model Provider, anthropic. Zero token cost on
+    // a refused selection: the model check is a registry read and
+    // runs before the key call.
     let validatedKey = null;
     let validatedModel = null;
     if (apiKey && typeof apiKey === "string" && apiKey.trim().length > 0) {
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required when providing an API key");
       }
-      let keyCheck;
       try {
-        keyCheck = await validateProviderKey("anthropic", apiKey.trim());
+        await validateModelProviderSelection({
+          providerId: "anthropic", modelId: model_id, apiKey: apiKey.trim()
+        });
       } catch (err) {
-        platformLog("warn", "provider_models_error", { provider: "anthropic", code: err?.code || null });
-        return safeError(res, 502, "Unable to verify API key with the selected provider");
-      }
-      if (!keyCheck.valid) {
+        if (!isModelProviderSelectionError(err)) throw err;
+        if (err.code === "UNKNOWN_MODEL") {
+          return safeError(res, 400, "Unknown model for the selected Model Provider");
+        }
+        if (err.code === "KEY_VALIDATION_UNAVAILABLE") {
+          platformLog("warn", "provider_models_error", { provider: "anthropic", code: err.causeCode });
+          return safeError(res, 502, "Unable to verify API key with the selected provider");
+        }
+        // KEY_INVALID (anthropic is always known and available here)
         return safeError(res, 401, "Invalid API key");
       }
       validatedKey = apiKey.trim();
@@ -152,7 +165,7 @@ router.post("/invite", requireAuth, resolveTenant, suspendedWriteGuard(), async 
     // Adjust email body based on whether key was provided
     const whatYouNeed = validatedKey
       ? `  • a name for your workspace\n  • your Anthropic AI credentials have been configured by your administrator — no additional setup needed.`
-      : `  • A name for your workspace\n  • An LLM vendor API key:\n    - https://console.anthropic.com/settings/keys\n    - https://platform.openai.com/api-keys\n    - https://console.x.ai/\n`;
+      : `  • A name for your workspace\n  • A Model Provider API key:\n    - https://console.anthropic.com/settings/keys\n    - https://platform.openai.com/api-keys\n    - https://console.x.ai/\n`;
 
     const expires = new Date(invite.expires_at)
     const emailBody = [
@@ -400,14 +413,14 @@ router.post("/init", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// Validate a vendor API key + list models (provider-aware)
+// Validate a Model Provider API key + list models (provider-aware)
 // ══════════════════════════════════════════════════════════════
 // One validation path for every caller: registration (token),
 // platform admins (session), and tenant OWNERS (session) using
 // the /app/admin AI configuration screen. The actual check runs
 // through the provider abstraction, so a valid result means the
-// key is valid FOR THE SELECTED VENDOR. `provider` defaults to
-// anthropic to preserve the original single-vendor contract.
+// key is valid FOR THE SELECTED MODEL PROVIDER. `provider` defaults to
+// anthropic to preserve the original single-Model Provider contract.
 
 router.post("/validate-key", optionalAuth, async (req, res) => {
   try {
@@ -466,7 +479,7 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
       return safeError(res, 400, "API key required");
     }
 
-    // Vendor models listing via the abstraction — zero tokens,
+    // Model Provider models listing via the abstraction, zero tokens,
     // registry-resolved endpoint, provider auth scheme, egress
     // allowlist enforced before the call.
     let outcome;
@@ -501,17 +514,17 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
 router.post("/complete", async (req, res) => {
   try {
     const { token, org_name, apiKey, model_id, provider } = req.body || {};
-    // Vendor choice (Option 1 ruling): defaults to anthropic so every
+    // Model Provider choice (Option 1 ruling): defaults to anthropic so every
     // existing invite and admin-provided-key flow behaves unchanged.
     const providerId = typeof provider === "string" && provider.trim().length > 0
       ? provider.trim()
       : "anthropic";
 
-    // 2.6.1: registration selects the workspace TEXT vendor, so the
+    // 2.6.1: registration selects the workspace TEXT Model Provider, so the
     // same availability gate as /api/admin/ai-config applies here.
     // Unknown ids fall through: the key-verify step below keeps its
     // existing "Unknown provider" contract. 2.6.5: the refusal
-    // carries the vendor's OWN notice (per-vendor data), with the
+    // carries the Model Provider's OWN notice (per-Model Provider data), with the
     // shared notice as the fallback.
     try {
       if (!isTextProviderAvailable(providerId)) {
@@ -539,28 +552,55 @@ router.post("/complete", async (req, res) => {
     const adminKey = await getRegistrationAdminKey(reg.id);
 
     if (adminKey) {
+      // The invite's selection was validated when the administrator
+      // created it, and the registry can change between creation and
+      // redemption, so the model resolves AGAIN at the moment a
+      // tenant is about to be born from it (4.25111.17).
+      if (adminKey.modelId) {
+        try {
+          await validateModelProviderSelection({
+            providerId: "anthropic", modelId: adminKey.modelId
+          });
+        } catch (err) {
+          if (isModelProviderSelectionError(err) && err.code === "UNKNOWN_MODEL") {
+            return safeError(res, 409,
+              "The model on this invitation is no longer available. Ask your administrator for a new invitation.");
+          }
+          throw err;
+        }
+      }
       finalKey = adminKey.apiKey;
       finalModel = adminKey.modelId;
     } else {
       if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length === 0) {
         return safeError(res, 400, "API key required");
       }
-      // Same guard the card path runs: the key must verify against
-      // the CHOSEN vendor before any tenant is born from it.
-      try {
-        // Ruling (2.4.29): custom endpoints cannot be verified from
-        // here and are exempt; every registry vendor still verifies.
-        const keyCheck = providerId === "custom"
-          ? { valid: true }
-          : await validateProviderKey(providerId, apiKey.trim());
-        if (!keyCheck.valid) return safeError(res, 401, "Invalid API key for the selected provider");
-      } catch (err) {
-        if (err && err.code === "UNKNOWN_PROVIDER") return safeError(res, 400, "Unknown provider");
-        platformLog("warn", "registration_key_verify_error", { provider: providerId, code: err?.code || null });
-        return safeError(res, 502, "Unable to verify the API key with the selected provider");
-      }
       if (!model_id || typeof model_id !== "string") {
         return safeError(res, 400, "Model selection required");
+      }
+      // The SAME guard the /app/admin card runs, from the SAME
+      // module (4.25111.17): provider and model must resolve in the
+      // registry and the key must verify against the CHOSEN Model
+      // Provider before any tenant is born from it. Ruling (2.4.29)
+      // preserved: custom endpoints cannot be key-verified from here
+      // and are exempt; their model must still resolve, exactly as
+      // the card requires.
+      try {
+        await validateModelProviderSelection({
+          providerId, modelId: model_id, apiKey: apiKey.trim(),
+          skipKeyValidation: providerId === "custom"
+        });
+      } catch (err) {
+        if (!isModelProviderSelectionError(err)) throw err;
+        if (err.code === "UNKNOWN_PROVIDER") return safeError(res, 400, "Unknown provider");
+        if (err.code === "TEXT_PROVIDER_COMING_SOON") return safeError(res, 409, err.message);
+        if (err.code === "UNKNOWN_MODEL") {
+          return safeError(res, 400, "Unknown model for the selected Model Provider");
+        }
+        if (err.code === "KEY_INVALID") return safeError(res, 401, "Invalid API key for the selected provider");
+        // KEY_VALIDATION_UNAVAILABLE
+        platformLog("warn", "registration_key_verify_error", { provider: providerId, code: err.causeCode });
+        return safeError(res, 502, "Unable to verify the API key with the selected provider");
       }
       finalKey = apiKey.trim();
       finalModel = model_id.trim();
@@ -583,7 +623,7 @@ router.post("/complete", async (req, res) => {
         const { setAgentState } = await import("../services/database.js");
         await setAgentState("mode", "manual");
         await setAgentState("corroboration", "disabled");
-        // Vendor selection through the SAME primitives the vendor
+        // Model Provider selection through the SAME primitives the Model Provider
         // card uses: llmCredentialKeyFor names the credential,
         // llm_provider / llm_model route the orchestrator. The
         // anthropic_model write keeps the pre-abstraction chain

@@ -1296,16 +1296,18 @@
               </div>
               <div className="text-muted-sm no-tenant-copy">
                 Your workspace has not been assigned. You may need to check your inbox for
-                an email from our security and identity partner to validate.
-                If your organization invited you, contact your administrator to be
-                added, then log out and back in.
-                <br/>Setting up on your own? Create your workspace now; you'll name it, 
+                an email from our Identity &amp; Authroization Team to continue.
+                <br/>If your organization invited you, contact your administrator.
+                <br/><br/>Setting up on your own? Create your workspace now; you'll name it, 
                 connect your AI vendor key, and pick a plan on the billing page.
               </div>
               <div className="no-tenant-actions">
                 <button className="btn btn-primary" onClick={selfServeSetup} disabled={selfServe.busy}>
                   {selfServe.busy ? 'Starting setup...' : 'Set Up My Workspace'}
                 </button>
+              <div className="get-help">
+                <a class="get-help-link" href="/about.html">Get Help Here</a>
+              </div>
               </div>
               {selfServe.msg && (
                 <div className="text-muted-sm self-serve-msg">

@@ -105,13 +105,21 @@ export function createGenerationTrace() {
   const startedAt = Date.now();
   const stages = [];
   return {
-    stage(name, data) {
+    // tookMs (4.25111.16, refactor item 1) is a MEASURED duration for
+    // the work this record announces, bracketed at the site of the
+    // work by spanStart(). It is optional: a record without one means
+    // "nobody measured this", which the display shows as blank rather
+    // than inventing a number. atMs stays what it always was, a point
+    // on the run's clock used for ordering, never a duration.
+    stage(name, data, tookMs) {
       try {
-        stages.push({
+        const record = {
           id: String(name),
           atMs: Date.now() - startedAt,
           data: clamp(data === undefined ? null : data)
-        });
+        };
+        if (Number.isFinite(tookMs) && tookMs >= 0) record.tookMs = tookMs;
+        stages.push(record);
       } catch {
         // Observation must never break the run. Record that we could
         // not observe, rather than losing the stage silently.
@@ -134,6 +142,25 @@ export function runWithGenerationTrace(frame, fn) {
 export function generationTrace() {
   const frame = als.getStore();
   return (frame && frame.trace) || null;
+}
+
+// 4.25111.16 (refactor item 1). Bracketed duration measurement, the
+// tried-and-true pair-of-marks pattern the orchestrator already uses
+// for its own durationMs, offered here so the pipeline's emit sites
+// measure the same way and only when someone is observing.
+//
+//   const took = spanStart();          null in production
+//   ...do the work...
+//   stage("x", data, took && took());  measured ms, or blank
+//
+// Self-gating: with no ambient frame this returns null and the whole
+// pattern costs one null check, so a scheduled run pays nothing.
+// performance.now() is monotonic, so the delta cannot be bent by a
+// wall clock step the way a Date.now() difference can.
+export function spanStart() {
+  if (!als.getStore()) return null;
+  const t0 = performance.now();
+  return () => performance.now() - t0;
 }
 
 // The credential and routing an OBSERVED run must use, or null in

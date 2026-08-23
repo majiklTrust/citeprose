@@ -1826,6 +1826,8 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     }).then(function (data) {
       state.run = data;
       state.runError = null;
+      state.elapsed = typeof data.totalMs === "number" ? data.totalMs : 0;
+      updateElapsed();
       applyRunSlots(data.promptSlots);
       renderResult(data.result, data.quality);
       return data;
@@ -1845,7 +1847,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     // says which of the two it was.
     if (!record) {
       s.status = "norecord";
-      s.durMs = 0;
+      s.durMs = null;
       return true;
     }
     s.assembled = record.assembled || null;
@@ -1856,8 +1858,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     // field the server sends: a field the server fills and applyStage
     // does not copy is a field the page can never show.
     s.prompts = record.prompts || null;
-    s.durMs = typeof record.durMs === "number" ? record.durMs : 0;
-    state.elapsed += s.durMs;
+    s.durMs = typeof record.durMs === "number" ? record.durMs : null;
     if (record.status === "failed") { s.status = "failed"; s.error = record.error || "(no detail)"; return false; }
     if (record.status === "skipped") { s.status = "skipped"; return true; }
     s.status = "done";

@@ -23,7 +23,7 @@ import { getCooldownMs } from "../config/research.js";
 import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js";
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
-import { generationTrace, generationVendor, traceArguments, labRun } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments, labRun, spanStart } from "./generation-trace.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -85,6 +85,7 @@ function describeVendorResponse(response) {
 async function gatherRSSMaterial(topic, angle) {
   traceArguments("gatherRSSMaterial", "async function gatherRSSMaterial(topic, angle)",
     [["topic", topic], ["angle", angle]]);
+  const rssTook = spanStart();
   const maxAge = topic.max_age_days || 20;
   const articles = await getArticlesForTopic(topic.slug, maxAge, 30);
 
@@ -104,6 +105,7 @@ async function gatherRSSMaterial(topic, angle) {
   // Announce the database assembly with full drop accounting: an
   // observer must be able to see WHY an article did not make it,
   // not merely that it is absent.
+  // Measured: the article fetch plus relevance filtering above.
   generationTrace()?.stage("db_articles", {
     topic: topic.slug,
     windowDays: maxAge,
@@ -115,7 +117,7 @@ async function gatherRSSMaterial(topic, angle) {
       id: a.id, feed: a.feed_name, tier: a.feed_tier, published: a.published_at,
       relevanceScore: a.relevanceScore, title: a.title, link: a.link
     }))
-  });
+  }, rssTook && rssTook());
 
   return kept;
 }
@@ -131,7 +133,12 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const topicName = topic.name || topicId;
   traceArguments("buildQueries", "export function buildQueriesForTopicDetailed(topic, angle)",
     [["topic", topic], ["angle", angle]]);
+  // Measured tightly around the query build alone, captured before
+  // the logging below so console and activity writes are not billed
+  // to this row's time.
+  const queriesTook = spanStart();
   const queryPlan = buildQueriesForTopicDetailed(topic, angle);
+  const queriesTookMs = queriesTook && queriesTook();
   const searchQueries = queryPlan.queries;
 
   // Console: the actual queries this cycle will run, which path
@@ -153,7 +160,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     placeholderContext: queryPlan.context,
     searchTemplates: topic.search_templates || [],
     renderedQueries: searchQueries
-  });
+  }, queriesTookMs);
 
   // Resolved OUTSIDE the try so the catch can name it. A const inside
   // the try is not in scope in the catch, and the failure record reads
@@ -169,6 +176,11 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const lab = labRun();
   const model = lab ? lab.model : await getAnthropicModel();
   const webSearchEntry = MODELS.find((m) => m.id === model);
+  // Declared outside the try for the same scope reason as model
+  // above: the catch reads it to report time to failure when the
+  // vendor call itself is what threw. Null until the crossing is
+  // reached, so a refusal that never called the vendor stays blank.
+  let vendorTook = null;
 
   try {
     // No row means this deployment has not configured web search for
@@ -241,9 +253,13 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // the network would have received. Everything below this line
     // runs identically either way.
     const vendor = generationVendor();
+    // Vendor latency, bracketed immediately around the crossing so
+    // the parsing below is not billed to the vendor's time.
+    vendorTook = spanStart();
     const response = vendor
       ? vendor.anthropic("web_search", requestParams)
       : await callAnthropic(client, requestParams);
+    const vendorTookMs = vendorTook && vendorTook();
     assembledPrompt = null;
 
     const textBlocks = response.content.filter(b => b.type === "text");
@@ -255,7 +271,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       generationTrace()?.stage("web_search_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON array found in the response. The stage returns no claims and the run continues."
-      }, describeVendorResponse(response)));
+      }, describeVendorResponse(response)), vendorTookMs);
       await logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
@@ -265,7 +281,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // on the wrong bytes is invisible without it.
     generationTrace()?.stage("web_search_response", Object.assign({
       rawText, claimCount: claims.length, claims
-    }, describeVendorResponse(response)));
+    }, describeVendorResponse(response)), vendorTookMs);
 
     // Console mirror: the direct effect of the queries above —
     // how much citable material this cycle's retrieval produced.
@@ -297,10 +313,12 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // writes inside the tenant transaction, which the Lab rolls back,
     // so an error recorded only there is destroyed. platformLog writes
     // on its own connection and survives.
+    // Time to failure when the crossing was reached, blank when the
+    // failure came before it (refusal, vault miss, credentials).
     generationTrace()?.stage("web_search_response", Object.assign({
       failed: true, reason: err && err.name ? err.name : "Error",
       error: err && err.message ? err.message : String(err)
-    }, attempted));
+    }, attempted), vendorTook ? vendorTook() : undefined);
     platformLog("error", "web_search_failed",
       Object.assign({ cycleId, error: err && err.message }, attempted));
     // Best effort: when the error being recorded ABORTED the tenant
@@ -369,10 +387,13 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }
 
+  const sourcesTook = spanStart();
   await logActivity("info", "corroboration_started", { cycleId, sourceCount: allSources.length });
 
   // Everything corroboration will weigh, before a prompt exists:
   // the merged web and database material with its tier mix.
+  // The measured time covers the activity write above plus the tier
+  // arithmetic below, the real wall cost of reaching this record.
   generationTrace()?.stage("corroboration_sources", {
     totalSourceItems: allSources.length,
     fromWebSearch: allSources.filter(s => s.type === "web_search").length,
@@ -382,7 +403,10 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     sources: allSources.map((s, i) => ({
       index: i + 1, name: s.name, tier: s.tier, type: s.type, date: s.date, url: s.url
     }))
-  });
+  }, sourcesTook && sourcesTook());
+
+  // Same scope rule as the web_search crossing: the catch reads it.
+  let corrTook = null;
 
   try {
     const client = await newAnthropicClient();
@@ -428,9 +452,11 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       assembledPrompt
     });
     const vendor = generationVendor();
+    corrTook = spanStart();
     const response = vendor
       ? vendor.anthropic("corroboration", requestParams)
       : await callAnthropic(client, requestParams);
+    const corrTookMs = corrTook && corrTook();
     assembledPrompt = null;
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
@@ -441,7 +467,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       generationTrace()?.stage("corroboration_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON object found in the response. No claims are verified and the run continues."
-      }, describeVendorResponse(response)));
+      }, describeVendorResponse(response)), corrTookMs);
       await logActivity("warn", "corroboration_parse_failed", { cycleId });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
@@ -472,7 +498,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
         claim: c.claim, trustWeight: c.trustWeight, meetsThreshold: c.meetsThreshold,
         confidence: c.confidence, sources: c.sources
       }))
-    }));
+    }), corrTookMs);
 
     await logActivity("info", "corroboration_complete", {
       cycleId,
@@ -487,7 +513,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     generationTrace()?.stage("corroboration_response", {
       failed: true, reason: err && err.name ? err.name : "Error",
       error: err && err.message ? err.message : String(err)
-    });
+    }, corrTook ? corrTook() : undefined);
     platformLog("error", "corroboration_failed", { cycleId, error: err && err.message });
     // Best effort for the same reason as the web_search catch: the
     // recorded error may itself have aborted the tenant transaction.

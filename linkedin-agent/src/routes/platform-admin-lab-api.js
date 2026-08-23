@@ -177,13 +177,13 @@ function indexStages(trace) {
     // are resolved directly rather than through the map.
     if (record.id.endsWith(ARGUMENTS_SUFFIX)) {
       const argRow = record.id.slice(0, -ARGUMENTS_SUFFIX.length);
-      const argSlot = byCall[argRow] || (byCall[argRow] = { status: "done", durMs: 0 });
+      const argSlot = byCall[argRow] || (byCall[argRow] = { status: "done", durMs: null });
       argSlot.args = { data: record.data };
       continue;
     }
     const callId = STAGE_TO_CALL[record.id];
     if (!callId) continue;
-    const slot = byCall[callId] || (byCall[callId] = { status: "done", durMs: 0 });
+    const slot = byCall[callId] || (byCall[callId] = { status: "done", durMs: null });
     if (record.id.endsWith("_request")) slot.request = { data: record.data };
     else if (record.id.endsWith("_response")) {
       slot.response = { data: record.data };
@@ -196,7 +196,21 @@ function indexStages(trace) {
       }
     }
     else slot.assembled = { data: record.data };
-    slot.durMs = record.atMs;
+    // 4.25111.16 (refactor item 1). durMs is the SUM of the MEASURED
+    // durations this call's records carry, or null when none was
+    // measured, which the page shows as blank. The old line here,
+    // slot.durMs = record.atMs, stored a point on the run's clock
+    // under a duration's name: every row showed how far into the run
+    // its last record landed, so numbers grew monotonically down the
+    // spine and the last row always wore the whole run's wall time.
+    if (Number.isFinite(record.tookMs)) {
+      slot.durMs = (slot.durMs || 0) + record.tookMs;
+    }
+  }
+  // One rounding pass at the end so repeated additions cannot
+  // accumulate rounding error mid-fold.
+  for (const slot of Object.values(byCall)) {
+    if (Number.isFinite(slot.durMs)) slot.durMs = Math.round(slot.durMs);
   }
   crossReference(byCall);
   return byCall;
@@ -266,7 +280,7 @@ function attachPromptsToCalls(byCall, slots) {
   for (const slot of slots || []) {
     const callId = PROMPT_TO_CALL[slot.key];
     if (!callId) continue;
-    const row = byCall[callId] || (byCall[callId] = { status: "done", durMs: 0 });
+    const row = byCall[callId] || (byCall[callId] = { status: "done", durMs: null });
     (row.prompts || (row.prompts = [])).push({
       key: slot.key,
       present: slot.present,
@@ -672,6 +686,11 @@ export default function createPlatformAdminLabRoutes() {
         quality: out.quality,
         promptSlots: out.promptSlots,
         stages: attachPromptsToCalls(indexStages(trace), out.promptSlots),
+        // The run's true wall time, measured by the collector itself.
+        // The page's elapsed readout uses this; summing per-row
+        // durations can never reconstruct it, because unmeasured and
+        // in-between time belongs to no row.
+        totalMs: trace.toJSON().totalMs,
         trace: trace.toJSON()
       });
     } catch (err) {
@@ -680,6 +699,7 @@ export default function createPlatformAdminLabRoutes() {
       res.status(status).json({
         error: status === 404 ? err.message : `Lab run failed: ${err.message}`,
         stages: indexStages(trace),
+        totalMs: trace.toJSON().totalMs,
         trace: trace.toJSON()
       });
     }

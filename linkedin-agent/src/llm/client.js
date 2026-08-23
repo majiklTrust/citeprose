@@ -289,7 +289,12 @@ export async function generateWithTenantLlm(input, deps = {}) {
       stopReason: response.stopReason,
       provider: selection.provider,
       model: selection.model,
-      costEstimateUsd
+      costEstimateUsd,
+      // 4.25111.16 (refactor item 1): the duration this orchestrator
+      // already measures around the vendor call, previously logged
+      // and discarded. Returned so callers report the MEASURED number
+      // instead of inferring one downstream from announcement times.
+      durationMs
     });
   } catch (err) {
     d.log("error", "llm_orchestrated_failed", {

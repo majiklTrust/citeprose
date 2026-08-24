@@ -16,6 +16,15 @@ function fp(material) {
   return createHash("sha256").update(String(material)).digest("hex").slice(0, 16);
 }
 
+// 4.25111.20: the ONE fingerprint derivation, exported. Every
+// ledger row that names a key must derive its fingerprint the same
+// way or the same key shows up as two different keys in the books.
+// The Generation Lab uses this on the platform language key, and
+// the research metering path uses it on the tenant key.
+export function keyFingerprintOf(material) {
+  return fp(material);
+}
+
 export class TrialRefusedError extends Error {
   constructor(code, providerId) {
     super(code === "TRIAL_EXPIRED"

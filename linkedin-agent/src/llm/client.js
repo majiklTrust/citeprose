@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // src/llm/client.js - the orchestrator (single entry point)
 // ═══════════════════════════════════════════════════════════════
-// The one function the content pipeline calls to reach ANY vendor.
+// The one function the content pipeline calls to reach ANY Model Provider.
 // Safe production order, in this exact sequence:
 //   1. resolve the tenant to a provider and model (fail closed on
 //      unknown or unprovisioned selections; never a silent default)
@@ -9,7 +9,7 @@
 //   3. build the canonical request once (output cap clamped)
 //   4. hand it to the correct adapter for the wire request
 //   5. enforce the registry-derived egress allowlist on the host
-//   6. call the vendor with a timeout
+//   6. call the Model Provider with a timeout
 //   7. normalize through the adapter; return canonical result + usage
 //
 // Dependency discipline: static imports are limited to sibling llm
@@ -139,7 +139,7 @@ function buildCallContext(selection, apiKey, env) {
   return ctx;
 }
 
-// Timed vendor call. Network faults surface with a FIXED message
+// Timed Model Provider call. Network faults surface with a FIXED message
 // (transport errors can echo headers) and abort maps to TIMEOUT.
 async function fetchWithTimeout(d, url, options, providerId, timeoutMs) {
   const controller = new AbortController();
@@ -159,7 +159,7 @@ async function fetchWithTimeout(d, url, options, providerId, timeoutMs) {
   }
 }
 
-async function readVendorJson(res, providerId) {
+async function readModelProviderJson(res, providerId) {
   if (!res.ok) {
     let bodyText = "";
     try { bodyText = await res.text(); } catch { /* body unavailable */ }
@@ -256,7 +256,7 @@ export async function generateWithTenantLlm(input, deps = {}) {
       headers: wire.headers,
       body: JSON.stringify(wire.body)
     }, selection.provider, timeoutMs);
-    const raw = await readVendorJson(res, selection.provider);
+    const raw = await readModelProviderJson(res, selection.provider);
 
     const response = adapter.parseWireResponse(raw);
     const durationMs = Date.now() - startedMs;
@@ -267,12 +267,14 @@ export async function generateWithTenantLlm(input, deps = {}) {
       usage: response.usage, stopReason: response.stopReason, durationMs, costEstimateUsd
     });
 
-    // A Lab run is UNMETERED by ruling. The gate is not cosmetic:
-    // with no activation context the recorder mints a standalone
-    // 'compose' activation and defaults provenance to key_source
-    // 'tenant', so an ungated call would file PLATFORM key spend
-    // against whichever tenant the Lab was pointed at.
-    if (!lab) try {
+    // 4.25111.20, ruling: real spend is always recorded, Lab runs
+    // included. The old `if (!lab)` gate here is gone because its
+    // job moved to the ONE seam that writes rows: spend-recorder
+    // consults the ambient lab frame itself and attributes lab
+    // calls to key_source 'platform' / workflow 'generation_lab',
+    // so an ungated call can no longer file platform spend against
+    // the tenant the Lab was pointed at.
+    try {
       const { recordSpend } = await import("../spend/spend-recorder.js");
       await recordSpend({ requestType: "text_generation", provider: selection.provider,
         model: selection.model, usage: response.usage, costEstimateUsd, status: "ok" });
@@ -291,7 +293,7 @@ export async function generateWithTenantLlm(input, deps = {}) {
       model: selection.model,
       costEstimateUsd,
       // 4.25111.16 (refactor item 1): the duration this orchestrator
-      // already measures around the vendor call, previously logged
+      // already measures around the Model Provider call, previously logged
       // and discarded. Returned so callers report the MEASURED number
       // instead of inferring one downstream from announcement times.
       durationMs
@@ -304,7 +306,9 @@ export async function generateWithTenantLlm(input, deps = {}) {
       code: isLlmError(err) ? err.code : (err && err.name) || "Error"
     });
     try {
-      if (selection && !lab) {
+      // Same seam rule as the success path (4.25111.20): the lab
+      // gate is gone, the recorder attributes lab failures itself.
+      if (selection) {
         const { recordSpend } = await import("../spend/spend-recorder.js");
         const timedOut = isLlmError(err) && err.code === "TIMEOUT";
         await recordSpend({ requestType: "text_generation", provider: selection.provider,
@@ -319,7 +323,7 @@ export async function generateWithTenantLlm(input, deps = {}) {
 // ── Provider-aware key validation (validate before store) ─────
 // One implementation serves registration and the owner admin
 // screen. Valid means valid FOR THE SELECTED VENDOR: the key is
-// presented to that vendor's models endpoint using the provider's
+// presented to that Model Provider's models endpoint using the provider's
 // own auth scheme, behind the same egress gate as generation.
 // Returns { valid: true, models } or { valid: false, status }.
 export async function validateProviderKey(providerId, apiKey, deps = {}) {
@@ -349,7 +353,7 @@ export async function validateProviderKey(providerId, apiKey, deps = {}) {
   if (res.status === 401 || res.status === 403) {
     return { valid: false, status: res.status };
   }
-  const raw = await readVendorJson(res, provider.id);
+  const raw = await readModelProviderJson(res, provider.id);
   if (!raw || !Array.isArray(raw.data)) {
     throw llmError(LLM_ERROR_CODES.BAD_RESPONSE,
       `LLM provider ${provider.id} models listing has no data array`, { providerId: provider.id });

@@ -9,7 +9,7 @@
 //
 //   GET /lab/meta[?tenantId=<uuid>]
 //     Everything the Run Setup selectors need to populate and to
-//     default correctly. Read only. No vendor call, no write.
+//     default correctly. Read only. No Model Provider call, no write.
 //
 //     tenantId is OPTIONAL. Omit it and the route resolves the
 //     signed in admin's own tenant and reports which one it used.
@@ -20,18 +20,25 @@
 //     answers correctly the first time.
 //
 //   POST /lab/run
-//     Executes the REAL pipeline against REAL tenant data with the
-//     vendor calls SUBSTITUTED. Sequencing stays entirely inside
-//     generatePost and conductResearch; the Lab supplies a trace
-//     collector and a stand in vendor, then reads what the pipeline
+//     Executes the REAL pipeline against REAL tenant data with REAL
+//     Model Provider calls on the PLATFORM key (Phase 3; the header
+//     said "substituted" long after the mock was retired, corrected
+//     4.25111.20). Sequencing stays entirely inside generatePost and
+//     conductResearch; the Lab supplies a trace collector, the
+//     credential and routing, then reads what the pipeline
 //     announced. The Lab never drives the order of anything.
 //
-//     A run WRITES NOTHING. The pipeline makes activity_log inserts
-//     as it goes; the whole run is deliberately rolled back so a
-//     developer tool cannot leave rows in a customer's activity log
-//     for work that customer did not request. Reads are unaffected,
-//     and platform logging is on its own connection so operator
-//     audit survives. See runAndRollback below.
+//     A run leaves NO TENANT CONTENT behind. The pipeline's
+//     activity_log and post writes happen inside a transaction that
+//     is deliberately rolled back, so a developer tool cannot leave
+//     content rows in a customer's workspace for work that customer
+//     did not request. Two record classes deliberately SURVIVE the
+//     rollback (ruling 2026-08-24: real spend is always recorded):
+//     llm_spend_events and llm_activations rows, written by the
+//     spend recorder in its own transaction and attributed to
+//     key_source 'platform' / workflow 'generation_lab' by the
+//     recorder's lab seam, and platform_log audit lines, written on
+//     their own pooled connection.
 //
 // Every value is read through a function that already exists and is
 // already the source of truth for that value elsewhere in the
@@ -61,14 +68,16 @@ import express from "express";
 import { withTenant } from "../db/with-tenant.js";
 import { createGenerationTrace, runWithGenerationTrace } from "../services/generation-trace.js";
 import { getPlatformApiKey } from "../config/platform-keys.js";
-import { getProvider } from "../llm/registry.js";
+import { getProvider, getModelProfile, estimateCostUsd } from "../llm/registry.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { getAgentState } from "../services/database.js";
 import { listGenresForKey, getPromptProvenance, templateUsesMetricBlock } from "../services/prompt-vault.js";
 import { listProviders, listModels } from "../llm/registry.js";
-import { resolveTenantLlmSelection } from "../llm/client.js";
+import { resolveTenantLlmSelection, isLlmAbstractionEnabled } from "../llm/client.js";
 import { findTenantByAuthIdentity } from "../tenant/platform-db.js";
+import { keyFingerprintOf } from "../spend/key-resolver.js";
+import { annotateActivation } from "../spend/activation-middleware.js";
 import { platformLog } from "../services/platform-log.js";
 
 // The rewrite prompt lives under the content_generator key as this
@@ -165,6 +174,84 @@ const STAGE_TO_CALL = Object.freeze({
   quality_request:        "qualityCheck",
   quality_response:       "qualityCheck"
 });
+
+// ── Run cost (4.25111.20) ────────────────────────────────────
+// The four crossings that spend money, in pipeline order. The cost
+// summary reads the SAME folded records the inspector reads, so the
+// two can never disagree about what a call reported.
+const COSTED_CALLS = Object.freeze(["webSearch", "corroborate", "generateContent", "qualityCheck"]);
+
+// Usage arrives in two dialects: the raw SDK's snake_case on the
+// research crossings and the orchestrator's camelCase on generation
+// and quality. One normalizer, applied at fold time, so neither
+// dialect leaks to the page.
+function normalizeUsage(u) {
+  if (!u || typeof u !== "object") return null;
+  const pick = (...vals) => { for (const v of vals) if (Number.isFinite(v)) return v; return null; };
+  const norm = {
+    inputTokens: pick(u.promptTokens, u.inputTokens, u.input_tokens),
+    outputTokens: pick(u.completionTokens, u.outputTokens, u.output_tokens),
+    cacheReadTokens: pick(u.cacheReadTokens, u.cache_read_input_tokens),
+    cacheWriteTokens: pick(u.cacheWriteTokens, u.cache_creation_input_tokens)
+  };
+  return (norm.inputTokens === null && norm.outputTokens === null) ? null : norm;
+}
+
+// Per-stage and total token spend with dollar estimates. A lab run
+// is one model on the platform key throughout, so ONE resolved
+// profile prices every crossing, including the two research calls
+// that bypass the orchestrator's own estimate. Rules the page
+// relies on: a null estimate means UNPRICED, never zero; the totals
+// carry how many usage-bearing stages went unpriced; and the
+// web_search_requests count is a separately billed axis with no
+// price entry, totaled but never folded into the dollar figure.
+function buildRunCost(byCall, profile, provider, model) {
+  const perStage = [];
+  const totals = {
+    inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+    webSearchRequests: 0, costEstimateUsd: 0, pricedStages: 0, unpricedStages: 0
+  };
+  let sawCost = false;
+  for (const call of COSTED_CALLS) {
+    const slot = byCall[call];
+    if (!slot) continue;
+    const data = slot.response && slot.response.data;
+    const rawUsage = data && data.usage;
+    const usage = normalizeUsage(rawUsage);
+    const webSearchRequests = rawUsage && rawUsage.server_tool_use
+      && Number.isFinite(rawUsage.server_tool_use.web_search_requests)
+      ? rawUsage.server_tool_use.web_search_requests : null;
+    // The orchestrator's own estimate is authoritative when the
+    // stage carried one; the profile prices the research stages.
+    let costEstimateUsd = data && Number.isFinite(data.costEstimateUsd) ? data.costEstimateUsd : null;
+    if (costEstimateUsd === null && usage && profile) {
+      const est = estimateCostUsd(profile, {
+        promptTokens: usage.inputTokens, completionTokens: usage.outputTokens
+      });
+      costEstimateUsd = Number.isFinite(est) ? est : null;
+    }
+    perStage.push({
+      call, status: slot.status || "done",
+      usage, webSearchRequests, costEstimateUsd,
+      priced: costEstimateUsd !== null
+    });
+    if (usage) {
+      totals.inputTokens += usage.inputTokens || 0;
+      totals.outputTokens += usage.outputTokens || 0;
+      totals.cacheReadTokens += usage.cacheReadTokens || 0;
+      totals.cacheWriteTokens += usage.cacheWriteTokens || 0;
+      if (costEstimateUsd === null) totals.unpricedStages += 1;
+    }
+    if (webSearchRequests) totals.webSearchRequests += webSearchRequests;
+    if (costEstimateUsd !== null) {
+      totals.costEstimateUsd += costEstimateUsd;
+      totals.pricedStages += 1;
+      sawCost = true;
+    }
+  }
+  totals.costEstimateUsd = sawCost ? Math.round(totals.costEstimateUsd * 1e6) / 1e6 : null;
+  return { provider, model, keySource: "platform", perStage, totals };
+}
 
 // Fold the flat announcement stream into per call records the page
 // can drop straight into its inspector. A *_request record fills the
@@ -440,6 +527,13 @@ export default function createPlatformAdminLabRoutes() {
   // Per-run operator material: never cached, never revalidated.
   router.use((req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
+  // 4.25111.20: every request here runs under the generation_lab
+  // activation, so the ledger rows a run writes share one activation
+  // row carrying the signed-in admin as created_by. Meta requests
+  // never spend, and an activation row is minted lazily on first
+  // spend, so annotating the whole router costs nothing extra.
+  router.use(annotateActivation("generation_lab"));
+
   // ── GET /lab/meta ─────────────────────────────────────────────
   router.get("/meta", async (req, res) => {
     const requested = String(req.query.tenantId || "");
@@ -484,7 +578,7 @@ export default function createPlatformAdminLabRoutes() {
 
       // Only providers this deployment can actually reach. The
       // parked ones are RETURNED, carrying their own notice, so the
-      // page can show them disabled: a hidden vendor is an absence
+      // page can show them disabled: a hidden Model Provider is an absence
       // the operator cannot explain.
       const providers = listProviders(process.env)
         .filter((p) => p.configured)
@@ -538,9 +632,9 @@ export default function createPlatformAdminLabRoutes() {
   // Body: { tenantId, topicId, angle?, genre?, corroboration? }
   //
   // Provider, model and research tool are shown on the page but are
-  // NOT honoured here: Phase 2 substitutes the vendor entirely, so
-  // claiming to route to a vendor would be false. Phase 3 makes them
-  // live.
+  // honoured here since Phase 3 made the calls live; 4.25111.20
+  // validates both at the route so a bad selection is refused before
+  // anything is spent.
   router.post("/run", async (req, res) => {
     const body = req.body || {};
     const tenantId = String(body.tenantId || "");
@@ -580,6 +674,31 @@ export default function createPlatformAdminLabRoutes() {
     } catch (err) {
       return res.status(400).json({ error: `Unknown provider '${provider}'`, code: "UNKNOWN_PROVIDER" });
     }
+    // 4.25111.20: the model resolves in the registry AT THE ROUTE,
+    // before anything is spent. Without this, a bad model id was
+    // discovered mid-run: web search refused it with a misleading
+    // "no web search tool" message, the run continued RSS-only, and
+    // generation failed minutes later after money had left.
+    let labProfile = null;
+    try {
+      labProfile = getModelProfile(provider, model, process.env);
+    } catch {
+      return res.status(400).json({
+        error: `Model '${model}' is not registered for provider '${provider}'`,
+        code: "UNKNOWN_MODEL"
+      });
+    }
+    // 4.25111.20: the orchestrated path is the only one that routes
+    // a Lab run's generation and quality onto the platform key. The
+    // legacy direct path would silently bill the tenant, so a Lab
+    // run refuses to start without the orchestrator rather than
+    // trusting an env promise.
+    if (!isLlmAbstractionEnabled()) {
+      return res.status(503).json({
+        error: "Lab runs require the LLM orchestrator (LLM_ABSTRACTION=1)",
+        code: "LAB_REQUIRES_ORCHESTRATOR"
+      });
+    }
 
     // FAIL BEFORE SPENDING. The key is resolved and decrypted here,
     // before the pipeline starts, so a misconfigured platform key
@@ -597,13 +716,8 @@ export default function createPlatformAdminLabRoutes() {
         code: "PLATFORM_KEY_UNAVAILABLE"
       });
     }
-    // The web_search tool version, if the operator pinned one. Free
-    // text by design: the vendor ships versions faster than any
-    // allowlist here could track, and a bad value fails loudly at the
-    // vendor rather than silently.
-
     // No separate research model. web_search is implemented for
-    // Anthropic only, and the platform key belongs to one vendor, so
+    // Anthropic only, and the platform key belongs to one Model Provider, so
     // a run is one key, one provider, one model throughout. A run
     // whose key and model are not Anthropic fails at the web search
     // call and says so on that row, rather than being refused up
@@ -611,7 +725,15 @@ export default function createPlatformAdminLabRoutes() {
     // No webSearchTool on the frame: the pipeline resolves it from the
     // model. A pinned version would let the Lab send a combination the
     // scheduled path cannot, which is the one thing it must not do.
-    const labFrame = Object.freeze({ apiKey: platformKey, provider, model });
+    //
+    // keyFingerprint (4.25111.20): the platform key's ledger identity,
+    // derived by the SAME function the tenant key path uses, carried
+    // on the frame so the spend recorder's lab seam can attribute
+    // every row this run writes without ever seeing the key again.
+    const labFrame = Object.freeze({
+      apiKey: platformKey, provider, model,
+      keyFingerprint: keyFingerprintOf(platformKey)
+    });
 
     const promptOverrides = {};
     const raw = body.promptOverrides && typeof body.promptOverrides === "object" ? body.promptOverrides : {};
@@ -651,7 +773,7 @@ export default function createPlatformAdminLabRoutes() {
 
         // The pipeline sequences itself. The Lab supplies a collector,
         // the credential and routing, and any prompt override, then
-        // reads what was announced. No vendor substitute: every call
+        // reads what was announced. No substitute: every call
         // reaches a real model.
         const result = await runWithGenerationTrace({ trace, labRun: labFrame, promptOverrides }, async () => {
           const generated = await generatePost(topicId, req.user?.sub || null, null, angle, genre);
@@ -676,31 +798,46 @@ export default function createPlatformAdminLabRoutes() {
         return { ...result, promptSlots };
       });
 
+      // One toJSON, one fold, per response (4.25111.20). The raw
+      // trace itself is GONE from the payload: the page never read
+      // it, and shipping it duplicated every clamped prompt and
+      // response a second time on the wire and in browser memory.
+      // The folded stages ARE the trace, shaped for the inspector.
+      const traceJson = trace.toJSON();
+      const byCall = attachPromptsToCalls(indexStages(trace), out.promptSlots);
+      const runCost = buildRunCost(byCall, labProfile, provider, model);
       platformLog("info", "lab_run_complete", {
         tenantId, topicId, genre,
         blocked: !!out.generated.blocked,
-        stages: trace.toJSON().stages.length
+        stages: traceJson.stages.length,
+        costEstimateUsd: runCost.totals.costEstimateUsd
       });
       res.json({
         result: out.generated,
         quality: out.quality,
         promptSlots: out.promptSlots,
-        stages: attachPromptsToCalls(indexStages(trace), out.promptSlots),
+        stages: byCall,
+        cost: runCost,
         // The run's true wall time, measured by the collector itself.
         // The page's elapsed readout uses this; summing per-row
         // durations can never reconstruct it, because unmeasured and
         // in-between time belongs to no row.
-        totalMs: trace.toJSON().totalMs,
-        trace: trace.toJSON()
+        totalMs: traceJson.totalMs
       });
     } catch (err) {
       const status = err && err.labStatus ? err.labStatus : 500;
       platformLog("error", "lab_run_failed", { tenantId, topicId, error: err.message });
+      // The error response carries the SAME folded shape as success
+      // (4.25111.20): a run that died at generation still paid for
+      // web search, so the stages that did execute and their cost
+      // travel with the error instead of being replaced by it.
+      const traceJson = trace.toJSON();
+      const byCall = indexStages(trace);
       res.status(status).json({
         error: status === 404 ? err.message : `Lab run failed: ${err.message}`,
-        stages: indexStages(trace),
-        totalMs: trace.toJSON().totalMs,
-        trace: trace.toJSON()
+        stages: byCall,
+        cost: buildRunCost(byCall, labProfile, provider, model),
+        totalMs: traceJson.totalMs
       });
     }
   });

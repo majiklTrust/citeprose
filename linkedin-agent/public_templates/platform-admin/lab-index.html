@@ -35,7 +35,7 @@
    paper/panel/ink/rule carry the chrome. Three signal colors, each
    with exactly one meaning, never decorative:
      inspect  reading, free, no cost
-     gate     a vendor boundary, the moment execution leaves the
+     gate     a Model Provider boundary, the moment execution leaves the
               building. Reserved for the three LLM crossings.
      execute  an action that costs money or changes state
    live/fail are status only. ------------------------------------ */
@@ -154,7 +154,7 @@ body {
   border: 1px solid var(--rule); border-radius: 3px; background: var(--panel);
 }
 .field select:disabled, .field input:disabled { background: var(--rule-2); color: var(--faint); }
-/* An unset vendor selection is a real state, not an error: the pair
+/* An unset Model Provider selection is a real state, not an error: the pair
    is either both set or both empty (never half). */
 .field select[data-unset="true"] { color: var(--faint); font-style: italic; }
 
@@ -191,7 +191,7 @@ body {
 /* ── the execution spine: the signature element ───────────────────
    A real call tree, not a flat list. Depth is indentation, the rail
    is continuous so the sequence reads as one execution, and the
-   three vendor crossings visibly interrupt it. Breakpoints live in
+   three Model Provider crossings visibly interrupt it. Breakpoints live in
    a gutter to the left, exactly where a debugger puts them. ------ */
 .panel.flush { margin-bottom: 0; }
 .console-split {
@@ -258,7 +258,7 @@ body {
 .stage[data-status="norecord"] .name  { color: var(--muted); }
 .stage[data-status="paused"]  .glyph { color: var(--execute); }
 
-/* A vendor crossing is structurally different from a local call and
+/* A Model Provider crossing is structurally different from a local call and
    is drawn that way: heavier rule, gate colour, and the egress
    marker in the left column. */
 .stage[data-kind="gate"] {
@@ -281,7 +281,7 @@ body {
 .insp-file  { font-family: var(--mono); font-size: 0.64rem; color: var(--faint); margin-top: 1px; }
 /* Which vault prompt this call read. Set in the GATE colour, the same
    one the egress marker carries in the call sequence, so the vault
-   and the vendor boundary read as one family of "this call reached
+   and the Model Provider boundary read as one family of "this call reached
    outside itself" rather than as two unrelated highlights. */
 .insp-prompt { font-family: var(--mono); font-size: 0.64rem; color: var(--gate); margin-top: 2px; }
 .insp-prompt:empty { display: none; }
@@ -446,6 +446,24 @@ pre.post-body {
   border-radius: 0 3px 3px 0; background: #fdf6f2;
   padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-2);
 }
+
+/* Run cost (4.25111.20). One aligned line per paid crossing plus a
+   total; the dollar column right-aligns so estimates compare down
+   the column, and "unpriced" is muted rather than pretending to be
+   a number. */
+.run-cost { padding: var(--sp-2) var(--sp-3) var(--sp-3); border-top: 1px solid var(--line); }
+.cost-table { font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.cost-row {
+  display: grid; grid-template-columns: 7.5rem 1fr 6rem 8.5rem;
+  gap: var(--sp-2); padding: 2px 0; align-items: baseline;
+}
+.cost-row.is-failed .cost-call { color: var(--execute); }
+.cost-call { font-weight: 600; }
+.cost-searches { color: var(--muted); }
+.cost-usd { text-align: right; }
+.cost-usd.is-unpriced { color: var(--muted); font-style: italic; }
+.cost-total { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 4px; font-weight: 700; }
+.cost-note { font-size: 0.66rem; color: var(--muted); margin: var(--sp-2) 0 0; }
 .blocked-box h4 { margin: 0 0 var(--sp-1); font-size: 0.75rem; color: var(--execute); }
 .blocked-box p  { margin: 0; font-size: 0.72rem; }
 
@@ -655,6 +673,10 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       <section class="panel flush" id="result-panel">
         <h2>Result</h2>
         <div class="result" id="result"></div>
+        <!-- Run cost (4.25111.20): what the run consumed and what it
+             cost, rendered for successful AND failed runs, because a
+             run that died at generation still paid for web search. -->
+        <div id="run-cost"></div>
       </section>
 
       </div>
@@ -695,7 +717,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   //   kind  call  a function that orchestrates others
   //         db    reads the database
   //         pure  no io
-  //         gate  execution leaves the building for a vendor
+  //         gate  execution leaves the building for a Model Provider
   var SEQUENCE = [
     { id: "generatePost",      depth: 0, kind: "call", fn: "generatePost()",                    file: "src/services/content-generator.js" },
     { id: "resolveAngle",      depth: 1, kind: "pure", fn: "resolveAngle()",                    file: "src/services/angle-select.js" },
@@ -1066,14 +1088,21 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     if (!s) {
       $("insp-title").textContent = "No stage selected";
       $("insp-file").textContent = "Select a call in the sequence to inspect it.";
-      pane.appendChild(emptyState("Nothing selected", "Pick any call in the sequence on the left. Calls that cross to a vendor are marked egress."));
+      pane.appendChild(emptyState("Nothing selected", "Pick any call in the sequence on the left. Calls that cross to a Model Provider are marked egress."));
       return;
     }
 
     $("insp-title").textContent = s.fn;
     $("insp-file").textContent = s.file;
 
-    if (s.error) { pane.appendChild(errorBox("This call failed", s.error)); return; }
+    // A failed row shows its error AND its recorded tabs
+    // (4.25111.20). The early return that stood here hid the
+    // assembled prompt and the raw response exactly when the
+    // operator most needed them: while diagnosing the failure.
+    if (s.error) {
+      pane.appendChild(errorBox("This call failed", s.error));
+      if (!s[state.pane]) return;
+    }
     if (s.status === "pending") {
       pane.appendChild(emptyState("Not executed yet", "Run the sequence to populate this call."));
       return;
@@ -1232,7 +1261,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   //   scalars and short strings   one row of the key/value table
   //   long or multiline strings   their own labelled block, which is
   //                               how assembled prompts and raw
-  //                               vendor text stay readable
+  //                               Model Provider text stay readable
   //   arrays of objects           a table, columns unioned across rows
   //   arrays of scalars           a single joined row
   //   nested scalar objects       flattened into key.subkey rows
@@ -1489,6 +1518,64 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
   function withClass(node, cls) {
     node.className = (node.className ? node.className + " " : "") + cls;
     return node;
+  }
+
+  // ══ RUN COST (4.25111.20) ════════════════════════════════════
+  // One line per crossing that spends money, then the total. Rules:
+  // a null estimate renders as "unpriced", never as $0.00; the total
+  // names how many usage-bearing stages went unpriced instead of
+  // hiding them; the web search count is billed separately and is
+  // never folded into the dollar figure. Rendered for failed runs
+  // too, from the error body, because the money is already gone.
+  var COST_LABELS = {
+    webSearch: "web search", corroborate: "corroboration",
+    generateContent: "generation", qualityCheck: "quality review"
+  };
+  function renderRunCost(cost) {
+    var host = $("run-cost");
+    host.innerHTML = "";
+    if (!cost || !cost.perStage || !cost.perStage.length) return;
+    var wrap = el("div", "run-cost");
+    wrap.appendChild(el("p", "result-sub", "Run cost"));
+    var table = el("div", "cost-table");
+    cost.perStage.forEach(function (st) {
+      var row = el("div", "cost-row" + (st.status === "failed" ? " is-failed" : ""));
+      row.appendChild(el("span", "cost-call", COST_LABELS[st.call] || st.call));
+      var u = st.usage;
+      row.appendChild(el("span", "cost-tokens", u
+        ? ("in " + (u.inputTokens === null ? "?" : u.inputTokens)
+           + " / out " + (u.outputTokens === null ? "?" : u.outputTokens))
+        : (st.status === "failed" ? "no usage reported" : "no usage")));
+      row.appendChild(el("span", "cost-searches",
+        st.webSearchRequests
+          ? (st.webSearchRequests + (st.webSearchRequests === 1 ? " search" : " searches"))
+          : ""));
+      row.appendChild(el("span", "cost-usd" + (st.priced ? "" : " is-unpriced"),
+        st.priced ? "$" + Number(st.costEstimateUsd).toFixed(6) : (u ? "unpriced" : "")));
+      table.appendChild(row);
+    });
+    var t = cost.totals || {};
+    var totalRow = el("div", "cost-row cost-total");
+    totalRow.appendChild(el("span", "cost-call", "total"));
+    totalRow.appendChild(el("span", "cost-tokens",
+      "in " + (t.inputTokens || 0) + " / out " + (t.outputTokens || 0)));
+    totalRow.appendChild(el("span", "cost-searches",
+      t.webSearchRequests ? (t.webSearchRequests + (t.webSearchRequests === 1 ? " search" : " searches")) : ""));
+    totalRow.appendChild(el("span", "cost-usd",
+      (t.costEstimateUsd === null || t.costEstimateUsd === undefined)
+        ? "unpriced"
+        : "$" + Number(t.costEstimateUsd).toFixed(6)
+          + (t.unpricedStages
+             ? " + " + t.unpricedStages + (t.unpricedStages === 1 ? " unpriced stage" : " unpriced stages")
+             : "")));
+    table.appendChild(totalRow);
+    wrap.appendChild(table);
+    wrap.appendChild(el("p", "cost-note",
+      "Estimates from the platform price table; the Model Provider invoice is the ground truth. "
+      + "Web searches are billed separately and are not in the dollar figure. "
+      + "Paid by the platform account, never this workspace; recorded in the spend ledger as "
+      + "platform spend under workflow generation_lab."));
+    host.appendChild(wrap);
   }
 
   // ══ PROMPT SLOTS ═════════════════════════════════════════════
@@ -1839,6 +1926,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       updateElapsed();
       applyRunSlots(data.promptSlots);
       renderResult(data.result, data.quality);
+      renderRunCost(data.cost || null);
       return data;
     }, function (err) {
       state.runError = err;
@@ -1907,11 +1995,31 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
       setStatus(state.running ? "running" : "done", state.running ? ("Running " + s.fn) : ("Stopped after " + s.fn));
       return true;
     }).catch(function (err) {
+      // 4.25111.20: the server's error body now carries the SAME
+      // folded stages and cost the success body does, because a run
+      // that failed midway still executed and PAID for its earlier
+      // calls. When that shape is present, apply it: the rows that
+      // ran show their real records, the failed row carries its own
+      // error, and the cost block reports what the failure cost.
+      var body = err && err.body && typeof err.body === "object" ? err.body : null;
+      state.running = false;
+      if (body && body.stages) {
+        state.stages.forEach(function (s) {
+          if (s.status === "skipped") return;
+          applyStage(s, body.stages[s.id]);
+        });
+        state.cursor = state.stages.length - 1;
+        if (typeof body.totalMs === "number") { state.elapsed = body.totalMs; updateElapsed(); }
+        renderRunCost(body.cost || null);
+        var failedRow = state.stages.filter(function (s) { return s.status === "failed"; })[0];
+        renderSpine(); select((failedRow || state.stages[Math.max(i, 0)]).id); syncButtons();
+        setStatus("failed", "Run failed: " + String(body.error || describe(err)).split("\n")[0]);
+        return false;
+      }
       var s = state.stages[Math.max(i, 0)];
       state.cursor = i;
       s.status = "failed";
       s.error = err;
-      state.running = false;
       renderSpine(); select(s.id); syncButtons();
       setStatus("failed", "Run failed: " + describe(err).split("\n")[0]);
       return false;
@@ -2000,6 +2108,7 @@ textarea.slot-edit:focus { outline: 2px solid var(--gate); outline-offset: 1px; 
     // discards those.
     if (state.metaSlots) renderPromptSlots(state.metaSlots);
     renderResult(null, null);
+    renderRunCost(null);
     loadSequence();
     setStatus("idle", "Idle. Run to begin.");
     syncButtons();

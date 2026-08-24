@@ -24,6 +24,8 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js"
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { generationTrace, generationVendor, traceArguments, labRun, spanStart } from "./generation-trace.js";
+import { estimateCostUsd, getModelProfile } from "../llm/registry.js";
+import { keyFingerprintOf } from "../spend/key-resolver.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -32,16 +34,82 @@ import { generationTrace, generationVendor, traceArguments, labRun, spanStart } 
 // ruling. The research stage is Anthropic-fixed regardless of the
 // provider selected for generation, because web_search is an
 // Anthropic server side tool, so this is the only key it needs.
+//
+// 4.25111.20: also returns key provenance for the ledger. This path
+// bypasses the resolver chain, so the fingerprint must be derived
+// HERE or every research row records 'unresolved'. On a Lab run
+// provenance is null on purpose: the recorder's own lab seam is the
+// authority for platform attribution, never the call site.
 async function newAnthropicClient() {
   const lab = labRun();
-  if (lab && lab.apiKey) return new Anthropic({ apiKey: lab.apiKey });
+  if (lab && lab.apiKey) {
+    return { client: new Anthropic({ apiKey: lab.apiKey }), provenance: null };
+  }
   const apiKey = await getAnthropicApiKey();
-  return new Anthropic({ apiKey });
+  return {
+    client: new Anthropic({ apiKey }),
+    provenance: { keySource: "tenant", keyFingerprint: keyFingerprintOf(apiKey) }
+  };
 }
 
-// What the vendor actually returned, beyond the model's own words.
+// ── Research spend recording (4.25111.20) ────────────────────
+// Ruling: real spend is always recorded. Web search and
+// corroboration call the SDK directly and never passed through the
+// orchestrator's metering, so every run's ledger undercounted by
+// its two most expensive calls. This helper is the bookkeeping for
+// those two crossings: usage arrives in the SDK's snake_case shape
+// and is normalized to the recorder's contract; cost is estimated
+// from the same registry pricing the orchestrator uses; the
+// web_search_requests count (a billable axis with no token
+// equivalent and no ledger column) rides in source_ref. A row is
+// written only when a real crossing happened: substituted calls and
+// refusals before the wire are not spend. status 'unknown_usage' is
+// reserved for calls that may have executed without reporting usage
+// (timeouts), matching the audit view's meaning; a priced-out model
+// keeps status 'ok' with a null estimate, because the tokens are
+// still the ground truth. Never throws: metering must not break
+// research any more than it may break generation.
+async function recordResearchSpend({ call, model, usage, provenance, cycleId, status, webSearchRequests }) {
+  try {
+    const { recordSpend } = await import("../spend/spend-recorder.js");
+    let normalized = null;
+    let costEstimateUsd = null;
+    if (usage) {
+      normalized = {
+        inputTokens: Number.isFinite(usage.input_tokens) ? usage.input_tokens : null,
+        outputTokens: Number.isFinite(usage.output_tokens) ? usage.output_tokens : null,
+        cacheReadTokens: Number.isFinite(usage.cache_read_input_tokens) ? usage.cache_read_input_tokens : null,
+        cacheWriteTokens: Number.isFinite(usage.cache_creation_input_tokens) ? usage.cache_creation_input_tokens : null
+      };
+      try {
+        costEstimateUsd = estimateCostUsd(getModelProfile("anthropic", model, process.env), {
+          promptTokens: normalized.inputTokens,
+          completionTokens: normalized.outputTokens
+        });
+      } catch { costEstimateUsd = null; }
+    }
+    const sourceRef = { call, cycleId: cycleId || null };
+    if (Number.isFinite(webSearchRequests)) sourceRef.webSearchRequests = webSearchRequests;
+    await recordSpend({
+      requestType: "text_generation",
+      provider: "anthropic",
+      model,
+      usage: normalized,
+      costEstimateUsd,
+      status: status || "ok",
+      provenance: provenance || undefined,
+      sourceRef
+    });
+  } catch (recErr) {
+    // The recorder logs its own failures; this fires only if it
+    // cannot load or crashed pre-log. Never silent (2.5.81).
+    console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+  }
+}
+
+// What the Model Provider actually returned, beyond the model's own words.
 //
-// A web_search response is not one text block. The vendor interleaves
+// A web_search response is not one text block. The Model Provider interleaves
 // server_tool_use blocks, each carrying the query the MODEL chose to
 // issue, and web_search_tool_result blocks carrying the pages that
 // came back. The pipeline needs only the text, so it filters the rest
@@ -51,7 +119,7 @@ async function newAnthropicClient() {
 //
 // Reads blocks that already arrive. Nothing extra is requested and
 // no pipeline behaviour changes.
-function describeVendorResponse(response) {
+function describeModelProviderResponse(response) {
   const blocks = (response && response.content) || [];
   const counts = {};
   blocks.forEach((b) => { counts[b.type] = (counts[b.type] || 0) + 1; });
@@ -178,16 +246,19 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   const webSearchEntry = MODELS.find((m) => m.id === model);
   // Declared outside the try for the same scope reason as model
   // above: the catch reads it to report time to failure when the
-  // vendor call itself is what threw. Null until the crossing is
-  // reached, so a refusal that never called the vendor stays blank.
-  let vendorTook = null;
+  // Model Provider call itself is what threw. Null until the
+  // crossing is reached, so a refusal that never called the Model
+  // Provider stays blank. keyProvenance travels the same way so the
+  // catch can attribute a failed crossing's ledger row (4.25111.20).
+  let providerTook = null;
+  let keyProvenance = null;
 
   try {
     // No row means this deployment has not configured web search for
     // the selected model. Refuse HERE, and refuse FIRST.
     //
-    // The danger is NOT that the vendor would reject the request. With
-    // no tools key the vendor accepts it and returns an ordinary
+    // The danger is NOT that the Model Provider would reject the request. With
+    // no tools key the Model Provider accepts it and returns an ordinary
     // completion, and the stage reports a successful search that found
     // nothing. A silent empty result is worse than a loud refusal,
     // because the run continues and the post is built from RSS alone
@@ -202,7 +273,8 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       throw new Error("no web search tool configured for this model");
     }
 
-    const client = await newAnthropicClient();
+    const { client, provenance } = await newAnthropicClient();
+    keyProvenance = provenance;
 
     var vaultGet = actionToken
       ? (key) => getAuthorizedPrompt(key, actionToken)
@@ -249,18 +321,32 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       model, maxTokens: requestParams.max_tokens, tools: requestParams.tools,
       assembledPrompt
     });
-    // The vendor substitute receives the SAME fully assembled request
-    // the network would have received. Everything below this line
-    // runs identically either way.
-    const vendor = generationVendor();
-    // Vendor latency, bracketed immediately around the crossing so
-    // the parsing below is not billed to the vendor's time.
-    vendorTook = spanStart();
-    const response = vendor
-      ? vendor.anthropic("web_search", requestParams)
+    // The Model Provider substitute receives the SAME fully
+    // assembled request the network would have received. Everything
+    // below this line runs identically either way.
+    const substitute = generationVendor();
+    // Model Provider latency, bracketed immediately around the
+    // crossing so the parsing below is not billed to its time.
+    providerTook = spanStart();
+    const response = substitute
+      ? substitute.anthropic("web_search", requestParams)
       : await callAnthropic(client, requestParams);
-    const vendorTookMs = vendorTook && vendorTook();
+    const providerTookMs = providerTook && providerTook();
     assembledPrompt = null;
+
+    // Money left the account the moment the crossing returned, so
+    // the row is written HERE, before any parse gate can bail out.
+    // A substituted call made no crossing and records nothing.
+    if (!substitute) {
+      await recordResearchSpend({
+        call: "web_search", model,
+        usage: response.usage || null,
+        provenance: keyProvenance, cycleId, status: "ok",
+        webSearchRequests: response.usage && response.usage.server_tool_use
+          ? response.usage.server_tool_use.web_search_requests
+          : undefined
+      });
+    }
 
     const textBlocks = response.content.filter(b => b.type === "text");
     const rawText = textBlocks.map(b => b.text).join("\n").trim();
@@ -271,7 +357,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       generationTrace()?.stage("web_search_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON array found in the response. The stage returns no claims and the run continues."
-      }, describeVendorResponse(response)), vendorTookMs);
+      }, describeModelProviderResponse(response)), providerTookMs);
       await logActivity("warn", "web_search_no_json", { cycleId, rawLength: rawText.length });
       return [];
     }
@@ -281,7 +367,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // on the wrong bytes is invisible without it.
     generationTrace()?.stage("web_search_response", Object.assign({
       rawText, claimCount: claims.length, claims
-    }, describeVendorResponse(response)), vendorTookMs);
+    }, describeModelProviderResponse(response)), providerTookMs);
 
     // Console mirror: the direct effect of the queries above —
     // how much citable material this cycle's retrieval produced.
@@ -318,9 +404,21 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     generationTrace()?.stage("web_search_response", Object.assign({
       failed: true, reason: err && err.name ? err.name : "Error",
       error: err && err.message ? err.message : String(err)
-    }, attempted), vendorTook ? vendorTook() : undefined);
+    }, attempted), providerTook ? providerTook() : undefined);
     platformLog("error", "web_search_failed",
       Object.assign({ cycleId, error: err && err.message }, attempted));
+    // 4.25111.20: a crossing that was REACHED may have spent money
+    // even though it threw. A timeout after the model started is
+    // spend with unreported usage (unknown_usage); a rejection is
+    // failed. A refusal before the crossing (providerTook null)
+    // spent nothing and records nothing.
+    if (providerTook) {
+      await recordResearchSpend({
+        call: "web_search", model, usage: null,
+        provenance: keyProvenance, cycleId,
+        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed"
+      });
+    }
     // Best effort: when the error being recorded ABORTED the tenant
     // transaction, a plain logActivity here would throw 25P02 and
     // replace this catch's return-empty degrade with a propagation.
@@ -405,18 +503,23 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     }))
   }, sourcesTook && sourcesTook());
 
-  // Same scope rule as the web_search crossing: the catch reads it.
+  // Same scope rule as the web_search crossing: the catch reads
+  // these. model is hoisted too (4.25111.20) so the failed-crossing
+  // ledger row can name the model that was attempted.
   let corrTook = null;
+  let keyProvenance = null;
+  let model = null;
 
   try {
-    const client = await newAnthropicClient();
+    const { client, provenance } = await newAnthropicClient();
+    keyProvenance = provenance;
     // A Lab run uses the model the operator selected, the SAME one
     // generation uses. Falling through to the tenant's agent_state
     // value would pair the platform key with a model from a different
     // account. This stage sends NO tool block, so the web_search
     // notes on the stage above do not apply here.
     const lab = labRun();
-    const model = lab ? lab.model : await getAnthropicModel();
+    model = lab ? lab.model : await getAnthropicModel();
 
     var vaultGet = actionToken
       ? (key) => getAuthorizedPrompt(key, actionToken)
@@ -451,13 +554,23 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       model, maxTokens: requestParams.max_tokens, sourceCount: allSources.length,
       assembledPrompt
     });
-    const vendor = generationVendor();
+    const substitute = generationVendor();
     corrTook = spanStart();
-    const response = vendor
-      ? vendor.anthropic("corroboration", requestParams)
+    const response = substitute
+      ? substitute.anthropic("corroboration", requestParams)
       : await callAnthropic(client, requestParams);
     const corrTookMs = corrTook && corrTook();
     assembledPrompt = null;
+
+    // Ledger row at the crossing, before any parse gate (4.25111.20):
+    // the spend is real whether or not the JSON below survives.
+    if (!substitute) {
+      await recordResearchSpend({
+        call: "corroboration", model,
+        usage: response.usage || null,
+        provenance: keyProvenance, cycleId, status: "ok"
+      });
+    }
 
     const rawText = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
     const cleaned = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
@@ -467,7 +580,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       generationTrace()?.stage("corroboration_response", Object.assign({
         rawText, parseFailed: true,
         note: "No JSON object found in the response. No claims are verified and the run continues."
-      }, describeVendorResponse(response)), corrTookMs);
+      }, describeModelProviderResponse(response)), corrTookMs);
       await logActivity("warn", "corroboration_parse_failed", { cycleId });
       return { verified: [], belowThreshold: [], uncorroborated: [] };
     }
@@ -489,7 +602,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     // Raw text, plus the trust weight arithmetic that decided which
     // claims survive. The scoring is where claims are actually won
     // or lost, so it is shown rather than summarised.
-    generationTrace()?.stage("corroboration_response", Object.assign(describeVendorResponse(response), {
+    generationTrace()?.stage("corroboration_response", Object.assign(describeModelProviderResponse(response), {
       rawText,
       verified: verified.length,
       belowThreshold: belowThreshold.length,
@@ -515,6 +628,14 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       error: err && err.message ? err.message : String(err)
     }, corrTook ? corrTook() : undefined);
     platformLog("error", "corroboration_failed", { cycleId, error: err && err.message });
+    // 4.25111.20: same failed-crossing bookkeeping as web search.
+    if (corrTook) {
+      await recordResearchSpend({
+        call: "corroboration", model, usage: null,
+        provenance: keyProvenance, cycleId,
+        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed"
+      });
+    }
     // Best effort for the same reason as the web_search catch: the
     // recorded error may itself have aborted the tenant transaction.
     await logActivityBestEffort("error", "corroboration_failed", { cycleId, error: err.message });
@@ -722,8 +843,8 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
-    // The cooldown exists to pace REAL vendor traffic. A substituted
-    // vendor makes no network call, so waiting would only make the
+    // The cooldown exists to pace REAL Model Provider traffic. A substituted
+    // Model Provider makes no network call, so waiting would only make the
     // observation slower without making it truer.
     const cooldownMs = generationVendor() ? 0 : getCooldownMs();
     await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldownMs / 1000}s before corroboration call` });

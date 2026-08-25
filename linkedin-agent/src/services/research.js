@@ -843,10 +843,13 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     brief = buildDirectBrief(allSources);
   } else {
     // Path A: Full corroboration pipeline
-    // The cooldown exists to pace REAL Model Provider traffic. A substituted
-    // Model Provider makes no network call, so waiting would only make the
-    // observation slower without making it truer.
-    const cooldownMs = generationVendor() ? 0 : getCooldownMs();
+    // The cooldown exists to pace REAL Model Provider traffic on a
+    // tenant's key. A substituted Model Provider makes no network
+    // call, and a Lab run (4.25111.21, delegated ruling) is an
+    // interactive one-off on the separate platform key, so neither
+    // waits: for the Lab the pause only lengthened the held
+    // transaction by the full cooldown.
+    const cooldownMs = (labRun() || generationVendor()) ? 0 : getCooldownMs();
     await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldownMs / 1000}s before corroboration call` });
     if (cooldownMs > 0) await new Promise(resolve => setTimeout(resolve, cooldownMs));
 

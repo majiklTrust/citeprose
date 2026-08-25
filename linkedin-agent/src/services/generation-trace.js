@@ -12,11 +12,11 @@
 //           into. Recording NEVER throws and never awaits, so the
 //           collector cannot become the failure it is observing.
 //
-//   vendor  an OPTIONAL substitute for the vendor call. When
+//   vendor  an OPTIONAL substitute for the Model Provider call. When
 //           present, the pipeline hands its fully assembled request
 //           to this object instead of the network. Everything above
 //           the wire (prompt assembly, parsing, scoring, gates) runs
-//           for real. When absent, the pipeline calls the vendor
+//           for real. When absent, the pipeline calls the Model Provider
 //           exactly as it always has.
 //
 // When no frame is ambient, every accessor returns null and the
@@ -26,7 +26,7 @@
 // Zero imports beyond node:async_hooks, so this can be imported
 // anywhere without creating a cycle.
 //
-// The records deliberately contain assembled prompts and vendor
+// The records deliberately contain assembled prompts and Model Provider
 // responses; that visibility is the entire point. They are held in
 // request memory only. They are NEVER written to the database and
 // NEVER passed to platformLog.
@@ -196,13 +196,27 @@ export function promptOverride(key) {
   return typeof text === "string" && text.length > 0 ? text : null;
 }
 
-// The vendor substitute, or null when the run should call the real
-// vendor. Its presence is also what marks a run as observed, which
-// is how the pipeline knows to skip inter-call rate limit cooldowns
-// that exist only to pace real vendor traffic.
+// The Model Provider substitute, or null when the run should call
+// the real Model Provider. (Since Phase 3 made Lab calls real,
+// nothing sets this; the seam is retained for the planned mock
+// toggle, and labRun() is what marks a run as observed.)
 export function generationVendor() {
   const frame = als.getStore();
   return (frame && frame.vendor) || null;
+}
+
+// A request scoped override for the tenant's corroboration setting,
+// or null when the tenant's own stored value governs (4.25111.21,
+// Item #1 Phase 1). Same shape as promptOverride: the frame carries
+// the operator's choice, the ONE read site in generatePost consults
+// it before agent_state, and nothing is ever written. This replaced
+// the Lab's in-transaction agent_state override, which took a row
+// lock on the tenant's settings for the entire run and blocked
+// production writes to that row until the run finished.
+export function corroborationOverride() {
+  const frame = als.getStore();
+  if (!frame || typeof frame.corroborationOverride !== "boolean") return null;
+  return frame.corroborationOverride;
 }
 
 // ── Arguments ────────────────────────────────────────────────

@@ -28,17 +28,20 @@
 //     credential and routing, then reads what the pipeline
 //     announced. The Lab never drives the order of anything.
 //
-//     A run leaves NO TENANT CONTENT behind. The pipeline's
-//     activity_log and post writes happen inside a transaction that
-//     is deliberately rolled back, so a developer tool cannot leave
-//     content rows in a customer's workspace for work that customer
-//     did not request. Two record classes deliberately SURVIVE the
-//     rollback (ruling 2026-08-24: real spend is always recorded):
-//     llm_spend_events and llm_activations rows, written by the
-//     spend recorder in its own transaction and attributed to
-//     key_source 'platform' / workflow 'generation_lab' by the
-//     recorder's lab seam, and platform_log audit lines, written on
-//     their own pooled connection.
+//     A run leaves NO TENANT CONTENT behind. As of 4.25111.21 that
+//     is PREVENTION, not destruction: activity_log writes are
+//     suppressed at the source under the Lab frame, the forced
+//     corroboration choice rides the frame instead of being written,
+//     and so the run's transaction holds no tenant writes and no
+//     locks at all. The rollback in runAndRollback REMAINS as
+//     defense in depth for any future write nobody gated. Two
+//     record classes deliberately persist (ruling 2026-08-24: real
+//     spend is always recorded): llm_spend_events and
+//     llm_activations rows, written by the spend recorder in its
+//     own transaction and attributed to key_source 'platform' /
+//     workflow 'generation_lab' by the recorder's lab seam, and
+//     platform_log audit lines, written on their own pooled
+//     connection.
 //
 // Every value is read through a function that already exists and is
 // already the source of truth for that value elsewhere in the
@@ -487,15 +490,16 @@ async function collectPromptSlots(genre, usedKeys) {
   return slots;
 }
 
-// Set an agent_state value INSIDE the current transaction only. The
-// row never survives, because the transaction is rolled back.
-async function setAgentStateInTransaction(key, value) {
-  const { currentClient } = await import("../db/with-tenant.js");
-  await currentClient().query(
-    `INSERT INTO agent_state (tenant_id, key, value) VALUES (current_tenant_id(), $1, $2)
-     ON CONFLICT (tenant_id, key) DO UPDATE SET value = $2`,
-    [key, value]
-  );
+// ── In-flight run cap (4.25111.21, Item #1 Phase 1) ──────────
+// A run is a paid, minutes-long unit holding a pool client. Beyond
+// the cap the route REFUSES with 429 rather than queueing: a queue
+// would silently hold clients and stack spend, and the operator
+// deserves the truth. The slot releases in a finally, so a crashed
+// run can never leak one. Env LAB_MAX_CONCURRENT_RUNS, default 2.
+let inFlightRuns = 0;
+function labRunCap() {
+  const n = parseInt(process.env.LAB_MAX_CONCURRENT_RUNS, 10);
+  return Number.isInteger(n) && n >= 1 ? n : 2;
 }
 
 // Run inside a tenant transaction and ALWAYS roll it back.
@@ -506,6 +510,13 @@ async function setAgentStateInTransaction(key, value) {
 // path here, not the failure path. Reads inside the transaction are
 // unaffected, and platformLog writes on its own connection so the
 // operator audit trail survives.
+//
+// 4.25111.21: the expected writes no longer happen at all
+// (activity_log is suppressed at source under the frame; the
+// corroboration override rides the frame instead of agent_state),
+// so this rollback is now DEFENSE IN DEPTH, destroying only writes
+// nobody gated, and the transaction it guards holds no locks. Item
+// #1 Phase 2 replaces this envelope with leased, read-only units.
 class LabRunComplete extends Error {
   constructor(value) { super("lab run complete"); this.value = value; }
 }
@@ -636,6 +647,27 @@ export default function createPlatformAdminLabRoutes() {
   // validates both at the route so a bad selection is refused before
   // anything is spent.
   router.post("/run", async (req, res) => {
+    // Seat check first (4.25111.21): a refusal costs nothing and
+    // says exactly why nothing ran. The slot is released in a
+    // finally, so no failure path can leak one.
+    if (inFlightRuns >= labRunCap()) {
+      platformLog("warn", "lab_run_refused_busy", { inFlight: inFlightRuns, cap: labRunCap() });
+      return res.status(429).json({
+        error: `The Lab is already executing ${inFlightRuns} run(s); the concurrent cap is ${labRunCap()}`,
+        code: "LAB_BUSY",
+        inFlight: inFlightRuns,
+        cap: labRunCap()
+      });
+    }
+    inFlightRuns += 1;
+    try {
+      await handleRun(req, res);
+    } finally {
+      inFlightRuns -= 1;
+    }
+  });
+
+  async function handleRun(req, res) {
     const body = req.body || {};
     const tenantId = String(body.tenantId || "");
     const topicId = String(body.topicId || "");
@@ -762,20 +794,21 @@ export default function createPlatformAdminLabRoutes() {
           e.labStatus = 404;
           throw e;
         }
-        // Corroboration is a tenant setting the pipeline reads for
-        // itself. Honouring the operator's choice means setting that
-        // value inside the rolled back transaction, so the pipeline
-        // reads it the ordinary way and the tenant's stored value is
-        // never actually changed.
-        if (forceCorroboration !== null) {
-          await setAgentStateInTransaction("corroboration", forceCorroboration ? "enabled" : "disabled");
-        }
-
         // The pipeline sequences itself. The Lab supplies a collector,
-        // the credential and routing, and any prompt override, then
-        // reads what was announced. No substitute: every call
-        // reaches a real model.
-        const result = await runWithGenerationTrace({ trace, labRun: labFrame, promptOverrides }, async () => {
+        // the credential and routing, any prompt override, and the
+        // operator's forced corroboration choice, then reads what was
+        // announced. No substitute: every call reaches a real model.
+        //
+        // 4.25111.21: the forced corroboration choice rides the FRAME
+        // now, consulted at generatePost's one read site exactly like
+        // a prompt override. Its predecessor wrote agent_state inside
+        // this transaction, which took a row lock on the tenant's
+        // settings for the WHOLE run: an owner pausing their agent
+        // while a Lab run replayed their tenant waited minutes for
+        // this route to finish. Nothing is written or locked now.
+        const frame = { trace, labRun: labFrame, promptOverrides };
+        if (forceCorroboration !== null) frame.corroborationOverride = forceCorroboration;
+        const result = await runWithGenerationTrace(frame, async () => {
           const generated = await generatePost(topicId, req.user?.sub || null, null, angle, genre);
           let quality = null;
           if (!generated.blocked) {
@@ -840,7 +873,7 @@ export default function createPlatformAdminLabRoutes() {
         totalMs: traceJson.totalMs
       });
     }
-  });
+  }
 
   return router;
 }

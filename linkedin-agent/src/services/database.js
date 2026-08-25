@@ -22,6 +22,9 @@
 import { getPostsWindowDays } from "../config/posts-window.js";
 import { currentClient, currentTenantId } from "../db/with-tenant.js";
 import { canTransition, isEditable } from "./post-status.js";
+// Zero-dependency frame module (imports only node:async_hooks), so
+// this static import can never create a cycle.
+import { labRun } from "./generation-trace.js";
 
 // ── Internal helpers ─────────────────────────────────────────
 
@@ -554,7 +557,17 @@ export async function setAgentState(key, value) {
 // as { raw: string } for JSONB storage consistency; objects pass
 // through; null stays null. Matches the pre-conversion behavior
 // of accepting either shape.
+//
+// 4.25111.21 (Item #1 Phase 1): under a Lab frame this returns
+// without writing. The ruling that a Lab run leaves no tenant
+// content stands; prevention at the source replaces reliance on
+// the run's rollback, so the Lab transaction stops accumulating
+// writes it was only going to destroy, and an aborted-statement
+// failure inside a Lab run can no longer poison the bookkeeping.
+// The rollback remains in place as defense for any write nobody
+// gated. Production paths have no frame and are untouched.
 export async function logActivity(level, action, details = null, userSub = null) {
+  if (labRun()) return;
   const c = client();
   let jsonb = null;
   if (details != null) {

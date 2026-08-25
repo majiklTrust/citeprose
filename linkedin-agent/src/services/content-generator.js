@@ -28,6 +28,7 @@ import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-t
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
 import { generationTrace, generationVendor, traceArguments, promptOverride, corroborationOverride, labRun, spanStart } from "./generation-trace.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -389,6 +390,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       generatedText = mocked.text;
       generationModel = `${mocked.provider}/${mocked.model}`;
     } else if (isLlmAbstractionEnabled()) {
+      // Surrender the DB lease before the crossing (Item #1 Phase 2,
+      // corrected 4.25111.31: the first placement covered only the
+      // legacy branch below, and with LLM_ABSTRACTION=1 always set
+      // this orchestrated branch is the one that runs, so the lease
+      // rode through the generation wait). No-op under withTenant.
+      await yieldDb();
       const orchestrated = await generateWithTenantLlm({
         system: topic.system_context || null,
         user: userPrompt,
@@ -428,6 +435,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
         platformLog("debug", "llm_payload_main_post_generation",
           buildLlmPayloadDebug("main_post_generation", requestParams, cycleId));
       }
+      // Surrender the DB lease before the crossing (Item #1 Phase
+      // 2): Model Provider latency dwarfs any database burst, and a
+      // workflow holds no connection while it waits. No-op under
+      // classic withTenant, so production behavior is unchanged.
+      await yieldDb();
       const response = await callAnthropic(client, requestParams);
       generatedText = response.content[0].text;
       generationModel = model;
@@ -598,6 +610,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   if (qSubstitute) {
     reviewText = qSubstitute.orchestrated("quality_check").text;
   } else if (isLlmAbstractionEnabled()) {
+    // Lease surrendered before the crossing; orchestrated branch,
+    // corrected 4.25111.31 (see the generation branch note).
+    await yieldDb();
     const orchestrated = await generateWithTenantLlm({
       system: null,
       user: assembledPrompt,
@@ -630,6 +645,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
       platformLog("debug", "llm_payload_quality_check",
         buildLlmPayloadDebug("quality_check", requestParams, cycleId));
     }
+    // Lease surrendered before the crossing; no-op under classic
+    // withTenant (Item #1 Phase 2).
+    await yieldDb();
     const response = await callAnthropic(client, requestParams);
     reviewText = response.content[0].text;
   }
@@ -700,6 +718,9 @@ export async function refinePost(
     // the pre-existing direct Anthropic path, unchanged.
     let refinedText;
     if (isLlmAbstractionEnabled()) {
+      // Lease surrendered before the crossing; orchestrated branch,
+      // corrected 4.25111.31 (see the generation branch note).
+      await yieldDb();
       const orchestrated = await generateWithTenantLlm({
         system: null,
         user: userPrompt,
@@ -725,6 +746,9 @@ export async function refinePost(
         platformLog("debug", "llm_payload_refine",
           buildLlmPayloadDebug("refine", requestParams, cycleId));
       }
+      // Lease surrendered before the crossing; no-op under classic
+      // withTenant (Item #1 Phase 2).
+      await yieldDb();
       const response = await callAnthropic(client, requestParams);
       refinedText = response.content[0].text;
     }

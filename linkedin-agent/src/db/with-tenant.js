@@ -77,8 +77,10 @@ const als = new AsyncLocalStorage();
 // Strict UUID grammar (8-4-4-4-12 hex). Only a value matching this
 // is ever inlined into the fused opener, which makes the inline
 // literal injection-proof by construction. Anything else takes the
-// original parameterized path.
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+// original parameterized path. Exported (4.25111.28) so
+// tenant-workflow.js validates against the SAME grammar its own
+// fused opener depends on, rather than a drifting copy.
+export const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 // Monotonic clock in fractional milliseconds. process.hrtime.bigint
 // is immune to wall-clock adjustment, which matters because the
@@ -105,6 +107,21 @@ export function currentTenantId() {
 export function currentClient() {
   const store = als.getStore();
   return store ? store.client : null;
+}
+
+// -- Item #1 Phase 2 bridge (4.25111.28) ------------------------
+// tenant-workflow.js runs its leased stores on THIS module's ALS,
+// so currentTenantId() and currentClient() answer identically no
+// matter which envelope opened the scope, and a nested classic
+// withTenant shadows a workflow store exactly as it shadows a
+// request store. The ALS instance itself stays private to this
+// module; these two functions are the whole surface.
+export function enterTenantScope(store, fn) {
+  return als.run(store, fn);
+}
+
+export function currentTenantScope() {
+  return als.getStore() || null;
 }
 
 // Wraps `fn` in a PostgreSQL transaction with the tenant

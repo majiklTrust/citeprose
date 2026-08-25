@@ -32,9 +32,10 @@
 //     is PREVENTION, not destruction: activity_log writes are
 //     suppressed at the source under the Lab frame, the forced
 //     corroboration choice rides the frame instead of being written,
-//     and so the run's transaction holds no tenant writes and no
-//     locks at all. The rollback in runAndRollback REMAINS as
-//     defense in depth for any future write nobody gated. Two
+//     and so the run holds no tenant writes and no locks at all. As
+//     of 4.25111.28 the backstop for any future write nobody gated
+//     is the READ-ONLY lease itself: the statement fails loudly
+//     instead of being silently erased by a rollback. Two
 //     record classes deliberately persist (ruling 2026-08-24: real
 //     spend is always recorded): llm_spend_events and
 //     llm_activations rows, written by the spend recorder in its
@@ -69,6 +70,7 @@
 // =================================================================
 import express from "express";
 import { withTenant } from "../db/with-tenant.js";
+import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { createGenerationTrace, runWithGenerationTrace } from "../services/generation-trace.js";
 import { getPlatformApiKey } from "../config/platform-keys.js";
 import { getProvider, getModelProfile, estimateCostUsd } from "../llm/registry.js";
@@ -502,35 +504,28 @@ function labRunCap() {
   return Number.isInteger(n) && n >= 1 ? n : 2;
 }
 
-// Run inside a tenant transaction and ALWAYS roll it back.
+// How a Lab run touches the database (Item #1 Phase 2, 4.25111.28).
 //
-// withTenant commits when its callback returns and rolls back when
-// it throws. A Lab run must never leave rows behind, so the result
-// is carried out on a sentinel error: the rollback is the normal
-// path here, not the failure path. Reads inside the transaction are
-// unaffected, and platformLog writes on its own connection so the
-// operator audit trail survives.
+// The run executes under withTenantWorkflow with READ-ONLY leases.
+// Until 4.25111.27 it ran inside runAndRollback: one withTenant
+// transaction held for the run's entire wall time, whose rollback
+// erased anything written. That envelope earned its keep when the
+// run still wrote (agent_state, activity_log); 4.25111.21 prevented
+// those writes at source, which demoted the rollback to defense in
+// depth guarding a transaction that pinned a pool client for
+// minutes to protect nothing.
 //
-// 4.25111.21: the expected writes no longer happen at all
-// (activity_log is suppressed at source under the frame; the
-// corroboration override rides the frame instead of agent_state),
-// so this rollback is now DEFENSE IN DEPTH, destroying only writes
-// nobody gated, and the transaction it guards holds no locks. Item
-// #1 Phase 2 replaces this envelope with leased, read-only units.
-class LabRunComplete extends Error {
-  constructor(value) { super("lab run complete"); this.value = value; }
-}
-
-async function runAndRollback(tenantId, fn) {
-  try {
-    await withTenant(tenantId, async () => { throw new LabRunComplete(await fn()); });
-  } catch (err) {
-    if (err instanceof LabRunComplete) return err.value;
-    throw err;
-  }
-  // Unreachable: the callback always throws.
-  throw new Error("Lab run did not complete");
-}
+// The lease model inverts the guarantee from ERASURE to PREVENTION:
+// every lease opens BEGIN READ ONLY, so a write nobody gated fails
+// loudly at the statement with read_only_sql_transaction instead of
+// being silently destroyed later, and between Model Provider
+// crossings (yieldDb in the pipeline) the run holds no connection,
+// no transaction, and no snapshot at all. Reads are unchanged:
+// every lease carries the tenant GUC under FORCE RLS, exactly as
+// production reads do, and READ COMMITTED already took a fresh
+// snapshot per statement inside the old envelope. The writes that
+// must survive the run (spend ledger, activations, platform log)
+// always ran on their own connections and are untouched.
 
 export default function createPlatformAdminLabRoutes() {
   const router = express.Router();
@@ -787,7 +782,7 @@ export default function createPlatformAdminLabRoutes() {
 
     const trace = createGenerationTrace();
     try {
-      const out = await runAndRollback(tenantId, async () => {
+      const out = await withTenantWorkflow(tenantId, { readOnly: true }, async () => {
         const topic = await getTopicBySlug(topicId);
         if (!topic) {
           const e = new Error(`Topic not found: ${topicId}`);

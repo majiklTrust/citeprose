@@ -24,6 +24,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt } from "./prompt-vault.js"
 import { buildQueriesForTopicDetailed } from "./search-queries.js";
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { generationTrace, generationVendor, traceArguments, labRun, spanStart } from "./generation-trace.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 import { estimateCostUsd, getModelProfile } from "../llm/registry.js";
 import { keyFingerprintOf } from "../spend/key-resolver.js";
 
@@ -325,6 +326,11 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // assembled request the network would have received. Everything
     // below this line runs identically either way.
     const substitute = generationVendor();
+    // Surrender the DB lease before the crossing (Item #1 Phase 2):
+    // Model Provider latency dwarfs any database burst, and a
+    // workflow holds no connection while it waits. No-op under
+    // classic withTenant, so production behavior is unchanged.
+    await yieldDb();
     // Model Provider latency, bracketed immediately around the
     // crossing so the parsing below is not billed to its time.
     providerTook = spanStart();
@@ -555,6 +561,9 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       assembledPrompt
     });
     const substitute = generationVendor();
+    // Lease surrendered before the crossing; no-op under classic
+    // withTenant (Item #1 Phase 2).
+    await yieldDb();
     corrTook = spanStart();
     const response = substitute
       ? substitute.anthropic("corroboration", requestParams)

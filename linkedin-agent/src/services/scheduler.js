@@ -32,6 +32,7 @@ import {
 import { PRE_PUB_STATUSES } from "./post-status.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-publisher.js";
+import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
@@ -265,6 +266,18 @@ async function executePostInner(postId) {
 
     return result;
   } catch (err) {
+    if (err.code === "COMMENTARY_TOO_LONG") {
+      // 4.25111.7: a content decision, not a fault. The post
+      // returns to the approval queue intact and editable, with
+      // the polite reason attached, instead of being branded
+      // 'failed' (which reads as an infrastructure fault and is
+      // not editable). Reached only from the unattended paths
+      // (batch publisher claim state 'publishing') or any future
+      // caller that skips the approve pre-flight.
+      await updatePostStatus(postId, "pending_approval", { errorMessage: err.message });
+      await logActivity("warn", "post_too_long_for_linkedin", { postId, ...(err.details || {}) });
+      throw err;
+    }
     await updatePostStatus(postId, "failed", { errorMessage: err.message });
     await logActivity("error", "post_publish_failed", { postId, error: err.message });
     throw err;
@@ -284,6 +297,21 @@ export async function approvePost(postId, userSub = null) {
     const err = new Error("Cannot publish an empty post.");
     err.code = "EMPTY_CONTENT";
     throw err;
+  }
+  // 4.25111.7: wire-length pre-flight BEFORE any state transition
+  // (validate-before-mutate: a refusal here leaves the post in
+  // pending_approval with content untouched; the only write is the
+  // append-only audit line, so the refusal is idempotent and there
+  // is never partial state to repair). Escaped length is the
+  // conservative measure for both publish modes: legacy v2 sends
+  // the raw, never-longer text.
+  const wire = composeWireCommentary(post.content, post.hashtags);
+  const wireMax = getCommentaryMax();
+  if (wire.length > wireMax) {
+    await logActivity("warn", "post_too_long_for_linkedin", {
+      postId, wireLength: wire.length, limit: wireMax, overBy: wire.length - wireMax
+    }, userSub);
+    throw commentaryTooLongError(wire.length, wireMax);
   }
   await updatePostStatus(postId, "approved");
   await logActivity("info", "post_approved", { postId }, userSub);

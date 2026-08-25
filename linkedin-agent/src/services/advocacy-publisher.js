@@ -182,6 +182,24 @@ export async function publishApprovedVariant(variantId, memberSub, opts = {}) {
       accessToken: creds.accessToken
     }, opts.deps || {});
   } catch (err) {
+    if (err.code === "COMMENTARY_TOO_LONG") {
+      // 4.25111.7: a content decision, not a fault. The variant
+      // returns to the member's queue intact and editable, with
+      // the reason recorded, instead of landing in 'failed'.
+      await c.query(
+        `UPDATE advocacy_variants
+            SET status = 'pending_approval',
+                quality = COALESCE(quality, '{}'::jsonb)
+                  || jsonb_build_object('publish', jsonb_build_object(
+                       'code', 'COMMENTARY_TOO_LONG'::text, 'message', $2::text))
+          WHERE id = $1`,
+        [variantId, err.message]
+      );
+      await logActivity("warn", "advocacy_post_too_long", {
+        variantId, sourcePostId: variant.source_post_id, ...(err.details || {})
+      }, memberSub);
+      return { status: "too_long", code: "COMMENTARY_TOO_LONG", message: err.message };
+    }
     const code = isLinkedInApiError(err) ? err.code : LI_ERROR_CODES.NETWORK;
     return failVariant(code);
   }

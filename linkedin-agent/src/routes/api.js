@@ -552,6 +552,12 @@ router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), 
     res.json({ success: true, result });
   } catch (err) {
     if (err.code === "EMPTY_CONTENT") return res.status(400).json({ error: err.message });
+    // 4.25111.7: the wire-length refusal is user-actionable, not an
+    // internal error. The message already says exactly how far over
+    // the limit the post is and that the draft is unchanged.
+    if (err.code === "COMMENTARY_TOO_LONG") {
+      return res.status(400).json({ error: err.message, code: err.code, details: err.details || null });
+    }
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

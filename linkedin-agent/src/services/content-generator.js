@@ -27,7 +27,7 @@ import { getPrompt, getAuthorizedPrompt, renderPrompt, genreExists } from "./pro
 import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-trace.js";
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
-import { generationTrace, generationVendor, traceArguments, promptOverride, spanStart } from "./generation-trace.js";
+import { generationTrace, generationVendor, traceArguments, promptOverride, corroborationOverride, labRun, spanStart } from "./generation-trace.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
 
@@ -119,8 +119,16 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 
   const cycleId = crypto.randomBytes(4).toString("hex");
 
-  // Read corroboration toggle from agent state
-  const skipCorroboration = (await getAgentState("corroboration")) === "disabled";
+  // Read corroboration toggle from agent state. A Lab run may carry
+  // a frame override (4.25111.21): the operator's forced choice
+  // rides the frame exactly like a prompt override, is consulted
+  // HERE at the one read site, and is never written anywhere. Null
+  // frame or no override means the tenant's stored value governs,
+  // byte for byte as before.
+  const corrOverride = corroborationOverride();
+  const skipCorroboration = corrOverride !== null
+    ? !corrOverride
+    : (await getAgentState("corroboration")) === "disabled";
 
   // Vault access: use signed token when triggered by a user request,
   // fall back to internal access for automated/scheduled operations.
@@ -207,9 +215,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   }
 
   // ── Rate limit cooldown before generation ──────────────────
-  // Paces real vendor traffic only; a substituted vendor waits for
-  // nothing.
-  const cooldown = generationVendor() ? 0 : getCooldownMs();
+  // Paces real Model Provider traffic on a tenant's key only. A
+  // substituted call waits for nothing, and a Lab run (4.25111.21,
+  // the same delegated ruling as the corroboration cooldown in
+  // research.js) is an interactive one-off on the separate platform
+  // key: this pause only lengthened the Lab's held transaction.
+  const cooldown = (labRun() || generationVendor()) ? 0 : getCooldownMs();
   await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldown / 1000}s before content generation` });
   if (cooldown > 0) await new Promise(resolve => setTimeout(resolve, cooldown));
 
@@ -348,10 +359,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   const genStartMs = Date.now();
 
   try {
-    // Vendor call. Flag ON (LLM_ABSTRACTION=1): the orchestrator
+    // Model Provider call. Flag ON (LLM_ABSTRACTION=1): the orchestrator
     // resolves the tenant's provider + model, enforces the egress
     // allowlist, and returns the canonical response, so this
-    // pipeline never learns which vendor served the request.
+    // pipeline never learns which Model Provider served the request.
     // Flag OFF (default): the pre-existing direct Anthropic path,
     // byte-for-byte unchanged.
     traceArguments("generateContent",
@@ -367,14 +378,14 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     });
     let generatedText;
     let generationModel;
-    let genVendorMeta = null;
-    let genVendorTookMs;
-    const genVendor = generationVendor();
-    if (genVendor) {
-      // Substituted vendor. The prompt above is exactly what a real
+    let genProviderMeta = null;
+    let genProviderTookMs;
+    const genSubstitute = generationVendor();
+    if (genSubstitute) {
+      // Substituted Model Provider. The prompt above is exactly what a real
       // call would have carried; parsing, metric substitution and the
       // fidelity gate below all run unchanged.
-      const mocked = genVendor.orchestrated("main_post_generation");
+      const mocked = genSubstitute.orchestrated("main_post_generation");
       generatedText = mocked.text;
       generationModel = `${mocked.provider}/${mocked.model}`;
     } else if (isLlmAbstractionEnabled()) {
@@ -392,14 +403,14 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       // The orchestrator returns usage, stop reason and a cost
       // estimate alongside the text. The pipeline needs only the text,
       // so an observer has to take the rest here or it is lost.
-      genVendorMeta = {
+      genProviderMeta = {
         usage: orchestrated.usage || null,
         stopReason: orchestrated.stopReason || null,
         costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
       };
-      // The orchestrator measures its own vendor call; report that
+      // The orchestrator measures its own Model Provider call; report that
       // number rather than measuring the same interval a second time.
-      genVendorTookMs = typeof orchestrated.durationMs === "number" ? orchestrated.durationMs : undefined;
+      genProviderTookMs = typeof orchestrated.durationMs === "number" ? orchestrated.durationMs : undefined;
     } else {
       warnLegacyPathOnce();
       const client = await newAnthropicClient();
@@ -425,7 +436,7 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 
     generationTrace()?.stage("generation_response", Object.assign({
       model: generationModel, rawText: generatedText
-    }, genVendorMeta || {}), genVendorTookMs);
+    }, genProviderMeta || {}), genProviderTookMs);
 
     const raw = generatedText.trim();
     const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
@@ -575,17 +586,17 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   });
   template = null;
 
-  // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
+  // Model Provider call: orchestrated when LLM_ABSTRACTION=1, otherwise
   // the pre-existing direct Anthropic path, unchanged.
   generationTrace()?.stage("quality_request", {
     maxOutputTokens: 800, assembledPrompt
   });
   let reviewText;
-  let qVendorMeta = null;
-  let qVendorTookMs;
-  const qVendor = generationVendor();
-  if (qVendor) {
-    reviewText = qVendor.orchestrated("quality_check").text;
+  let qProviderMeta = null;
+  let qProviderTookMs;
+  const qSubstitute = generationVendor();
+  if (qSubstitute) {
+    reviewText = qSubstitute.orchestrated("quality_check").text;
   } else if (isLlmAbstractionEnabled()) {
     const orchestrated = await generateWithTenantLlm({
       system: null,
@@ -597,13 +608,13 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
       cycleId: cycleId || null
     });
     reviewText = orchestrated.text;
-    qVendorMeta = {
+    qProviderMeta = {
       model: `${orchestrated.provider}/${orchestrated.model}`,
       usage: orchestrated.usage || null,
       stopReason: orchestrated.stopReason || null,
       costEstimateUsd: typeof orchestrated.costEstimateUsd === "number" ? orchestrated.costEstimateUsd : null
     };
-    qVendorTookMs = typeof orchestrated.durationMs === "number" ? orchestrated.durationMs : undefined;
+    qProviderTookMs = typeof orchestrated.durationMs === "number" ? orchestrated.durationMs : undefined;
   } else {
     warnLegacyPathOnce();
     const client = await newAnthropicClient();
@@ -625,7 +636,7 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   assembledPrompt = null;
 
   generationTrace()?.stage("quality_response",
-    Object.assign({ rawText: reviewText }, qVendorMeta || {}), qVendorTookMs);
+    Object.assign({ rawText: reviewText }, qProviderMeta || {}), qProviderTookMs);
 
   const raw = reviewText.trim();
   const cleaned = raw.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
@@ -685,7 +696,7 @@ export async function refinePost(
   platformLog("info", "post_refine_started", { cycleId, genre: genre || "default" });
 
   try {
-    // Vendor call: orchestrated when LLM_ABSTRACTION=1, otherwise
+    // Model Provider call: orchestrated when LLM_ABSTRACTION=1, otherwise
     // the pre-existing direct Anthropic path, unchanged.
     let refinedText;
     if (isLlmAbstractionEnabled()) {

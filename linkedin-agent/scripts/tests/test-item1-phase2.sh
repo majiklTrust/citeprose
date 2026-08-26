@@ -281,13 +281,13 @@ grep -q 'withTenantWorkflow(tenantId, { readOnly: true }' "$APP_ROOT/src/routes/
 if grep -q 'LabRunComplete' "$APP_ROOT/src/routes/platform-admin-lab-api.js" 2>/dev/null; then G1=0; fi
 YR="$(grep -c 'await yieldDb();' "$APP_ROOT/src/services/research.js" 2>/dev/null || echo 0)"
 YC="$(grep -c 'await yieldDb();' "$APP_ROOT/src/services/content-generator.js" 2>/dev/null || echo 0)"
-[ "$YR" = "2" ] || G1=0
-# 6, not 3 (4.25111.31): generation, quality and refine each carry
-# the yield on BOTH wire branches (orchestrated and legacy). The .28
-# placement covered only the legacy branch, and the devenv rerun of
-# this suite is what exposed it: the orchestrated branch is the one
-# that runs under LLM_ABSTRACTION=1.
-[ "$YC" = "6" ] || G1=0
+# 3 and 7 (4.25111.32): the Phase 2 counts were 2 and 6 (each
+# crossing yielding on both wire branches per the 4.25111.31
+# correction); Phase 3 added one yield before each production
+# cooldown pause (research corroboration pause, content-generator
+# generation pause), so a paced wait holds no transaction either.
+[ "$YR" = "2" ] || [ "$YR" = "3" ] || G1=0
+[ "$YC" = "6" ] || [ "$YC" = "7" ] || G1=0
 c_out "probe workflowFile=$([ -f "$APP_ROOT/src/db/tenant-workflow.js" ] && echo yes || echo no) yieldDb_research=$YR yieldDb_generator=$YC allPresent=$G1"
 verdict "TC-1" "4.25111.28 code markers present in the installed tree" "impact" "$G1" "(markers absent)"
 

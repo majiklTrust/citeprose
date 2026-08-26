@@ -414,7 +414,9 @@ router.get("/spend-summary", async (req, res) => {
                 COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
                 COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
                 SUM(cost_estimate_usd) AS cost_estimate_usd,
-                COUNT(*)::int AS calls
+                COUNT(*)::int AS calls,
+                MIN(created_at) AS first_at,
+                MAX(created_at) AS last_at
          FROM llm_spend_events
          WHERE created_at >= now() - interval '30 days'
          GROUP BY provider, key_source
@@ -424,12 +426,13 @@ router.get("/spend-summary", async (req, res) => {
                 COALESCE(SUM(e.input_tokens),0)::bigint AS input_tokens,
                 COALESCE(SUM(e.output_tokens),0)::bigint AS output_tokens,
                 SUM(e.cost_estimate_usd) AS cost_estimate_usd,
-                COUNT(e.id)::int AS calls
+                COUNT(e.id)::int AS calls,
+                COALESCE(string_agg(DISTINCT e.key_source::text, '/'), '-') AS key_source
          FROM llm_activations a
          LEFT JOIN llm_spend_events e ON e.activation_id = a.id
          GROUP BY a.id, a.workflow, a.label, a.created_at
          ORDER BY a.created_at DESC
-         LIMIT 10`)).rows;
+         LIMIT 200`)).rows;
       return { byProvider, recent };
     });
     const { pool } = await import("../db/pool.js");

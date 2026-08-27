@@ -27,6 +27,7 @@ import { generationTrace, generationVendor, traceArguments, labRun, spanStart } 
 import { yieldDb } from "../db/tenant-workflow.js";
 import { estimateCostUsd, getModelProfile } from "../llm/registry.js";
 import { keyFingerprintOf } from "../spend/key-resolver.js";
+import { classifyProviderError, providerFailureLogDetails } from "../llm/provider-error.js";
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store.
@@ -70,7 +71,7 @@ async function newAnthropicClient() {
 // keeps status 'ok' with a null estimate, because the tokens are
 // still the ground truth. Never throws: metering must not break
 // research any more than it may break generation.
-async function recordResearchSpend({ call, model, usage, provenance, cycleId, status, webSearchRequests }) {
+async function recordResearchSpend({ call, model, usage, provenance, cycleId, status, webSearchRequests, errorClass }) {
   try {
     const { recordSpend } = await import("../spend/spend-recorder.js");
     let normalized = null;
@@ -91,6 +92,10 @@ async function recordResearchSpend({ call, model, usage, provenance, cycleId, st
     }
     const sourceRef = { call, cycleId: cycleId || null };
     if (Number.isFinite(webSearchRequests)) sourceRef.webSearchRequests = webSearchRequests;
+    // 4.25111.38: a failed row names WHY it failed, so the ledger
+    // can answer "how much did we spend against a dead key" without
+    // joining back to logs.
+    if (errorClass) sourceRef.errorClass = errorClass;
     await recordSpend({
       requestType: "text_generation",
       provider: "anthropic",
@@ -188,6 +193,17 @@ async function gatherRSSMaterial(topic, angle) {
     }))
   }, rssTook && rssTook());
 
+  // Item #1 Part II property 1 (hold proportional to DB work,
+  // 4.25111.40; first shipped as the abandoned lineage's .34): the
+  // article fetch is the last database read of the run's opening
+  // burst, but the lease it rode stayed open through query building
+  // and prompt assembly all the way to the web-search crossing,
+  // measured at 3.0 to 3.4 seconds on devenv, an order of magnitude
+  // over the 250ms hold target. Surrender it here, at the end of the
+  // read; the next database touch opens its own lease. No-op under
+  // classic withTenant.
+  await yieldDb();
+
   return kept;
 }
 
@@ -195,7 +211,7 @@ async function gatherRSSMaterial(topic, angle) {
 // Step 2: Gather material from web search (API call #1)
 // ═══════════════════════════════════════════════════════════════
 
-async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
+async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken, providerFailures = null) {
   traceArguments("webSearch", "async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken)",
     [["topic", topic], ["angle", angle], ["cycleId", cycleId], ["actionToken", actionToken]]);
   const topicId = topic.slug;
@@ -253,6 +269,13 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
   // catch can attribute a failed crossing's ledger row (4.25111.20).
   let providerTook = null;
   let keyProvenance = null;
+  // The failed-crossing ledger row was gated on providerTook, but
+  // spanStart() returns null OUTSIDE a trace frame, so in production
+  // that gate could never open and a denied crossing recorded
+  // nothing (4.25111.38 root cause RC-2, reproduced against a
+  // billing-denied key). crossingReached is the explicit fact the
+  // gate always needed; providerTook stays as duration only.
+  let crossingReached = false;
 
   try {
     // No row means this deployment has not configured web search for
@@ -334,6 +357,7 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
     // Model Provider latency, bracketed immediately around the
     // crossing so the parsing below is not billed to its time.
     providerTook = spanStart();
+    if (!substitute) crossingReached = true;
     const response = substitute
       ? substitute.anthropic("web_search", requestParams)
       : await callAnthropic(client, requestParams);
@@ -411,25 +435,37 @@ async function gatherWebSearchMaterial(topic, angle, cycleId, actionToken) {
       failed: true, reason: err && err.name ? err.name : "Error",
       error: err && err.message ? err.message : String(err)
     }, attempted), providerTook ? providerTook() : undefined);
+    // 4.25111.38: name the failure BEFORE recording it anywhere. A
+    // billing denial spent a day disguised as "insufficient sources"
+    // because every record below carried only the raw message.
+    // The research SDK path is always Anthropic; name it even
+    // though SDK errors carry no providerId (4.25111.42).
+    const pf = classifyProviderError(err, { providerId: "anthropic" });
+    if (pf) Object.assign(attempted, { errorClass: pf.class, operatorMessage: pf.operatorMessage });
+    if (providerFailures && pf) providerFailures.push({ call: "web_search", ...pf });
     platformLog("error", "web_search_failed",
       Object.assign({ cycleId, error: err && err.message }, attempted));
-    // 4.25111.20: a crossing that was REACHED may have spent money
-    // even though it threw. A timeout after the model started is
-    // spend with unreported usage (unknown_usage); a rejection is
-    // failed. A refusal before the crossing (providerTook null)
-    // spent nothing and records nothing.
-    if (providerTook) {
+    // 4.25111.20 intent, 4.25111.38 gate: a crossing that was
+    // REACHED may have spent money even though it threw. A timeout
+    // after the model started is spend with unreported usage
+    // (unknown_usage); a rejection is failed. A refusal before the
+    // crossing spent nothing and records nothing.
+    if (crossingReached) {
       await recordResearchSpend({
         call: "web_search", model, usage: null,
         provenance: keyProvenance, cycleId,
-        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed"
+        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed",
+        errorClass: pf ? pf.class : "unclassified"
       });
     }
     // Best effort: when the error being recorded ABORTED the tenant
     // transaction, a plain logActivity here would throw 25P02 and
     // replace this catch's return-empty degrade with a propagation.
+    // 4.25111.42: the COMPLETE error, not a summary, in the
+    // activity log: raw message, class, status, provider, request
+    // id, body snippet, provider words.
     await logActivityBestEffort("error", "web_search_failed",
-      Object.assign({ cycleId, error: err.message }, attempted));
+      Object.assign({ cycleId }, attempted, providerFailureLogDetails(err, pf)));
     return [];
   }
 }
@@ -483,7 +519,7 @@ function assembleAllSources(webClaims, rssArticles) {
 // Path A: Corroboration (API call #2)
 // ═══════════════════════════════════════════════════════════════
 
-async function corroborateClaims(allSources, cycleId, actionToken) {
+async function corroborateClaims(allSources, cycleId, actionToken, providerFailures = null) {
   traceArguments("corroborate", "async function corroborateClaims(allSources, cycleId, actionToken)",
     [["allSources", allSources], ["cycleId", cycleId], ["actionToken", actionToken]]);
   if (allSources.length === 0) {
@@ -515,6 +551,10 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
   let corrTook = null;
   let keyProvenance = null;
   let model = null;
+  // Same explicit crossing fact as the web_search gatherer
+  // (4.25111.38): corrTook comes from spanStart(), which is null
+  // outside a trace frame, so it can never gate a production ledger row.
+  let crossingReached = false;
 
   try {
     const { client, provenance } = await newAnthropicClient();
@@ -565,6 +605,7 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
     // withTenant (Item #1 Phase 2).
     await yieldDb();
     corrTook = spanStart();
+    if (!substitute) crossingReached = true;
     const response = substitute
       ? substitute.anthropic("corroboration", requestParams)
       : await callAnthropic(client, requestParams);
@@ -636,18 +677,25 @@ async function corroborateClaims(allSources, cycleId, actionToken) {
       failed: true, reason: err && err.name ? err.name : "Error",
       error: err && err.message ? err.message : String(err)
     }, corrTook ? corrTook() : undefined);
-    platformLog("error", "corroboration_failed", { cycleId, error: err && err.message });
-    // 4.25111.20: same failed-crossing bookkeeping as web search.
-    if (corrTook) {
+    const pf = classifyProviderError(err, { providerId: "anthropic" });
+    if (providerFailures && pf) providerFailures.push({ call: "corroboration", ...pf });
+    platformLog("error", "corroboration_failed",
+      { cycleId, error: err && err.message, errorClass: pf ? pf.class : undefined });
+    // 4.25111.20 intent, 4.25111.38 gate: same failed-crossing
+    // bookkeeping as web search, on the explicit crossing fact.
+    if (crossingReached) {
       await recordResearchSpend({
         call: "corroboration", model, usage: null,
         provenance: keyProvenance, cycleId,
-        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed"
+        status: /timeout|abort/i.test((err && err.name) || "") ? "unknown_usage" : "failed",
+        errorClass: pf ? pf.class : "unclassified"
       });
     }
     // Best effort for the same reason as the web_search catch: the
     // recorded error may itself have aborted the tenant transaction.
-    await logActivityBestEffort("error", "corroboration_failed", { cycleId, error: err.message });
+    // 4.25111.42: the COMPLETE error in the activity log.
+    await logActivityBestEffort("error", "corroboration_failed",
+      Object.assign({ cycleId }, providerFailureLogDetails(err, pf)));
     return { verified: [], belowThreshold: [], uncorroborated: [] };
   }
 }
@@ -793,8 +841,14 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
   // Step 1: RSS (instant)
   const rssArticles = await gatherRSSMaterial(topic, angle);
 
+  // Provider failures observed by this run's crossings, in operator
+  // language (4.25111.38). They ride the brief so the BLOCKED REASON
+  // can tell the truth: a run starved by a billing-denied key must
+  // never present itself as ordinary thin research.
+  const providerFailures = [];
+
   // Step 2: Web search (API call #1)
-  const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId, actionToken);
+  const webClaims = await gatherWebSearchMaterial(topic, angle, cycleId, actionToken, providerFailures);
 
   // ── Stage 1 logging: research material breakdown ────────────
   // Shows which feeds contributed, topic-specific vs catchall split,
@@ -859,16 +913,30 @@ export async function conductResearch(topicId, angle, cycleId = null, skipCorrob
     // waits: for the Lab the pause only lengthened the held
     // transaction by the full cooldown.
     const cooldownMs = (labRun() || generationVendor()) ? 0 : getCooldownMs();
-    await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldownMs / 1000}s before corroboration call` });
-    if (cooldownMs > 0) await new Promise(resolve => setTimeout(resolve, cooldownMs));
+    // 4.25111.38 (RC-5): pace the Model Provider only when there is
+    // a call to pace. With zero sources the corroborator refuses
+    // before the wire, and the reproduced billing-denied run sat
+    // through a full cooldown protecting a call that never happens.
+    if (allSources.length > 0) {
+      await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldownMs / 1000}s before corroboration call` });
+      // Production pause (Item #1 Phase 3, 4.25111.40): the lease is
+      // surrendered BEFORE the wait, after the log write above, so
+      // pacing real Model Provider traffic holds no transaction and
+      // no connection. No-op under classic withTenant.
+      if (cooldownMs > 0) { await yieldDb(); await new Promise(resolve => setTimeout(resolve, cooldownMs)); }
+    }
 
     const corrobStart = Date.now();
-    const corroboration = await corroborateClaims(allSources, cycleId, actionToken);
+    const corroboration = await corroborateClaims(allSources, cycleId, actionToken, providerFailures);
     traceArguments("buildBrief", "function buildVerifiedBrief(corroboration, allSources)",
       [["corroboration", corroboration], ["allSources", allSources]]);
     brief = buildVerifiedBrief(corroboration, allSources);
     brief._corrobDurationMs = Date.now() - corrobStart;
   }
+
+  // Attach the observed provider failures to the brief itself, so
+  // every consumer (blocked reason, response, activity) names them.
+  brief.providerFailures = providerFailures;
 
   const researchCompleteDetails = {
     cycleId, topicId,

@@ -34,9 +34,20 @@ function safeStringify(value) {
   }
 }
 
+let persistOffAnnounced = false;
+
 async function persist(level, action, detailJson) {
   try {
-    if ((process.env.PLATFORM_LOG_PERSIST || "on") === "off") return;
+    if ((process.env.PLATFORM_LOG_PERSIST || "on") === "off") {
+      // 4.25111.38: dark persistence must announce itself ONCE. A
+      // day of failures was invisible to every database-side error
+      // query because nothing said the store was disabled.
+      if (!persistOffAnnounced) {
+        persistOffAnnounced = true;
+        console.warn("[platform-log] persistence is DISABLED (PLATFORM_LOG_PERSIST=off): events reach the console only");
+      }
+      return;
+    }
     let tenantId = null;
     try {
       const { currentTenantId } = await import("../db/with-tenant.js");

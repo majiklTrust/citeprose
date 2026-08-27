@@ -249,20 +249,20 @@ async function fetchFeed(feedRow) {
         linked,
         totalItems: feed.items?.length || 0
       });
-      platformLog("info", "feed_fetched", {
-        feed: feedRow.name, status: httpStatus,
-        newArticles, linked, totalItems: feed.items?.length || 0
-      });
+      // platformLog("info", "feed_fetched", {
+      //   feed: feedRow.name, status: httpStatus,
+      //   newArticles, linked, totalItems: feed.items?.length || 0
+      // });
 
       return { newArticles, linked };
     });
   } catch (err) {
     // Console first: this path must produce a record even if every
     // database write below is refused.
-    platformLog("warn", "feed_fetch_failed", {
-      status: httpStatus, error: err.message.substring(0, 300),
-      feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
-    });
+    // platformLog("warn", "feed_fetch_failed", {
+    //   status: httpStatus, error: err.message.substring(0, 300),
+    //   feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
+    // });
 
     // Failure bookkeeping. Each write takes its OWN savepoint,
     // because a bookkeeping statement that fails (a CHECK
@@ -334,7 +334,7 @@ export async function pollAllFeeds() {
   const feeds = feedsResult.rows;
 
   await logActivity("info", "feed_poll_started", { feedCount: feeds.length });
-  platformLog("info", "feed_poll_started", { feedCount: feeds.length });
+  // platformLog("info", "feed_poll_started", { feedCount: feeds.length });
 
   let totalNew = 0;
   let totalLinked = 0;
@@ -384,10 +384,10 @@ export async function pollAllFeeds() {
     prunedLinks: pruned.rowCount,
     fetched, cooldownSkipped, minRefreshMinutes
   });
-  platformLog("info", "feed_poll_complete", {
-    newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount,
-    fetched, cooldownSkipped, minRefreshMinutes
-  });
+  // platformLog("info", "feed_poll_complete", {
+  //   newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount,
+  //   fetched, cooldownSkipped, minRefreshMinutes
+  // });
 
   return totalNew;
 }
@@ -415,9 +415,9 @@ export async function pollSingleFeed(feedId) {
 
   const feedRow = feedResult.rows[0];
 
-  platformLog("info", "single_feed_poll_started", {
-    feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
-  });
+  // platformLog("info", "single_feed_poll_started", {
+  //   feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
+  // });
 
     const result = await fetchFeed(feedRow);
 

@@ -35,6 +35,7 @@ import { publishPost } from "./linkedin-publisher.js";
 import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
+import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
@@ -195,7 +196,14 @@ async function schedulerTick(topicId = null) {
     }
 
   } catch (err) {
-    await logActivity("error", "scheduler_error", err.message);
+    // 4.25111.38: a tick that died on a Model Provider failure says
+    // so, in class terms, instead of burying a raw message.
+    const { classifyProviderError, providerFailureLogDetails } = await import("../llm/provider-error.js");
+    const pf = err.providerFailure || classifyProviderError(err);
+    // 4.25111.42: classified or not, the trail carries the
+    // COMPLETE error (raw message, class, wire facts, provider
+    // words), never a bare message string.
+    await logActivity("error", "scheduler_error", providerFailureLogDetails(err, pf));
   }
 }
 
@@ -439,7 +447,16 @@ async function runTickForAllTenants() {
       continue;
     }
     try {
-      await withTenant(tenant.id, async () => {
+      // Item #1 Phase 3 (4.25111.40): the tick runs under the LEASED
+      // envelope, not one long transaction. A cron cycle spends most
+      // of its wall time waiting on Model Providers (and, in auto
+      // mode, on LinkedIn); the pipeline's yieldDb crossings now
+      // surrender the connection through every one of those waits.
+      // Writes commit per lease, which changes nothing observable
+      // here: this tick already caught its own errors and committed
+      // its activity trail, so failure behavior is identical, minus
+      // the pinned client and the run-long transaction.
+      await withTenantWorkflow(tenant.id, async () => {
         await logActivity("info", "scheduler_tick", `Cron fired for tenant ${tenant.slug}`);
         await schedulerTick();
       });

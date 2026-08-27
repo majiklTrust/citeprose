@@ -49,6 +49,8 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { isPlatformAdmin } from "../tenant/platform-db.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant, currentClient as client } from "../db/with-tenant.js";
+import { withTenantWorkflow } from "../db/tenant-workflow.js";
+import { classifyProviderError, providerFailureLogDetails } from "../llm/provider-error.js";
 import { platformLog } from "../services/platform-log.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { selectPrimarySource, sanitizePrimarySource } from "../services/source-provenance.js";
@@ -660,9 +662,59 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
   }
 });
 
+
+// 4.25111.38: a Model Provider failure is user-actionable and must
+// never wear the generic 500. The classifier recognizes both wire
+// shapes; err.providerFailure is pre-attached by pipeline catches
+// that already saw it. 502: the upstream failed, not this server.
+function respondProviderFailure(req, res, err) {
+  const pf = err.providerFailure || classifyProviderError(err);
+  if (!pf) return false;
+  // 4.25111.42: the platform record carries the COMPLETE error.
+  platformLog("error", "provider_failure",
+    Object.assign({ path: req.path }, providerFailureLogDetails(err, pf)));
+  res.status(502).json({
+    error: pf.operatorMessage,
+    code: "PROVIDER_" + pf.class.toUpperCase(),
+    retriable: pf.retriable
+  });
+  return true;
+}
+
 // ── Manual Triggers ──────────────────────────────────────────
 
+// Preview seats (Item #1 Phase 3, 4.25111.40; ruling 2026-08-25:
+// cap 3). A preview is a paid, minute-long generation on the
+// tenant's key. Beyond the cap the route REFUSES with 429 rather
+// than queueing, the same posture as the Lab's run cap: a queue
+// would silently stack spend. The slot releases in a finally, so a
+// crashed preview can never leak one. Env
+// PREVIEW_MAX_CONCURRENT_RUNS, default 3.
+let inFlightPreviews = 0;
+function previewRunCap() {
+  const n = parseInt(process.env.PREVIEW_MAX_CONCURRENT_RUNS, 10);
+  return Number.isInteger(n) && n >= 1 ? n : 3;
+}
+
 router.post("/api/generate-preview", requirePermission("preview_post"), annotateActivation("quick_action"), async (req, res) => {
+  if (inFlightPreviews >= previewRunCap()) {
+    platformLog("warn", "preview_refused_busy", { inFlight: inFlightPreviews, cap: previewRunCap() });
+    return res.status(429).json({
+      error: `${inFlightPreviews} preview generation(s) are already running; the concurrent cap is ${previewRunCap()}`,
+      code: "PREVIEW_BUSY",
+      inFlight: inFlightPreviews,
+      cap: previewRunCap()
+    });
+  }
+  inFlightPreviews += 1;
+  try {
+    await handleGeneratePreview(req, res);
+  } finally {
+    inFlightPreviews -= 1;
+  }
+});
+
+async function handleGeneratePreview(req, res) {
   try {
     const topicId = req.body.topicId || null;
     // Feature 2: an explicitly chosen EXISTING angle may accompany the
@@ -670,7 +722,18 @@ router.post("/api/generate-preview", requirePermission("preview_post"), annotate
     // (membership in topic.content_angles; fail-closed otherwise).
     const angle = typeof req.body.angle === "string" ? req.body.angle : null;
     const actionToken = createActionToken("generate-content", req.user.sub);
-    const result = await withTenant(req.tenant.id, async () => {
+    // Item #1 Phase 3 (4.25111.40): the preview runs under the LEASED
+    // envelope. Until now this was ONE transaction pinning one pool
+    // client for the full pipeline (research, corroboration,
+    // generation, quality), minutes of provider latency holding the
+    // database for nothing; the pipeline's yieldDb crossings now
+    // surrender the connection through every wait. Writes commit per
+    // lease, and the related writes (createPost plus its
+    // preview_auto_saved line) share one lease because no crossing
+    // sits between them. Ruling 2026-08-25: an UNCAUGHT failure keeps
+    // the activity rows written before it, a truthful partial trail,
+    // where the old envelope's rollback erased them.
+    const result = await withTenantWorkflow(req.tenant.id, async () => {
       const g = await generatePost(topicId, null, actionToken, angle);
       if (g.blocked) return { generated: g, quality: null, postId: null };
 
@@ -737,10 +800,11 @@ router.post("/api/generate-preview", requirePermission("preview_post"), annotate
     }
     res.json({ post: { ...result.generated, generated_image_id: null }, quality: result.quality, postId: result.postId });
   } catch (err) {
+    if (respondProviderFailure(req, res, err)) return;
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
-});
+}
 
 router.post("/api/save-preview", requirePermission("edit_post"), async (req, res) => {
   try {
@@ -838,11 +902,16 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
 router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, res) => {
   try {
     const topicId = req.body.topicId || null;
-    await withTenant(req.tenant.id, async () => {
+    // Item #1 Phase 3 (4.25111.40): this is the scheduler tick by
+    // another trigger, so it runs on the SAME leased envelope the
+    // cron path uses. One pipeline, one transaction discipline,
+    // whoever pulls the lever.
+    await withTenantWorkflow(req.tenant.id, async () => {
       return forceCycle(topicId, req.user?.sub || null);
     });
     res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {
+    if (respondProviderFailure(req, res, err)) return;
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }

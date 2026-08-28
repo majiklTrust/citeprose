@@ -35,6 +35,7 @@ import * as openAiCompatibleAdapter from "./adapters/openai-compatible.js";
 import { platformLog } from "../services/platform-log.js";
 import { labRun } from "../services/generation-trace.js";
 import { traceEnabled } from "../services/llm-trace.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 
 const ADAPTERS = Object.freeze({
   "anthropic": anthropicAdapter,
@@ -248,6 +249,18 @@ export async function generateWithTenantLlm(input, deps = {}) {
     if (traceEnabled(d.env ? d.env.LLM_TRACE : undefined)) {
       d.log("debug", "llm_payload_orchestrated", redactDeep({ purpose, cycleId, request: wire }));
     }
+
+    // Item #1 Phase 3 (4.25111.40): every database read this call
+    // needed (agent_state selection, the tenant credential through
+    // the resolver chain) has happened, and the payload is built.
+    // Surrender the lease HERE, before the wire, or the credential
+    // read's lease sits open through the whole provider wait: the
+    // call-site yields in content-generator cannot cover reads that
+    // happen INSIDE this function. The Lab path never showed this
+    // hole because a Lab run rides the platform key from env and
+    // reads nothing. No-op under classic withTenant and when no
+    // lease is open.
+    await yieldDb();
 
     const timeoutMs = resolveTimeoutMs(d.env);
     const startedMs = Date.now();

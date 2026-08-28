@@ -90,6 +90,19 @@ function nowMs() {
   return Number(process.hrtime.bigint() / 1000n) / 1000;
 }
 
+// Lease lock discipline (Item #1 Phase 3): OPT-IN via env
+// LEASE_LOCK_TIMEOUT_MS. When set to a positive integer, every lease
+// opens with that transaction-scoped lock_timeout, so a workflow
+// statement that would otherwise queue indefinitely behind another
+// session's lock fails loudly instead. Unset (the default) changes
+// nothing: leases wait exactly as classic withTenant transactions
+// do. Read once per workflow, not per lease, so one run cannot see
+// two different disciplines.
+function leaseLockTimeoutMs() {
+  const n = parseInt(process.env.LEASE_LOCK_TIMEOUT_MS, 10);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
 // -- Lease lifecycle --------------------------------------------
 
 // Acquire the workflow's client and open its transaction. Callers
@@ -115,11 +128,16 @@ async function ensureLease(state) {
     resetSavepointScope(client);
     try {
       // Fused opener, one round trip: BEGIN (READ ONLY when asked)
-      // plus the transaction-scoped tenant GUC. The inline literal
-      // is safe because tenantId matched UUID_RE at workflow entry.
+      // plus the transaction-scoped tenant GUC, plus the optional
+      // lease lock_timeout (Item #1 Phase 3). All literals are safe:
+      // tenantId matched UUID_RE at workflow entry and the timeout is
+      // a validated integer. Both settings are is_local, so they die
+      // with the lease and can never leak into a pooled connection.
+      const lockMs = state.lockTimeoutMs;
       await client.query(
         `BEGIN${state.readOnly ? " READ ONLY" : ""};` +
-        `SELECT set_config('app.current_tenant_id','${state.tenantId}',true)`
+        `SELECT set_config('app.current_tenant_id','${state.tenantId}',true)` +
+        (lockMs ? `,set_config('lock_timeout','${lockMs}ms',true)` : "")
       );
     } catch (openErr) {
       // Nothing usable was established. Destroy rather than repool:
@@ -230,6 +248,7 @@ export async function withTenantWorkflow(tenantId, opts, fn) {
   const state = {
     tenantId,
     readOnly: !!(opts && opts.readOnly === true),
+    lockTimeoutMs: leaseLockTimeoutMs(),
     lease: null,
     acquiring: null,
     siteMarker: isSiteCaptureEnabled() ? new Error("withTenantWorkflow call site") : null

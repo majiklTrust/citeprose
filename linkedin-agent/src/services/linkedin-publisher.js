@@ -44,6 +44,7 @@ import {
 } from "../tenant/credential-store.js";
 import { isSafeUrl } from "./security.js";
 import { currentTenantId } from "../db/with-tenant.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -370,6 +371,14 @@ async function restPublish(content, hashtags, imageUrl, target, imageBytes = nul
   // in payload shape.
   const payload = buildRestPostBody({ authorUrn, content, hashtags });
   const commentaryText = payload.commentary || "";
+
+  // Item #1 Phase 3: every database read this publish needs (target,
+  // token, author URN) has happened, and the wire-length gate above
+  // has already refused an oversize post without touching the
+  // network. Surrender the lease HERE, before the image and post
+  // calls, so LinkedIn's latency is never spent holding a
+  // transaction. No-op under classic withTenant.
+  await yieldDb();
 
   // Upload image if provided. A stored (generated) image arrives as
   // bytes and takes precedence: it has no public URL and must never

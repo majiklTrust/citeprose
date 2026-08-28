@@ -32,8 +32,10 @@ import {
 import { PRE_PUB_STATUSES } from "./post-status.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost } from "./linkedin-publisher.js";
+import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
+import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
@@ -194,7 +196,14 @@ async function schedulerTick(topicId = null) {
     }
 
   } catch (err) {
-    await logActivity("error", "scheduler_error", err.message);
+    // 4.25111.38: a tick that died on a Model Provider failure says
+    // so, in class terms, instead of burying a raw message.
+    const { classifyProviderError, providerFailureLogDetails } = await import("../llm/provider-error.js");
+    const pf = err.providerFailure || classifyProviderError(err);
+    // 4.25111.42: classified or not, the trail carries the
+    // COMPLETE error (raw message, class, wire facts, provider
+    // words), never a bare message string.
+    await logActivity("error", "scheduler_error", providerFailureLogDetails(err, pf));
   }
 }
 
@@ -265,6 +274,18 @@ async function executePostInner(postId) {
 
     return result;
   } catch (err) {
+    if (err.code === "COMMENTARY_TOO_LONG") {
+      // 4.25111.7: a content decision, not a fault. The post
+      // returns to the approval queue intact and editable, with
+      // the polite reason attached, instead of being branded
+      // 'failed' (which reads as an infrastructure fault and is
+      // not editable). Reached only from the unattended paths
+      // (batch publisher claim state 'publishing') or any future
+      // caller that skips the approve pre-flight.
+      await updatePostStatus(postId, "pending_approval", { errorMessage: err.message });
+      await logActivity("warn", "post_too_long_for_linkedin", { postId, ...(err.details || {}) });
+      throw err;
+    }
     await updatePostStatus(postId, "failed", { errorMessage: err.message });
     await logActivity("error", "post_publish_failed", { postId, error: err.message });
     throw err;
@@ -284,6 +305,21 @@ export async function approvePost(postId, userSub = null) {
     const err = new Error("Cannot publish an empty post.");
     err.code = "EMPTY_CONTENT";
     throw err;
+  }
+  // 4.25111.7: wire-length pre-flight BEFORE any state transition
+  // (validate-before-mutate: a refusal here leaves the post in
+  // pending_approval with content untouched; the only write is the
+  // append-only audit line, so the refusal is idempotent and there
+  // is never partial state to repair). Escaped length is the
+  // conservative measure for both publish modes: legacy v2 sends
+  // the raw, never-longer text.
+  const wire = composeWireCommentary(post.content, post.hashtags);
+  const wireMax = getCommentaryMax();
+  if (wire.length > wireMax) {
+    await logActivity("warn", "post_too_long_for_linkedin", {
+      postId, wireLength: wire.length, limit: wireMax, overBy: wire.length - wireMax
+    }, userSub);
+    throw commentaryTooLongError(wire.length, wireMax);
   }
   await updatePostStatus(postId, "approved");
   await logActivity("info", "post_approved", { postId }, userSub);
@@ -411,7 +447,16 @@ async function runTickForAllTenants() {
       continue;
     }
     try {
-      await withTenant(tenant.id, async () => {
+      // Item #1 Phase 3 (4.25111.40): the tick runs under the LEASED
+      // envelope, not one long transaction. A cron cycle spends most
+      // of its wall time waiting on Model Providers (and, in auto
+      // mode, on LinkedIn); the pipeline's yieldDb crossings now
+      // surrender the connection through every one of those waits.
+      // Writes commit per lease, which changes nothing observable
+      // here: this tick already caught its own errors and committed
+      // its activity trail, so failure behavior is identical, minus
+      // the pinned client and the run-long transaction.
+      await withTenantWorkflow(tenant.id, async () => {
         await logActivity("info", "scheduler_tick", `Cron fired for tenant ${tenant.slug}`);
         await schedulerTick();
       });

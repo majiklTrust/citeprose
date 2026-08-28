@@ -50,6 +50,45 @@ function escapeHashtag(tag) {
   return t.startsWith("#") ? "#" + escapeLittleText(t.slice(1)) : escapeLittleText(t);
 }
 
+// ── wire-length gate (4.25111.7) ────────────────────────────────
+// LinkedIn caps post commentary at 3,000 characters. The cap is
+// checked on the WIRE string (escaped content plus hashtag line),
+// never on the stored draft: escaping adds one character per
+// reserved character, so a draft can pass a raw-length check and
+// still exceed the limit as sent. Measuring the escaped form is
+// the conservative reading (the docs do not state whether escapes
+// count toward the limit); it can only refuse a marginal post
+// early, never send one that bounces. Pure computation, no I/O:
+// every caller on every node measures identically, and a future
+// UX counter can display the same number by calling the same
+// function, so the two layers cannot disagree.
+export function getCommentaryMax() {
+  const raw = parseInt(process.env.LINKEDIN_COMMENTARY_MAX, 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 3000;
+}
+
+// The single composition rule: what buildRestPostBody sends is
+// exactly what this returns. Callers pre-flight with it so the
+// measured string and the sent string can never drift.
+export function composeWireCommentary(content, hashtags = []) {
+  const tags = Array.isArray(hashtags)
+    ? hashtags.filter((h) => typeof h === "string" && h.trim().length > 0)
+    : [];
+  const hashtagString = tags.length > 0 ? `\n\n${tags.map(escapeHashtag).join(" ")}` : "";
+  return `${escapeLittleText(typeof content === "string" ? content : "")}${hashtagString}`;
+}
+
+export function commentaryTooLongError(wireLength, max) {
+  const err = new Error(
+    `This post is ${wireLength} characters after LinkedIn formatting escapes are applied, `
+    + `${wireLength - max} over LinkedIn's ${max}-character limit. `
+    + `Please shorten it and try again. Your draft is unchanged.`
+  );
+  err.code = "COMMENTARY_TOO_LONG";
+  err.details = { wireLength, limit: max, overBy: wireLength - max };
+  return err;
+}
+
 // content: post text; hashtags: string[] appended on a blank line
 // exactly as the org publisher always has; imageUrn optional.
 export function buildRestPostBody({ authorUrn, content, hashtags = [], imageUrn = null, title = null } = {}) {
@@ -59,14 +98,19 @@ export function buildRestPostBody({ authorUrn, content, hashtags = [], imageUrn 
   if (typeof content !== "string" || content.trim().length === 0) {
     throw new Error("post request requires non-empty content");
   }
-  const tags = Array.isArray(hashtags)
-    ? hashtags.filter((h) => typeof h === "string" && h.trim().length > 0)
-    : [];
-  const hashtagString = tags.length > 0 ? `\n\n${tags.map(escapeHashtag).join(" ")}` : "";
+  const commentary = composeWireCommentary(content, hashtags);
+  const max = getCommentaryMax();
+  if (commentary.length > max) {
+    // Defense in depth: callers pre-flight before any state change;
+    // this throw guarantees no caller, present or future, reaches
+    // the network with an oversize commentary. It fires before the
+    // publisher's image upload, so refusal always precedes spend.
+    throw commentaryTooLongError(commentary.length, max);
+  }
 
   const payload = {
     author: authorUrn,
-    commentary: `${escapeLittleText(content)}${hashtagString}`,
+    commentary,
     visibility: "PUBLIC",
     distribution: {
       feedDistribution: "MAIN_FEED",

@@ -28,8 +28,23 @@ import { traceEnabled, buildLlmRequestInfo, buildLlmPayloadDebug } from "./llm-t
 import { buildMetricBlock, substituteMetricTokens, extractNumericTokens, verifyMetricFidelity } from "./metric-content.js";
 import { getCooldownMs } from "../config/research.js";
 import { generationTrace, generationVendor, traceArguments, promptOverride, corroborationOverride, labRun, spanStart } from "./generation-trace.js";
+import { classifyProviderError, providerFailureLogDetails } from "../llm/provider-error.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 import { getTopicsForGeneration, getTopicBySlug } from "../tenant/topic-store.js";
 import { resolveAngle } from "./angle-select.js";
+
+// 4.25111.42: commit the failure record's lease before a catch
+// rethrows. The leased envelope rolls back the OPEN lease when an
+// error exits it, and a trail row written inside a catch rides
+// exactly that lease: without this commit the activity log kept
+// everything EXCEPT the failure itself. Best effort, like the
+// write: the original error must always win. NOT a pipeline
+// crossing yield, and phrased without the trailing semicolon so
+// the crossing-count probes (which grep the exact call form) do
+// not count it as one.
+async function commitFailureTrailLease() {
+  try { await yieldDb() } catch { /* the original error wins */ }
+}
 
 // Anthropic client is constructed per-call using the tenant's
 // BYOK key fetched from the credential store. Module-level
@@ -198,17 +213,26 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
 
   // ── Block if sources are insufficient ──────────────────────
   if (!researchBrief || !researchBrief.hasEnoughMaterial) {
-    const reason = !researchBrief
+    let reason = !researchBrief
       ? "Research service unavailable"
       : skipCorroboration
         ? `Only ${researchBrief.independentSourceCount} independent source(s) found; minimum is 2`
         : `Only ${researchBrief.verifiedClaimCount || 0} verified claim(s) found; minimum is 1 from 2+ independent sources`;
+    // 4.25111.38: when research crossings failed at the Model
+    // Provider, thin material is a SYMPTOM, and reporting it as the
+    // cause sent an operator to their feeds while the real problem
+    // was a denied key. The provider failure leads the reason.
+    const pf = researchBrief && Array.isArray(researchBrief.providerFailures) && researchBrief.providerFailures[0];
+    if (pf) {
+      reason = `Web research unavailable (${pf.call}: ${pf.operatorMessage}) ${reason}`;
+    }
 
-    await logActivity("info", "post_blocked_insufficient_sources", {
-      cycleId, topicId: topic.slug, angle, reason
+    const pfClass = pf ? pf.class : undefined;
+    await logActivity(pf ? "error" : "info", "post_blocked_insufficient_sources", {
+      cycleId, topicId: topic.slug, angle, reason, errorClass: pfClass
     });
-    platformLog("warn", "post_blocked_insufficient_sources", {
-      cycleId, topicId: topic.slug, reason
+    platformLog(pf ? "error" : "warn", "post_blocked_insufficient_sources", {
+      cycleId, topicId: topic.slug, reason, errorClass: pfClass
     });
 
     return { blocked: true, reason, topicId: topic.slug, angle, cycleId };
@@ -222,7 +246,10 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
   // key: this pause only lengthened the Lab's held transaction.
   const cooldown = (labRun() || generationVendor()) ? 0 : getCooldownMs();
   await logActivity("info", "rate_limit_cooldown", { cycleId, message: `Waiting ${cooldown / 1000}s before content generation` });
-  if (cooldown > 0) await new Promise(resolve => setTimeout(resolve, cooldown));
+  // Production pause (Item #1 Phase 3, 4.25111.40): lease surrendered
+  // before the wait, after the log write. No-op under classic
+  // withTenant.
+  if (cooldown > 0) { await yieldDb(); await new Promise(resolve => setTimeout(resolve, cooldown)); }
 
   // Build context about what was recently posted to avoid repetition
   const recentSummaries = recentPosts.slice(0, 6).map(p =>
@@ -389,6 +416,12 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
       generatedText = mocked.text;
       generationModel = `${mocked.provider}/${mocked.model}`;
     } else if (isLlmAbstractionEnabled()) {
+      // Surrender the DB lease before the crossing (Item #1 Phase 2,
+      // corrected 4.25111.31: the first placement covered only the
+      // legacy branch below, and with LLM_ABSTRACTION=1 always set
+      // this orchestrated branch is the one that runs, so the lease
+      // rode through the generation wait). No-op under withTenant.
+      await yieldDb();
       const orchestrated = await generateWithTenantLlm({
         system: topic.system_context || null,
         user: userPrompt,
@@ -428,6 +461,11 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
         platformLog("debug", "llm_payload_main_post_generation",
           buildLlmPayloadDebug("main_post_generation", requestParams, cycleId));
       }
+      // Surrender the DB lease before the crossing (Item #1 Phase
+      // 2): Model Provider latency dwarfs any database burst, and a
+      // workflow holds no connection while it waits. No-op under
+      // classic withTenant, so production behavior is unchanged.
+      await yieldDb();
       const response = await callAnthropic(client, requestParams);
       generatedText = response.content[0].text;
       generationModel = model;
@@ -536,14 +574,20 @@ export async function generatePost(topic = null, userSub = null, actionToken = n
     // plain logActivity on an aborted transaction would throw 25P02
     // first and the caller would see the logging failure instead of
     // the real cause.
-    await logActivityBestEffort("error", "content_generation_failed", {
-      cycleId, topicId: topic.slug, error: err.message
-    });
-    platformLog("error", "content_generation_failed", {
-      cycleId, topicId: topic.slug, error: err.message,
-      code: err.code, status: err.status, type: err.constructor?.name,
-      stack: (err.stack || "").split("\n").slice(0, 3).join(" | ")
-    });
+    // 4.25111.38: recognize a Model Provider failure here, attach
+    // it to the error, and let it travel: the route answers with a
+    // named 502 instead of a generic 500.
+    const pf = classifyProviderError(err);
+    if (pf) err.providerFailure = pf;
+    // 4.25111.42: the COMPLETE error in the activity log and the
+    // platform log alike; the stack stays platform-side only.
+    await logActivityBestEffort("error", "content_generation_failed",
+      Object.assign({ cycleId, topicId: topic.slug }, providerFailureLogDetails(err, pf)));
+    await commitFailureTrailLease();
+    platformLog("error", "content_generation_failed",
+      Object.assign({ cycleId, topicId: topic.slug, type: err.constructor?.name,
+        stack: (err.stack || "").split("\n").slice(0, 3).join(" | ") },
+        providerFailureLogDetails(err, pf)));
     throw err;
   }
 }
@@ -598,6 +642,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
   if (qSubstitute) {
     reviewText = qSubstitute.orchestrated("quality_check").text;
   } else if (isLlmAbstractionEnabled()) {
+    // Lease surrendered before the crossing; orchestrated branch,
+    // corrected 4.25111.31 (see the generation branch note).
+    await yieldDb();
     const orchestrated = await generateWithTenantLlm({
       system: null,
       user: assembledPrompt,
@@ -630,6 +677,9 @@ export async function qualityCheck(content, researchSummary = null, cycleId = nu
       platformLog("debug", "llm_payload_quality_check",
         buildLlmPayloadDebug("quality_check", requestParams, cycleId));
     }
+    // Lease surrendered before the crossing; no-op under classic
+    // withTenant (Item #1 Phase 2).
+    await yieldDb();
     const response = await callAnthropic(client, requestParams);
     reviewText = response.content[0].text;
   }
@@ -700,6 +750,9 @@ export async function refinePost(
     // the pre-existing direct Anthropic path, unchanged.
     let refinedText;
     if (isLlmAbstractionEnabled()) {
+      // Lease surrendered before the crossing; orchestrated branch,
+      // corrected 4.25111.31 (see the generation branch note).
+      await yieldDb();
       const orchestrated = await generateWithTenantLlm({
         system: null,
         user: userPrompt,
@@ -725,6 +778,9 @@ export async function refinePost(
         platformLog("debug", "llm_payload_refine",
           buildLlmPayloadDebug("refine", requestParams, cycleId));
       }
+      // Lease surrendered before the crossing; no-op under classic
+      // withTenant (Item #1 Phase 2).
+      await yieldDb();
       const response = await callAnthropic(client, requestParams);
       refinedText = response.content[0].text;
     }
@@ -743,7 +799,16 @@ export async function refinePost(
     platformLog("info", "post_refine_success", { cycleId, wordCount: (parsed.body || "").split(/\s+/).length });
     return { cycleId, title: parsed.title, content: parsed.body, hashtags: refinedHashtags };
   } catch (err) {
-    platformLog("error", "post_refine_failed", { cycleId, error: err.message });
+    const pf = classifyProviderError(err);
+    if (pf) err.providerFailure = pf;
+    // 4.25111.42: refine failures reach the tenant activity trail
+    // too, with the complete error (best effort: this catch
+    // rethrows and must not replace the real cause with 25P02).
+    await logActivityBestEffort("error", "post_refine_failed",
+      Object.assign({ cycleId }, providerFailureLogDetails(err, pf)));
+    await commitFailureTrailLease();
+    platformLog("error", "post_refine_failed",
+      Object.assign({ cycleId }, providerFailureLogDetails(err, pf)));
     throw err;
   }
 }

@@ -61,7 +61,21 @@
 // ===============================================================
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { pool } from "./pool.js";
+// Lazy, memoized pool access (Slice A). pool.js validates and
+// decrypts the PG environment at module top. That is correct for
+// the database layer but must never run at IMPORT time here:
+// this module rides the same static graph through
+// tenant-workflow.js, so its pool edge must defer exactly the
+// same way.
+// The pool import is deferred to the first real connection and
+// cached; after that the hot path awaits an already-resolved
+// promise, so steady-state cost is nil.
+let _poolPromise = null;
+function getPool() {
+  if (_poolPromise === null) _poolPromise = import("./pool.js").then((m) => m.pool);
+  return _poolPromise;
+}
+
 import { resetSavepointScope } from "./savepoint.js";
 import {
   noteTransactionOpen,
@@ -77,8 +91,10 @@ const als = new AsyncLocalStorage();
 // Strict UUID grammar (8-4-4-4-12 hex). Only a value matching this
 // is ever inlined into the fused opener, which makes the inline
 // literal injection-proof by construction. Anything else takes the
-// original parameterized path.
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+// original parameterized path. Exported (4.25111.28) so
+// tenant-workflow.js validates against the SAME grammar its own
+// fused opener depends on, rather than a drifting copy.
+export const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 // Monotonic clock in fractional milliseconds. process.hrtime.bigint
 // is immune to wall-clock adjustment, which matters because the
@@ -107,6 +123,21 @@ export function currentClient() {
   return store ? store.client : null;
 }
 
+// -- Item #1 Phase 2 bridge (4.25111.28) ------------------------
+// tenant-workflow.js runs its leased stores on THIS module's ALS,
+// so currentTenantId() and currentClient() answer identically no
+// matter which envelope opened the scope, and a nested classic
+// withTenant shadows a workflow store exactly as it shadows a
+// request store. The ALS instance itself stays private to this
+// module; these two functions are the whole surface.
+export function enterTenantScope(store, fn) {
+  return als.run(store, fn);
+}
+
+export function currentTenantScope() {
+  return als.getStore() || null;
+}
+
 // Wraps `fn` in a PostgreSQL transaction with the tenant
 // context set via set_config (transaction-scoped, equivalent to
 // SET LOCAL). The callback receives the dedicated client as its
@@ -130,6 +161,7 @@ export async function withTenant(tenantId, fn) {
 
   let client;
   try {
+    const pool = await getPool();
     client = await pool.connect();
   } catch (acquireErr) {
     // Nothing was opened, so nothing is decremented. This is the

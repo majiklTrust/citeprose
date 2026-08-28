@@ -9,6 +9,7 @@ import {
   getLinkedInPersonUrn
 } from "../tenant/credential-store.js";
 import { currentTenantId } from "../db/with-tenant.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 import { platformLog } from "./platform-log.js";
 import { LINKEDIN_OAUTH_SCOPES } from "../config/linkedin-scopes.js";
 import {
@@ -180,6 +181,11 @@ export async function publishPost(content, hashtags = []) {
       "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
     }
   };
+
+  // Item #1 Phase 3: credentials are read, the payload is built;
+  // surrender the lease before LinkedIn's latency. No-op under
+  // classic withTenant.
+  await yieldDb();
 
   try {
     const response = await axios.post(`${LINKEDIN_API}/ugcPosts`, payload, {

@@ -42,6 +42,7 @@ import * as openAiImagesAdapter from "./adapters/openai-images.js";
 import { assertHostAllowed, redactDeep } from "../llm/security.js";
 import { platformLog } from "../services/platform-log.js";
 import { traceEnabled } from "../services/llm-trace.js";
+import { yieldDb } from "../db/tenant-workflow.js";
 
 const ADAPTERS = Object.freeze({
   "openai-images": openAiImagesAdapter
@@ -237,6 +238,12 @@ export async function render(input, deps = {}) {
     if (traceEnabled(d.env ? d.env.IMAGE_TRACE : undefined)) {
       d.log("debug", "image_payload_orchestrated", redactDeep({ purpose, cycleId, request: wire }));
     }
+
+    // Item #1 Phase 3 (4.25111.40): same wire seam as the language
+    // client. Reads are done (selection, credential); surrender the
+    // lease before the image provider's latency. No-op under classic
+    // withTenant and when no lease is open.
+    await yieldDb();
 
     const timeoutMs = resolveTimeoutMs(d.env);
     const startedMs = Date.now();

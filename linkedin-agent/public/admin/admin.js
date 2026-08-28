@@ -1037,7 +1037,7 @@ function loadSpendSummary() {
   fetch(API + '/api/admin/spend-summary', { credentials: 'include' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
-      if (!d) { $('spend-by-provider').textContent = 'Spend data unavailable.'; return; }
+      if (!d) { var sm0 = $('spend-message'); if (sm0) sm0.textContent = 'Spend data unavailable.'; return; }
       var money = function (v) { return v === null || v === undefined ? 'n/a' : '$' + Number(v).toFixed(4); };
       if (d.activeTrials && d.activeTrials.length) {
         var tr = d.activeTrials[0];
@@ -1046,18 +1046,44 @@ function loadSpendSummary() {
         pill.innerHTML = '<strong>Platform Trial Key Active</strong> (' + tr.provider + '): ' +
           money(tr.key_spent) + ' of ' + money(tr.max_spend_usd) + ' used; ends ' + new Date(tr.ends_at).toLocaleDateString() + '.';
       }
-      var rows = (d.byProvider || []).map(function (p) {
-        return '<div>' + p.provider + ' (' + p.key_source + '): ' + p.calls + ' calls, ' +
-          p.input_tokens + ' in / ' + p.output_tokens + ' out tokens, ' + money(p.cost_estimate_usd) + ' est.</div>';
-      }).join('');
-      $('spend-by-provider').innerHTML = rows || '<div>No spend recorded in the last 30 days.</div>';
-      var recent = (d.recent || []).map(function (a) {
-        return '<div>' + new Date(a.created_at).toLocaleString() + ' \u00B7 ' + a.workflow +
-          (a.label ? (': ' + a.label) : '') + ' \u00B7 ' + a.calls + ' calls \u00B7 ' + money(a.cost_estimate_usd) + ' est.</div>';
-      }).join('');
-      $('spend-recent').innerHTML = recent || '<div>No activity yet.</div>';
+      var sm = $('spend-message'); if (sm) sm.textContent = '';
+      var dateRange = function (a, b) {
+        if (!a && !b) { return '-'; }
+        var s = a ? new Date(a).toLocaleDateString() : '';
+        var e = b ? new Date(b).toLocaleDateString() : '';
+        return s === e ? s : (s + ' to ' + e);
+      };
+      var aggBody = $('spend-by-provider-body');
+      if (aggBody) {
+        var rows = (d.byProvider || []).map(function (p) {
+          return '<tr>' +
+            '<td>' + escapeHtml(p.provider || '') + '</td>' +
+            '<td>' + escapeHtml(p.key_source || '-') + '</td>' +
+            '<td>' + escapeHtml(dateRange(p.first_at, p.last_at)) + '</td>' +
+            '<td class="num">' + escapeHtml(String(p.calls)) + '</td>' +
+            '<td class="num">' + escapeHtml(String(p.input_tokens)) + '</td>' +
+            '<td class="num">' + escapeHtml(String(p.output_tokens)) + '</td>' +
+            '<td class="num">' + escapeHtml(money(p.cost_estimate_usd)) + '</td>' +
+            '</tr>';
+        }).join('');
+        aggBody.innerHTML = rows || '<tr><td colspan="7">No spend recorded in the last 30 days.</td></tr>';
+      }
+      var recentBody = $('spend-recent-body');
+      if (recentBody) {
+        var recent = (d.recent || []).map(function (a) {
+          return '<tr>' +
+            '<td>' + escapeHtml(new Date(a.created_at).toLocaleString()) + '</td>' +
+            '<td>' + escapeHtml(a.workflow || '') + '</td>' +
+            '<td>' + escapeHtml(a.label || '') + '</td>' +
+            '<td>' + escapeHtml(a.key_source || '-') + '</td>' +
+            '<td class="num">' + escapeHtml(String(a.calls)) + '</td>' +
+            '<td class="num">' + escapeHtml(money(a.cost_estimate_usd)) + '</td>' +
+            '</tr>';
+        }).join('');
+        recentBody.innerHTML = recent || '<tr><td colspan="6">No activity yet.</td></tr>';
+      }
     })
-    .catch(function () { $('spend-by-provider').textContent = 'Spend data unavailable.'; });
+    .catch(function () { var sm1 = $('spend-message'); if (sm1) sm1.textContent = 'Spend data unavailable.'; });
 }
 
 })();

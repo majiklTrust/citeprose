@@ -71,7 +71,22 @@
 // can observe; it changes only how long connections are held.
 // ===============================================================
 
-import { pool } from "./pool.js";
+// Lazy, memoized pool access (Slice A). pool.js validates and
+// decrypts the PG environment at module top. That is correct for
+// the database layer but must never run at IMPORT time here:
+// yieldDb is statically imported by pure orchestrators
+// (src/llm/client.js, src/image/client.js), and a static edge to
+// pool.js made every one of them un-importable without a full PG
+// environment.
+// The pool import is deferred to the first real connection and
+// cached; after that the hot path awaits an already-resolved
+// promise, so steady-state cost is nil.
+let _poolPromise = null;
+function getPool() {
+  if (_poolPromise === null) _poolPromise = import("./pool.js").then((m) => m.pool);
+  return _poolPromise;
+}
+
 import { resetSavepointScope } from "./savepoint.js";
 import { enterTenantScope, currentTenantScope, UUID_RE } from "./with-tenant.js";
 import {
@@ -115,6 +130,7 @@ async function ensureLease(state) {
     const tStart = nowMs();
     let client;
     try {
+      const pool = await getPool();
       client = await pool.connect();
     } catch (acquireErr) {
       recordAcquireFailure(nowMs() - tStart);

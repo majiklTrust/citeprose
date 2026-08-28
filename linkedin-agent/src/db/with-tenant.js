@@ -61,7 +61,21 @@
 // ===============================================================
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { pool } from "./pool.js";
+// Lazy, memoized pool access (Slice A). pool.js validates and
+// decrypts the PG environment at module top. That is correct for
+// the database layer but must never run at IMPORT time here:
+// this module rides the same static graph through
+// tenant-workflow.js, so its pool edge must defer exactly the
+// same way.
+// The pool import is deferred to the first real connection and
+// cached; after that the hot path awaits an already-resolved
+// promise, so steady-state cost is nil.
+let _poolPromise = null;
+function getPool() {
+  if (_poolPromise === null) _poolPromise = import("./pool.js").then((m) => m.pool);
+  return _poolPromise;
+}
+
 import { resetSavepointScope } from "./savepoint.js";
 import {
   noteTransactionOpen,
@@ -147,6 +161,7 @@ export async function withTenant(tenantId, fn) {
 
   let client;
   try {
+    const pool = await getPool();
     client = await pool.connect();
   } catch (acquireErr) {
     // Nothing was opened, so nothing is decremented. This is the

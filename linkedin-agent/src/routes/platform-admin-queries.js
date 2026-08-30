@@ -158,8 +158,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "recent-errors": {
     label: "Recent Errors",
-    description: "400 most recent error-level activity_log entries for a tenant.",
-    capability: "Triage failures fast — surface a tenant's recent errors without shell access to logs.",
+    description: "400 most recent error-level activity_log entries for a tenant. Triage failures fast — surface a tenant's recent errors without shell access to logs.",
+    capability: "PLATFORM LOG",
     sql: `SELECT timestamp, action, level, details
           FROM activity_log
           WHERE tenant_id = $1::uuid
@@ -178,8 +178,8 @@ export const QUERY_REGISTRY = Object.freeze({
   // ── Operational self-awareness (2.4.1) ──────────────────────
   "platform-events-recent": {
     label: "Platform Events (Recent)",
-    description: "Latest persisted platform events, newest first.",
-    capability: "Watch the platform think: every persisted event with level, detail, and tenant.",
+    description: "Latest persisted platform events, newest first. Watch the platform think: every persisted event with level, detail, and tenant.",
+    capability: "PLATFORM LOG",
     sql: `SELECT created_at, level, event, tenant_id, detail
           FROM platform_log
           ORDER BY created_at DESC
@@ -191,8 +191,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "platform-events-by-tenant": {
     label: "Platform Events (By Tenant)",
-    description: "Persisted events attributed to one tenant, newest first.",
-    capability: "Audit one workspace's trail end to end.",
+    description: "Persisted events attributed to one tenant, newest first. Audit one workspace's trail end to end.",
+    capability: "PLATFORM LOG",
     sql: `SELECT created_at, level, event, detail
           FROM platform_log
           WHERE tenant_id = $1::uuid
@@ -207,8 +207,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "platform-event-metrics": {
     label: "Usage Metrics (Event Counts)",
-    description: "Event volume by type and level over the last N days.",
-    capability: "Usage metrics from the event stream: what runs, how often, and how loudly.",
+    description: "Event volume by type and level over the last N days. Usage metrics from the event stream: what runs, how often, and how loudly.",
+    capability: "PLATFORM LOG",
     sql: `SELECT event, level, count(*)::bigint AS occurrences,
                  min(created_at) AS first_seen, max(created_at) AS last_seen
           FROM platform_log
@@ -225,8 +225,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "prompt-vault-audit": {
     label: "Prompt Vault Access Audit",
-    description: "Every persisted prompt_* security event, newest first.",
-    capability: "The prompt-security audit trail the vault phases were designed to feed.",
+    description: "Every persisted prompt_* security event, newest first. The prompt-security audit trail the vault phases were designed to feed.",
+    capability: "PLATFORM LOG",
     sql: `SELECT created_at, level, event, tenant_id, detail
           FROM platform_log
           WHERE event LIKE 'prompt\_%'

@@ -990,15 +990,18 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "recent-errors": {
     label: "Recent Errors",
-    description: "50 most recent error-level activity_log entries for a tenant.",
+    description: "400 most recent error-level activity_log entries for a tenant.",
     capability: "Triage failures fast — surface a tenant's recent errors without shell access to logs.",
-    sql: `SELECT timestamp, action, details
+    sql: `SELECT timestamp, action, level, details
           FROM activity_log
-          WHERE tenant_id = $1::uuid AND level = 'error'::log_level
+          WHERE tenant_id = $1::uuid
+            AND ($2::text IS NULL OR action = $2::text)
+            AND level IN( 'error'::log_level,  'warn'::log_level )
           ORDER BY timestamp DESC
-          LIMIT 200`,
+          LIMIT 400`,
     params: [
-      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true },
+      { name: "action", label: "Action", type: "select", source: "activityactions", required: false }
     ],
     destructive: false,
     readOnly: true

@@ -328,6 +328,38 @@ export default function createPlatformAdminRoutes() {
       client.release();
     }
   });
+  
+  // ── GET /tenants: tenant catalog for dropdowns ───────────
+  // Populates tenant-select params (e.g. Set Language Model) so an
+  // admin picks a tenant by name instead of pasting a UUID.
+  //
+  // Zero Trust:
+  //   • Reads only the platform tenants table, under the platform
+  //     admin DB role (SET LOCAL ROLE, transaction-scoped).
+  //   • Returns only id, name, slug, and status. No secrets.
+  //   • Behind the isPlatformAdmin gate (router-level).
+  
+  router.get("/activityactions", async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SET LOCAL ROLE ${resolveAdminRole()}`);   // ◄ same role elevation POST /execute uses
+      const result = await client.query(
+        `SELECT DISTINCT action
+          FROM activity_log
+          WHERE action IS NOT NULL
+          ORDER BY action`
+      );
+      await client.query("COMMIT");
+      res.json({ activityactions: result.rows });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      platformLog("error", "activity_log_actions_list_failed", { admin: req.user.sub, error: err.message });
+      res.status(502).json({ error: "Could not retrieve activity-log actions" });
+    } finally {
+      client.release();
+    }
+  });
 
   // ── POST /execute — run a named query ────────────────────
   // Body: { key: string, params: { name: value, ... }, confirmed?: boolean }

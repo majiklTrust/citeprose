@@ -119,6 +119,10 @@
             html += '<select data-param="' + esc(p.name) + '" data-source="tenants" disabled>';
             html += '<option value="">Loading tenants…</option>';
             html += '</select>';
+          } else if (p.type === "select" && p.source === "activityactions") {
+            html += '<select data-param="' + esc(p.name) + '" data-source="activityactions" disabled>';
+            html += '<option value="">Loading actions…</option>';
+            html += '</select>';
           } else if (p.type === "select" && p.source === "tiers") {
             html += '<select data-param="' + esc(p.name) + '" data-source="tiers" disabled>';
             html += '<option value="">Loading tiers…</option>';
@@ -166,6 +170,8 @@
     populateModelSelects();
     // Populate any dynamic tenant dropdowns from the platform catalog
     populateTenantSelects();
+    // Populate any dynamic activityactions dropdowns from the activity-log
+    populateActivityActionstSelects();
   }
 
   // ── Populate model dropdowns from the live Anthropic catalog ──
@@ -263,6 +269,36 @@
       .catch(function () {
         selects.forEach(function (sel) {
           sel.innerHTML = '<option value="">Unable to load tenants</option>';
+        });
+      });
+  }
+  function populateActivityActionstSelects() {
+    var selects = document.querySelectorAll('select[data-source="activityactions"]');
+    if (selects.length === 0) return;
+
+    fetch(API + "/api/platform-admin/activityactions", { credentials: "include" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("status " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var activityactions = data.activityactions || [];
+        selects.forEach(function (sel) {
+          if (activityactions.length === 0) {
+            sel.innerHTML = '<option value="">No activityactions available</option>';
+            return;
+          }
+          var html = '<option value="">All Actions</option>';
+          activityactions.forEach(function (a) {
+            html += '<option value="' + esc(a.action) + '">' + esc(a.action) + '</option>';
+          });
+          sel.innerHTML = html;
+          sel.disabled = false;
+        });
+      })
+      .catch(function () {
+        selects.forEach(function (sel) {
+          sel.innerHTML = '<option value="">Unable to load activityactions</option>';
         });
       });
   }

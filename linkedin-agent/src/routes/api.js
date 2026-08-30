@@ -41,7 +41,7 @@ import { generatePost, qualityCheck, refinePost } from "../services/content-gene
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { createActionToken } from "../services/prompt-actions.js";
 import { validateToken } from "../services/linkedin-api.js";
-import { getArticleStats, getArticlesForTopic, pollAllFeeds, pollSingleFeed } from "../services/news-monitor.js";
+import { getArticleStats, getArticlesForTopic, pollAllFeedsChunked, pollSingleFeed } from "../services/news-monitor.js";
 import { createAuthMiddleware } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/index.js";
 import { getServerAddress } from "../services/server-address.js";
@@ -960,7 +960,9 @@ router.get("/api/research/articles", requirePermission("view_dashboard"), async 
 
 router.post("/api/research/poll", requirePermission("refresh_feeds"), async (req, res) => {
   try {
-    const newArticles = await withTenant(req.tenant.id, async () => pollAllFeeds());
+    // 2.88.21: pollAllFeedsChunked manages its own short
+    // per-chunk transactions, so no withTenant wrapper here.
+    const newArticles = await pollAllFeedsChunked(req.tenant.id);
     res.json({ success: true, newArticles });
   } catch (err) {
     platformLog("error", "api_error", { path: req.path, error: err.message });

@@ -14,8 +14,11 @@
 //
 // Two entry patterns:
 //   1. API routes — wrapped in withTenant by the handler.
-//   2. Cron loop — iterates all active tenants, wraps each
-//      in its own withTenant block.
+//      Exception (2.88.21): the full poll, pollAllFeedsChunked,
+//      manages its own sequence of short withTenant transactions
+//      and is called OUTSIDE any tenant scope.
+//   2. Cron loop — iterates all active tenants and calls
+//      pollAllFeedsChunked per tenant.
 // ═══════════════════════════════════════════════════════════════
 
 import Parser from "rss-parser";
@@ -26,7 +29,7 @@ import { sanitizeTitle, sanitizeSummary, sanitizeLink, detectPromptInjection } f
 import { extractArticleImage } from "./article-image.js";
 import { resolvePollSchedule } from "../config/poll-schedule.js";
 import { currentClient } from "../db/with-tenant.js";
-import { withSavepoint, tryBookkeeping } from "../db/savepoint.js";
+import { withSavepoint, tryBookkeeping, getSavepointCap } from "../db/savepoint.js";
 import { withTenant } from "../db/with-tenant.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 
@@ -249,20 +252,27 @@ async function fetchFeed(feedRow) {
         linked,
         totalItems: feed.items?.length || 0
       });
-      // platformLog("info", "feed_fetched", {
-      //   feed: feedRow.name, status: httpStatus,
-      //   newArticles, linked, totalItems: feed.items?.length || 0
-      // });
 
       return { newArticles, linked };
     });
   } catch (err) {
+    // Build the failure detail once so the console and activity logs
+    // stay identical. Include the underlying cause only when err.cause
+    // carries it; HTTP-level errors (no err.cause) keep status instead.
+    const err_failure = {
+      status: httpStatus,
+      error: err.message.substring(0, 300),
+      feed: feedRow.id,
+      feedName: feedRow.name,
+      url: feedRow.url,
+      ...(err.cause && {
+        code: err.cause.code || null,
+        message: String(err.cause.message || "").substring(0, 300)
+      })
+    };
     // Console first: this path must produce a record even if every
     // database write below is refused.
-    // platformLog("warn", "feed_fetch_failed", {
-    //   status: httpStatus, error: err.message.substring(0, 300),
-    //   feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
-    // });
+    platformLog("warn", "feed_fetch_failed", err_failure);
 
     // Failure bookkeeping. Each write takes its OWN savepoint,
     // because a bookkeeping statement that fails (a CHECK
@@ -294,10 +304,7 @@ async function fetchFeed(feedRow) {
     const activityRecorded = await tryBookkeeping(
       txClient,
       `feed-activity:${feedRow.id}`,
-      () => logActivity("warn", "feed_fetch_failed", {
-        status: httpStatus, error: err.message.substring(0, 300),
-        feed: feedRow.id, feedName: feedRow.name, url: feedRow.url
-      })
+      () => logActivity("warn", "feed_fetch_failed", err_failure)
     );
 
     // A feed that failed AND could not record that it failed is
@@ -318,23 +325,58 @@ async function fetchFeed(feedRow) {
 }
 
 // ── Polling Cycle ────────────────────────────────────────────
-// Must be called inside withTenant.
+// 2.88.21: the poll runs as a SEQUENCE of short classic withTenant
+// transactions instead of one transaction around the whole sweep.
+// withTenant resets savepoint accounting at every BEGIN
+// (with-tenant.js resetSavepointScope), so each chunk starts with
+// the full per-transaction savepoint allowance and every feed
+// keeps its own savepoint. Under the old single-transaction shape
+// a tenant with more feeds than the cap (DB_SAVEPOINT_CAP_PER_TXN,
+// default 48) polled the tail of the sweep without isolation and
+// savepoint_cap_reached fired (observed live: feed:121 at 48/48).
+//
+// Committed chunks stay committed if a later chunk fails. That is
+// the same keep-the-completed-work stance the per-feed savepoints
+// already take inside a transaction, now extended across chunks.
+//
+// NOT converted to withTenantWorkflow: the lease facade is
+// query-only by contract (tenant-workflow.js) and the savepoint
+// counter keys on the client object, so under the workflow the
+// allowance would never renew and per-feed ROLLBACK TO handling
+// would break. Classic short transactions give the renewal with
+// no change to the shared db layer.
 
-export async function pollAllFeeds() {
-  const c = client();
+// Worst case one FAILING feed consumes three savepoint slots: the
+// feed savepoint plus the two tryBookkeeping savepoints in
+// fetchFeed's catch. The chunk size is derived from the live cap
+// with that worst case in mind, so a chunk cannot exhaust its
+// transaction's allowance even if every feed in it fails.
+function feedChunkSize() {
+  return Math.max(1, Math.floor(getSavepointCap() / 3));
+}
 
-  // Read feeds from the database instead of the hardcoded array
-  const feedsResult = await c.query(
-    `SELECT id, url, name, tier::text, refresh_minutes, last_polled_at
-     FROM feeds_v2
-     WHERE enabled = true
-     ORDER BY last_polled_at ASC NULLS FIRST`
-  );
-
-  const feeds = feedsResult.rows;
-
-  await logActivity("info", "feed_poll_started", { feedCount: feeds.length });
-  // platformLog("info", "feed_poll_started", { feedCount: feeds.length });
+// Full poll for one tenant. Manages its own transactions, so it
+// must be called OUTSIDE any withTenant scope (the cron loop and
+// the /api/research/poll route both call it bare). Returns the
+// count of new articles, exactly as pollAllFeeds did.
+export async function pollAllFeedsChunked(tenantId) {
+  // Transaction A: read the sweep's feed list and announce it.
+  const feeds = await withTenant(tenantId, async () => {
+    const c = client();
+    // Read feeds from the database instead of the hardcoded array
+    const feedsResult = await c.query(
+      `SELECT id, url, name, tier::text, refresh_minutes, last_polled_at
+       FROM feeds_v2
+       WHERE enabled = true
+       ORDER BY last_polled_at ASC NULLS FIRST`
+    );
+    const feed_poll_started = { 
+      feedCount: feedsResult.rows.length
+    }
+    await logActivity("debug", "feed_poll_started", feed_poll_started);
+    platformLog("debug", "feed_poll_started", feed_poll_started);
+    return feedsResult.rows;
+  });
 
   let totalNew = 0;
   let totalLinked = 0;
@@ -347,49 +389,61 @@ export async function pollAllFeeds() {
   const minRefreshMinutes = feeds.length > 0
     ? Math.min(...feeds.map(f => f.refresh_minutes)) : null;
 
-  for (const feedRow of feeds) {
-    // Skip feeds that aren't due for polling yet
-    if (feedRow.last_polled_at) {
-      const minutesSincePoll = (Date.now() - new Date(feedRow.last_polled_at).getTime()) / 60000;
-      if (minutesSincePoll < feedRow.refresh_minutes) {
-        cooldownSkipped++;
-        continue;
-      }
-    }
+  // One short transaction per chunk. The cooldown check stays
+  // inside the loop rather than becoming a pre-filter, so a feed
+  // that comes due while the sweep is running is still picked up,
+  // exactly as before.
+  const chunkSize = feedChunkSize();
+  for (let i = 0; i < feeds.length; i += chunkSize) {
+    const chunk = feeds.slice(i, i + chunkSize);
+    await withTenant(tenantId, async () => {
+      for (const feedRow of chunk) {
+        // Skip feeds that aren't due for polling yet
+        if (feedRow.last_polled_at) {
+          const minutesSincePoll = (Date.now() - new Date(feedRow.last_polled_at).getTime()) / 60000;
+          if (minutesSincePoll < feedRow.refresh_minutes) {
+            cooldownSkipped++;
+            continue;
+          }
+        }
 
-    const result = await fetchFeed(feedRow);
-    fetched++;
-    totalNew += result.newArticles;
-    totalLinked += result.linked;
-    await new Promise(r => setTimeout(r, 1500));
+        const result = await fetchFeed(feedRow);
+        fetched++;
+        totalNew += result.newArticles;
+        totalLinked += result.linked;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    });
   }
 
-  // Prune old feed_articles links for this tenant.
-  // Articles are global — we only remove the tenant's reference.
-  // Orphaned articles_v2 rows can be cleaned by a maintenance job.
-  const pruneWindow = getMaxAgeDaysPrune();
-  const pruned = await c.query(
-    `DELETE FROM feed_articles
-     WHERE tenant_id = current_tenant_id()
-       AND article_id IN (
-         SELECT a.id FROM articles_v2 a
-         WHERE a.published_at < now() - ($1 || ' days')::interval
-       )`,
-    [String(pruneWindow)]
-  );
+  // Transaction B: prune old links and write the sweep summary.
+  return withTenant(tenantId, async () => {
+    const c = client();
+    // Prune old feed_articles links for this tenant.
+    // Articles are global — we only remove the tenant's reference.
+    // Orphaned articles_v2 rows can be cleaned by a maintenance job.
+    const pruneWindow = getMaxAgeDaysPrune();
+    const pruned = await c.query(
+      `DELETE FROM feed_articles
+       WHERE tenant_id = current_tenant_id()
+         AND article_id IN (
+           SELECT a.id FROM articles_v2 a
+           WHERE a.published_at < now() - ($1 || ' days')::interval
+         )`,
+      [String(pruneWindow)]
+    );
 
-  await logActivity("info", "feed_poll_complete", {
-    newArticles: totalNew,
-    linked: totalLinked,
-    prunedLinks: pruned.rowCount,
-    fetched, cooldownSkipped, minRefreshMinutes
+    const feed_poll_complete = {
+      newArticles: totalNew,
+      linked: totalLinked,
+      prunedLinks: pruned.rowCount,
+      fetched, cooldownSkipped, minRefreshMinutes
+    };
+    await logActivity("debug", "feed_poll_complete", feed_poll_complete);
+    platformLog("debug", "feed_poll_complete", feed_poll_complete);
+
+    return totalNew;
   });
-  // platformLog("info", "feed_poll_complete", {
-  //   newArticles: totalNew, linked: totalLinked, prunedLinks: pruned.rowCount,
-  //   fetched, cooldownSkipped, minRefreshMinutes
-  // });
-
-  return totalNew;
 }
 
 // ── Polling One Feed ─────────────────────────────────────────
@@ -415,9 +469,9 @@ export async function pollSingleFeed(feedId) {
 
   const feedRow = feedResult.rows[0];
 
-  // platformLog("info", "single_feed_poll_started", {
-  //   feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
-  // });
+  platformLog("info", "single_feed_poll_started", {
+    feedId: feedRow.id, feedName: feedRow.name, url: feedRow.url
+  });
 
     const result = await fetchFeed(feedRow);
 
@@ -694,6 +748,7 @@ async function runPollForAllTenants() {
   let tenants;
   try {
     tenants = await listActiveTenants();
+    platformLog("info", "running_feed_poll_all_tenants", { tenants: tenants.length });
   } catch (err) {
     console.error("[news-monitor] failed to list tenants:", err.message);
     return;
@@ -710,9 +765,10 @@ async function runPollForAllTenants() {
       continue;
     }
     try {
-      await withTenant(tenant.id, async () => {
-        await pollAllFeeds();
-      });
+      // 2.88.21: the poll manages its own short per-chunk
+      // transactions, so it is called bare rather than inside
+      // one long withTenant envelope.
+      await pollAllFeedsChunked(tenant.id);
     } catch (err) {
       console.error(`[news-monitor] tenant ${tenant.slug} poll failed:`, err.message);
     }

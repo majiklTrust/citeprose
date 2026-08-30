@@ -453,8 +453,8 @@ export const QUERY_REGISTRY = Object.freeze({
 
   "clear-tenant-feeds": {
     label: "Clear All Tenant Feeds",
-    description: "Removes all feeds, feed-topic mappings, and feed-article links for a tenant. Articles are preserved.",
-    capability: "Wipe a tenant's feeds and feed links while preserving the underlying articles.",
+    description: "Removes all feeds, feed-topic mappings, and feed-article links for a tenant. Articles are preserved. Wipe a tenant's feeds and feed links while preserving the underlying articles.",
+    capability: "FEEDS.",
     sql: `WITH deleted_mappings AS (
             DELETE FROM feed_topics WHERE tenant_id = $1::uuid
           ), deleted_articles AS (
@@ -463,6 +463,21 @@ export const QUERY_REGISTRY = Object.freeze({
             )
           )
           DELETE FROM feeds_v2 WHERE tenant_id = $1::uuid`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: true,
+    readOnly: false
+  },
+
+  "reset-feeds-poll-timer": {
+    label: "Reset Tenant Feeds Polling Timer",
+    description: "Allows all feeds for a tenant to request new articles by clearing the last_polled_at field",
+    capability: "FEEDS.",
+    sql: `UPDATE feeds_v2
+            SET last_polled_at = NULL
+            WHERE tenant_id = $1::uuid
+              AND enabled = true;`,
     params: [
       { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
     ],

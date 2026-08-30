@@ -120,8 +120,27 @@ export async function validateFeed(url) {
     if (fetchErr.name === "AbortError") {
       result.error = `Timeout after ${VALIDATION_TIMEOUT_MS}ms`;
     } else {
-      result.error = `Fetch failed: ${fetchErr.message.substring(0, 200)}`;
+      // Surface the underlying network cause when present. undici puts
+      // the specific reason on err.cause (e.g. UND_ERR_CONNECT_TIMEOUT),
+      // while err.message stays the generic "fetch failed".
+      const cause = fetchErr.cause;
+      result.error = cause?.code
+        ? `Fetch failed: ${cause.code} (${String(cause.message || "").substring(0, 300)})`
+        : `Fetch failed: ${fetchErr.message.substring(0, 300)}`;
+      if (cause) {
+        result.cause = {
+          code: cause.code || null,
+          message: String(cause.message || "").substring(0, 300)
+        };
+      }
     }
+    // One log after the branch, carrying the feed identity and the
+    // specific error already built, not the generic wrapper.
+    platformLog("error", "feed_validator_failure", {
+      url,
+      error: result.error,
+      ...(result.cause && { cause: result.cause })
+    });
     return result;
   } finally {
     clearTimeout(timeout);

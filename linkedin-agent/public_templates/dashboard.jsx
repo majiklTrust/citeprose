@@ -1182,13 +1182,13 @@
         setLoading(l => ({ ...l, statusChange: false }));
       }
 
-      const pendingStatusRank = (s) => (s === 'draft' ? 0 : s === 'pending_approval' ? 1 : 2);
+      const pendingStatusRank = (s) => (s === 'draft' ? 0 : s === 'pending_approval' ? 1 : s === 'scheduled' ? 2 : s === 'failed' ? 3 : 4);
       const pendingPosts = posts
-        .filter(p => p.status === 'draft' || p.status === 'pending_approval' || p.status === 'scheduled')
+        .filter(p => p.status === 'draft' || p.status === 'pending_approval' || p.status === 'scheduled' || p.status === 'failed')
         .sort((a, b) => pendingStatusRank(a.status) - pendingStatusRank(b.status));
       const recentStatusRank = (s) => (s === 'posted' ? 0 : s === 'rejected' ? 2 : 1);
       const recentPosts = posts
-        .filter(p => p.status !== 'pending_approval' && p.status !== 'draft')
+        .filter(p => p.status !== 'draft' && p.status !== 'pending_approval' && p.status !== 'scheduled' && p.status !== 'failed')
         .sort((a, b) => recentStatusRank(a.status) - recentStatusRank(b.status));
 
       // ── Login Wall: shown when auth is required but no user ──

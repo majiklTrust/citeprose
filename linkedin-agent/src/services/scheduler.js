@@ -343,6 +343,14 @@ export async function rejectPost(postId, reason = "", userSub = null) {
 // enforced under row lock in transitionPostStatus. Entering 'scheduled'
 // requires a future time; leaving it clears scheduled_for. Any supplied
 // editor content is saved with the move (save-then-transition).
+//
+// 4.25111.45: the same entry point carries the recovery edge
+// failed -> pending_approval. The target is still validated against
+// PRE_PUB_STATUSES (pending_approval is one), the policy decides
+// whether 'failed' may reach it, and the trail records the recovery
+// as its own line, carrying the failure reason the row just shed, so
+// "why did this post fail before it was requeued" is answerable from
+// the activity log after the column is cleared.
 const SCHEDULE_SPACING_MIN = () => parseInt(process.env.MIN_MINUTES_BETWEEN_SCHEDULED_POSTS || "0", 10);
 
 export async function transitionStatus(postId, to, opts = {}, userSub = null) {
@@ -369,7 +377,7 @@ export async function transitionStatus(postId, to, opts = {}, userSub = null) {
   }
 
   const spacing = SCHEDULE_SPACING_MIN();
-  await transitionPostStatus({
+  const moved = await transitionPostStatus({
     id: postId,
     to,
     scheduledFor: scheduledForIso,
@@ -380,8 +388,13 @@ export async function transitionStatus(postId, to, opts = {}, userSub = null) {
     spacingMinutes: to === "scheduled" && Number.isInteger(spacing) && spacing > 0 ? spacing : 0
   });
 
-  await logActivity("info", "post_status_changed", { postId, to, scheduledFor: scheduledForIso }, userSub);
-  return { status: to, scheduledForIso };
+  await logActivity("info", "post_status_changed", { postId, from: moved.from, to, scheduledFor: scheduledForIso }, userSub);
+  if (moved.from === "failed") {
+    await logActivity("info", "post_recovered_from_failed", {
+      postId, to, previousError: moved.previousErrorMessage
+    }, userSub);
+  }
+  return { status: to, scheduledForIso, from: moved.from };
 }
 
 // ── Scheduler Lifecycle ──────────────────────────────────────

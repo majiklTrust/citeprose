@@ -760,6 +760,29 @@
         }
       }
 
+      // 4.25111.45: one click recovery for a FAILED post. Moves it back to
+      // pending_approval through the generic status endpoint; the server's
+      // transition policy is the authority (failed -> pending_approval is
+      // the only edge out of failed). No content is sent: the row keeps
+      // exactly what it has, and the stored failure reason is cleared by
+      // the server and preserved in the activity trail.
+      async function handleRecover(id, e) {
+        if (e) e.stopPropagation();
+        setLoading(l => ({ ...l, [`recover-${id}`]: true }));
+        try {
+          await mutate(`${API}/api/posts/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: 'pending_approval' })
+          });
+          setSelectedPost(null);
+          fetchAll();
+        } catch (err) {
+          alert('Failed to requeue: ' + err.message);
+        }
+        setLoading(l => ({ ...l, [`recover-${id}`]: false }));
+      }
+
       // Discard a draft: delete the persisted row, then close + refresh.
       // A DB-loaded draft carries `id`; a preview carries `draftPostId`
       // (the row saved at generation). If neither is present nothing was
@@ -1487,17 +1510,37 @@
                         </div>
                         <div className="post-title-text">{post.title}</div>
                         <div className="post-preview">{post.content}</div>
+                        {post.status === 'failed' && post.error_message && (
+                          <div className="post-fail-reason" title={post.error_message}>
+                            Publish failed: {post.error_message}
+                          </div>
+                        )}
                         <div className="post-footer">
                           <div className="post-meta">
                             <span className="post-date">{postDisplayDate(post)}</span>
-                            {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
+                            {/* 4.25111.47: the row's database id, discreet, in the
+                                whitespace beside the source link. Text only. */}
+                            <span className="post-meta-row">
+                              {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
+                              <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}># {post.id}</span>
+                            </span>
                           </div>
                           <div className="post-actions">
                             {post.status === 'draft' ? (
                               <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
                                 Review
                               </button>
-                            ) : (<>
+                            ) : post.status === 'failed' ? (<>
+                            {/* 4.25111.45: a failed post used to show Publish and
+                                Reject, both refused by the server (not pending).
+                                One click puts it back in the approval queue. */}
+                            <button className="btn btn-primary" title="Move this failed post back to Pending Approval" onClick={(e) => handleRecover(post.id, e)} disabled={!!loading[`recover-${post.id}`]}>
+                              {loading[`recover-${post.id}`] ? <span className="loading-spinner"></span> : '↩ Requeue'}
+                            </button>
+                            <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}>
+                              Edit
+                            </button>
+                            </>) : (<>
                             {post.status !== 'scheduled' && (<>
                             <button className="btn btn-approve" onClick={(e) => handleApprove(post.id, e)}>
                               {loading[`approve-${post.id}`] ? <span className="loading-spinner"></span> : 'Publish'}
@@ -1541,7 +1584,11 @@
                     <div className="post-title-text">{post.title}</div>
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
-                      <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
+                      <span className="post-meta-row">
+                        <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
+                        {/* 4.25111.47: same discreet id on recent cards, beside the date. */}
+                        <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}># {post.id}</span>
+                      </span>
                       {(post.status === 'draft' || post.status === 'pending_approval') && (
                         <button className="btn btn-edit btn-action-sm" onClick={(e) => openEditModal(post, e)}>
                           Edit
@@ -1783,11 +1830,16 @@
               || selectedPost.status === 'draft'
               || selectedPost.status === 'pending_approval');
             const moveId = selectedPost.id || selectedPost.draftPostId;
+            // 4.25111.45: 'failed' is movable too, but only along the
+            // recovery edge (back to the approval queue); the row below
+            // hides Draft and Schedule for it, matching the server policy.
             const movable = !!moveId && (selectedPost.isPreview
               || selectedPost.status === 'draft'
               || selectedPost.status === 'pending_approval'
-              || selectedPost.status === 'scheduled');
+              || selectedPost.status === 'scheduled'
+              || selectedPost.status === 'failed');
             const currStatus = selectedPost.isPreview ? 'draft' : selectedPost.status;
+            const recovering = currStatus === 'failed';
             return (
             <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -1818,6 +1870,12 @@
                 {!selectedPost.isPreview && selectedPost.status === 'scheduled' && selectedPost.scheduled_for && (
                   <div className="schedule-banner">
                     🗓️ Scheduled to publish <strong>{formatDate(selectedPost.scheduled_for)}</strong> · your local time
+                  </div>
+                )}
+
+                {recovering && (
+                  <div className="fail-banner">
+                    Publish failed{selectedPost.error_message ? <>: <strong>{selectedPost.error_message}</strong></> : ''}. Requeue it to send it back through approval.
                   </div>
                 )}
 
@@ -1870,16 +1928,21 @@
                   <div className="modal-move">
                     <div className="modal-move-label">Move this post to:</div>
                     <div className="modal-move-row">
-                      {currStatus !== 'draft' && (
+                      {currStatus !== 'draft' && !recovering && (
                         <button className="btn btn-tight" onClick={() => handleStatusChange('draft')} disabled={!!loading.statusChange}>
                           ✎ Draft
                         </button>
                       )}
-                      {currStatus !== 'pending_approval' && currStatus !== 'draft' && (
+                      {recovering ? (
+                        <button className="btn btn-primary btn-tight" onClick={(e) => handleRecover(moveId, e)} disabled={!!loading[`recover-${moveId}`]}>
+                          {loading[`recover-${moveId}`] ? <span className="loading-spinner"></span> : '↩ Requeue for Approval'}
+                        </button>
+                      ) : currStatus !== 'pending_approval' && currStatus !== 'draft' && (
                         <button className="btn btn-tight" onClick={() => handleStatusChange('pending_approval')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>
                           ⏳ Queue for Approval
                         </button>
                       )}
+                      {!recovering && (
                       <button
                         className="btn btn-tight"
                         onClick={() => { setScheduleAt(prev => prev || nextHourLocal()); setShowSchedule(s => !s); }}
@@ -1887,6 +1950,7 @@
                       >
                         🗓️ {currStatus === 'scheduled' ? 'Reschedule' : 'Schedule'}
                       </button>
+                      )}
                     </div>
                     {showSchedule && (
                       <div className="schedule-picker">

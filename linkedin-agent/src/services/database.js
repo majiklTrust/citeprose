@@ -370,7 +370,7 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
   // empty-content checks MUST run under this lock to avoid a TOCTOU with a
   // concurrent move/approve.
   const guard = await c.query(
-    `SELECT status, content FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
+    `SELECT status, content, error_message FROM posts WHERE id = $1 AND tenant_id = current_tenant_id() FOR UPDATE`,
     [id]
   );
   if (guard.rows.length === 0) {
@@ -384,6 +384,12 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
     err.code = "INVALID_TRANSITION";
     throw err;
   }
+  // 4.25111.45: a recovery move (failed -> pending_approval, per the
+  // post-status policy) leaves the old publish failure behind: the
+  // stored error_message described the attempt that failed, not the
+  // post that is now back in the queue. The reason is not lost; the
+  // caller receives it below and writes it to the activity trail.
+  const recovering = from === "failed";
 
   // Empty-content guard: a post may sit empty as a draft, but it cannot be
   // queued or scheduled empty. effectiveContent = the supplied edit if any,
@@ -414,8 +420,9 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
   }
 
   // Save-then-transition: persist any supplied editor content. The row is
-  // locked and `from` is a pre-publication state, so a content write is safe
-  // regardless of target. Only supplied fields are written.
+  // locked and `from` is a pre-publication state (or 'failed', which the
+  // policy lists as editable), so a content write is safe regardless of
+  // target. Only supplied fields are written.
   {
     const sets = [];
     const params = [];
@@ -443,12 +450,18 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
       [scheduledFor, id]
     );
   } else {
+    // 4.25111.45: error_message is cleared ONLY on a recovery move; every
+    // other move leaves the column exactly as it was.
     await c.query(
-      `UPDATE posts SET status = $1::post_status, scheduled_for = NULL
+      `UPDATE posts SET status = $1::post_status, scheduled_for = NULL,
+              error_message = CASE WHEN $3::boolean THEN NULL ELSE error_message END
         WHERE id = $2 AND tenant_id = current_tenant_id()`,
-      [to, id]
+      [to, id, recovering]
     );
   }
+  // 4.25111.45: the caller (scheduler.transitionStatus) records where the
+  // post came from and, on recovery, the failure reason it left behind.
+  return { from, to, previousErrorMessage: recovering ? (guard.rows[0].error_message || null) : null };
 }
 
 // Returns all posts with the given status, most recent first.

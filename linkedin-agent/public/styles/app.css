@@ -738,6 +738,11 @@ body::after {
 .tier-secondary { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
 .source-url { color: var(--accent-cyan); text-decoration: none; font-size: 0.7rem; word-break: break-all; }
 .source-url:hover { text-decoration: underline; }
+/* 4.25111.47: the post's database id on every landing page card, a
+   quiet handle beside the source link (queue) or the date (recent).
+   The row keeps the link and the id on one line with a small gap. */
+.post-meta-row { display: inline-flex; align-items: baseline; gap: 0.5rem; min-width: 0; flex-wrap: wrap; }
+.post-id { font-size: 0.68rem; opacity: 0.55; color: var(--text-secondary); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; user-select: all; white-space: nowrap; }
 .factual-flags {
   margin-top: 0.75rem; padding: 0.75rem;
   background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
@@ -1060,6 +1065,12 @@ body::after {
 /* Post detail modal */
 .status-scheduled-sky { background: rgba(56,189,248,0.18); color: #38bdf8; }
 .schedule-banner { margin: 0.5rem 0; padding: 0.55rem 0.75rem; border-radius: 6px; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.35); font-size: 0.88rem; }
+/* 4.25111.45: failed post surfaces. The banner sits in the detail modal
+   beside the schedule banner; the reason line sits on the queue card.
+   Both carry the stored publish failure text, which the dashboard never
+   showed before. */
+.fail-banner { margin: 0.5rem 0; padding: 0.55rem 0.75rem; border-radius: 6px; background: var(--glow-red); border: 1px solid var(--accent-red); color: var(--text-primary); font-size: 0.88rem; overflow-wrap: anywhere; }
+.post-fail-reason { margin: 0.35rem 0 0.1rem; font-size: 0.78rem; color: var(--accent-red); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-rewrite { margin: 0.75rem 0; }
 .modal-move { margin: 0.75rem 0; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
 .modal-move-label { font-size: 0.78rem; opacity: 0.7; margin-bottom: 0.4rem; }

@@ -738,11 +738,15 @@ body::after {
 .tier-secondary { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
 .source-url { color: var(--accent-cyan); text-decoration: none; font-size: 0.7rem; word-break: break-all; }
 .source-url:hover { text-decoration: underline; }
-/* 4.25111.47: the post's database id on every landing page card, a
-   quiet handle beside the source link (queue) or the date (recent).
-   The row keeps the link and the id on one line with a small gap. */
-.post-meta-row { display: inline-flex; align-items: baseline; gap: 0.5rem; min-width: 0; flex-wrap: wrap; }
+/* 4.25111.47/.50: the post's database id on every landing page card, a
+   quiet handle in the footer. It is a direct child of .post-footer:
+   margin-right auto hugs it to the element on its left (the .post-meta
+   column on queue cards, the date on recent cards) instead of letting
+   space-between center it, and flex-end alignment drops it to the
+   bottom of the footer so on queue cards it sits level with the
+   source link, in the whitespace to the link's right. */
 .post-id { font-size: 0.68rem; opacity: 0.55; color: var(--text-secondary); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; user-select: all; white-space: nowrap; }
+.post-footer > .post-id { align-self: flex-end; margin-right: auto; margin-left: 0.5rem; padding-bottom: 0.05rem; }
 .factual-flags {
   margin-top: 0.75rem; padding: 0.75rem;
   background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);

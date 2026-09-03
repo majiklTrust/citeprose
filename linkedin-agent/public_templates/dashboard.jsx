@@ -1518,13 +1518,14 @@
                         <div className="post-footer">
                           <div className="post-meta">
                             <span className="post-date">{postDisplayDate(post)}</span>
-                            {/* 4.25111.47: the row's database id, discreet, in the
-                                whitespace beside the source link. Text only. */}
-                            <span className="post-meta-row">
-                              {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
-                              <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}># {post.id}</span>
-                            </span>
+                            {pSource && (<a href={pSource.url} target="_blank" rel="noopener noreferrer nofollow" className="source-url" onClick={(e) => e.stopPropagation()}>via {pSource.domain}</a>)}
                           </div>
+                          {/* 4.25111.47/.50: the row's database id, discreet, in the
+                              whitespace beside the source link. It is a sibling of
+                              .post-meta, bottom-aligned by CSS so it sits level with
+                              the link line; .post-meta itself is unchanged (a standing
+                              probe reads that block through a bounded window). */}
+                          <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}>{post.id}</span>
                           <div className="post-actions">
                             {post.status === 'draft' ? (
                               <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
@@ -1584,11 +1585,9 @@
                     <div className="post-title-text">{post.title}</div>
                     <div className="post-preview">{post.content}</div>
                     <div className="post-footer">
-                      <span className="post-meta-row">
-                        <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
-                        {/* 4.25111.47: same discreet id on recent cards, beside the date. */}
-                        <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}># {post.id}</span>
-                      </span>
+                      <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
+                      {/* 4.25111.47: same discreet id on recent cards, beside the date. */}
+                      <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}>{post.id}</span>
                       {(post.status === 'draft' || post.status === 'pending_approval') && (
                         <button className="btn btn-edit btn-action-sm" onClick={(e) => openEditModal(post, e)}>
                           Edit

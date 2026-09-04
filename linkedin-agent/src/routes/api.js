@@ -63,6 +63,23 @@ import { annotateActivation } from "../spend/activation-middleware.js";
 
 const router = Router();
 
+// 4.25111.58: one shape for every route-level failure. These catch
+// blocks run after withTenant has returned, so the platform log's
+// scope capture sees no tenant; the row used to persist with
+// tenant_id NULL (verified: every api_error row). The tenant and the
+// actor are in hand here, so they ride the detail, and the platform
+// log lifts tenantId into the column. Message and status are exactly
+// what they were.
+function logApiError(req, err) {
+  platformLog("error", "api_error", {
+    path: req.path,
+    method: req.method,
+    tenantId: req.tenant ? req.tenant.id : null,
+    sub: req.user && req.user.sub ? req.user.sub : null,
+    error: err && err.message ? err.message : String(err)
+  });
+}
+
 // ── Pre-Auth Route Existence Check ────────────────────────────
 // Return 404 for any /api/* path that isn't a registered route.
 // Registered BEFORE requireAuth so unknown paths can't probe for
@@ -264,8 +281,13 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             } catch { /* defaults hold */ }
           });
         }
-      } catch {
-        // Tenant lookup failed — return platform-level data only
+      } catch (err) {
+        // Tenant lookup failed: platform-level data only, as before.
+        // 4.25111.58: say so. A database failure here used to read
+        // as "no workspace" to the user with no row anywhere.
+        platformLog("error", "tenant_lookup_failed", {
+          path: req.path, sub: req.user.sub, error: err && err.message ? err.message : String(err)
+        });
       }
     }
 
@@ -309,7 +331,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       publishMode: getPublishMode()
     });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -415,7 +437,7 @@ router.get("/api/posts", requirePermission("view_dashboard"), async (req, res) =
     });
     res.json({ posts });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -432,7 +454,7 @@ router.get("/api/posts/:id", requirePermission("view_dashboard"), async (req, re
     if (!post) return res.status(404).json({ error: "Post not found" });
     res.json({ post });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -484,7 +506,7 @@ router.patch("/api/posts/:id", requirePermission("edit_post"), async (req, res) 
     if (err.code === "NOT_FOUND")    return res.status(404).json({ error: err.message });
     if (err.code === "NOT_EDITABLE") return res.status(409).json({ error: err.message });
     if (err.code === "NO_FIELDS")    return res.status(400).json({ error: err.message });
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -507,7 +529,7 @@ router.delete("/api/posts/:id", requirePermission("edit_post"), async (req, res)
     if (!deleted) return res.status(404).json({ error: "Draft not found" });
     res.json({ success: true, deleted: true });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -571,7 +593,7 @@ router.post("/api/posts/:id/rewrite", requirePermission("edit_post"), async (req
     if (err.code === "REFINE_NOT_CONFIGURED") {
       return res.status(503).json({ error: "Rewrite isn't configured yet — add the 'refine' genre to the content_generator prompt." });
     }
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -608,7 +630,7 @@ router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), 
     if (outcome.error) return respondApproveFailure(req, res, id, outcome.error);
     res.json({ success: true, result: outcome.result });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -638,7 +660,9 @@ function isApproveOutcome(err) {
 function respondApproveFailure(req, res, postId, err) {
   if (err.postStatus) {
     platformLog("warn", "post_publish_failed_interactive", {
-      path: req.path, postId, status: err.postStatus, error: err.message
+      path: req.path, postId, status: err.postStatus, error: err.message,
+      tenantId: req.tenant ? req.tenant.id : null,
+      sub: req.user && req.user.sub ? req.user.sub : null
     });
     return res.status(502).json({
       error: err.message, code: "PUBLISH_FAILED", status: err.postStatus
@@ -658,7 +682,7 @@ router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), a
     });
     res.json({ success: true });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -695,7 +719,7 @@ router.post("/api/posts/:id/status", requirePermission("approve_reject_post"), a
     if (err.code === "NOT_FOUND")          return res.status(404).json({ error: "Post not found" });
     if (err.code === "SPACING_CONFLICT")   return res.status(409).json({ error: err.message });
     if (err.code === "EMPTY_CONTENT")      return res.status(400).json({ error: err.message });
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -713,7 +737,7 @@ router.post("/api/mode", requirePermission("change_mode"), async (req, res) => {
     });
     res.json({ mode });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -726,7 +750,7 @@ router.post("/api/pause", requirePermission("change_mode"), async (req, res) => 
     });
     res.json({ paused: !!paused });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -741,7 +765,7 @@ router.post("/api/corroboration", requirePermission("toggle_corroboration"), asy
     });
     res.json({ corroboration: value });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -885,7 +909,7 @@ async function handleGeneratePreview(req, res) {
     res.json({ post: { ...result.generated, generated_image_id: null }, quality: result.quality, postId: result.postId });
   } catch (err) {
     if (respondProviderFailure(req, res, err)) return;
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 }
@@ -978,7 +1002,7 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
     res.json({ success: true, postId: savedId });
   } catch (err) {
     if (err.code === "EMPTY_CONTENT") return res.status(400).json({ error: err.message });
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -996,7 +1020,7 @@ router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, re
     res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
   } catch (err) {
     if (respondProviderFailure(req, res, err)) return;
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1017,7 +1041,7 @@ router.get("/api/research/stats", requirePermission("view_dashboard"), async (re
     const stats = await withTenant(req.tenant.id, async () => getArticleStats(topic));
     res.json(stats);
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1037,7 +1061,7 @@ router.get("/api/research/articles", requirePermission("view_dashboard"), async 
     });
     res.json({ articles });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1049,7 +1073,7 @@ router.post("/api/research/poll", requirePermission("refresh_feeds"), async (req
     const newArticles = await pollAllFeedsChunked(req.tenant.id);
     res.json({ success: true, newArticles });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1063,7 +1087,7 @@ router.post("/api/research/single", requirePermission("refresh_feeds"), async (r
     const result = await withTenant(req.tenant.id, async () => pollSingleFeed(feedId));
     res.json(result);
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1083,7 +1107,7 @@ router.get("/api/logs", requirePermission("view_dashboard"), async (req, res) =>
     const logs = await withTenant(req.tenant.id, async () => getActivityLog(limit));
     res.json({ logs });
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
@@ -1099,7 +1123,7 @@ router.get("/api/linkedin/status", requirePermission("view_dashboard"), async (r
     });
     res.json(status);
   } catch (err) {
-    platformLog("error", "api_error", { path: req.path, error: err.message });
+    logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }
 });

@@ -109,7 +109,7 @@ async function recordResearchSpend({ call, model, usage, provenance, cycleId, st
   } catch (recErr) {
     // The recorder logs its own failures; this fires only if it
     // cannot load or crashed pre-log. Never silent (2.5.81).
-    console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+    platformLog("error", "spend_recorder_unreachable", { requestType: "research", error: recErr && recErr.message });
   }
 }
 

@@ -750,7 +750,9 @@ async function runPollForAllTenants() {
     tenants = await listActiveTenants();
     platformLog("info", "running_feed_poll_all_tenants", { tenants: tenants.length });
   } catch (err) {
-    console.error("[news-monitor] failed to list tenants:", err.message);
+    // 4.25111.58: persisted. Feed polling stops for every tenant
+    // when this fails, and it used to leave no row.
+    platformLog("error", "feed_poll_tenant_list_failed", { error: err.message });
     return;
   }
 
@@ -770,7 +772,8 @@ async function runPollForAllTenants() {
       // one long withTenant envelope.
       await pollAllFeedsChunked(tenant.id);
     } catch (err) {
-      console.error(`[news-monitor] tenant ${tenant.slug} poll failed:`, err.message);
+      // 4.25111.58: persisted with the tenant in the column.
+      platformLog("error", "feed_poll_tenant_failed", { tenantId: tenant.id, tenant: tenant.slug || null, error: err.message });
     }
   }
 }
@@ -778,7 +781,7 @@ async function runPollForAllTenants() {
 export function startMonitor() {
   // Initial poll at startup — async, don't block boot
   runPollForAllTenants().catch(err => {
-    console.error("[news-monitor] initial poll failed:", err.message);
+    platformLog("error", "feed_poll_sweep_failed", { phase: "startup", error: err.message });
   });
 
   // Recurring poll for all tenants. Schedule is FEED_POLL_CRON
@@ -792,7 +795,7 @@ export function startMonitor() {
   }
   monitorJob = cron.schedule(sched.expression, () => {
     runPollForAllTenants().catch(err => {
-      console.error("[news-monitor] scheduled poll failed:", err.message);
+      platformLog("error", "feed_poll_sweep_failed", { error: err.message });
     });
   });
 

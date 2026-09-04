@@ -270,7 +270,7 @@ export async function render(input, deps = {}) {
         provider: selection.provider, model: selection.model,
         usage: response.usage, costEstimateUsd, status: "ok" });
     } catch (recErr) {
-      console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+      platformLog("error", "spend_recorder_unreachable", { requestType: "image_generation", error: recErr && recErr.message });
     }
 
     return Object.freeze({

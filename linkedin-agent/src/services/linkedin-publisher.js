@@ -208,6 +208,11 @@ function detectImageType(buffer) {
 
 async function downloadImage(imageUrl) {
   if (!isSafeUrl(imageUrl)) {
+    // 4.25111.58: a blocked fetch is a security event and is recorded
+    // as one (host only, never the full URL). The throw is unchanged.
+    let host = null;
+    try { host = new URL(String(imageUrl)).hostname; } catch { /* not a URL at all */ }
+    platformLog("warn", "ssrf_blocked", { surface: "publish_image_download", host });
     throw new Error("Image URL blocked by SSRF protection");
   }
 

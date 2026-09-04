@@ -37,7 +37,15 @@ export async function recordSpend(evt, deps = {}) {
       writeSpend(evt, ctx, (sql, params) => client.query(sql, params), { ...deps, tenantId })
     );
   } catch (err) {
-    platformLog("error", "spend_record_failed", { error: err && err.message, provider: evt && evt.provider });
+    // 4.25111.58: the ledger row that did not land is described in
+    // full (tenant, request type, model, status, estimate) so the
+    // books can be reconstructed from this row alone.
+    platformLog("error", "spend_record_failed", {
+      error: err && err.message, provider: evt && evt.provider,
+      tenantId: (deps && deps.tenantId) || currentTenantId() || null,
+      requestType: evt && evt.requestType, model: evt && evt.model,
+      status: evt && evt.status, costEstimateUsd: evt && Number.isFinite(evt.costEstimateUsd) ? evt.costEstimateUsd : null
+    });
   }
 }
 

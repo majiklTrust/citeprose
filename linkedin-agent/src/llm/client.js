@@ -295,7 +295,9 @@ export async function generateWithTenantLlm(input, deps = {}) {
       // The recorder logs its own failures; this catch fires only if
       // the recorder itself cannot load or crashed pre-log. That
       // must never be silent (2.5.81).
-      console.error("[PLATFORM:ERROR] spend_recorder_unreachable", JSON.stringify({ error: recErr && recErr.message }));
+      // 4.25111.58: persisted; the [PLATFORM:ERROR] console line used
+      // to look like a platform log row and was not one.
+      platformLog("error", "spend_recorder_unreachable", { requestType: "text_generation", error: recErr && recErr.message });
     }
 
     return Object.freeze({
@@ -328,7 +330,12 @@ export async function generateWithTenantLlm(input, deps = {}) {
           model: selection.model, usage: null, costEstimateUsd: null,
           status: timedOut ? "unknown_usage" : "failed" });
       }
-    } catch { /* never mask the real error */ }
+    } catch (recErr) {
+      // never mask the real error. 4.25111.58: but do record that the
+      // failure row itself did not land (the money side of a failed
+      // call was silent here).
+      platformLog("error", "spend_recorder_unreachable", { requestType: "text_generation", onErrorPath: true, error: recErr && recErr.message });
+    }
     throw err;
   }
 }

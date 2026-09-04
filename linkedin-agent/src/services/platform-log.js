@@ -15,7 +15,8 @@
 //
 // Detail payloads are clamped (8 KB) so a hostile or runaway
 // caller cannot flood the table through a single event. Tenant
-// context is captured from AsyncLocalStorage when present.
+// context is captured from AsyncLocalStorage when present, and
+// from a UUID at detail.tenantId when it is not (4.25111.58).
 // PLATFORM_LOG_PERSIST=off disables persistence (console stays).
 // ═══════════════════════════════════════════════════════════════
 
@@ -36,6 +37,23 @@ function safeStringify(value) {
 
 let persistOffAnnounced = false;
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The UUID at detail.tenantId, or null. Reads the already-serialized
+// payload so a hostile or circular detail cannot reach this path
+// twice; anything that is not a well-formed UUID is ignored (the
+// column is uuid-typed and a bad value would fail the whole insert).
+function tenantIdFromDetail(detailJson) {
+  if (!detailJson) return null;
+  try {
+    const parsed = JSON.parse(detailJson);
+    const candidate = parsed && typeof parsed === "object" ? parsed.tenantId : null;
+    return typeof candidate === "string" && UUID_SHAPE.test(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
 async function persist(level, action, detailJson) {
   try {
     if ((process.env.PLATFORM_LOG_PERSIST || "on") === "off") {
@@ -53,6 +71,14 @@ async function persist(level, action, detailJson) {
       const { currentTenantId } = await import("../db/with-tenant.js");
       tenantId = currentTenantId() || null;
     } catch { /* no tenant context machinery available: platform-level */ }
+    // 4.25111.58: attribution from the payload when the scope has
+    // none. Route catch blocks run after withTenant has returned, and
+    // the platform-level loops (scheduler, batch publisher, feed
+    // poll, token refreshers) name the tenant only in their detail;
+    // both persisted with tenant_id NULL, so the per-tenant platform
+    // log query missed every one of them. A UUID at detail.tenantId
+    // now fills the column. The scope still wins when present.
+    if (!tenantId) tenantId = tenantIdFromDetail(detailJson);
     const clamped = detailJson && detailJson.length > DETAIL_MAX_CHARS
       ? JSON.stringify({ truncated: true, head: detailJson.slice(0, DETAIL_MAX_CHARS) })
       : detailJson;

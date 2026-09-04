@@ -609,14 +609,20 @@ export async function logActivity(level, action, details = null, userSub = null)
 // This variant never throws. The attempt is made; on failure the
 // event is preserved through platformLog, which writes on its own
 // pool connection and survives an aborted tenant transaction.
+// 4.25111.58: preserved WHOLE. The fallback used to keep only the
+// action name and the write error; the original level, details, and
+// actor were lost at exactly the moment they mattered. The platform
+// row now carries them (clamped by platformLog) at the original
+// level when that level is error, and the scope's tenant rides
+// along as it always did.
 export async function logActivityBestEffort(level, action, details = null, userSub = null) {
   try {
     await logActivity(level, action, details, userSub);
   } catch (err) {
     try {
       const { platformLog } = await import("./platform-log.js");
-      platformLog("warn", "activity_log_write_failed",
-        { action, error: err && err.message ? err.message : String(err) });
+      platformLog(level === "error" ? "error" : "warn", "activity_log_write_failed",
+        { action, level, details, userSub, error: err && err.message ? err.message : String(err) });
     } catch {
       // Nothing left to report with. Swallowing here is the entire
       // point of the function: a logging failure must never outrank

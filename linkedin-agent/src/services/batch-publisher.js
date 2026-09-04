@@ -36,7 +36,7 @@
 
 import cron from "node-cron";
 import { withTenant } from "../db/with-tenant.js";
-import { logActivity } from "./database.js";
+import { logActivityBestEffort } from "./database.js";
 import { executePost } from "./scheduler.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 import { platformLog } from "./platform-log.js";
@@ -97,12 +97,12 @@ async function runBatchForTenant(tenant) {
       return rows;
     });
   } catch (err) {
-    platformLog("error", "batch_publish_claim_failed", { tenant: tenant.slug, error: err.message });
+    platformLog("error", "batch_publish_claim_failed", { tenantId: tenant.id, tenant: tenant.slug, error: err.message });
     return;
   }
 
   if (claimed.length === 0) return;
-  platformLog("info", "batch_publish_claimed", { tenant: tenant.slug, count: claimed.length });
+  platformLog("info", "batch_publish_claimed", { tenantId: tenant.id, tenant: tenant.slug, count: claimed.length });
 
   // Step 2 — PUBLISH each claimed post in its own transaction.
   for (const post of claimed) {
@@ -114,13 +114,18 @@ async function runBatchForTenant(tenant) {
           // executePost already wrote 'failed'/'blocked' in THIS
           // transaction. Swallow so that status COMMITS — re-throwing
           // would ROLLBACK the status write and strand the post.
-          await logActivity("error", "scheduled_publish_failed", { postId: post.id, error: err.message });
+          // 4.25111.58: best-effort. When the failure was the
+          // database's (the transaction is aborted, 25P02), a plain
+          // logActivity threw out of this swallow and stranded the
+          // post in 'publishing'; the record now lands in the
+          // platform log instead and the swallow keeps its promise.
+          await logActivityBestEffort("error", "scheduled_publish_failed", { postId: post.id, error: err.message });
         }
       });
     } catch (err) {
       // Transaction-level failure (couldn't even open/commit). The post
       // is left in 'publishing' for reconciliation.
-      platformLog("error", "batch_publish_txn_failed", { tenant: tenant.slug, postId: post.id, error: err.message });
+      platformLog("error", "batch_publish_txn_failed", { tenantId: tenant.id, tenant: tenant.slug, postId: post.id, error: err.message });
     }
   }
 }
@@ -132,7 +137,9 @@ async function runBatchForAllTenants() {
   try {
     tenants = await listActiveTenants();
   } catch (err) {
-    console.error("[batch-publisher] failed to list tenants:", err.message);
+    // 4.25111.58: persisted. Scheduled posts stop publishing for
+    // every tenant when this fails, and it used to leave no row.
+    platformLog("error", "batch_publish_tenant_list_failed", { error: err.message });
     return;
   }
   // Payments (2.3.1.1): lazy import per the module-loads-DB-free
@@ -158,12 +165,12 @@ export function startBatchPublisher() {
   // Initial sweep at startup so a post whose time passed during a
   // restart isn't delayed a whole interval. Non-blocking.
   runBatchForAllTenants().catch(err => {
-    console.error("[batch-publisher] initial sweep failed:", err.message);
+    platformLog("error", "batch_publish_sweep_failed", { phase: "startup", error: err.message });
   });
 
   publisherJob = cron.schedule(expression, () => {
     runBatchForAllTenants().catch(err => {
-      console.error("[batch-publisher] scheduled sweep failed:", err.message);
+      platformLog("error", "batch_publish_sweep_failed", { error: err.message });
     });
   });
 

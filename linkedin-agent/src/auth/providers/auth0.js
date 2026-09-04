@@ -312,8 +312,9 @@ const auth0Provider = {
     } catch (err) {
       // Discovery fetch failure is non-fatal during init —
       // it will be retried on first auth attempt
-      console.warn(`[AUTH0] OIDC discovery fetch failed during init: ${err.message}`);
-      console.warn("[AUTH0] Will retry on first authentication attempt.");
+      // 4.25111.58: persisted; a login outage that starts here used
+      // to be visible on the console only.
+      platformLog("warn", "auth0_discovery_fetch_failed", { phase: "init", retry: "on first authentication attempt", error: err.message });
     }
 
     initConfig = config;

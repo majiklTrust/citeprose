@@ -21,6 +21,20 @@
 // =================================================================
 
 import crypto from "node:crypto";
+import { platformLog } from "../../services/platform-log.js";
+
+// 4.25111.58: a refused webhook used to return null with no record,
+// so a wrong STRIPE_WEBHOOK_SECRET in production refused every
+// subscription event silently. Each refusal now names its reason in
+// the platform log. Never the body, never the signature: the header
+// presence flags are the only request facts that ride along.
+function refuse(reason, headers) {
+  platformLog("warn", "payment_webhook_rejected", {
+    provider: "stripe", reason,
+    hasSignatureHeader: !!(headers && headers["stripe-signature"])
+  });
+  return null;
+}
 
 const UUID_SHAPE = /^[0-9a-f-]{36}$/;
 
@@ -101,13 +115,13 @@ export const stripeProvider = {
   //               answers 200 so Stripe stops retrying)
   parseWebhook(headers, rawBody, nowSeconds = Math.floor(Date.now() / 1000)) {
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!secret) return null;
-    if (!Buffer.isBuffer(rawBody)) return null;
-    if (!verifySignature(headers, rawBody, secret, nowSeconds)) return null;
+    if (!secret) return refuse("STRIPE_WEBHOOK_SECRET is not set", headers);
+    if (!Buffer.isBuffer(rawBody)) return refuse("raw body unavailable (json parser ran first?)", headers);
+    if (!verifySignature(headers, rawBody, secret, nowSeconds)) return refuse("signature missing, malformed, stale, or wrong", headers);
 
     let body;
-    try { body = JSON.parse(rawBody.toString("utf8")); } catch { return null; }
-    if (!body || typeof body !== "object" || typeof body.type !== "string") return null;
+    try { body = JSON.parse(rawBody.toString("utf8")); } catch { return refuse("signed body is not JSON", headers); }
+    if (!body || typeof body !== "object" || typeof body.type !== "string") return refuse("signed body has no event type", headers);
 
     const mapped = TYPE_MAP[body.type];
     if (!mapped) return { ignored: true, reason: `stripe event ${body.type} is not lifecycle-relevant` };

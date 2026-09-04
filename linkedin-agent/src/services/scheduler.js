@@ -25,6 +25,7 @@ import {
   createPost,
   updatePostStatus,
   logActivity,
+  logActivityBestEffort,
   getPostStats,
   getPost,
   transitionPostStatus
@@ -39,6 +40,7 @@ import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 import { dashboardCopy } from "../config/dashboard-copy.js";
+import { platformLog } from "./platform-log.js";
 
 let schedulerJob = null;
 
@@ -259,7 +261,10 @@ async function executePostInner(postId) {
         const img = await readImageBytes(post.generated_image_id);
         imageBytes = { buffer: img.bytes, contentType: img.mime };
       } catch (err) {
-        await logActivity("error", "post_image_read_failed", {
+        // 4.25111.58: best-effort. If the read failed because the
+        // transaction is already aborted, a plain logActivity would
+        // throw here and skip the 'failed' write below.
+        await logActivityBestEffort("error", "post_image_read_failed", {
           postId, imageId: post.generated_image_id, error: err.message
         });
         throw new Error(
@@ -460,9 +465,10 @@ async function runTickForAllTenants() {
   try {
     tenants = await listActiveTenants();
   } catch (err) {
-    // Platform-level log — no tenant context available. Falls
-    // back to console so the failure isn't invisible.
-    console.error("[scheduler] failed to list tenants:", err.message);
+    // Platform-level: no tenant context. 4.25111.58: persisted (the
+    // console line stays; platformLog prints it first). This failure
+    // stops generation for EVERY tenant and used to leave no row.
+    platformLog("error", "scheduler_tenant_list_failed", { error: err.message });
     return;
   }
 
@@ -473,7 +479,7 @@ async function runTickForAllTenants() {
     const { sweepLapsedPeriods } = await import("./subscription-lifecycle.js");
     await sweepLapsedPeriods();
   } catch (err) {
-    console.error("[scheduler] payment lapse sweep failed:", err.message);
+    platformLog("error", "scheduler_lapse_sweep_failed", { error: err.message });
   }
 
   // Self-awareness (2.4.1): platform log retention, platform-level,
@@ -482,7 +488,7 @@ async function runTickForAllTenants() {
     const { prunePlatformLog } = await import("./platform-log.js");
     await prunePlatformLog();
   } catch (err) {
-    console.error("[scheduler] platform log prune failed:", err.message);
+    platformLog("error", "platform_log_prune_failed", { error: err.message });
   }
 
   // 3.25111.1: registration expiry sweep. expireStaleRegistrations
@@ -498,7 +504,7 @@ async function runTickForAllTenants() {
       console.log(`[scheduler] registration sweep expired ${expired} stale registration(s)`);
     }
   } catch (err) {
-    console.error("[scheduler] registration expiry sweep failed:", err.message);
+    platformLog("error", "registration_sweep_failed", { error: err.message });
   }
 
   // Payments (2.3.1.1): lazy import per the module-loads-DB-free
@@ -508,7 +514,10 @@ async function runTickForAllTenants() {
     // Payments (2.3.1.1): automated processing halts for tenants
     // outside good standing. Fail-closed: a read failure skips.
     if (!(await isTenantProcessingAllowed(tenant.id))) {
-      console.log(`[scheduler] tenant ${tenant.slug || tenant.id} skipped: subscription not in good standing`);
+      // 4.25111.58: persisted with the tenant in the column (the
+      // platform log lifts tenantId), so "why did this workspace
+      // stop generating" is answerable from the per-tenant query.
+      platformLog("info", "scheduler_tenant_skipped_subscription", { tenantId: tenant.id, tenant: tenant.slug || null });
       continue;
     }
     try {
@@ -526,7 +535,10 @@ async function runTickForAllTenants() {
         await schedulerTick();
       });
     } catch (err) {
-      console.error(`[scheduler] tenant ${tenant.slug} tick failed:`, err.message);
+      // A tick that died OUTSIDE schedulerTick's own catch (the
+      // envelope could not open, the entitlement read threw, the
+      // trail write failed). 4.25111.58: persisted with the tenant.
+      platformLog("error", "scheduler_tick_failed", { tenantId: tenant.id, tenant: tenant.slug || null, error: err.message });
     }
   }
 }
@@ -537,7 +549,7 @@ export function startScheduler() {
 
   schedulerJob = cron.schedule(`0 ${hour},${secondHour} * * *`, () => {
     runTickForAllTenants().catch(err => {
-      console.error("[scheduler] runTickForAllTenants unhandled error:", err.message);
+      platformLog("error", "scheduler_sweep_failed", { error: err.message });
     });
   });
 

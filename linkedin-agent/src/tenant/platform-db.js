@@ -13,6 +13,7 @@
 import { query } from "../db/pool.js";
 import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from "node:crypto";
 import { decryptPlatformSecret } from "../services/platform-secret.js";
+import { platformLog } from "../services/platform-log.js";
 
 // Looks up a tenant by the authenticated user's identity.
 // Returns { id, slug, name, status, role, created_at } or null.
@@ -176,7 +177,9 @@ function getAdminSubs() {
     // but undecryptable PLATFORM_ADMIN_SUBS silently disables every
     // platform admin, which is an operator emergency, not a quiet
     // default. Logged once per distinct cipher via the cache guard.
-    console.error("[platform-db] PLATFORM_ADMIN_SUBS is present but undecryptable, platform admin is DISABLED:", err.message);
+    // 4.25111.58: persisted, so the emergency is in the store an
+    // operator can query, not only on a console nobody is watching.
+    platformLog("error", "platform_admin_disabled_undecryptable", { error: err.message });
     return null;
   }
   const list = plaintext.split(",").map((s) => s.trim()).filter(Boolean);

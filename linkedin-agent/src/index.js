@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v4.25111.56
+// v4.25111.58
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -17,6 +17,7 @@
 // directly with a prepared context.
 // // ════════════════════════════════════════════════
 import dotenv from "dotenv";
+import { platformLog as persistedPlatformLog } from "./services/platform-log.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
@@ -33,16 +34,23 @@ export let app = null;
 // tenant context exists — auth registry initialization, OAuth
 // callback handlers, etc. The tenant-scoped logActivity would
 // reject these because they have no tenant context to attach the
-// log entry to. platformLog writes to the console with a clear
-// prefix so the diagnostic trail is preserved without database
-// involvement. Kept at module scope so createApp(), start(), and
+// log entry to. Kept at module scope so createApp(), start(), and
 // buildAppForTests() all share the same implementation.
+//
+// 4.25111.58: this used to be a private console-only printer that
+// predated the persisted platform logger (2.4.1), so every event
+// raised from this file (cors_origin_rejected, auth_callback_failed,
+// oauth_token_exchange_failed, user_logged_in, the refresher start
+// failures, and now the webhook and unhandled-route records) looked
+// like a platform log row on the console and never reached the
+// table; a query for any of them found nothing, ever. It now
+// delegates to services/platform-log.js: same console line first
+// (with the timestamp the rest of the platform already prints),
+// then the best-effort persisted row. Same signature, never throws,
+// never blocks, and that module does no I/O at load, so this file
+// still loads nothing database-side.
 export function platformLog(level, action, details) {
-  const upper = String(level || "info").toUpperCase();
-  const payload = details === null || details === undefined ? "" : (
-    typeof details === "string" ? details : JSON.stringify(details)
-  );
-  console.log(`[PLATFORM:${upper}] ${action}${payload ? " " + payload : ""}`);
+  persistedPlatformLog(level, action, details);
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -149,12 +157,15 @@ export function createApp(ctx) {
     try {
       const { getPaymentsProvider } = await import("./payments/provider.js");
       const provider = await getPaymentsProvider();
+      // 4.25111.58: the rejection reason is recorded by the provider
+      // (payment_webhook_rejected, one row per refusal, never the
+      // body or the signature). The answer is unchanged.
       const event = provider.parseWebhook(req.headers, req.body);
       if (!event) return res.status(401).json({ error: "Webhook rejected" });
       // Verified but not lifecycle-relevant (2.3.6): answer 200 so
       // the processor stops retrying; log the reason for the audit.
       if (event.ignored) {
-        console.log(`[payments] webhook ignored: ${event.reason}`);
+        platformLog("info", "payment_webhook_ignored", { provider: provider.name, reason: event.reason });
         return res.json({ ok: true, ignored: true });
       }
       const { applyEvent } = await import("./services/subscription-lifecycle.js");
@@ -164,7 +175,9 @@ export function createApp(ctx) {
       if (out.raced) return res.status(409).json({ error: "State changed; retry" });
       res.json({ ok: true });
     } catch (err) {
-      console.error("[payments] webhook failed:", err.message);
+      // 4.25111.58: persisted, not console only. A processing failure
+      // here means a paid subscription may not have activated.
+      platformLog("error", "payment_webhook_failed", { error: err && err.message ? err.message : String(err) });
       res.status(500).json({ error: "Webhook processing failed" });
     }
   });
@@ -487,8 +500,11 @@ export function createApp(ctx) {
     let tenant = null;
     try {
       tenant = await findTenantByAuthIdentity(provider, userSub);
-    } catch {
-      // Lookup failed
+    } catch (err) {
+      // Lookup failed: the answer below is unchanged (403). 4.25111.58:
+      // recorded, because a database failure here used to read as a
+      // missing membership with no row anywhere.
+      platformLog("error", "tenant_lookup_failed", { path: req.path, sub: userSub, error: err && err.message ? err.message : String(err) });
     }
     if (!tenant) {
       return res.status(403).send(`
@@ -641,6 +657,8 @@ export function createApp(ctx) {
         }
       }
     } catch (err) {
+      // 4.25111.58: persisted as well; the denial below is unchanged.
+      platformLog("error", "linkedin_connect_gate_failed", { sub: req.user && req.user.sub ? req.user.sub : null, error: err.message });
       console.error("[payments] connect gate failed:", err.message);
       return res.status(403).send(`
         <h2>Access Denied</h2>
@@ -670,7 +688,10 @@ export function createApp(ctx) {
     let tenant = null;
     if (userSub) {
       const provider = userSub.startsWith("user_") ? "workos" : "auth0";
-      try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch { /* lookup failed */ }
+      try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch (err) {
+        // 4.25111.58: recorded; the flow continues exactly as before.
+        platformLog("error", "tenant_lookup_failed", { path: req.path, sub: userSub, error: err && err.message ? err.message : String(err) });
+      }
     }
     try {
       const url = tenant
@@ -702,7 +723,10 @@ export function createApp(ctx) {
     if (!userSub) return { error: "not_signed_in" };
     const provider = userSub.startsWith("user_") ? "workos" : "auth0";
     let tenant = null;
-    try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch { /* lookup failed */ }
+    try { tenant = await findTenantByAuthIdentity(provider, userSub); } catch (err) {
+      // 4.25111.58: recorded; the outcome ("no_workspace") is unchanged.
+      platformLog("error", "tenant_lookup_failed", { path: req.path, sub: userSub, error: err && err.message ? err.message : String(err) });
+    }
     if (!tenant) return { error: "no_workspace" };
     const self = await withTenant(tenant.id, () => advocacyGetSelf(userSub));
     if (!self) return { error: "not_enabled" };
@@ -870,7 +894,22 @@ export function createApp(ctx) {
   });
 
   // Error handler (four params → Express treats as error handler)
+  // 4.25111.58: the answer is unchanged (403 "Forbidden" for every
+  // unhandled error, which is how a CORS rejection has always
+  // surfaced), but it used to leave no record at all, so a thrown
+  // middleware error, a body-parser failure, or a route bug read as
+  // a permissions problem with nothing to find. The row carries the
+  // method, path, tenant, actor, message, and the first stack frame.
   instance.use((err, req, res, next) => {
+    platformLog("error", "unhandled_route_error", {
+      method: req.method,
+      path: req.path,
+      tenantId: req.tenant ? req.tenant.id : null,
+      sub: req.user && req.user.sub ? req.user.sub : null,
+      error: err && err.message ? err.message : String(err),
+      at: err && err.stack ? String(err.stack).split("\n")[1] : null,
+      headersSent: !!res.headersSent
+    });
     if (!res.headersSent) {
       res.status(403).json({ error: "Forbidden" });
     }
@@ -1095,7 +1134,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  4.25111.56
+║           LinkedIn AI Content Agent  4.25111.58
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}
@@ -1131,9 +1170,9 @@ export async function start() {
     // Async (lazy node-cron import); a startup failure logs loudly and
     // must never become an unhandled rejection that kills the server.
     startMemberTokenRefresher().catch((err) =>
-      console.error("Advocacy token refresher failed to start:", err.message));
+      platformLog("error", "advocacy_token_refresher_start_failed", { error: err.message }));
     startReachRefresher().catch((err) =>
-      console.error("Advocacy reach refresher failed to start:", err.message));
+      platformLog("error", "advocacy_reach_refresher_start_failed", { error: err.message }));
     startTokenRefresher().catch((err) =>
       platformLog("error", "token_refresher_start_failed", { error: err.message }));
     // Analytics sync: retrieves post metrics + demographics (FR-P1-01)

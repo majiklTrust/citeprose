@@ -649,7 +649,12 @@ router.post("/complete", async (req, res) => {
 
     // Zero Trust: clear encrypted key from registration row
     if (adminKey) {
-      try { await clearRegistrationKey(reg.id); } catch { /* best-effort */ }
+      try { await clearRegistrationKey(reg.id); } catch (err) {
+        // best-effort as before. 4.25111.58: recorded, because an
+        // encrypted admin key left behind in the row is a hygiene
+        // failure someone must clean up.
+        platformLog("warn", "registration_key_clear_failed", { registrationId: reg.id, error: err && err.message ? err.message : String(err) });
+      }
     }
 
     // Create a pending owner invite for the registrant's email.

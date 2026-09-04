@@ -104,6 +104,25 @@ function nowMs() {
   return Number(process.hrtime.bigint() / 1000n) / 1000;
 }
 
+// 4.25111.58: the empty-scope record (see the fallback branch in
+// withTenant). Logger imported lazily so this module keeps loading
+// nothing but the pool; the caller site is the first stack frame
+// outside this file, captured only on this rare path.
+function warnEmptyScope(tenantId) {
+  let site = null;
+  try {
+    const frames = String(new Error().stack || "").split("\n").slice(1);
+    const outside = frames.find((f) => !f.includes("with-tenant.js"));
+    site = outside ? outside.trim().replace(/^at\s+/, "") : null;
+  } catch { /* site stays null */ }
+  import("../services/platform-log.js")
+    .then(({ platformLog }) => platformLog("warn", "tenant_scope_invalid", {
+      received: tenantId === null ? "null" : tenantId === undefined ? "undefined" : typeof tenantId === "string" ? `string(${tenantId.length})` : typeof tenantId,
+      site
+    }))
+    .catch(() => { /* logging never changes the outcome */ });
+}
+
 // -- Public API -------------------------------------------------
 
 // Returns the current tenant UUID, or null if called outside
@@ -201,6 +220,18 @@ export async function withTenant(tenantId, fn) {
     } else {
       // Fallback: exactly the original two-step path for any caller
       // that passes a non-UUID value.
+      //
+      // 4.25111.58: SAID OUT LOUD, behavior unchanged. A null,
+      // undefined, or malformed tenant id opens an EMPTY scope:
+      // set_config stores '' (or the bad string), current_tenant_id()
+      // returns NULL, row security hides every row, and inserts fail
+      // on NOT NULL with an error that never names the missing
+      // tenant (seen: recordSpend resolving no tenant and failing on
+      // llm_activations.tenant_id). withTenantWorkflow refuses this at
+      // entry; here the scope still opens as it always has, but the
+      // platform log records who opened it. Refusal is a separate
+      // ruling once this row proves no legitimate caller relies on it.
+      warnEmptyScope(tenantId);
       await client.query("BEGIN");
       await client.query(
         "SELECT set_config('app.current_tenant_id', $1, true)",

@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import axios from "axios";
-import { logActivity } from "./database.js";
+import { logActivity, logActivityBestEffort } from "./database.js";
 import {
   getLinkedInAccessToken,
   getLinkedInPersonUrn
@@ -84,7 +84,9 @@ export async function exchangeCodeForToken(code) {
       refreshTokenExpiresIn: response.data.refresh_token_expires_in
     };
   } catch (err) {
-    await logActivity("error", "linkedin_token_exchange_failed", {
+    // 4.25111.58: best-effort, so the exchange failure is what the
+    // caller sees, never a 25P02 from the record of it.
+    await logActivityBestEffort("error", "linkedin_token_exchange_failed", {
       error: err.response?.data || err.message
     });
     throw err;
@@ -141,7 +143,7 @@ export async function getProfile(accessToken, retries = 2) {
     } catch (err) {
       const status = err.response?.status;
       if (status === 429 && attempt < retries) {
-        await logActivity("warn", "linkedin_profile_rate_limited", { attempt: attempt + 1, retries });
+        await logActivityBestEffort("warn", "linkedin_profile_rate_limited", { attempt: attempt + 1, retries });
         continue;
       }
       throw err;
@@ -279,9 +281,10 @@ export async function validateToken() {
     return result;
   } catch (err) {
     let result;
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+    if (status === 401) {
       result = { valid: false, reason: "Token expired or invalid" };
-    } else if (err.response?.status === 429) {
+    } else if (status === 429) {
       // Rate limited — keep previous cache entry if we have one
       if (cached) {
         setCacheEntry(tenantId, cached.value);
@@ -291,6 +294,13 @@ export async function validateToken() {
     } else {
       result = { valid: false, reason: err.message };
     }
+    // 4.25111.58: the failed check used to be absorbed into the
+    // cached answer with no record at any level; the first sign of
+    // an expired or revoked token was a publish failure days later.
+    // One row per cache window per tenant (the cache is the throttle).
+    platformLog(result.valid ? "info" : "warn", "linkedin_token_check_failed", {
+      status: Number.isInteger(status) ? status : null, reason: result.reason, cachedMinutes: getTokenCacheTtl() / 60000
+    });
     setCacheEntry(tenantId, result);
     return result;
   }

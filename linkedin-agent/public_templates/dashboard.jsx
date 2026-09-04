@@ -1,6 +1,14 @@
     const { useState, useEffect, useCallback } = React;
 
     const API = '';  // same-origin
+    // 4.25111.55: end-user copy is package configuration. The build
+    // (scripts/build-pages.mjs) replaces the quoted placeholder below
+    // with the JSON of package.json config.dashboard.copy, one flat
+    // map of key to text shared with the server
+    // (src/config/dashboard-copy.js). Wording lives there, never in
+    // this file; the build refuses to compile when a
+    // DASHBOARD_COPY.<key> used here has no configured value.
+    const DASHBOARD_COPY = "{{DASHBOARD_COPY_JSON}}";
     const DASHBOARD_POLL_INTERVAL_MS = 15000;
     // 2.6.1: MIRROR SEAM: mirrors TENANT_FLAG.LLM_KEY_PRESENT in
     // src/services/tenant-meta.js. Consumers mask bits, never
@@ -65,8 +73,16 @@
       const res = await fetch(url, opts);
       if (!res.ok) {
         let detail = res.status;
-        try { const body = await res.json(); if (body && body.error) detail = body.error; } catch (e) {}
-        throw new Error('Request failed (' + detail + ')');
+        let body = null;
+        try { body = await res.json(); if (body && body.error) detail = body.error; } catch (e) {}
+        // 4.25111.52: the thrown error carries the server's own words
+        // and code alongside the unchanged message, so a handler can
+        // show the operator the reason rather than the wrapper.
+        const err = new Error('Request failed (' + detail + ')');
+        err.status = res.status;
+        err.detail = body && body.error ? body.error : null;
+        err.code = body && body.code ? body.code : null;
+        throw err;
       }
       return res;
     }
@@ -83,6 +99,18 @@
       // Defense in depth behind server-side validation: render only http(s).
       if (!ps || typeof ps.url !== 'string' || !/^https?:\/\//.test(ps.url)) return null;
       return ps;
+    }
+
+    // 4.25111.52: the deep link for a published post. posts.linkedin_id
+    // is the URN LinkedIn returned (urn:li:share:N from /v2/ugcPosts,
+    // urn:li:ugcPost:N or urn:li:activity:N from /rest/posts). Only a
+    // value of that shape becomes a link; anything else (no id, or a
+    // value that is not a LinkedIn URN) is shown as the raw text, so a
+    // 'posted' row that LinkedIn never issued an id for is visible as
+    // such on the card instead of looking like every other post.
+    function linkedinPostUrl(urn) {
+      if (typeof urn !== 'string' || !/^urn:li:(share|ugcPost|activity):\d+$/.test(urn)) return null;
+      return 'https://www.linkedin.com/feed/update/' + urn + '/';
     }
 
     function getArticleImages(post) {
@@ -697,6 +725,16 @@
         }
       }
 
+      // 4.25111.52: the alert carries the server's reason (a refusal
+      // such as "LinkedIn is not connected", or the publish failure
+      // the row now records) instead of the generic wrapper, and the
+      // lists refresh on failure too, because a publish failure now
+      // COMMITS: the card must show the post as the server left it
+      // (failed, with its reason and the Requeue action).
+      function publishFailureText(err) {
+        return DASHBOARD_COPY.approveFailedAlertPrefix + (err.detail || err.message);
+      }
+
       async function handleApprove(id, e) {
         e.stopPropagation();
         setLoading(l => ({ ...l, [`approve-${id}`]: true }));
@@ -704,7 +742,8 @@
           await mutate(`${API}/api/posts/${id}/approve`, { method: 'POST' });
           fetchAll();
         } catch (err) {
-          alert('Failed to approve: ' + err.message);
+          alert(publishFailureText(err));
+          fetchAll();
         }
         setLoading(l => ({ ...l, [`approve-${id}`]: false }));
       }
@@ -741,7 +780,12 @@
           setImageChoice({ mode: 'none', url: null });
           fetchAll();
         } catch (err) {
-          alert('Failed to approve: ' + err.message);
+          alert(publishFailureText(err));
+          // A committed publish failure leaves the modal's post in a
+          // state the modal was not opened for; close it and let the
+          // refreshed card carry the reason.
+          if (err.code === 'PUBLISH_FAILED') setSelectedPost(null);
+          fetchAll();
         }
         setLoading(l => ({ ...l, [`approve-${id}`]: false }));
       }
@@ -778,7 +822,7 @@
           setSelectedPost(null);
           fetchAll();
         } catch (err) {
-          alert('Failed to requeue: ' + err.message);
+          alert(DASHBOARD_COPY.requeueFailedAlertPrefix + err.message);
         }
         setLoading(l => ({ ...l, [`recover-${id}`]: false }));
       }
@@ -1428,11 +1472,23 @@
               <div className="stat-label">LinkedIn</div>
               <div className="stat-value stat-value-sm">
                 <span className={`conn-dot conn-dot-inline ${status.linkedinConnected ? 'connected' : 'disconnected'}`}></span>
-                {status.linkedinConnected ? 'Connected' : 'Not Connected'}
+                {status.linkedinConnected ? DASHBOARD_COPY.linkedInConnected : DASHBOARD_COPY.linkedInDisconnected}
               </div>
               {!status.linkedinConnected && (
                 <div className="stat-meta">
-                  <a href="/auth/linkedin" className="text-link-blue">Connect now →</a>
+                  {/* 4.25111.52: the reason behind "Not Connected". The
+                      server distinguishes "no token stored" from "token
+                      stored, LinkedIn did not confirm it"; the second
+                      still publishes, so it is named rather than hidden. */}
+                  {status.linkedinConnectionReason && (
+                    <div className="conn-reason" title={status.linkedinConnectionReason}>
+                      {status.linkedinConnectionReason}
+                      {status.linkedinTokenStored === true && DASHBOARD_COPY.linkedinTokenStoredSuffix}
+                    </div>
+                  )}
+                  <a href="/auth/linkedin" className="text-link-blue">
+                    {DASHBOARD_COPY.linkedinReconnectLink}
+                  </a>
                 </div>
               )}
               {status.linkedinConnected && (
@@ -1512,7 +1568,7 @@
                         <div className="post-preview">{post.content}</div>
                         {post.status === 'failed' && post.error_message && (
                           <div className="post-fail-reason" title={post.error_message}>
-                            Publish failed: {post.error_message}
+                            {DASHBOARD_COPY.cardPublishFailedPrefix}{post.error_message}
                           </div>
                         )}
                         <div className="post-footer">
@@ -1525,7 +1581,7 @@
                               .post-meta, bottom-aligned by CSS so it sits level with
                               the link line; .post-meta itself is unchanged (a standing
                               probe reads that block through a bounded window). */}
-                          <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}>{post.id}</span>
+                          <span className="post-id" title={DASHBOARD_COPY.postIdTitle} onClick={(e) => e.stopPropagation()}>{post.id}</span>
                           <div className="post-actions">
                             {post.status === 'draft' ? (
                               <button className="btn btn-approve" onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}>
@@ -1535,8 +1591,8 @@
                             {/* 4.25111.45: a failed post used to show Publish and
                                 Reject, both refused by the server (not pending).
                                 One click puts it back in the approval queue. */}
-                            <button className="btn btn-primary" title="Move this failed post back to Pending Approval" onClick={(e) => handleRecover(post.id, e)} disabled={!!loading[`recover-${post.id}`]}>
-                              {loading[`recover-${post.id}`] ? <span className="loading-spinner"></span> : '↩ Requeue'}
+                            <button className="btn btn-primary" title={DASHBOARD_COPY.cardRequeueButtonTitle} onClick={(e) => handleRecover(post.id, e)} disabled={!!loading[`recover-${post.id}`]}>
+                              {loading[`recover-${post.id}`] ? <span className="loading-spinner"></span> : DASHBOARD_COPY.cardRequeueButton}
                             </button>
                             <button className="btn btn-edit" onClick={(e) => openEditModal(post, e)}>
                               Edit
@@ -1587,7 +1643,15 @@
                     <div className="post-footer">
                       <span className="post-date">{post.status === 'scheduled' ? '🗓️ ' : ''}{postDisplayDate(post)}</span>
                       {/* 4.25111.47: same discreet id on recent cards, beside the date. */}
-                      <span className="post-id" title="Post id" onClick={(e) => e.stopPropagation()}>{post.id}</span>
+                      <span className="post-id" title={DASHBOARD_COPY.postIdTitle} onClick={(e) => e.stopPropagation()}>{post.id}</span>
+                      {/* 4.25111.52: where the post went. A LinkedIn URN links to
+                          the post; anything else is shown as-is so a 'posted' row
+                          without a LinkedIn id is visible as such. */}
+                      {post.status === 'posted' && (linkedinPostUrl(post.linkedin_id) ? (
+                        <a className="post-linkedin-link" href={linkedinPostUrl(post.linkedin_id)} target="_blank" rel="noopener noreferrer" title={post.linkedin_id} onClick={(e) => e.stopPropagation()}>{DASHBOARD_COPY.postedViewLink}</a>
+                      ) : (
+                        <span className="post-linkedin-link post-linkedin-missing" title={DASHBOARD_COPY.postedNoUrnTitle} onClick={(e) => e.stopPropagation()}>{post.linkedin_id ? DASHBOARD_COPY.postedRawIdPrefix + post.linkedin_id : DASHBOARD_COPY.postedNoIdLabel}</span>
+                      ))}
                       {(post.status === 'draft' || post.status === 'pending_approval') && (
                         <button className="btn btn-edit btn-action-sm" onClick={(e) => openEditModal(post, e)}>
                           Edit
@@ -1874,7 +1938,7 @@
 
                 {recovering && (
                   <div className="fail-banner">
-                    Publish failed{selectedPost.error_message ? <>: <strong>{selectedPost.error_message}</strong></> : ''}. Requeue it to send it back through approval.
+                    {DASHBOARD_COPY.modalFailBannerLead}{selectedPost.error_message ? <>: <strong>{selectedPost.error_message}</strong></> : ''}{DASHBOARD_COPY.modalFailBannerTail}
                   </div>
                 )}
 
@@ -1934,7 +1998,7 @@
                       )}
                       {recovering ? (
                         <button className="btn btn-primary btn-tight" onClick={(e) => handleRecover(moveId, e)} disabled={!!loading[`recover-${moveId}`]}>
-                          {loading[`recover-${moveId}`] ? <span className="loading-spinner"></span> : '↩ Requeue for Approval'}
+                          {loading[`recover-${moveId}`] ? <span className="loading-spinner"></span> : DASHBOARD_COPY.modalRequeueButton}
                         </button>
                       ) : currStatus !== 'pending_approval' && currStatus !== 'draft' && (
                         <button className="btn btn-tight" onClick={() => handleStatusChange('pending_approval')} disabled={!!loading.statusChange || !(selectedPost.content || '').trim()}>

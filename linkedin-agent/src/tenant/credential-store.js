@@ -202,6 +202,23 @@ export async function hasLinkedInRefreshToken() {
   }
 }
 
+// Presence probe for the ACCESS token, same contract as the two
+// probes around it. 4.25111.52: the dashboard's connection tile
+// used to answer "connected" from a live /userinfo check alone,
+// which reads "Not Connected" for any failure of that check while
+// the stored token still publishes. The tile now also reports
+// whether a token is stored at all, so "no token" and "token
+// stored, LinkedIn did not confirm it" are told apart. Must run
+// inside withTenant().
+export async function hasLinkedInAccessToken() {
+  try {
+    await fetchDecrypted(STORAGE_KEY.LINKEDIN_ACCESS_TOKEN);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Presence probe for the organization page URN, same contract as
 // hasLinkedInRefreshToken: never decrypt-throws on absence. Used by
 // the status endpoint and the publish-target route to answer "is

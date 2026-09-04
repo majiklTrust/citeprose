@@ -52,6 +52,7 @@ import { withTenant, currentClient as client } from "../db/with-tenant.js";
 import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { classifyProviderError, providerFailureLogDetails } from "../llm/provider-error.js";
 import { platformLog } from "../services/platform-log.js";
+import { dashboardCopy } from "../config/dashboard-copy.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
 import { selectPrimarySource, sanitizePrimarySource } from "../services/source-provenance.js";
 import { getAnthropicModel } from "../config/ai.js";
@@ -112,6 +113,23 @@ const resolveTenant = createTenantResolver();
 // scope — data returned is platform-level (server address, auth
 // config) or left null when no tenant is available.
 
+// 4.25111.52. One operator-facing line for a failed connection
+// check. The raw reason from validateToken is an internal message
+// when the token is simply absent ("Credential not found: ..."),
+// so that case is named from the presence probe instead; every
+// other reason (401, network, "Check failed") is passed through
+// because it is the actual finding.
+// 4.25111.55: the wording is package configuration (config.dashboard.copy
+// linkedinStatusNoToken / linkedinStatusNotConfirmed); an empty
+// value hides the line on the tile. This code only picks the case.
+function describeTokenCheck(tokenStatus, tokenStored) {
+  const reason = tokenStatus && tokenStatus.reason ? String(tokenStatus.reason) : "Check failed";
+  if (tokenStored === false || /^Credential not found/.test(reason)) {
+    return dashboardCopy("linkedinStatusNoToken") || null;
+  }
+  return dashboardCopy("linkedinStatusNotConfirmed", { reason }) || null;
+}
+
 router.get("/api/status", optionalAuth, async (req, res) => {
   try {
     // Platform-level data — no tenant context required
@@ -127,6 +145,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let researchStats = null;
     let cadence = null;
     let tokenStatus = { valid: false };
+    let linkedinTokenStored = null;
     let anthropicModel = null;
     let tenantMeta = null;
     let tenantRole = null;
@@ -213,6 +232,17 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             // block so currentTenantId() returns a valid UUID.
             cadence = await canPostNow();
             tokenStatus = await validateToken().catch(() => ({ valid: false, reason: "Check failed" }));
+            // 4.25111.52: validateToken answers from a live /userinfo
+            // call (cached per process, LINKEDIN_TOKEN_CHECK_MINUTES)
+            // and says "invalid" for ANY failure of that call, while
+            // the publish reads only the stored token. The tile needs
+            // both facts to say which of "no token" and "token stored,
+            // check failed" it is looking at. Probe failures fail open
+            // to "unknown" (null) rather than asserting either.
+            try {
+              const { hasLinkedInAccessToken } = await import("../tenant/credential-store.js");
+              linkedinTokenStored = await hasLinkedInAccessToken();
+            } catch { /* stays null: unknown, not asserted */ }
             anthropicModel = await getAnthropicModel();
             // 2.6.1: workspace readiness flags, computed by a quick
             // credential-presence lookup on the first authenticated
@@ -261,6 +291,14 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       feedLimit: parseInt(process.env.DASHBOARD_FEED_LIMIT) || 8,
       linkedinConnected: tokenStatus.valid,
       linkedinProfile: tokenStatus.valid ? tokenStatus.name : null,
+      // 4.25111.52: the two facts behind a "Not Connected" tile.
+      // linkedinTokenStored: true/false from the credential store,
+      // null when the probe itself failed. linkedinConnectionReason:
+      // the reason the live check gave, null when connected. A
+      // stored token with a failed check still publishes; the tile
+      // says so instead of implying there is nothing to publish with.
+      linkedinTokenStored,
+      linkedinConnectionReason: tokenStatus.valid ? null : describeTokenCheck(tokenStatus, linkedinTokenStored),
       publishTarget,
       organizationManager,
       subscription,
@@ -544,26 +582,72 @@ router.post("/api/posts/:id/rewrite", requirePermission("edit_post"), async (req
 // in delivery 0.45.1.16 to accept the tenant context via
 // AsyncLocalStorage (they will read currentTenantId internally).
 
+// 4.25111.52 (F-15). withTenant is one transaction: an error that
+// escapes the callback rolls back EVERYTHING the callback wrote. On
+// this route that meant a publish failure erased its own evidence
+// (the 'approved' and 'failed' writes, the reason, the trail rows)
+// and reached the operator as "An internal error occurred", while
+// the unattended paths committed the same failure as 'failed'. The
+// callback now RETURNS the outcomes approvePost raises on purpose
+// (a refusal that wrote only its audit line, or a publish failure
+// whose row already holds the status and reason) so they commit,
+// and the route answers with the reason. Anything else is a fault:
+// it still throws, still rolls back, still answers 500.
 router.post("/api/posts/:id/approve", requirePermission("approve_reject_post"), async (req, res) => {
   try {
     const id = parsePostId(req.params.id);
     if (id === null) return res.status(400).json({ error: "Invalid post id" });
-    const result = await withTenant(req.tenant.id, async () => {
-      return approvePost(id, req.user?.sub || null);
+    const outcome = await withTenant(req.tenant.id, async () => {
+      try {
+        return { result: await approvePost(id, req.user?.sub || null) };
+      } catch (err) {
+        if (isApproveOutcome(err)) return { error: err };
+        throw err;
+      }
     });
-    res.json({ success: true, result });
+    if (outcome.error) return respondApproveFailure(req, res, id, outcome.error);
+    res.json({ success: true, result: outcome.result });
   } catch (err) {
-    if (err.code === "EMPTY_CONTENT") return res.status(400).json({ error: err.message });
-    // 4.25111.7: the wire-length refusal is user-actionable, not an
-    // internal error. The message already says exactly how far over
-    // the limit the post is and that the draft is unchanged.
-    if (err.code === "COMMENTARY_TOO_LONG") {
-      return res.status(400).json({ error: err.message, code: err.code, details: err.details || null });
-    }
     platformLog("error", "api_error", { path: req.path, error: err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
 });
+
+// The outcomes approvePost raises on purpose. A code marks a
+// refusal made before any state change; postStatus marks a publish
+// failure made after the row moved (executePostInner tags it).
+const APPROVE_REFUSALS = {
+  NOT_FOUND: 404,
+  NOT_PENDING: 409,
+  EMPTY_CONTENT: 400,
+  COMMENTARY_TOO_LONG: 400,
+  LINKEDIN_NOT_CONNECTED: 409,
+  PUBLISH_MODE: 409
+};
+
+function isApproveOutcome(err) {
+  if (!err) return false;
+  if (err.postStatus) return true;
+  return Object.prototype.hasOwnProperty.call(APPROVE_REFUSALS, err.code);
+}
+
+// The body shape is the dashboard's contract: `error` is shown to
+// the operator verbatim, `code` names the class, `status` (publish
+// failures only) is what the row now says, so the client can show
+// the card in that state without a second round trip.
+function respondApproveFailure(req, res, postId, err) {
+  if (err.postStatus) {
+    platformLog("warn", "post_publish_failed_interactive", {
+      path: req.path, postId, status: err.postStatus, error: err.message
+    });
+    return res.status(502).json({
+      error: err.message, code: "PUBLISH_FAILED", status: err.postStatus
+    });
+  }
+  return res.status(APPROVE_REFUSALS[err.code]).json({
+    error: err.message, code: err.code, details: err.details || null
+  });
+}
 
 router.post("/api/posts/:id/reject", requirePermission("approve_reject_post"), async (req, res) => {
   try {

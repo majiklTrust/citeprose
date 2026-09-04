@@ -31,13 +31,14 @@ import {
 } from "./database.js";
 import { PRE_PUB_STATUSES } from "./post-status.js";
 import { generatePost, qualityCheck } from "./content-generator.js";
-import { publishPost } from "./linkedin-publisher.js";
+import { publishPost, checkPublishCredentials } from "./linkedin-publisher.js";
 import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
 import { withTenant } from "../db/with-tenant.js";
 import { withTenantWorkflow } from "../db/tenant-workflow.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
+import { dashboardCopy } from "../config/dashboard-copy.js";
 
 let schedulerJob = null;
 
@@ -234,32 +235,50 @@ async function executePostInner(postId) {
       reason: filterResult.reason,
       checks: filterResult.checks
     });
-    throw new Error(`Post blocked by output filter: ${filterResult.reason}`);
-  }
-
-  // Resolve an attached generated image to bytes. A stored image has
-  // no public URL and must be read from the image store, not fetched
-  // through the publisher's SSRF-guarded URL path. If the operator
-  // attached an image on purpose but it cannot be read, fail the
-  // publish loudly rather than silently posting the text without it.
-  let imageBytes = null;
-  if (post.generated_image_id) {
-    try {
-      const { readImageBytes } = await import("./image-store.js");
-      const img = await readImageBytes(post.generated_image_id);
-      imageBytes = { buffer: img.bytes, contentType: img.mime };
-    } catch (err) {
-      await logActivity("error", "post_image_read_failed", {
-        postId, imageId: post.generated_image_id, error: err.message
-      });
-      throw new Error(
-        `Attached image ${post.generated_image_id} could not be read: ${err.message}`
-      );
-    }
+    throw withPostStatus(new Error(`Post blocked by output filter: ${filterResult.reason}`), "blocked");
   }
 
   try {
+    // Resolve an attached generated image to bytes. A stored image
+    // has no public URL and must be read from the image store, not
+    // fetched through the publisher's SSRF-guarded URL path. If the
+    // operator attached an image on purpose but it cannot be read,
+    // fail the publish loudly rather than silently posting the text
+    // without it.
+    //
+    // 4.25111.52: the read now sits INSIDE the try so its failure
+    // reaches the catch below and writes 'failed' with the reason.
+    // It used to throw before the try, writing nothing: the batch
+    // publisher (which swallows the throw and commits) stranded such
+    // a post in 'publishing', and the interactive route, now that it
+    // commits publish failures, would have left it in 'approved'.
+    let imageBytes = null;
+    if (post.generated_image_id) {
+      try {
+        const { readImageBytes } = await import("./image-store.js");
+        const img = await readImageBytes(post.generated_image_id);
+        imageBytes = { buffer: img.bytes, contentType: img.mime };
+      } catch (err) {
+        await logActivity("error", "post_image_read_failed", {
+          postId, imageId: post.generated_image_id, error: err.message
+        });
+        throw new Error(
+          `Attached image ${post.generated_image_id} could not be read: ${err.message}`
+        );
+      }
+    }
+
     const result = await publishPost(post.content, post.hashtags, post.image_url, post.publish_target || null, imageBytes);
+
+    // 4.25111.52: 'posted' means the publisher AFFIRMED success. Both
+    // real publishers return { success: true, postId }; anything else
+    // (a stand-in wired in for a dry run, a future publisher that
+    // resolves with a bare object) is a failure with a reason, not a
+    // published post. A row that says 'posted' with no LinkedIn URN
+    // behind it is exactly the kind of row an operator cannot explain.
+    if (!result || result.success !== true) {
+      throw new Error(dashboardCopy("publishNoSuccessConfirmation"));
+    }
 
     await updatePostStatus(postId, "posted", {
       linkedinId: result.postId,
@@ -284,27 +303,39 @@ async function executePostInner(postId) {
       // caller that skips the approve pre-flight.
       await updatePostStatus(postId, "pending_approval", { errorMessage: err.message });
       await logActivity("warn", "post_too_long_for_linkedin", { postId, ...(err.details || {}) });
-      throw err;
+      throw withPostStatus(err, "pending_approval");
     }
     await updatePostStatus(postId, "failed", { errorMessage: err.message });
     await logActivity("error", "post_publish_failed", { postId, error: err.message });
-    throw err;
+    throw withPostStatus(err, "failed");
   }
+}
+
+// 4.25111.52. Every throw that leaves executePostInner AFTER a status
+// write carries the status the row now holds. The interactive approve
+// route reads it to decide between "the row already says what
+// happened, commit and report the reason" and "this is a fault, roll
+// back". The unattended callers (batch publisher, auto-mode tick)
+// ignore it; they swallow the throw and commit as before.
+function withPostStatus(err, status) {
+  err.postStatus = status;
+  return err;
 }
 
 // ── Manual Mode Actions ──────────────────────────────────────
 // Called from api.js routes which wrap them in withTenant.
 
+// 4.25111.52: every refusal below carries a code so the route can
+// answer with the reason instead of a generic 500. A refusal writes
+// nothing but its audit line and leaves the post exactly as found.
 export async function approvePost(postId, userSub = null) {
   const post = await getPost(postId);
-  if (!post) throw new Error(`Post ${postId} not found`);
+  if (!post) throw refusal(`Post ${postId} not found`, "NOT_FOUND");
   if (post.status !== "pending_approval") {
-    throw new Error(`Post ${postId} is not pending approval (status: ${post.status})`);
+    throw refusal(`Post ${postId} is not pending approval (status: ${post.status})`, "NOT_PENDING");
   }
   if (!(post.content || "").trim()) {
-    const err = new Error("Cannot publish an empty post.");
-    err.code = "EMPTY_CONTENT";
-    throw err;
+    throw refusal("Cannot publish an empty post.", "EMPTY_CONTENT");
   }
   // 4.25111.7: wire-length pre-flight BEFORE any state transition
   // (validate-before-mutate: a refusal here leaves the post in
@@ -321,9 +352,30 @@ export async function approvePost(postId, userSub = null) {
     }, userSub);
     throw commentaryTooLongError(wire.length, wireMax);
   }
+  // 4.25111.52: credential pre-flight, same discipline. The publish
+  // path reads the token and author URN first thing and throws
+  // "credentials not configured" when they are absent; asked here,
+  // before the row moves, the same absence is a refusal the operator
+  // can act on (connect LinkedIn, then click Publish again) with no
+  // 'approved' -> 'failed' flip and no requeue in between.
+  const creds = await checkPublishCredentials(post.publish_target || null);
+  if (!creds.ok) {
+    await logActivity("warn", "post_publish_refused", {
+      postId, code: creds.code, mode: creds.mode, target: creds.target, reason: creds.reason
+    }, userSub);
+    const err = refusal(creds.reason, creds.code);
+    err.details = { mode: creds.mode, target: creds.target };
+    throw err;
+  }
   await updatePostStatus(postId, "approved");
   await logActivity("info", "post_approved", { postId }, userSub);
   return executePost(postId);
+}
+
+function refusal(message, code) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
 }
 
 export async function rejectPost(postId, reason = "", userSub = null) {

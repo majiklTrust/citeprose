@@ -211,9 +211,19 @@ body::after {
 }
 
 /* Main content layout */
+/* 4.25111.54: the flexible column is minmax(0, 1fr), not 1fr. A bare
+   1fr track cannot shrink below the min-content of what it holds, and
+   one unbreakable line inside a card (the single-line failure reason
+   introduced in 4.25111.45, or any long nowrap text) held the column
+   open while the two fixed columns kept their width: the grid then
+   ran past the container and the Activity column was clipped behind
+   body overflow-x hidden until the 1100px query dropped a column.
+   With a zero minimum the track shrinks with the container, the card
+   takes the column's width, and the reason line clips with its
+   ellipsis inside the card as intended. Same rule in both queries. */
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr 300px 360px;
+  grid-template-columns: minmax(0, 1fr) 300px 360px;
   gap: 1.5rem;
 }
 
@@ -710,11 +720,11 @@ body::after {
 
 /* Responsive */
 @media (max-width: 1100px) {
-  .main-grid { grid-template-columns: 1fr 260px; }
+  .main-grid { grid-template-columns: minmax(0, 1fr) 260px; }
 }
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .main-grid { grid-template-columns: 1fr; }
+  .main-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Research & Sources */
@@ -747,6 +757,16 @@ body::after {
    source link, in the whitespace to the link's right. */
 .post-id { font-size: 0.68rem; opacity: 0.55; color: var(--text-secondary); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; user-select: all; white-space: nowrap; }
 .post-footer > .post-id { align-self: flex-end; margin-right: auto; margin-left: 0.5rem; padding-bottom: 0.05rem; }
+/* 4.25111.52: where a published post went. The link sits after the id
+   on recent cards, same quiet weight as the source link; the missing
+   variant (no LinkedIn URN on a 'posted' row) is amber so it reads as
+   a question, not as a link. */
+.post-linkedin-link { font-size: 0.7rem; color: var(--accent-cyan); text-decoration: none; white-space: nowrap; margin-left: 0.5rem; }
+.post-linkedin-link:hover { text-decoration: underline; }
+.post-linkedin-missing { color: var(--accent-amber); opacity: 0.85; cursor: default; user-select: all; }
+.post-linkedin-missing:hover { text-decoration: none; }
+/* 4.25111.52: the reason under a "Not Connected" LinkedIn tile. */
+.conn-reason { margin-bottom: 0.2rem; overflow-wrap: anywhere; }
 .factual-flags {
   margin-top: 0.75rem; padding: 0.75rem;
   background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);

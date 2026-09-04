@@ -12,11 +12,30 @@ import fs from "node:fs";
 import path from "node:path";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+// 4.25111.55 (.56: path renamed): end-user copy is package
+// configuration. package.json config.dashboard.copy is one flat map
+// of key to text; the dashboard source carries
+// `const DASHBOARD_COPY = "{{DASHBOARD_COPY_JSON}}";` and reads
+// DASHBOARD_COPY.<key>, the server reads the same map through
+// src/config/dashboard-copy.js. The quoted placeholder is replaced
+// with the map's JSON, so the stamped line is an object literal while
+// the unstamped source stays valid JS.
+// FAIL-LOUD: every DASHBOARD_COPY.<key> a jsx source uses, and every
+// key the server declares (SERVER_DASHBOARD_COPY_KEYS), must have a
+// string value in config.dashboard.copy, or the build stops and names
+// the missing keys. An empty string is a value (it hides an optional
+// line).
+const copyTable = (pkg.config && pkg.config.dashboard && pkg.config.dashboard.copy
+  && typeof pkg.config.dashboard.copy === "object") ? pkg.config.dashboard.copy : {};
 const subs = {
   "{{CSSVERSION}}": String((pkg.config && pkg.config.cssversion) || "0"),
   "{{VERSION}}": String(pkg.version || "0.0.0"),
-  "{{APPLICATION}}": String((pkg.config && pkg.config.appname) || "")
+  "{{APPLICATION}}": String((pkg.config && pkg.config.appname) || ""),
+  "\"{{DASHBOARD_COPY_JSON}}\"": JSON.stringify(copyTable)
 };
+function missingCopy(keys) {
+  return keys.filter((k) => typeof copyTable[k] !== "string");
+}
 
 const SRC = "public_templates";
 let built = 0;
@@ -122,12 +141,31 @@ if (jsxEntries.length > 0) {
       + ". Run: npm install --save-dev --save-exact esbuild@0.28.2");
     process.exit(1);
   }
+  // Server-side copy keys are validated here too, so ONE build
+  // answers for both surfaces before either ships.
+  {
+    const { SERVER_DASHBOARD_COPY_KEYS } = await import("../src/config/dashboard-copy.js");
+    const missing = missingCopy(SERVER_DASHBOARD_COPY_KEYS);
+    if (missing.length > 0) {
+      console.error("***** FATAL ERROR ***** build-pages.mjs FATAL: package.json config.dashboard.copy lacks server copy keys:\n\t" + missing.join("\n\t"));
+      process.exit(1);
+    }
+  }
+
   for (const entry of jsxEntries) {
     console.log(entry);
     const dm = /^(.+)-([^-]+)$/.exec(entry.name);
     const outDir = dm ? path.join("public", dm[1]) : "public";
     const outBase = (dm ? dm[2] : entry.name) + ".js";
     let source = entry.read();
+    {
+      const used = Array.from(new Set(Array.from(source.matchAll(/\bDASHBOARD_COPY\.([A-Za-z_][A-Za-z0-9_]*)/g), (m) => m[1])));
+      const missing = missingCopy(used);
+      if (missing.length > 0) {
+        console.error(`build-pages.mjs FATAL: ${entry.label} uses copy keys absent from package.json config.dashboard.copy: ` + missing.join(", "));
+        process.exit(1);
+      }
+    }
     for (const [k, v] of Object.entries(subs)) source = source.split(k).join(v);
     const out = await esbuild.transform(source, {
       loader: "jsx",

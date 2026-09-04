@@ -1,9 +1,37 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.51",
+  "version": "4.25111.56",
   "config": {
     "cssversion": "111",
-    "appname": "Market Intelligence"
+    "appname": "Market Intelligence",
+    "dashboard": {
+    "copy": {
+      "approveFailedAlertPrefix": "Failed to approve: ",
+      "requeueFailedAlertPrefix": "Failed to requeue: ",
+      "cardRequeueButton": "↩ Requeue",
+      "cardRequeueButtonTitle": "Move this failed post back to Pending Approval",
+      "cardPublishFailedPrefix": "Publish failed: ",
+      "modalFailBannerLead": "Publish Failed",
+      "modalFailBannerTail": ". Requeue it to send it back through approval.",
+      "modalRequeueButton": "↩ Requeue for Approval",
+      "postIdTitle": "Post ID",
+      "postedViewLink": "View on LinkedIn ↗",
+      "postedNoIdLabel": "no LinkedIn id",
+      "postedRawIdPrefix": "id: ",
+      "postedNoUrnTitle": "LinkedIn did not return a post URN for this row",
+      "linkedinReconnectLink": "Connect Now →",
+      "linkedinTokenStoredSuffix": "",
+      "linkedinNotConnected": "LinkedIn credentials not configured for {target} publishing. Connect via /auth/linkedin",
+      "linkedinTargetPersonal": "personal profile",
+      "linkedinTargetOrganization": "organization page",
+      "linkedinOrgRequiresRest": "Organization publishing requires LINKEDIN_PUBLISH_MODE=rest; text-posting mode authors as the personal profile only",
+      "publishNoSuccessConfirmation": "Publisher returned no success confirmation; the post was not marked posted",
+      "linkedinStatusNoToken": "",
+      "linkedinStatusNotConfirmed": "",
+      "linkedInConnected":"Connected",
+      "linkedInDisconnected":"Not Connected"
+    }
+    }
   },
   "description": "Autonomous AI agent for Market Intelligence content creation",
   "main": "src/index.js",

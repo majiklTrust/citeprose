@@ -45,6 +45,7 @@ import {
 import { isSafeUrl } from "./security.js";
 import { currentTenantId } from "../db/with-tenant.js";
 import { yieldDb } from "../db/tenant-workflow.js";
+import { dashboardCopy } from "../config/dashboard-copy.js";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -491,20 +492,29 @@ async function restPublish(content, hashtags, imageUrl, target, imageBytes = nul
 //
 // In text-posting mode, an image (URL or bytes) is ignored with a warning.
 
-export async function publishPost(content, hashtags = [], imageUrl = null, targetOverride = null, imageBytes = null) {
+// Per-post destination seam (MDP-proofing): a post may carry its own
+// publish_target (personal|organization), which overrides the global
+// LINKEDIN_PUBLISH_TARGET default. NULL -> global default (today's
+// behavior, unchanged). NOTE: legacyPublishPost/restPublish still read
+// the global target internally for URN selection; threading `target`
+// into them is the remaining wiring when organization/MDP posting is
+// implemented. For v1 this records the per-post target and keeps the
+// data flow destination-aware end to end.
+//
+// 4.25111.52: lifted out of publishPost so the credential pre-flight
+// below resolves mode and target through the SAME lines (one
+// resolution site in this module, which the design suite holds).
+async function resolvePublishRoute(targetOverride) {
   const mode = getPublishMode();
-  const hasImage = !!imageUrl || !!(imageBytes && imageBytes.buffer); // ◄ either source counts
-  // Per-post destination seam (MDP-proofing): a post may carry its own
-  // publish_target (personal|organization), which overrides the global
-  // LINKEDIN_PUBLISH_TARGET default. NULL -> global default (today's
-  // behavior, unchanged). NOTE: legacyPublishPost/restPublish still read
-  // the global target internally for URN selection; threading `target`
-  // into them is the remaining wiring when organization/MDP posting is
-  // implemented. For v1 this records the per-post target and keeps the
-  // data flow destination-aware end to end.
   const target = isValidPublishTarget(targetOverride)
     ? targetOverride
     : await getPublishTarget();
+  return { mode, target };
+}
+
+export async function publishPost(content, hashtags = [], imageUrl = null, targetOverride = null, imageBytes = null) {
+  const { mode, target } = await resolvePublishRoute(targetOverride);
+  const hasImage = !!imageUrl || !!(imageBytes && imageBytes.buffer); // ◄ either source counts
   const tenant = currentTenantId() || "unknown";
 
   platformLog("info", "publish", {
@@ -525,15 +535,55 @@ export async function publishPost(content, hashtags = [], imageUrl = null, targe
       });
     }
     if (target === "organization") {
-      throw new Error(
-        "Organization publishing requires LINKEDIN_PUBLISH_MODE=rest; " +
-        "text-posting mode authors as the personal profile only"
-      );
+      // 4.25111.55: same key the pre-flight below reads, so the two
+      // refusals can never drift apart. Text unchanged.
+      throw new Error(dashboardCopy("linkedinOrgRequiresRest"));
     }
     return legacyPublishPost(content, hashtags);
   }
 
   return restPublish(content, hashtags, imageUrl, target, imageBytes);
+}
+
+// ── Pre-flight ───────────────────────────────────────────────
+// 4.25111.52. Answers "would publishPost get past its credential
+// reads" WITHOUT publishing and without touching the post. It
+// resolves mode and target exactly as publishPost does above, then
+// probes the same credentials the chosen path reads (text-posting:
+// token + person URN; image-posting: token + the URN for the
+// target) and, in text-posting mode, refuses the organization
+// target the same way publishPost would.
+//
+// Why it exists: the interactive approve used to learn "LinkedIn
+// credentials not configured" only from inside the publish, after
+// the row had already moved to 'approved', and the throw then
+// rolled everything back and reached the operator as "An internal
+// error occurred". A refusal here happens BEFORE any state change,
+// so the post stays pending_approval and the reason reaches the
+// operator verbatim. Never throws: absence is an answer, not a
+// fault. Must be called inside withTenant().
+export async function checkPublishCredentials(targetOverride = null) {
+  const { mode, target } = await resolvePublishRoute(targetOverride);
+
+  if (mode === "text-posting" && target === "organization") {
+    return { ok: false, mode, target, code: "PUBLISH_MODE", reason: dashboardCopy("linkedinOrgRequiresRest") };
+  }
+
+  const wantsOrg = mode !== "text-posting" && target === "organization";
+  try {
+    await getLinkedInAccessToken();
+    if (wantsOrg) await getLinkedInOrgUrn();
+    else await getLinkedInPersonUrn();
+  } catch {
+    // 4.25111.55: wording is package configuration (config.dashboard.copy), the
+    // operator's to set; this code only chooses the target label.
+    const targetLabel = dashboardCopy(wantsOrg ? "linkedinTargetOrganization" : "linkedinTargetPersonal");
+    return {
+      ok: false, mode, target, code: "LINKEDIN_NOT_CONNECTED",
+      reason: dashboardCopy("linkedinNotConnected", { target: targetLabel })
+    };
+  }
+  return { ok: true, mode, target };
 }
 
 // Re-export for callers that need to check the mode

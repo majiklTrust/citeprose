@@ -73,8 +73,8 @@ body::after {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
-  padding-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -90,8 +90,9 @@ body::after {
 
 .header-subtitle {
   color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
+  font-size: 0.65rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
   font-family: var(--font-mono);
 }
 
@@ -155,7 +156,7 @@ body::after {
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
-.automation-option-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; }
+.automation-option-desc { font-size: 0.70rem; color: var(--text-muted); line-height: 1.35; }
 .automation-option.selected { border-color: var(--border-active); }
 .automation-option.selected.automation-manual .automation-option-label { color: var(--accent-amber); }
 .automation-option.selected.automation-manual input[type="radio"] { accent-color: var(--accent-amber); }

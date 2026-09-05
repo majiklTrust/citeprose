@@ -19,6 +19,20 @@
       { mode: 'auto-generate', title: DASHBOARD_COPY.automationStateAutoGenerateTitle },
       { mode: 'auto-post', title: DASHBOARD_COPY.automationStateAutoPostTitle }
     ];
+    // 4.25111.66: whether this server offers auto-post at all
+    // (ENABLE_AUTO_POST, default no). The answer travels in the
+    // automation object the automation route returns
+    // (status.automation.autoPostEnabled, merged in fetchAll). Only a
+    // boolean true shows the choice; anything else, including a server
+    // that says nothing, hides it. A store that says auto-post while
+    // the server has it switched off arrives here already as
+    // auto-generate, so nothing below has to reason about that case.
+    function autoPostOffered(status) {
+      return !!status && !!status.automation && status.automation.autoPostEnabled === true;
+    }
+    function offeredAutomationOptions(status) {
+      return AUTOMATION_OPTIONS.filter((opt) => opt.mode !== 'auto-post' || autoPostOffered(status));
+    }
     // The stored value, or null when the status carries none or one
     // the dashboard does not know (a corrupted row is shown as text in
     // the header but never treated as a state).
@@ -690,6 +704,21 @@
           if (!statusRes.stats) statusRes.stats = {
             totalPosted: 0, postsInWindow: 0, pendingApproval: 0, byTopic: []
           };
+
+          // 4.25111.66: the automation object from the automation route
+          // replaces the copy on /api/status. It is the same object plus
+          // what /api/status does not carry: whether this server offers
+          // auto-post at all (autoPostEnabled), which decides whether the
+          // auto-post choice exists on the page. Read before the first
+          // render so the card never shows a row it then takes away.
+          // When the route cannot answer, the status copy stands (and
+          // without the flag the choice stays hidden, the default).
+          try {
+            const autoRes = await authFetch(`${API}/api/automation/state`, { headers: bgHeaders }).then(r => r.ok ? r.json() : null);
+            if (autoRes && autoRes.automation && typeof autoRes.automation === 'object') statusRes.automation = autoRes.automation;
+          } catch (err) {
+            if (err.message === 'Authentication required') throw err;
+          }
 
           setStatus(statusRes);
 
@@ -1445,7 +1474,6 @@
           <div className="header">
             <div>
               <div className="header-title">{{APPLICATION}}</div>
-              <div className="header-subtitle">v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
             </div>
             <div className="header-controls">
               {status?.user && (
@@ -1476,7 +1504,7 @@
             </div>
             </div>
           </div>
-
+          <div className="header-subtitle">v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
           {/* Stats */}
           <div className="stats-grid">
             <div className="stat-card">
@@ -1709,11 +1737,13 @@
               {/* Automation state (4.25111.62): the three states as a
                   radio list, labels from the stored values, descriptions
                   from copy, the choice posted to /api/automation/mode.
-                  Members without change_mode see it disabled. */}
+                  Members without change_mode see it disabled.
+                  4.25111.66: the auto-post choice and its review window
+                  note exist only when the server offers auto-post. */}
               <div className="sidebar-panel automation-card">
                 <div className="section-title">{DASHBOARD_COPY.automationControlLabel}</div>
                 <div className="automation-list" role="radiogroup" aria-label={DASHBOARD_COPY.automationControlLabel}>
-                  {AUTOMATION_OPTIONS.map((opt) => {
+                  {offeredAutomationOptions(status).map((opt) => {
                     const current = automationModeOf(status);
                     const canChange = !!status.permissions?.includes('change_mode') && current !== null;
                     const selected = current === opt.mode;
@@ -1731,7 +1761,7 @@
                     );
                   })}
                 </div>
-                {automationModeOf(status) === 'auto-post' && reviewWindowHoursOf(status) !== null && (
+                {autoPostOffered(status) && automationModeOf(status) === 'auto-post' && reviewWindowHoursOf(status) !== null && (
                   <div className="automation-note">{DASHBOARD_COPY.reviewWindowNote.split('{hours}').join(String(reviewWindowHoursOf(status)))}</div>
                 )}
               </div>

@@ -16,6 +16,17 @@
 // business of the /api/mode shim in api.js and never accepted here.
 // Every write leaves an attributed trail line and a platform log
 // row with the tenant.
+//
+// 4.25111.64: the ENABLE_AUTO_POST switch. A state the server does
+// not offer right now (auto-post while the switch is off) is refused
+// with 400 AUTO_POST_DISABLED, through the interpreter's
+// availableModes() so this file never names a mode. The refusal
+// writes nothing, and is logged (a client asked for a state the
+// operator has switched off; the dashboard never offers it). The
+// state object carries autoPostEnabled, which the dashboard reads
+// from GET /state to decide whether the auto-post choice exists on
+// the page at all, and storedMode, so an operator can see a store
+// that says auto-post being treated as auto-generate.
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
@@ -25,8 +36,8 @@ import { createTenantResolver } from "../tenant/resolver.js";
 import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
-import { setAgentState, logActivity } from "../services/database.js";
-import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish } from "../automation/automation-mode.js";
+import { setAgentState, logActivity, logActivityBestEffort } from "../services/database.js";
+import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes } from "../automation/automation-mode.js";
 import { readAutomationSettings, parseReviewWindowHours, parseHoldWhilePending, SETTING_KEYS, REVIEW_WINDOW_MAX_HOURS } from "../automation/settings.js";
 
 const router = Router();
@@ -55,7 +66,9 @@ async function automationObject() {
     paused: state.paused,
     source: state.source,
     reviewWindowHours: settings.reviewWindowHours,
-    holdWhilePending: settings.holdWhilePending
+    holdWhilePending: settings.holdWhilePending,
+    autoPostEnabled: state.autoPostEnabled,
+    storedMode: state.storedMode
   };
 }
 
@@ -81,6 +94,14 @@ router.post("/mode", requirePermission("change_mode"), async (req, res) => {
     const mode = req.body && typeof req.body === "object" ? req.body.mode : undefined;
     if (!isMode(mode)) {
       return res.status(400).json({ error: `mode must be one of ${MODES.join(", ")}`, code: "INVALID_MODE" });
+    }
+    if (!availableModes().includes(mode)) {
+      // Offered nowhere on this server right now. The dashboard never
+      // shows the choice, so this answers clients only, in the same
+      // voice as INVALID_MODE above.
+      platformLog("info", "automation_mode_refused", { tenantId: req.tenant.id, requested: mode, reason: "auto_post_disabled", sub: req.user?.sub || null });
+      await withTenant(req.tenant.id, () => logActivityBestEffort("info", "automation_mode_refused", { requested: mode, reason: "auto_post_disabled" }, req.user?.sub || null));
+      return res.status(400).json({ error: `${mode} is not enabled on this server`, code: "AUTO_POST_DISABLED" });
     }
     const automation = await withTenant(req.tenant.id, async () => {
       const before = await readMode();

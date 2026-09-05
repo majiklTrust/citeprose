@@ -8,7 +8,7 @@
    ================================================================= */
 :root{
   --bg:#0b0f14; --panel:#121821; --panel-2:#0e141c; --line:#1e2733;
-  --ink:#e8edf3; --ink-dim:#93a1b2; --ink-faint:#5f6e80;
+  --ink:#e8edf3; --ink-dim:#93a1b2; --ink-faint:#5f6e80; --ink-dark:#212224; 
   --accent:#2dd4bf; --accent-deep:#0f766e; --accent-soft:rgba(45,212,191,.12);
   --verified:#f5b544; --danger:#f0674f;
   --radius:14px; --radius-sm:9px;
@@ -22,7 +22,7 @@ body{background:radial-gradient(1200px 700px at 70% -10%,#12202a 0%,var(--bg) 55
 .manager-nav{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px}
 .manager-nav-link{color:var(--ink-dim)}
 .manager-nav-link:hover{color:var(--accent)}
-.manager-nav-active{color:var(--ink)}
+.manager-nav-active{color:var(--accent);background: var(--accent-soft);}
 
 /* Top bar */
 .topbar{display:flex;align-items:center;gap:16px;padding:14px 18px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:16px;flex-wrap:wrap}

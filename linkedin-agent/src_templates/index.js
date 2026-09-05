@@ -62,6 +62,7 @@ export function createApp(ctx) {
   const {
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    automationRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
     imageStudioRoutes,
@@ -869,6 +870,13 @@ export function createApp(ctx) {
   // apiRoutes (api.js's guard 404s unknown /api/*).
   instance.use("/api/analytics", analyticsRoutes);
 
+  // 4.25111.60: the automation state (three modes) and its settings,
+  // mounted at /api/automation. Own auth, tenant and standing
+  // middleware inside the router. Must be before apiRoutes (api.js's
+  // guard 404s unknown /api/*). The legacy /api/mode shim stays in
+  // api.js for the untouched two-way toggle.
+  instance.use("/api/automation", automationRoutes);
+
   // LinkedIn connection management (publish target toggle, manual
   // tokens, org discovery). Owner-gated inside via manage_linkedin.
   // Must also be before apiRoutes for the same /api/* guard reason.
@@ -971,6 +979,7 @@ export async function buildAppForTests() {
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
+  const { default: automationRoutes }    = await import("./routes/automation-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
   const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
   const { default: imageStudioRoutes }   = await import("./routes/image-studio-api.js");
@@ -982,6 +991,7 @@ export async function buildAppForTests() {
   return createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    automationRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
     imageStudioRoutes,
@@ -1083,6 +1093,7 @@ export async function start() {
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
+  const { default: automationRoutes }    = await import("./routes/automation-api.js");
   const { default: linkedinConnectionRoutes } = await import("./routes/linkedin-connection-api.js");
   const { default: advocacyRoutes }      = await import("./routes/advocacy-api.js");
   const { default: imageStudioRoutes }   = await import("./routes/image-studio-api.js");
@@ -1105,6 +1116,7 @@ export async function start() {
   app = createApp({
     apiRoutes, adminRoutes, topicsRoutes, registrationRoutes, feedsRoutes, composeRoutes,
     analyticsRoutes,
+    automationRoutes,
     linkedinConnectionRoutes,
     advocacyRoutes,
     imageStudioRoutes,

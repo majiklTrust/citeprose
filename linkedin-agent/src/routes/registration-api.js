@@ -38,6 +38,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
 import { seedTenantDefaults } from "../tenant/seed-defaults.js";
+import { DEFAULT_MODE } from "../automation/automation-mode.js";
 
 const router = Router();
 
@@ -621,7 +622,11 @@ router.post("/complete", async (req, res) => {
     try {
       await withTenant(tenantId, async () => {
         const { setAgentState } = await import("../services/database.js");
-        await setAgentState("mode", "manual");
+        // 4.25111.60 (Decision 3): a new tenant starts with automation
+        // off. DEFAULT_MODE is 'manual' in the three-state vocabulary
+        // (nothing automated), not the old 'manual' that generated
+        // on cadence; the interpreter owns the string.
+        await setAgentState("mode", DEFAULT_MODE);
         await setAgentState("corroboration", "disabled");
         // Model Provider selection through the SAME primitives the Model Provider
         // card uses: llmCredentialKeyFor names the credential,

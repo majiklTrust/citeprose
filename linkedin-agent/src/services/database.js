@@ -187,7 +187,7 @@ export async function getPost(id) {
     `SELECT p.id, p.tenant_id, t.slug AS topic_id, p.title, p.content,
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
-            p.image_url, p.genre, p.generated_image_id, p.topic_id AS topic_num_id
+            p.image_url, p.genre, p.generated_image_id, p.topic_id AS topic_num_id, p.queued_at
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.id = $1`,
@@ -330,7 +330,11 @@ export async function applyRefinedContent(id, fields) {
 
 export async function updatePostStatus(id, status, extra = {}) {
   const c = client();
-  const sets = ["status = $1::post_status"];
+  // 4.25111.60: queued_at is when the post last entered the approval
+  // queue; the review window (automation) is measured from it.
+  // Written in the same statement as the status so the two can
+  // never disagree; untouched by every other move.
+  const sets = ["status = $1::post_status", "queued_at = CASE WHEN $1::post_status = 'pending_approval' THEN now() ELSE queued_at END"];
   const params = [status];
   let i = 2;
 
@@ -454,7 +458,8 @@ export async function transitionPostStatus({ id, to, scheduledFor, title, conten
     // other move leaves the column exactly as it was.
     await c.query(
       `UPDATE posts SET status = $1::post_status, scheduled_for = NULL,
-              error_message = CASE WHEN $3::boolean THEN NULL ELSE error_message END
+              error_message = CASE WHEN $3::boolean THEN NULL ELSE error_message END,
+              queued_at = CASE WHEN $1::post_status = 'pending_approval' THEN now() ELSE queued_at END
         WHERE id = $2 AND tenant_id = current_tenant_id()`,
       [to, id, recovering]
     );
@@ -473,7 +478,7 @@ export async function getPostsByStatus(status) {
             p.hashtags, p.status, p.linkedin_id, p.publish_target, p.created_at,
             p.scheduled_for, p.posted_at, p.error_message, p.news_context,
             p.image_url,
-            p.generated_image_id
+            p.generated_image_id, p.queued_at
      FROM posts p
      LEFT JOIN topics t ON t.id = p.topic_id
      WHERE p.status = $1::post_status

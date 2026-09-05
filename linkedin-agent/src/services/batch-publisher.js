@@ -40,6 +40,7 @@ import { logActivityBestEffort } from "./database.js";
 import { executePost } from "./scheduler.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 import { platformLog } from "./platform-log.js";
+import { runAutoPublishForTenant } from "../automation/publishing-loop.js";
 
 let publisherJob = null;
 
@@ -153,6 +154,18 @@ async function runBatchForAllTenants() {
       continue;
     }
     await runBatchForTenant(tenant);
+    // 4.25111.60: the second claim. Under auto-post the tenant's
+    // oldest queued post past its review window is approved and
+    // published by the mode, one per sweep, through the same
+    // exactly-once discipline as the scheduled claim above. Outside
+    // auto-post it decides "hold" silently and costs one read. Its
+    // own failures are its own (it never throws); a tenant's
+    // automated publish cannot stop the next tenant's sweep.
+    try {
+      await runAutoPublishForTenant(tenant);
+    } catch (err) {
+      platformLog("error", "auto_publish_sweep_failed", { tenantId: tenant.id, tenant: tenant.slug || null, error: err.message });
+    }
   }
 }
 

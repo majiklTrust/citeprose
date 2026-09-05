@@ -9,6 +9,28 @@
     // this file; the build refuses to compile when a
     // DASHBOARD_COPY.<key> used here has no configured value.
     const DASHBOARD_COPY = "{{DASHBOARD_COPY_JSON}}";
+    // 4.25111.62: the three automation states, in ladder order, as the
+    // database stores them (agent_state key mode). The labels a person
+    // sees ARE these stored values, uppercased, so the dashboard can
+    // never disagree with the database; only the descriptions are copy.
+    // Each key is a literal member so the build can validate it.
+    const AUTOMATION_OPTIONS = [
+      { mode: 'manual', title: DASHBOARD_COPY.automationStateManualTitle },
+      { mode: 'auto-generate', title: DASHBOARD_COPY.automationStateAutoGenerateTitle },
+      { mode: 'auto-post', title: DASHBOARD_COPY.automationStateAutoPostTitle }
+    ];
+    // The stored value, or null when the status carries none or one
+    // the dashboard does not know (a corrupted row is shown as text in
+    // the header but never treated as a state).
+    function automationModeOf(status) {
+      const m = status && status.automation ? status.automation.mode : null;
+      return AUTOMATION_OPTIONS.some((o) => o.mode === m) ? m : null;
+    }
+    // The review window, only when it is a usable number of hours.
+    function reviewWindowHoursOf(status) {
+      const h = status && status.automation ? status.automation.reviewWindowHours : null;
+      return Number.isInteger(h) && h >= 0 && h <= 24 * 366 ? h : null;
+    }
     const DASHBOARD_POLL_INTERVAL_MS = 15000;
     // 2.6.1: MIRROR SEAM: mirrors TENANT_FLAG.LLM_KEY_PRESENT in
     // src/services/tenant-meta.js. Consumers mask bits, never
@@ -711,17 +733,26 @@
         return () => clearInterval(interval);
       }, [fetchAll]);
 
-      async function toggleMode() {
-        const newMode = status.mode === 'auto' ? 'manual' : 'auto';
+      // 4.25111.62: one state change at a time. The ref, not the
+      // loading flag, is the guard: a second click before the first
+      // re-render would otherwise send a second request.
+      const automationBusyRef = React.useRef(false);
+      async function setAutomationMode(mode) {
+        if (automationBusyRef.current) return;
+        automationBusyRef.current = true;
+        setLoading(l => ({ ...l, automation: true }));
         try {
-          await mutate(`${API}/api/mode`, {
+          await mutate(`${API}/api/automation/mode`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: newMode })
+            body: JSON.stringify({ mode })
           });
-          fetchAll();
+          await fetchAll();
         } catch (err) {
-          alert('Failed to change mode: ' + err.message);
+          alert(DASHBOARD_COPY.automationChangeFailedAlertPrefix + (err.detail || err.message));
+        } finally {
+          automationBusyRef.current = false;
+          setLoading(l => ({ ...l, automation: false }));
         }
       }
 
@@ -1433,13 +1464,14 @@
               {status?.user?.role === 'owner' && !status.devBypass && (
                 <a href="/app/admin/" className="btn btn-ghost btn-nav">Manage</a>
               )}
+            {/* 4.25111.62: read-only. The text is the automation state
+                the database holds, uppercased; the control that changes
+                it is the Automation card in the middle column. Two
+                colors: manual amber, the automated states green. */}
             <div className="mode-switch">
               <span className="mode-label">Mode</span>
-              <div className={`toggle-track ${status.mode === 'auto' ? 'active' : ''}`} onClick={toggleMode}>
-                <div className="toggle-thumb"></div>
-              </div>
-              <span className={`mode-value ${status.mode === 'auto' ? 'mode-auto' : 'mode-manual'}`}>
-                {status.mode === 'auto' ? 'AGENTIC' : 'MANUAL'}
+              <span className={`mode-value ${status.automation?.mode === 'manual' ? 'mode-manual' : 'mode-auto'}`}>
+                {String(status.automation?.mode || '').toUpperCase()}
               </span>
             </div>
             </div>
@@ -1674,6 +1706,35 @@
                   </div>
                 </div>
               )}
+              {/* Automation state (4.25111.62): the three states as a
+                  radio list, labels from the stored values, descriptions
+                  from copy, the choice posted to /api/automation/mode.
+                  Members without change_mode see it disabled. */}
+              <div className="sidebar-panel automation-card">
+                <div className="section-title">{DASHBOARD_COPY.automationControlLabel}</div>
+                <div className="automation-list" role="radiogroup" aria-label={DASHBOARD_COPY.automationControlLabel}>
+                  {AUTOMATION_OPTIONS.map((opt) => {
+                    const current = automationModeOf(status);
+                    const canChange = !!status.permissions?.includes('change_mode') && current !== null;
+                    const selected = current === opt.mode;
+                    return (
+                      <label key={opt.mode} title={opt.title}
+                        className={`automation-option ${selected ? 'selected' : ''} ${opt.mode === 'manual' ? 'automation-manual' : 'automation-auto'} ${canChange && !loading.automation ? '' : 'disabled'}`}>
+                        <input type="radio" name="automation-state" value={opt.mode} checked={selected}
+                          disabled={!canChange || !!loading.automation}
+                          onChange={() => setAutomationMode(opt.mode)} />
+                        <span className="automation-option-body">
+                          <span className="automation-option-label">{opt.mode.toUpperCase()}</span>
+                          <span className="automation-option-desc">{opt.title}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {automationModeOf(status) === 'auto-post' && reviewWindowHoursOf(status) !== null && (
+                  <div className="automation-note">{DASHBOARD_COPY.reviewWindowNote.split('{hours}').join(String(reviewWindowHoursOf(status)))}</div>
+                )}
+              </div>
               {/* Quick Actions */}
               <div className="sidebar-panel">
                 <div className="section-title">Quick Actions</div>
@@ -1731,13 +1792,16 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
+                  {/* 4.25111.62: enabled in the two automated states,
+                      disabled in manual (owner's ruling); wording from
+                      the copy keys. */}
                   <button
-                    className={`btn btn-force-cycle ${(status.mode || 'manual') === 'auto' ? 'btn-primary' : 'btn-ghost'}`}
+                    className={`btn btn-force-cycle ${automationModeOf(status) && automationModeOf(status) !== 'manual' ? 'btn-primary' : 'btn-ghost'}`}
                     onClick={handleForceCycle}
-                    disabled={(status.mode || 'manual') !== 'auto'}
-                    title={(status.mode || 'manual') !== 'auto' ? 'Switch to Agentic mode to enable' : 'Run one scheduler cycle now'}
+                    disabled={!(status.automation && automationModeOf(status) && automationModeOf(status) !== 'manual')}
+                    title={automationModeOf(status) && automationModeOf(status) !== 'manual' ? DASHBOARD_COPY.forceCycleTitle : DASHBOARD_COPY.forceCycleDisabledTitle}
                   >
-                    {loading.forceCycle ? <span className="loading-spinner"></span> : '⟳ Force Scheduler Cycle'}
+                    {loading.forceCycle ? <span className="loading-spinner"></span> : DASHBOARD_COPY.forceCycleButton}
                   </button>
                 </div>
               </div>

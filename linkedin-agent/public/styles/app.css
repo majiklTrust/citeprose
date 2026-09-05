@@ -109,36 +109,10 @@ body::after {
   font-weight: 600;
 }
 
-.mode-switch .toggle-track {
-  width: 52px;
-  height: 28px;
-  border-radius: 14px;
-  background: var(--bg-card);
-  border: 2px solid var(--border);
-  position: relative;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.mode-switch .toggle-track.active {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
-}
-
-.mode-switch .toggle-track .toggle-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: transform 0.3s ease;
-}
-
-.mode-switch .toggle-track.active .toggle-thumb {
-  transform: translateX(24px);
-}
+/* 4.25111.62: the header toggle is gone; the state label stays,
+   read-only, on the same 28px line the toggle occupied. The control
+   moved to the Automation card (.automation-option below). */
+.mode-switch { min-height: 28px; }
 
 .mode-value {
   font-family: var(--font-mono);
@@ -149,6 +123,48 @@ body::after {
 
 .mode-auto { color: var(--accent-green); }
 .mode-manual { color: var(--accent-amber); }
+
+/* 4.25111.62: the Automation card. Three states as a radio list;
+   the selected row's dot and label take the state's color, the
+   same two colors the header label uses (manual amber, the rest
+   green). Members without change_mode see the list disabled. */
+.automation-card { padding-bottom: 0.6rem; }
+.automation-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.automation-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.automation-option:hover { background: var(--bg-card-hover); }
+.automation-option input[type="radio"] {
+  margin: 0.2rem 0 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--text-muted);
+  cursor: pointer;
+}
+.automation-option-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.automation-option-label {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.automation-option-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.35; }
+.automation-option.selected { border-color: var(--border-active); }
+.automation-option.selected.automation-manual .automation-option-label { color: var(--accent-amber); }
+.automation-option.selected.automation-manual input[type="radio"] { accent-color: var(--accent-amber); }
+.automation-option.selected.automation-auto .automation-option-label { color: var(--accent-green); }
+.automation-option.selected.automation-auto input[type="radio"] { accent-color: var(--accent-green); }
+.automation-option.disabled { cursor: default; opacity: 0.6; }
+.automation-option.disabled:hover { background: transparent; }
+.automation-option.disabled input[type="radio"] { cursor: default; }
+.automation-note { margin-top: 0.6rem; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.35; }
 
 /* Stats grid */
 .stats-grid {

@@ -20,6 +20,13 @@
 //
 //   failed ─────────► pending_approval   (4.25111.45: recovery edge)
 //
+//   pending_approval ► publishing        (4.25111.60: the automated
+//                (auto-post only)          approval, performed only by
+//                                          automation/publishing-loop.js
+//                                          after the review window; the
+//                                          trail line is post_auto_approved
+//                                          with the mode as the actor)
+//
 // canTransition() governs only the USER-INITIATED set: free movement
 // among the three PRE-PUBLICATION states. The approval edges
 // (→approved, →rejected), the publisher edge (scheduled→publishing),

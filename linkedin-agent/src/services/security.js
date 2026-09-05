@@ -3,6 +3,9 @@
 // ═══════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
+// 4.25111.60: the automation state vocabulary is owned by the
+// interpreter; isValidMode delegates so the two can never drift.
+import { isMode } from "../automation/automation-mode.js";
 
 // ── HTML Escaping ────────────────────────────────────────────
 
@@ -82,8 +85,6 @@ const VALID_STATUSES = new Set([
   "pending_approval", "posted", "rejected", "failed", "approved"
 ]);
 
-const VALID_MODES = new Set(["auto", "manual"]);
-
 export function isValidTopicId(topicId) {
   return topicId === null || topicId === undefined || VALID_TOPICS.has(topicId);
 }
@@ -93,7 +94,7 @@ export function isValidStatus(status) {
 }
 
 export function isValidMode(mode) {
-  return VALID_MODES.has(mode);
+  return isMode(mode);
 }
 
 export function parseId(value) {

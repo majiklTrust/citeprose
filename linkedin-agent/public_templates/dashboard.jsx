@@ -1478,7 +1478,6 @@
             <div className="header-controls">
               {status?.user && (
                 <div className="user-info">
-                  <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
                   <a href="/auth/logout" className="logout-btn">Logout</a>
                 </div>
               )}
@@ -1504,7 +1503,10 @@
             </div>
             </div>
           </div>
-          <div className="header-subtitle">v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}</div>
+          <div className="header-subtitle">
+            v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}
+            <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
+          </div>
           {/* Stats */}
           <div className="stats-grid">
             <div className="stat-card">

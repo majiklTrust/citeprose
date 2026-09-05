@@ -986,6 +986,11 @@ body::after {
   color: var(--text-secondary);
   font-family: var(--font-mono);
 }
+
+.header-subtitle .user-name {
+  padding-left: 0.75rem;
+}
+
 .logout-btn {
   padding: 0.3rem 0.75rem;
   background: transparent;

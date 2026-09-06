@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replay: Create, Edit, Publish (3.3.11) -->
+  <!-- Showcase replay: Create, Edit, Publish (3.3.12) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -76,6 +76,16 @@
   </div>
 
   <main id="main">
+    <!-- Showcase replay (3.3.12): a scripted replay of a tenant user
+         activating Create on the dashboard (Create a post modal), then
+         editing the pending post (Edit Post modal), then opening the
+         post detail modal and publishing it. Markup mirrors public_templates/dashboard.jsx with
+         spos- prefixed classes so app.css does not restyle it. Styles
+         in /styles/showcase-poc.css, playback in
+         /scripts/showcase-poc.js (0.4x, loops with a 3 second hold).
+         The caption in the window bar tracks the recorded events.
+         Post text, counts, names and the genres after "no genre" are
+         illustrative. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -290,6 +300,9 @@ Three decisions worth revisiting this quarter:
         </nav>
         <p class="hero-eyebrow">Research to published<br/> &rarr; on your approval</p>
 
+        <!-- Hero gallery (2.4.57): drop images at assets/hero/shot-1.png
+             through shot-3.png. Slots without a file hide themselves.
+             Each shot is viewer-resizable by its corner handle. -->
         <div class="hero-shots" aria-label="Product screenshots">
           <figure class="shot">
             <img src="/assets/editorial5.png?v={{CSSVERSION}}" alt="editorial photo 2"
@@ -331,6 +344,20 @@ Three decisions worth revisiting this quarter:
           <a class="btn btn-ghost btn-lg" href="signup.html">Set Up Your Workspace</a>
           <a class="btn btn-ghost btn-lg" href="#how-it-works">See How It Works</a>
         </div>
+        <!-- <ul class="hero-proof" role="list">
+          <li class="hero-proof-item">
+            <span class="hero-proof-kicker">Stay current</span>
+            Drafts anchored to this week's developments, not last quarter's ideas.
+          </li>
+          <li class="hero-proof-item">
+            <span class="hero-proof-kicker">Keep the final word</span>
+            Nothing reaches your page without a human review and an explicit approval.
+          </li>
+          <li class="hero-proof-item">
+            <span class="hero-proof-kicker">Skip the blank page</span>
+            Open a reviewed queue of researched drafts instead of an empty editor.
+          </li>
+        </ul> -->
       </div>
     </section>
 
@@ -468,6 +495,48 @@ Three decisions worth revisiting this quarter:
             </p>
           </div>
         </aside>
+<!-- 
+        <div class="features-grid workflow-grid">
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9673;</div>
+            <h3 class="feature-title">Choose what matters: Topics</h3>
+            <p class="feature-body">
+              In the Topic Manager, use Add Topic to name the subjects your brand
+              should have a point of view on. From then on, the platform monitors
+              those subjects continuously, so your page reflects your agenda, not
+              whatever happened to cross your desk.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9672;</div>
+            <h3 class="feature-title">Decide who to listen to: Feeds Manager</h3>
+            <p class="feature-body">
+              The Feeds Manager is where you connect and curate the
+              live web and RSS sources that feed your topics. Your posts inherit
+              the credibility of the sources you chose, because the research is
+              limited to publications you trust.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9670;</div>
+            <h3 class="feature-title">Start from a draft: Generate with AI</h3>
+            <p class="feature-body">
+              The New Post action turns gathered research into a drafted LinkedIn
+              post for your organization page. What lands in front of you is a
+              researched first draft, which means the hard part of your job
+              becomes editing, the part your team is best at.
+            </p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">&#9671;</div>
+            <h3 class="feature-title">Approve before anything ships</h3>
+            <p class="feature-body">
+              Every draft waits in a review queue for a human. Edit it into your
+              voice, approve it, or reject it. Brand safety is not a setting you
+              trust; it is a step you perform, on every single post.
+            </p>
+          </article>
+        </div> -->
 
         <h3 class="featlist-heading">The full feature set, at a glance</h3>
         <p class="featlist-lede">

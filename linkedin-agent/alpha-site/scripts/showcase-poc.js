@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.12)
+// showcase-poc.js  (delivery 3.3.13)
 // ================================================================
 // Drives the showcase replay at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three scenes:

@@ -909,7 +909,7 @@ font-size: 0.5rem;color: var(--text-muted);text-decoration: none;padding-left: 6
 
 
 /* ================================================================
-   Homepage section spacing (3.3.12)
+   Homepage section spacing (3.3.12, unchanged in 3.3.13)
    ================================================================
    Halves four gaps on index.html. The ids and classes named here
    (#showcase-pos, .hero, #how-it-works, #features, .alpha-section-cta,

@@ -906,3 +906,34 @@ font-size: 0.5rem;color: var(--text-muted);text-decoration: none;padding-left: 6
 @media (max-width: 640px) {
   .contact-panel { padding: 1.75rem 1.25rem; }
 }
+
+
+/* ================================================================
+   Homepage section spacing (3.3.12, unchanged in 3.3.13)
+   ================================================================
+   Halves four gaps on index.html. The ids and classes named here
+   (#showcase-pos, .hero, #how-it-works, #features, .alpha-section-cta,
+   #contact) occur only on the homepage, so the base .alpha-section,
+   .hero and CTA paddings are unchanged for any other page. Values are
+   half of the desktop composition each gap had before (padding plus
+   the trailing margin inside the hero). These rules come last in the
+   file and use ids or equal specificity, so they also win over the
+   768px media re-sets above; small screens get the same halved gaps.
+   ================================================================ */
+
+/* showcase-pos to hero: was 1.5rem + 3rem, now 0.75rem + 1.5rem */
+#showcase-pos { padding-bottom: 0.75rem; }
+#showcase-pos + .hero { padding-top: 1.5rem; }
+
+/* hero to how-it-works: was 2rem (hero-cta) + 3rem + 4rem, now 1rem + 1.5rem + 2rem */
+.hero .hero-cta { margin-bottom: 1rem; }
+.hero + #how-it-works { padding-top: 2rem; }
+#how-it-works { padding-top: 2rem; }
+.hero { padding-bottom: 1.5rem; }
+
+/* features to CTA: was 4rem + 5rem, now 2rem + 2.5rem */
+#features { padding-bottom: 2rem; }
+.alpha-section-cta { padding-top: 2.5rem; }
+
+/* CTA to contact: was 6rem + 0, now 3rem + 0 */
+.alpha-section-cta { padding-bottom: 3rem; }

@@ -1,0 +1,323 @@
+/* ================================================================
+   showcase-poc.css  (delivery 3.3.13)
+   ================================================================
+   Marketing site showcase: a scripted replay of a tenant user
+   activating the Create CTA (Create a post modal), editing the pending
+   post (Edit Post modal), and publishing it from the post detail modal.
+   Rendered at the top of site_templates/index.html.
+
+   Layout (3.3.7)
+     - One recording, centered, 871px wide (3.3.9: 20 percent over the
+       726px of 3.3.7), wrapped in the site's .shot-window frame with
+       .shot-window-bar. The event caption lives in the window bar,
+       centered over the recording, clear of the three dots on the left.
+     - Headline above and footnote below share the recording's left
+       edge through the .spos-inner column.
+     - Headline treatment: three lines in a stepped cadence; the phrase
+       "Source-Backed" carries an underline that draws itself once on
+       load, and the closing line is set in the cyan to green gradient
+       the dashboard title uses, so the eye lands on "Confidence".
+       Reduced motion viewers get the finished state with no drawing.
+     - The recording's browser window is 1000 CSS px wide, which is
+       under the dashboard's 1100px breakpoint: the main grid drops to
+       two columns (minmax(0,1fr) 260px, as in app.css) and the
+       Activity Log column wraps below the fold, where the fixed stage
+       height clips it. The window shows only Queue and Quick Actions.
+
+   Design notes
+     - Every selector is prefixed spos- and scoped under #showcase-pos.
+       The marketing page already loads /app/styles/app.css, whose
+       .header, .btn, .stat-card and .composer-* rules would otherwise
+       restyle this reproduction; the prefix keeps the two apart.
+     - Color, radius and font tokens come from app.css :root so the
+       replay tracks the product theme without duplicating values.
+     - No inline style attributes anywhere in the markup: the page CSP
+       is style-src 'self'. Geometry the script computes at run time is
+       written through the CSSOM (element.style.left, custom
+       properties), which the CSP permits.
+     - Motion timing is expressed relative to --spos-rate. The script
+       sets it to the playback speed so cursor travel, ripples and the
+       modal fade all slow down together with the timeline.
+   ================================================================ */
+
+#showcase-pos {
+  --spos-rate: 1; /* set by showcase-poc.js to the playback rate */
+  --spos-cursor-ms: 0.9s;
+  --spos-fade-ms: 0.22s;
+  --spos-ripple-ms: 0.55s;
+  padding: 2.5rem 0 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+#showcase-pos .spos-inner { max-width: 871px; margin: 0 auto; }
+/* alpha.css caps every .shot-window at 560px and centers it with
+   margin auto. The recording must fill the .spos-inner column instead,
+   so the cap is lifted here; without this line the column width above
+   has no effect and the 560px window sits at the column's left edge. */
+#showcase-pos .spos-display { max-width: none; width: 100%; margin: 0; }
+
+/* ---------- Headline ---------- */
+#showcase-pos .spos-headline {
+  display: flex; flex-direction: column; gap: 0.15em;
+  margin: 0 0 1.5rem; padding: 0;
+  font-family: var(--font-body); font-weight: 700; letter-spacing: -0.02em; line-height: 1.08;
+  font-size: clamp(1.5rem, 4.2vw, 2.6rem);
+  color: var(--text-primary);
+}
+#showcase-pos .spos-headline-line { display: block; }
+#showcase-pos .spos-headline-line:nth-child(1) { color: var(--text-secondary); font-weight: 500; }
+#showcase-pos .spos-headline-line:nth-child(2) { padding-left: 0.6em; }
+#showcase-pos .spos-headline-line:nth-child(3) { padding-left: 1.2em; }
+#showcase-pos .spos-headline-mark {
+  position: relative; white-space: nowrap;
+  background-image: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+  background-repeat: no-repeat; background-position: 0 100%; background-size: 0% 3px;
+  animation: spos-underline 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.4s forwards;
+}
+@keyframes spos-underline { to { background-size: 100% 3px; } }
+#showcase-pos .spos-headline-close {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-green) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+@media (max-width: 600px) {
+  #showcase-pos .spos-headline-line:nth-child(2), #showcase-pos .spos-headline-line:nth-child(3) { padding-left: 0; }
+}
+
+/* ---------- Footnote ---------- */
+#showcase-pos .spos-footnote {
+  margin: 0.45rem 0 0; text-align: left;
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);
+}
+/* The caption is centered over the recording, not left aligned after the
+   dots: it is taken out of the bar's flex flow and spans the full bar
+   width, with side padding that keeps it clear of the three dots.
+   alpha.css styles every span in the bar as a 10px dot; that is undone
+   here. The bar becomes the positioning context. */
+#showcase-pos .shot-window-bar { position: relative; min-width: 0; }
+#showcase-pos .shot-window-bar .spos-callout {
+  position: absolute; left: 0; right: 0; top: 0; height: 34px; line-height: 34px;
+  padding: 0 64px; text-align: center; pointer-events: none;
+  width: auto; border-radius: 0; background: none; margin: 0;
+  font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transition: opacity calc(0.25s / var(--spos-rate));
+}
+#showcase-pos .shot-window-bar .spos-callout.spos-on { opacity: 1; }
+#showcase-pos .shot-window-bar .spos-callout b { color: var(--accent-cyan); font-weight: 600; }
+
+/* ---------- Frame ---------- */
+#showcase-pos .spos-frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+#showcase-pos .spos-scaler { width: 100%; }
+#showcase-pos .spos-stage {
+  position: relative;
+  width: 1000px;
+  height: 620px;
+  transform-origin: top left;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+#showcase-pos .spos-screen { position: absolute; inset: 0; overflow: hidden; }
+#showcase-pos .spos-screen::before {
+  content: ''; position: absolute; top: -20%; left: -10%; width: 60%; height: 60%;
+  background: radial-gradient(ellipse, rgba(59, 130, 246, 0.06) 0%, transparent 70%); pointer-events: none;
+}
+#showcase-pos .spos-screen::after {
+  content: ''; position: absolute; bottom: -20%; right: -10%; width: 50%; height: 50%;
+  background: radial-gradient(ellipse, rgba(6, 182, 212, 0.04) 0%, transparent 70%); pointer-events: none;
+}
+
+/* ---------- Dashboard reproduction ---------- */
+#showcase-pos .spos-app { max-width: 1280px; margin: 0 auto; padding: 1.5rem 2rem; position: relative; z-index: 1; }
+#showcase-pos .spos-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--border); }
+#showcase-pos .spos-header-title {
+  font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+#showcase-pos .spos-header-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; font-family: var(--font-mono); }
+#showcase-pos .spos-header-controls { display: flex; align-items: center; gap: 0.75rem; }
+#showcase-pos .spos-mode { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary); }
+#showcase-pos .spos-track { width: 34px; height: 18px; border-radius: 9px; background: var(--border); position: relative; }
+#showcase-pos .spos-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-secondary); }
+#showcase-pos .spos-mode-value { font-family: var(--font-mono); font-weight: 600; color: var(--accent-amber); }
+#showcase-pos .spos-logout { font-size: 0.75rem; color: var(--text-secondary); border: 1px solid var(--border); padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); }
+
+#showcase-pos .spos-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+#showcase-pos .spos-stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 0.75rem; position: relative; overflow: hidden; }
+#showcase-pos .spos-stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+#showcase-pos .spos-stat:nth-child(1)::before { background: var(--accent-blue); }
+#showcase-pos .spos-stat:nth-child(2)::before { background: var(--accent-green); }
+#showcase-pos .spos-stat:nth-child(3)::before { background: var(--accent-amber); }
+#showcase-pos .spos-stat:nth-child(4)::before { background: var(--accent-cyan); }
+#showcase-pos .spos-stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+#showcase-pos .spos-stat-value { font-size: 1.5rem; font-weight: 700; font-family: var(--font-mono); margin-top: 0.25rem; }
+#showcase-pos .spos-stat-value-sm { font-size: 1rem; margin-top: 0.6rem; color: var(--accent-green); }
+#showcase-pos .spos-stat-meta { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem; font-family: var(--font-mono); }
+
+/* Two columns, mirroring app.css at max-width 1100px. The third child
+   (Activity Log) auto-flows to a second row below the visible height. */
+#showcase-pos .spos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 1.5rem; }
+#showcase-pos .spos-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); }
+#showcase-pos .spos-title-gap { margin-top: 1.1rem; }
+#showcase-pos .spos-badge { background: var(--accent-blue); color: #fff; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-family: var(--font-mono); }
+#showcase-pos .spos-posts { display: flex; flex-direction: column; gap: 0.75rem; }
+#showcase-pos .spos-post { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem 1rem; transition: border-color 0.2s, background 0.2s, opacity calc(0.4s / var(--spos-rate)); }
+#showcase-pos .spos-badges { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; }
+#showcase-pos .spos-topic { font-size: 0.68rem; font-family: var(--font-mono); padding: 0.1rem 0.45rem; border-radius: 6px; background: rgba(139, 92, 246, 0.18); color: #a78bfa; }
+#showcase-pos .spos-status { font-size: 0.68rem; font-family: var(--font-mono); padding: 0.1rem 0.45rem; border-radius: 6px; background: var(--glow-amber); color: var(--accent-amber); }
+#showcase-pos .spos-status-draft { background: rgba(136, 153, 176, 0.15); color: var(--text-secondary); }
+#showcase-pos .spos-status-posted { background: var(--glow-green); color: var(--accent-green); }
+#showcase-pos .spos-preview { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#showcase-pos .spos-actions { display: flex; gap: 0.4rem; margin-top: 0.55rem; }
+
+#showcase-pos .spos-btn { padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 600; border: none; cursor: default; font-family: var(--font-body); transition: background 0.2s, transform 0.1s, filter 0.1s; }
+#showcase-pos .spos-btn-tight { padding: 0.125rem 0.25rem; }
+#showcase-pos .spos-btn-sm { font-size: 0.72rem; padding: 0.3rem 0.6rem; }
+#showcase-pos .spos-btn-full { width: 100%; }
+#showcase-pos .spos-btn-grow { flex: 1; }
+#showcase-pos .spos-btn-xs { font-size: 0.75rem; }
+#showcase-pos .spos-btn-primary { background: var(--accent-blue); color: #fff; }
+#showcase-pos .spos-btn-primary.spos-hover { background: #2563eb; }
+#showcase-pos .spos-btn-primary.spos-pressed { transform: scale(0.97); filter: brightness(0.92); }
+#showcase-pos .spos-btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+#showcase-pos .spos-btn-approve { background: var(--accent-green); color: #fff; }
+#showcase-pos .spos-btn-reject { background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); }
+#showcase-pos .spos-btn-edit { background: transparent; border: 1px solid var(--accent-amber); color: var(--accent-amber); }
+#showcase-pos .spos-hstack { display: flex; gap: 0.5rem; }
+#showcase-pos .spos-vstack { display: flex; flex-direction: column; gap: 0.5rem; }
+
+#showcase-pos .spos-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem 1rem; margin-bottom: 1rem; }
+#showcase-pos .spos-model-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; }
+#showcase-pos .spos-model-label { color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+#showcase-pos .spos-model-value { font-family: var(--font-mono); color: var(--accent-cyan); }
+#showcase-pos .spos-select {
+  width: 100%; padding: 0.5rem 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-family: var(--font-body); font-size: 0.8rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238899b0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.75rem center;
+}
+#showcase-pos .spos-toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; }
+#showcase-pos .spos-toggle-on { color: var(--accent-green); }
+#showcase-pos .spos-switch { width: 34px; height: 18px; border-radius: 9px; background: var(--accent-green); position: relative; }
+#showcase-pos .spos-switch::after { content: ''; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+#showcase-pos .spos-cov-row { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.45rem; }
+#showcase-pos .spos-cov-count { font-family: var(--font-mono); color: var(--text-secondary); }
+#showcase-pos .spos-cov-bar { height: 4px; border-radius: 2px; background: var(--border); margin-bottom: 0.7rem; overflow: hidden; }
+#showcase-pos .spos-cov-bar i { display: block; height: 100%; background: var(--accent-cyan); }
+#showcase-pos .spos-cov-78 i { width: 78%; }
+#showcase-pos .spos-cov-52 i { width: 52%; }
+#showcase-pos .spos-cov-24 i { width: 24%; }
+#showcase-pos .spos-log { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-secondary); padding: 0.25rem 0; border-bottom: 1px solid rgba(42, 53, 72, 0.6); display: flex; gap: 0.5rem; }
+#showcase-pos .spos-log time { color: var(--text-muted); flex: none; }
+#showcase-pos .spos-log .spos-lvl { color: var(--accent-green); flex: none; }
+
+/* ---------- Composer modal (mirrors dashboard.jsx Composer) ---------- */
+#showcase-pos .spos-composer-overlay {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 100; display: flex; justify-content: center; align-items: flex-start;
+  padding: 2rem 1rem; opacity: 0; visibility: hidden;
+  transition: opacity calc(var(--spos-fade-ms) / var(--spos-rate)) ease, visibility 0s linear calc(var(--spos-fade-ms) / var(--spos-rate));
+}
+#showcase-pos .spos-composer-overlay.spos-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+#showcase-pos .spos-composer {
+  background: #fff; border-radius: 8px; width: 100%; max-width: 640px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); color: #222;
+  transform: translateY(10px) scale(0.98); transition: transform calc(var(--spos-fade-ms) / var(--spos-rate)) ease;
+}
+#showcase-pos .spos-composer-overlay.spos-open .spos-composer { transform: none; }
+#showcase-pos .spos-composer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+#showcase-pos .spos-composer-title { font-size: 1.2rem; font-weight: 700; color: #222; margin: 0; }
+#showcase-pos .spos-composer-close { background: none; border: none; font-size: 1.2rem; color: #666; line-height: 1; }
+#showcase-pos .spos-composer-label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.8rem 0 0.3rem; }
+#showcase-pos .spos-genres { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
+#showcase-pos .spos-genre { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #ddd; border-radius: 6px; transition: border-color 0.15s, background 0.15s; }
+#showcase-pos .spos-genre.spos-selected { border-color: #2563eb; background: #eff5ff; }
+#showcase-pos .spos-genre.spos-hover { border-color: #93c5fd; }
+#showcase-pos .spos-genre input { margin-top: 0.2rem; }
+#showcase-pos .spos-genre-main { display: flex; flex-direction: column; gap: 0.1rem; }
+#showcase-pos .spos-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
+#showcase-pos .spos-genre-desc { font-size: 0.76rem; color: #777; }
+#showcase-pos .spos-composer-actions .spos-btn-primary { background: #3b82f6; }
+
+/* ---------- Dashboard modals (mirror app.css .modal-overlay / .modal-content) ---------- */
+#showcase-pos .spos-modal-overlay {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 2rem;
+  opacity: 0; visibility: hidden;
+  transition: opacity calc(var(--spos-fade-ms) / var(--spos-rate)) ease, visibility 0s linear calc(var(--spos-fade-ms) / var(--spos-rate));
+}
+#showcase-pos .spos-modal-overlay.spos-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+#showcase-pos .spos-modal {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem;
+  max-width: 640px; width: 100%; max-height: 88%; overflow: hidden; color: var(--text-primary);
+  transform: translateY(10px) scale(0.98); transition: transform calc(var(--spos-fade-ms) / var(--spos-rate)) ease;
+}
+#showcase-pos .spos-modal-overlay.spos-open .spos-modal { transform: none; }
+#showcase-pos .spos-modal-narrow { max-width: 600px; }
+#showcase-pos .spos-modal-close { float: right; color: var(--text-muted); font-size: 1.25rem; }
+#showcase-pos .spos-modal-heading { margin: 1rem 0 0.5rem; font-size: 1.1rem; font-weight: 600; }
+#showcase-pos .spos-modal-heading-top { margin: 0 0 1rem; font-size: 1.1rem; font-weight: 600; }
+#showcase-pos .spos-mb { margin-bottom: 0.75rem; }
+#showcase-pos .spos-mb-lg { margin-bottom: 1rem; }
+#showcase-pos .spos-form-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--text-muted); }
+#showcase-pos .spos-form-input { width: 100%; padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#showcase-pos .spos-form-textarea { width: 100%; height: 120px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85rem; line-height: 1.4; white-space: pre-wrap; overflow: hidden; }
+#showcase-pos .spos-form-textarea.spos-focus { border-color: var(--border-active); box-shadow: 0 0 0 2px var(--glow-blue); }
+#showcase-pos .spos-caret { display: none; width: 1px; height: 1em; background: var(--text-primary); vertical-align: text-bottom; margin-left: 1px; animation: spos-caret 1s steps(2) infinite; }
+#showcase-pos .spos-form-textarea.spos-focus .spos-caret { display: inline-block; }
+@keyframes spos-caret { to { opacity: 0; } }
+#showcase-pos .spos-dest-badge { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 10px; margin-left: 0.4rem; background: #616161; color: #f5f5f5; }
+#showcase-pos .spos-corr-badge { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.7rem; padding: 0.2rem 0.3rem; border-radius: 6px; margin-left: 0.5rem; background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+#showcase-pos .spos-badges-wrap { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+#showcase-pos .spos-modal-body { white-space: pre-wrap; line-height: 1.7; color: var(--text-secondary); margin: 1.5rem 0; font-size: 0.9rem; }
+#showcase-pos .spos-hashtags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+#showcase-pos .spos-hashtag { background: var(--bg-secondary); color: var(--accent-cyan); font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-family: var(--font-mono); }
+#showcase-pos .spos-modal-rewrite { margin: 0.75rem 0; }
+#showcase-pos .spos-modal-move { margin: 0.75rem 0; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+#showcase-pos .spos-modal-move-label { font-size: 0.78rem; opacity: 0.7; margin-bottom: 0.4rem; }
+#showcase-pos .spos-modal-move-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+#showcase-pos .spos-btn-plain { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); font-size: 0.75rem; }
+#showcase-pos .spos-source-list { margin-top: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--accent-cyan); }
+#showcase-pos .spos-section-heading-cyan { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--accent-cyan); }
+#showcase-pos .spos-source-item { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.78rem; color: var(--text-secondary); padding: 0.3rem 0; }
+#showcase-pos .spos-source-tier { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-green); flex: none; }
+#showcase-pos .spos-section-divider { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+#showcase-pos .spos-section-heading { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+#showcase-pos .spos-detail-stack { display: flex; flex-direction: column; gap: 0.5rem; }
+#showcase-pos .spos-image-choice { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); }
+#showcase-pos .spos-studio-panel { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); padding: 0.6rem 0.8rem; }
+#showcase-pos .spos-studio-head { font-size: 0.8rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 0.4rem; }
+#showcase-pos .spos-studio-row { display: flex; align-items: center; gap: 0.5rem; }
+#showcase-pos .spos-studio-label { font-size: 0.78rem; color: var(--text-secondary); }
+#showcase-pos .spos-studio-select { flex: 1; font-size: 0.8rem; border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.4rem; background: var(--bg-card); color: var(--text-primary); }
+#showcase-pos .spos-modal-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+#showcase-pos .spos-modal-actions-end { display: flex; gap: 0.75rem; justify-content: flex-end; }
+#showcase-pos .spos-btn-approve.spos-hover, #showcase-pos .spos-btn-edit.spos-hover { filter: brightness(1.12); }
+#showcase-pos .spos-btn-approve.spos-pressed, #showcase-pos .spos-btn-edit.spos-pressed { transform: scale(0.97); filter: brightness(0.92); }
+#showcase-pos .spos-post.spos-hover { border-color: var(--border-active); background: var(--bg-card-hover); }
+#showcase-pos .spos-post.spos-published { opacity: 0.35; }
+
+/* ---------- Cursor, click ripple, highlight, callout ---------- */
+#showcase-pos .spos-cursor {
+  position: absolute; left: 0; top: 0; width: 22px; height: 30px; z-index: 500; pointer-events: none; transform: translate(-4px, -2px);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+  transition: left calc(var(--spos-cursor-ms) / var(--spos-rate)) cubic-bezier(0.22, 0.61, 0.36, 1), top calc(var(--spos-cursor-ms) / var(--spos-rate)) cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+#showcase-pos .spos-cursor.spos-fast { transition-duration: calc(0.55s / var(--spos-rate)), calc(0.55s / var(--spos-rate)); }
+#showcase-pos .spos-cursor.spos-jump { transition: none; }
+#showcase-pos .spos-ripple { position: absolute; z-index: 499; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid var(--accent-cyan); opacity: 0; pointer-events: none; }
+#showcase-pos .spos-ripple.spos-go { animation: spos-ripple calc(var(--spos-ripple-ms) / var(--spos-rate)) ease-out forwards; }
+@keyframes spos-ripple { 0% { opacity: 0.9; transform: scale(0.6); } 100% { opacity: 0; transform: scale(4.2); } }
+#showcase-pos .spos-highlight { position: absolute; z-index: 498; border: 2px solid var(--accent-cyan); border-radius: 10px; box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.15); opacity: 0; pointer-events: none; transition: opacity calc(0.2s / var(--spos-rate)); }
+#showcase-pos .spos-highlight.spos-on { opacity: 1; }
+
+/* Viewers who ask for reduced motion see the end state without the cursor choreography. */
+@media (prefers-reduced-motion: reduce) {
+  #showcase-pos .spos-headline-mark { animation: none; background-size: 100% 3px; }
+  #showcase-pos .spos-cursor, #showcase-pos .spos-ripple, #showcase-pos .spos-highlight { display: none; }
+  #showcase-pos .spos-composer-overlay { opacity: 1; visibility: visible; transition: none; }
+  #showcase-pos .spos-composer { transform: none; transition: none; }
+}

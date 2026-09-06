@@ -33,6 +33,8 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
+  <!-- Showcase replay: Create, Edit, Publish (3.3.13) -->
+  <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
   <div class="ambient-glow" aria-hidden="true"></div>
@@ -74,6 +76,220 @@
   </div>
 
   <main id="main">
+    <!-- Showcase replay (3.3.13): a scripted replay of a tenant user
+         activating Create on the dashboard (Create a post modal), then
+         editing the pending post (Edit Post modal), then opening the
+         post detail modal and publishing it. Markup mirrors public_templates/dashboard.jsx with
+         spos- prefixed classes so app.css does not restyle it. Styles
+         in /styles/showcase-poc.css, playback in
+         /scripts/showcase-poc.js (0.4x, loops with a 3 second hold).
+         The caption in the window bar tracks the recorded events.
+         Post text, counts, names and the genres after "no genre" are
+         illustrative. -->
+    <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
+      <div class="site-container">
+        <div class="spos-inner">
+        <h2 class="spos-headline" id="showcase-pos-headline">
+          <span class="spos-headline-line">Live Market Research</span>
+          <span class="spos-headline-line">Into <span class="spos-headline-mark">Source-Backed</span> Posts</span>
+          <span class="spos-headline-line spos-headline-close">To Publish With Confidence.</span>
+        </h2>
+        <div class="shot-window spos-display">
+          <div class="shot-window-bar"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><span class="spos-callout" aria-live="polite"></span></div>
+        <div class="spos-frame">
+          <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <div class="spos-screen">
+                <div class="spos-app">
+                  <div class="spos-header">
+                    <div>
+                      <div class="spos-header-title">Market Intelligence</div>
+                      <div class="spos-header-subtitle">v{{APPVERSION}}  connected as Jordan Ellis</div>
+                    </div>
+                    <div class="spos-header-controls">
+                      <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
+                      <span class="spos-logout">Logout</span>
+                    </div>
+                  </div>
+
+                  <div class="spos-stats">
+                    <div class="spos-stat"><div class="spos-stat-label">Total Published</div><div class="spos-stat-value spos-stat-published">27</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Posts (10-day)</div><div class="spos-stat-value">2</div><div class="spos-stat-meta">max 4  ready to post</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value spos-stat-pending">1</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">LinkedIn</div><div class="spos-stat-value spos-stat-value-sm">Connected</div><div class="spos-stat-meta">target: organization</div></div>
+                  </div>
+
+                  <div class="spos-grid">
+                    <div>
+                      <div class="spos-title">Queue <span class="spos-badge spos-queue-badge">1</span></div>
+                      <div class="spos-posts">
+                        <div class="spos-post spos-pending-card">
+                          <div class="spos-badges"><span class="spos-topic">cloud-security</span><span class="spos-status spos-pending-status">pending approval</span></div>
+                          <div class="spos-preview spos-pending-preview">Zero Trust is not a product you buy, it is a set of decisions you keep making. This week two reports landed that make the same point from opposite directions...</div>
+                          <div class="spos-actions spos-pending-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm spos-edit-btn">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">ai-platforms</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Most teams measure model cost per call. The teams that stay in budget measure cost per outcome, and the difference shows up in the ledger within a quarter.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Evidence, not intent, is what an assessor scores. Three controls where most SMBs have the practice but not the artifact, and how to close that gap.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                      </div>
+                      <div class="spos-title spos-title-gap">Recent Posts</div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">CMMC Level 2 assessments are now scheduling into next spring. If your evidence library is still a folder of screenshots, this is the month to fix that.</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="spos-panel"><div class="spos-model-row"><span class="spos-model-label">AI Model</span><span class="spos-model-value">claude-sonnet-4-6</span></div></div>
+                      <div class="spos-panel spos-quick-actions">
+                        <div class="spos-title">Quick Actions</div>
+                        <div class="spos-vstack">
+                          <div class="spos-hstack">
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Generate</span>
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow spos-btn-create">Create</span>
+                          </div>
+                          <div class="spos-select">Auto-select topic</div>
+                          <div class="spos-toggle-row"><span class="spos-toggle-on">Corroboration ON</span><span class="spos-switch"></span></div>
+                          <span class="spos-btn spos-btn-ghost spos-btn-full spos-btn-xs">Refresh Feeds Now</span>
+                        </div>
+                      </div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Topic Coverage</div>
+                        <div class="spos-cov-row"><span>cloud-security</span><span class="spos-cov-count">14</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
+                        <div class="spos-cov-row"><span>ai-platforms</span><span class="spos-cov-count">9</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
+                        <div class="spos-cov-row"><span>cmmc</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Activity Log</div>
+                        <div class="spos-log"><time>09:41:07</time><span class="spos-lvl">info</span><span>feeds polled: 6 ok, 0 failed, 11 new articles</span></div>
+                        <div class="spos-log"><time>09:38:52</time><span class="spos-lvl">info</span><span>post 3a91 moved to pending_approval</span></div>
+                        <div class="spos-log"><time>09:38:49</time><span class="spos-lvl">info</span><span>quality review passed (overall 8)</span></div>
+                        <div class="spos-log"><time>09:38:31</time><span class="spos-lvl">info</span><span>research: 4 independent sources, corroborated</span></div>
+                        <div class="spos-log"><time>09:37:58</time><span class="spos-lvl">info</span><span>cycle 7f2c1a9e started, topic cloud-security</span></div>
+                        <div class="spos-log"><time>08:12:04</time><span class="spos-lvl">info</span><span>LinkedIn token refreshed</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="spos-composer-overlay">
+                  <div class="spos-composer">
+                    <div class="spos-composer-head">
+                      <h2 class="spos-composer-title">Create a post</h2>
+                      <span class="spos-composer-close">&#x2715;</span>
+                    </div>
+                    <span class="spos-composer-label">Genre</span>
+                    <div class="spos-genres">
+                      <div class="spos-genre spos-selected spos-genre-none"><input type="radio" name="spos-genre" checked disabled><span class="spos-genre-main"><span class="spos-genre-name">no genre</span><span class="spos-genre-desc">Start from a blank canvas and write the post yourself.</span></span></div>
+                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A research grounded point of view on one development in the topic.</span></span></div>
+                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">metric_brief</span><span class="spos-genre-desc">Built around one verified metric from the workspace metric store.</span></span></div>
+                    </div>
+                    <div class="spos-composer-actions"><span class="spos-btn spos-btn-primary spos-btn-full">New Post</span></div>
+                  </div>
+                </div>
+
+                <!-- Edit Post modal (mirrors dashboard.jsx editingPost) -->
+                <div class="spos-modal-overlay spos-edit-overlay">
+                  <div class="spos-modal spos-modal-narrow">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <h3 class="spos-modal-heading-top">Edit Post <span class="spos-dest-badge">ORG</span></h3>
+                    <div class="spos-mb">
+                      <span class="spos-form-label">Title</span>
+                      <div class="spos-form-input">Zero Trust is a set of decisions, not a purchase</div>
+                    </div>
+                    <div class="spos-mb">
+                      <span class="spos-form-label">Content</span>
+                      <div class="spos-form-textarea spos-edit-textarea">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+
+This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+
+Three decisions worth revisiting this quarter:
+1. Where does a session get re-checked, and by what?
+2. Which service accounts still hold standing privilege?
+3. What is logged when a policy says no?<span class="spos-caret"></span></div>
+                    </div>
+                    <div class="spos-mb-lg">
+                      <span class="spos-form-label">Hashtags (comma-separated)</span>
+                      <div class="spos-form-input">ZeroTrust, CloudSecurity, CMMC</div>
+                    </div>
+                    <div class="spos-studio-panel"><div class="spos-studio-head">Post Image</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
+                    <div class="spos-modal-actions-end">
+                      <span class="spos-btn spos-btn-ghost spos-btn-sm">Cancel</span>
+                      <span class="spos-btn spos-btn-approve spos-btn-sm spos-edit-save">Save Changes</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Post detail modal (mirrors dashboard.jsx selectedPost, pending_approval) -->
+                <div class="spos-modal-overlay spos-detail-overlay">
+                  <div class="spos-modal spos-detail-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <div class="spos-badges-wrap"><span class="spos-topic">cloud-security</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
+                    <h3 class="spos-modal-heading">Zero Trust is a set of decisions, not a purchase</h3>
+                    <div class="spos-modal-body">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+
+This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+
+Three decisions worth revisiting this quarter:
+1. Where does a session get re-checked, and by what?
+2. Which service accounts still hold standing privilege?
+3. What is logged when a policy says no?</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#ZeroTrust</span><span class="spos-hashtag">#CloudSecurity</span><span class="spos-hashtag">#CMMC</span></div>
+                    <div class="spos-modal-rewrite"><span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-xs">Rewrite with AI</span></div>
+                    <div class="spos-modal-move">
+                      <div class="spos-modal-move-label">Move this post to:</div>
+                      <div class="spos-modal-move-row"><span class="spos-btn spos-btn-tight spos-btn-plain">Draft</span><span class="spos-btn spos-btn-tight spos-btn-plain">Schedule</span></div>
+                    </div>
+                    <div class="spos-source-list">
+                      <div class="spos-section-heading-cyan">Sources (4)</div>
+                      <div class="spos-source-item"><span>Federal audit summary, cloud identity controls</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Breach post mortem, session re-validation gap</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Vendor briefing, standing privilege in service accounts</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Industry survey, policy decision logging</span><span class="spos-source-tier">B</span></div>
+                    </div>
+                    <div class="spos-section-divider">
+                      <div class="spos-section-heading">Post Image</div>
+                      <div class="spos-detail-stack">
+                        <div class="spos-image-choice"><input type="radio" name="spos-image" disabled> No image</div>
+                        <div class="spos-image-choice"><input type="radio" name="spos-image" checked disabled> Article image (federal audit summary)</div>
+                        <div class="spos-studio-panel"><div class="spos-studio-head">Image Studio</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
+                      </div>
+                    </div>
+                    <div class="spos-modal-actions">
+                      <span class="spos-btn spos-btn-approve spos-btn-sm spos-publish-btn">Publish</span>
+                      <span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span>
+                      <span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="spos-highlight"></div>
+                <div class="spos-ripple"></div>
+                <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                  <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        </div>
+        <p class="spos-footnote">From the dashboard to a new post</p>
+        </div>
+      </div>
+    </section>
+
     <section class="hero">
       <div class="site-container hero-inner">
         <nav class="hero-mobile-nav" aria-label="Sections">
@@ -128,7 +344,7 @@
           <a class="btn btn-ghost btn-lg" href="signup.html">Set Up Your Workspace</a>
           <a class="btn btn-ghost btn-lg" href="#how-it-works">See How It Works</a>
         </div>
-        <ul class="hero-proof" role="list">
+        <!-- <ul class="hero-proof" role="list">
           <li class="hero-proof-item">
             <span class="hero-proof-kicker">Stay current</span>
             Drafts anchored to this week's developments, not last quarter's ideas.
@@ -141,7 +357,97 @@
             <span class="hero-proof-kicker">Skip the blank page</span>
             Open a reviewed queue of researched drafts instead of an empty editor.
           </li>
-        </ul>
+        </ul> -->
+      </div>
+    </section>
+
+    <section id="how-it-works" class="alpha-section alpha-section-alt">
+      <div class="site-container">
+        <p class="alpha-section-eyebrow">How it Works</p>
+        <h2 class="section-title">Your first post, then the full workflow.</h2>
+        <p class="alpha-section-lede">
+          Start with the shortest path to a published post. Then open each layer
+          below when you want more control over what gets researched, where the
+          research comes from, and how drafts take shape.
+        </p>
+
+        <div class="fastpath" aria-labelledby="fastpath-title">
+          <h3 id="fastpath-title" class="fastpath-title">The fast path: first post in four steps</h3>
+          <ol class="steps-list">
+            <li class="step">
+              <div class="step-num" aria-hidden="true">01</div>
+              <div class="step-body">
+                <h4 class="step-title">Add a topic</h4>
+                <p>
+                  Open Topics and choose Add Topic. Name a subject your brand
+                  should be talking about, in plain language, the way you would
+                  brief a colleague.
+                </p>
+                <figure class="shot">
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/topics-add.png?v={{CSSVERSION}}" alt="Topic Manager with the Add Topic dialog open, naming a new subject" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Topics &gt; Add Topic</span></figcaption>
+                </figure>
+              </div>
+            </li>
+            <li class="step">
+              <div class="step-num" aria-hidden="true">02</div>
+              <div class="step-body">
+                <h4 class="step-title">Let the research gather</h4>
+                <p>
+                  The platform monitors live web and RSS sources for that topic
+                  and collects what is current. You do not have to read any of it
+                  first; it becomes the raw material for your draft.
+                </p>
+                <figure class="shot">
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/research-gathering.png?v={{CSSVERSION}}" alt="Research view showing gathered articles collecting under the chosen topic" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
+                </figure>
+              </div>
+            </li>
+            <li class="step">
+              <div class="step-num" aria-hidden="true">03</div>
+              <div class="step-body">
+                <h4 class="step-title">Generate with AI</h4>
+                <p>
+                  Choose New Post. The platform turns the gathered research into
+                  a drafted LinkedIn post for your organization page and places
+                  it in your review queue.
+                </p>
+                <figure class="shot">
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/generate-new-post.png?v={{CSSVERSION}}" alt="New Post action generating a drafted LinkedIn post from the gathered research" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; New Post &gt; Generate with AI</span></figcaption>
+                </figure>
+              </div>
+            </li>
+            <li class="step">
+              <div class="step-num" aria-hidden="true">04</div>
+              <div class="step-body">
+                <h4 class="step-title">Review, edit, approve</h4>
+                <p>
+                  Read the draft, edit it into your voice, and approve it.
+                  Nothing publishes until you do. That is the whole promise:
+                  research to published, on your approval.
+                </p>
+                <figure class="shot">
+                  <div class="shot-window">
+                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <img class="shot-img" src="/assets/draft-review-approve.png?v={{CSSVERSION}}" alt="Review queue with a draft open for editing and the approve control visible" loading="lazy" decoding="async">
+                  </div>
+                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit or Approve</span></figcaption>
+                </figure>
+              </div>
+            </li>
+          </ol>
+        </div>
       </div>
     </section>
 
@@ -278,202 +584,6 @@
       </div>
     </section>
 
-    <section id="how-it-works" class="alpha-section alpha-section-alt">
-      <div class="site-container">
-        <p class="alpha-section-eyebrow">How it Works</p>
-        <h2 class="section-title">Your first post, then the full workflow.</h2>
-        <p class="alpha-section-lede">
-          Start with the shortest path to a published post. Then open each layer
-          below when you want more control over what gets researched, where the
-          research comes from, and how drafts take shape.
-        </p>
-
-        <div class="fastpath" aria-labelledby="fastpath-title">
-          <h3 id="fastpath-title" class="fastpath-title">The fast path: first post in four steps</h3>
-          <ol class="steps-list">
-            <li class="step">
-              <div class="step-num" aria-hidden="true">01</div>
-              <div class="step-body">
-                <h4 class="step-title">Add a topic</h4>
-                <p>
-                  Open Topics and choose Add Topic. Name a subject your brand
-                  should be talking about, in plain language, the way you would
-                  brief a colleague.
-                </p>
-                <figure class="shot">
-                  <div class="shot-window">
-                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/topics-add.png?v={{CSSVERSION}}" alt="Topic Manager with the Add Topic dialog open, naming a new subject" loading="lazy" decoding="async">
-                  </div>
-                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Topics &gt; Add Topic</span></figcaption>
-                </figure>
-              </div>
-            </li>
-            <li class="step">
-              <div class="step-num" aria-hidden="true">02</div>
-              <div class="step-body">
-                <h4 class="step-title">Let the research gather</h4>
-                <p>
-                  The platform monitors live web and RSS sources for that topic
-                  and collects what is current. You do not have to read any of it
-                  first; it becomes the raw material for your draft.
-                </p>
-                <figure class="shot">
-                  <div class="shot-window">
-                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/research-gathering.png?v={{CSSVERSION}}" alt="Research view showing gathered articles collecting under the chosen topic" loading="lazy" decoding="async">
-                  </div>
-                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
-                </figure>
-              </div>
-            </li>
-            <li class="step">
-              <div class="step-num" aria-hidden="true">03</div>
-              <div class="step-body">
-                <h4 class="step-title">Generate with AI</h4>
-                <p>
-                  Choose New Post. The platform turns the gathered research into
-                  a drafted LinkedIn post for your organization page and places
-                  it in your review queue.
-                </p>
-                <figure class="shot">
-                  <div class="shot-window">
-                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/generate-new-post.png?v={{CSSVERSION}}" alt="New Post action generating a drafted LinkedIn post from the gathered research" loading="lazy" decoding="async">
-                  </div>
-                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; New Post &gt; Generate with AI</span></figcaption>
-                </figure>
-              </div>
-            </li>
-            <li class="step">
-              <div class="step-num" aria-hidden="true">04</div>
-              <div class="step-body">
-                <h4 class="step-title">Review, edit, approve</h4>
-                <p>
-                  Read the draft, edit it into your voice, and approve it.
-                  Nothing publishes until you do. That is the whole promise:
-                  research to published, on your approval.
-                </p>
-                <figure class="shot">
-                  <div class="shot-window">
-                    <div class="shot-window-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <img class="shot-img" src="/assets/draft-review-approve.png?v={{CSSVERSION}}" alt="Review queue with a draft open for editing and the approve control visible" loading="lazy" decoding="async">
-                  </div>
-                  <figcaption><span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit or Approve</span></figcaption>
-                </figure>
-              </div>
-            </li>
-          </ol>
-        </div>
-<!-- 
-        <h3 class="layers-title">Go deeper, one layer at a time</h3>
-
-        <details class="layer">
-          <summary class="layer-summary">
-            <span class="layer-kicker">Layer 1</span>
-            Topics: run your agenda in the Topic Manager
-          </summary>
-          <div class="layer-body">
-            <p>
-              Topics are standing assignments. Each one tells the platform what
-              to keep researching and drafting about, so your page holds a
-              steady point of view instead of reacting at random.
-            </p>
-            <ol class="layer-steps">
-              <li>Open the Topic Manager to see every subject under watch.</li>
-              <li>Use Add Topic for each theme your brand should own. A few
-                  focused topics beat a long unfocused list.</li>
-              <li>Revisit monthly: retire topics that no longer serve the
-                  strategy and add the ones that now do. Drafts follow your
-                  edits automatically.</li>
-            </ol>
-            <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Topic Manager: active topics">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Topic Manager: active topics</text>
-                </svg>
-                <figcaption>Screenshot to add: the Topic Manager listing several active topics under watch (file: /assets/screenshots/topic-manager.png)<span class="shot-pathline">Click path: Dashboard &gt; Topics (Topic Manager)</span></figcaption>
-              </figure>
-          </div>
-        </details>
-
-        <details class="layer">
-          <summary class="layer-summary">
-            <span class="layer-kicker">Layer 2</span>
-            Feeds Manager: curate the sources behind the research
-          </summary>
-          <div class="layer-body">
-            <p>
-              Research quality is source quality. The Feeds Manager is where you
-              decide which live web and RSS sources are allowed to inform your
-              drafts, so every post stands on publications you would cite
-              yourself.
-            </p>
-            <ol class="layer-steps">
-              <li>Open the Feeds Manager and review the connected
-                  sources feeding your topics.</li>
-              <li>Add the industry publications your team already reads and
-                  trusts.</li>
-              <li>Prune sources that underdeliver. Curation here raises the
-                  floor of every future draft.</li>
-            </ol>
-            <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: Feeds Manager: curated sources">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">Feeds Manager: curated sources</text>
-                </svg>
-                <figcaption>Screenshot to add: the Feeds Manager with connected sources and an add source control (file: /assets/screenshots/feeds-manager.png)<span class="shot-pathline">Click path: Dashboard &gt; Feeds Manager</span></figcaption>
-              </figure>
-          </div>
-        </details>
-
-        <details class="layer">
-          <summary class="layer-summary">
-            <span class="layer-kicker">Layer 3</span>
-            Generate with AI: from research to a post worth approving
-          </summary>
-          <div class="layer-body">
-            <p>
-              New Post is where research becomes writing. Use it whenever you
-              want a draft: after fresh developments in a topic, ahead of a
-              planned publishing slot, or simply because the page has been quiet.
-            </p>
-            <ol class="layer-steps">
-              <li>Choose New Post and generate a draft from the current
-                  research.</li>
-              <li>Edit freely: sharpen the angle, adjust the tone, make it
-                  unmistakably yours. The draft is a starting point, not a
-                  final word.</li>
-              <li>Approve to publish to your organization page, or reject and
-                  generate again. Approval is always the gate.</li>
-              <li>Watch what resonates after publishing, and let that steer
-                  which topics and sources you emphasize next. That is the
-                  measure step closing the loop.</li>
-            </ol>
-            <figure class="shot">
-                <svg class="shot-frame" viewBox="0 0 640 360" role="img" aria-label="Screenshot placeholder: New Post: edit before approval">
-                  <rect class="shot-bg" x="1" y="1" width="638" height="358" rx="10"></rect>
-                  <rect class="shot-bar" x="1" y="1" width="638" height="34" rx="10"></rect>
-                  <circle class="shot-dot" cx="22" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="42" cy="18" r="5"></circle>
-                  <circle class="shot-dot" cx="62" cy="18" r="5"></circle>
-                  <text class="shot-label" x="320" y="200" text-anchor="middle">New Post: edit before approval</text>
-                </svg>
-                <figcaption>Screenshot to add: a generated draft being edited before approval, with the publish gate visible (file: /assets/screenshots/post-edit-voice.png)<span class="shot-pathline">Click path: Dashboard &gt; Post queue &gt; select the draft &gt; Edit Post</span></figcaption>
-              </figure>
-          </div>
-        </details>
-      </div>
-    </section> -->
-
     <section class="alpha-section-cta">
       <div class="site-container cta-inner">
         <h2 class="cta-title">Research Your First Draft Today</h2>
@@ -556,6 +666,7 @@
     </div>
   </footer>
 
-  <script src="/scripts/site.js" defer></script>
+  <script src="/scripts/site.js?v={{CSSVERSION}}" defer></script>
+  <script src="/scripts/showcase-poc.js?v={{CSSVERSION}}" defer></script>
 </body>
 </html>

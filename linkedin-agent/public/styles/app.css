@@ -1102,7 +1102,7 @@ body::after {
 /* Quick Actions */
 .hstack-sm { display: flex; gap: 0.5rem; }
 .btn-grow { flex: 1; }
-.btn-force-cycle { width: 100%; }
+.btn-force-cycle { width: 100%; padding: 0.25rem; margin-top: 0.5rem; border: 1px solid var(--border); }
 .btn-force-cycle:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
 /* LinkedIn stat card publish-target switch */

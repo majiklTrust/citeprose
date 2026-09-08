@@ -1766,10 +1766,21 @@
                 {autoPostOffered(status) && automationModeOf(status) === 'auto-post' && reviewWindowHoursOf(status) !== null && (
                   <div className="automation-note">{DASHBOARD_COPY.reviewWindowNote.split('{hours}').join(String(reviewWindowHoursOf(status)))}</div>
                 )}
+                  {/* 4.25111.62: enabled in the two automated states,
+                      disabled in manual (owner's ruling); wording from
+                      the copy keys. */}
+                  <button
+                    className={`btn btn-force-cycle ${automationModeOf(status) && automationModeOf(status) !== 'manual' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={handleForceCycle}
+                    disabled={!(status.automation && automationModeOf(status) && automationModeOf(status) !== 'manual')}
+                    title={automationModeOf(status) && automationModeOf(status) !== 'manual' ? DASHBOARD_COPY.forceCycleTitle : DASHBOARD_COPY.forceCycleDisabledTitle}
+                  >
+                    {loading.forceCycle ? <span className="loading-spinner"></span> : DASHBOARD_COPY.forceCycleButton}
+                  </button>
               </div>
               {/* Quick Actions */}
               <div className="sidebar-panel">
-                <div className="section-title">Quick Actions</div>
+                <div className="section-title">{DASHBOARD_COPY.quickActionsLabel}</div>
                 <div className="vstack-sm">
                   <div className="hstack-sm">
                     {/* 2.6.1: both generation CTAs check the tenant
@@ -1824,17 +1835,6 @@
                       <span className="toggle-track"></span>
                     </label>
                   </div>
-                  {/* 4.25111.62: enabled in the two automated states,
-                      disabled in manual (owner's ruling); wording from
-                      the copy keys. */}
-                  <button
-                    className={`btn btn-force-cycle ${automationModeOf(status) && automationModeOf(status) !== 'manual' ? 'btn-primary' : 'btn-ghost'}`}
-                    onClick={handleForceCycle}
-                    disabled={!(status.automation && automationModeOf(status) && automationModeOf(status) !== 'manual')}
-                    title={automationModeOf(status) && automationModeOf(status) !== 'manual' ? DASHBOARD_COPY.forceCycleTitle : DASHBOARD_COPY.forceCycleDisabledTitle}
-                  >
-                    {loading.forceCycle ? <span className="loading-spinner"></span> : DASHBOARD_COPY.forceCycleButton}
-                  </button>
                 </div>
               </div>
 

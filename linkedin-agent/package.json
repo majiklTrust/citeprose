@@ -30,7 +30,7 @@
         "linkedinStatusNotConfirmed": "",
         "linkedInConnected": "Connected",
         "linkedInDisconnected": "Not Connected",
-        "automationControlLabel": "Automation",
+        "automationControlLabel": "Control Center",
         "automationStateManual": "Manual",
         "automationStateAutoGenerate": "Agentic",
         "automationStateAutoPost": "Auto-Post",
@@ -41,7 +41,8 @@
         "reviewWindowNote": "Queued posts will publish after {hours} hours.",
         "forceCycleButton": "⟳ Force Scheduler Cycle",
         "forceCycleTitle": "run the scheduler cycle now",
-        "forceCycleDisabledTitle": "Not available in the Manual automation state."
+        "forceCycleDisabledTitle": "Active in auto-generate mode.",
+        "quickActionsLabel":"Post Composition"
       }
     }
   },

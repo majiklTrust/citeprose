@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy (3.3.24) -->
+  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy (3.3.25) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -76,7 +76,7 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.24): three scripted replays a visitor can pick
+    <!-- Showcase replay (3.3.25): three scripted replays a visitor can pick
          between; only the selected one plays. Markup mirrors
          public_templates/dashboard.jsx and public/topics/index.html with
          spos- prefixed classes so app.css does not restyle it. Styles in
@@ -86,8 +86,10 @@
          readout). The caption in the window bar tracks the recorded
          events. Post text, counts, names, feed names,
          quality scores and the genres after "no genre" are illustrative.
-           Recording "create": Create a post, Edit Post, publish from the
-             post detail modal.
+           Recording "create" (independent retailer): Generate from Quick
+             Actions, the Generating Content overlay, the draft with its
+             Sources Referenced and Quality Assessment, Queue for Approval,
+             then Edit Post, then publish from the post detail modal.
            Recording "topics" (finance tenant): add a topic on the Topics
              page, generate suggestions, save, discover feeds for it, then
              Generate from Quick Actions and review the draft's Sources
@@ -133,15 +135,15 @@
                   <div class="spos-stats">
                     <div class="spos-stat"><div class="spos-stat-label">Total Published</div><div class="spos-stat-value spos-stat-published">27</div></div>
                     <div class="spos-stat"><div class="spos-stat-label">Posts (10-day)</div><div class="spos-stat-value">2</div><div class="spos-stat-meta">max 4  ready to post</div></div>
-                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value spos-stat-pending">1</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value spos-stat-pending">0</div></div>
                     <div class="spos-stat"><div class="spos-stat-label">LinkedIn</div><div class="spos-stat-value spos-stat-value-sm">Connected</div><div class="spos-stat-meta">target: organization</div></div>
                   </div>
 
                   <div class="spos-grid">
                     <div>
-                      <div class="spos-title">Queue <span class="spos-badge spos-queue-badge">1</span></div>
+                      <div class="spos-title">Queue <span class="spos-badge spos-queue-badge">0</span></div>
                       <div class="spos-posts">
-                        <div class="spos-post spos-pending-card">
+                        <div class="spos-post spos-pending-card spos-c-hidden">
                           <div class="spos-badges"><span class="spos-topic">customer-loyalty</span><span class="spos-status spos-pending-status">pending approval</span></div>
                           <div class="spos-preview spos-pending-preview">Points are not loyalty. Two shopper studies landed this week and both point the same direction: members who redeem within thirty days come back three times as often...</div>
                           <div class="spos-actions spos-pending-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm spos-edit-btn">Edit</span></div>
@@ -172,8 +174,8 @@
                         <div class="spos-title">Quick Actions</div>
                         <div class="spos-vstack">
                           <div class="spos-hstack">
-                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Generate</span>
-                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow spos-btn-create">Create</span>
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow spos-btn-generate">Generate</span>
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Create</span>
                           </div>
                           <div class="spos-select">Auto-select topic</div>
                           <div class="spos-toggle-row"><span class="spos-toggle-on">Corroboration ON</span><span class="spos-switch"></span></div>
@@ -202,19 +204,51 @@
                   </div>
                 </div>
 
-                <div class="spos-composer-overlay">
-                  <div class="spos-composer">
-                    <div class="spos-composer-head">
-                      <h2 class="spos-composer-title">Create a post</h2>
-                      <span class="spos-composer-close">&#x2715;</span>
+                <!-- Generating Content overlay (mirrors #generate-overlay in public_templates/index.html) -->
+                <div class="spos-gen-overlay spos-c-gen-overlay">
+                  <div class="spos-gen-card">
+                    <div class="spos-gen-spinner"></div>
+                    <div class="spos-gen-title">Generating Content</div>
+                    <div class="spos-gen-sub">Researching sources and composing your post. This may take a moment.</div>
+                    <div class="spos-gen-fine">Your draft is saved automatically.</div>
+                  </div>
+                </div>
+
+                <!-- Draft preview modal (mirrors selectedPost with isPreview) -->
+                <div class="spos-modal-overlay spos-c-draft-overlay">
+                  <div class="spos-modal spos-c-draft-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <div class="spos-badges-wrap"><span class="spos-topic">customer-loyalty</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
+                    <h3 class="spos-modal-heading">Points are not loyalty</h3>
+                    <div class="spos-modal-body">Points are not loyalty.
+
+Two shopper studies landed this week and both point the same direction: members who redeem a reward within thirty days of joining come back three times as often as members who never redeem. The card in the wallet is not the habit. The first redemption is.
+
+Three things worth changing before the holiday rush:
+1. Make the first reward reachable in one visit, not five.
+2. Put the redemption prompt at the register, not in the app.
+3. Thank the redeemer by name the next time they walk in.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#Loyalty</span><span class="spos-hashtag">#Retail</span><span class="spos-hashtag">#CustomerExperience</span></div>
+                    <div class="spos-source-list">
+                      <div class="spos-section-heading-cyan">Sources Referenced</div>
+                      <div class="spos-source-item"><span>Retail industry association: loyalty program benchmark, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Shopper survey: first redemption and repeat visits</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Regional grocer case study: reward at the register</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Trade press: what a loyalty point costs a small retailer</span><span class="spos-source-tier">B</span></div>
                     </div>
-                    <span class="spos-composer-label">Genre</span>
-                    <div class="spos-genres">
-                      <div class="spos-genre spos-selected spos-genre-none"><input type="radio" name="spos-genre" checked disabled><span class="spos-genre-main"><span class="spos-genre-name">no genre</span><span class="spos-genre-desc">Start from a blank canvas and write the post yourself.</span></span></div>
-                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A point of view on one shopper trend, grounded in this week's research.</span></span></div>
-                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">seasonal_brief</span><span class="spos-genre-desc">A short, dated note built around one verified figure for the season.</span></span></div>
+                    <div class="spos-quality">
+                      <div class="spos-section-heading">Quality Assessment</div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">hook strength</span><div class="spos-quality-bar"><i class="spos-q-9"></i></div><span class="spos-quality-score">9</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">authenticity</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">source grounding</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">factual caution</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-overall">Overall: <strong class="spos-quality-pass">8/10 Pass</strong></div>
                     </div>
-                    <div class="spos-composer-actions"><span class="spos-btn spos-btn-primary spos-btn-full">New Post</span></div>
+                    <div class="spos-modal-actions">
+                      <span class="spos-btn spos-btn-approve spos-btn-sm spos-c-queue-btn">Queue for Approval</span>
+                      <span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span>
+                      <span class="spos-btn spos-btn-reject spos-btn-sm">Discard</span>
+                    </div>
                   </div>
                 </div>
 

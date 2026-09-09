@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "3.3.24",
+  "version": "3.3.25",
   "config": {
     "cssversion": "114",
     "appname": "Market Intelligence",
@@ -42,7 +42,7 @@
         "forceCycleButton": "⟳ Force Scheduler Cycle",
         "forceCycleTitle": "run the scheduler cycle now",
         "forceCycleDisabledTitle": "Active in auto-generate mode.",
-        "quickActionsLabel":"Post Composition"
+        "quickActionsLabel": "Post Composition"
       }
     }
   },

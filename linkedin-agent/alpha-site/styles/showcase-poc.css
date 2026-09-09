@@ -1,7 +1,7 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.21)
+   showcase-poc.css  (delivery 3.3.22)
    ================================================================
-   Marketing site showcase: two scripted replays the visitor picks
+   Marketing site showcase: three scripted replays the visitor picks
    between with a tab row; only the selected one plays.
      "create": the Create CTA (Create a post modal), editing the pending
        post (Edit Post modal), publishing from the post detail modal.
@@ -11,6 +11,10 @@
        Generating Content overlay, the Research Monitor narrowing to the
        topic, the draft modal with Sources Referenced and Quality
        Assessment).
+     "analytics": the Analytics page (program intelligence, amplification,
+       posts table, performance by topic, posting time heatmap, follower
+       demographics, narrative summary), then the Advocacy page (members,
+       generate variants, a member approves a personalized variant).
    Rendered at the top of site_templates/index.html.
 
    Layout (3.3.7)
@@ -377,6 +381,75 @@
 #showcase-pos .spos-tp-dactions.spos-open { display: flex; }
 #showcase-pos .spos-t-new-feed { display: none; }
 #showcase-pos .spos-t-new-feed.spos-shown { display: flex; }
+
+/* ---------- Analytics and Advocacy pages (light theme, mirror public/shared/manager-nav.css page styles) ---------- */
+#showcase-pos .spos-an-screen, #showcase-pos .spos-ad-screen { overflow: hidden; }
+#showcase-pos .spos-an-container { max-width: 1000px; }
+#showcase-pos .spos-ad-container { max-width: 860px; }
+#showcase-pos .spos-an-subtitle { font-size: 0.78rem; color: #888; margin: -0.3rem 0 0.9rem; }
+#showcase-pos .spos-an-toolbar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+#showcase-pos .spos-an-toolbar-label { font-weight: 600; font-size: 0.85rem; color: #555; }
+#showcase-pos .spos-an-select { display: inline-block; padding: 0.35rem 1.8rem 0.35rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23666' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E") no-repeat right 0.5rem center; color: #333; }
+#showcase-pos .spos-an-select.spos-hover { border-color: #0073b1; }
+#showcase-pos .spos-an-spacer { flex: 1; }
+#showcase-pos .spos-tp-btn.spos-tp-btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+#showcase-pos .spos-an-note-lg { font-size: 0.75rem; color: #999; margin-bottom: 0.7rem; }
+#showcase-pos .spos-an-badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; vertical-align: middle; }
+#showcase-pos .spos-an-badge-computed { background: #ede7f6; color: #5e35b1; }
+#showcase-pos .spos-an-badge-topic { background: #e3f2fd; color: #1565c0; }
+#showcase-pos .spos-an-badge-pending { background: #fff3e0; color: #e65100; }
+#showcase-pos .spos-an-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+#showcase-pos .spos-an-table th { text-align: left; color: #666; font-weight: 600; padding: 0.35rem 0.5rem; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+#showcase-pos .spos-an-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+#showcase-pos .spos-an-table th.spos-an-num, #showcase-pos .spos-an-table td.spos-an-num { text-align: right; font-variant-numeric: tabular-nums; }
+#showcase-pos .spos-an-post-title { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#showcase-pos .spos-an-note { font-size: 0.7rem; color: #aaa; }
+#showcase-pos .spos-hm { display: grid; grid-template-columns: 3.2rem repeat(24, 1fr); gap: 2px; font-size: 0.62rem; }
+#showcase-pos .spos-hm-label { color: #888; display: flex; align-items: center; }
+#showcase-pos .spos-hm-hour { color: #aaa; text-align: center; }
+#showcase-pos .spos-hm-cell { height: 1.15rem; border-radius: 2px; background: #f0f0f0; }
+#showcase-pos .spos-hm-1 { background: #d7e9f4; }
+#showcase-pos .spos-hm-2 { background: #a6cbe4; }
+#showcase-pos .spos-hm-3 { background: #5d9fc9; }
+#showcase-pos .spos-hm-4 { background: #0073b1; }
+#showcase-pos .spos-an-demo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+#showcase-pos .spos-an-demo-col h3 { font-size: 0.85rem; color: #555; margin: 0 0 0.5rem; text-transform: capitalize; font-weight: 600; }
+#showcase-pos .spos-an-demo-row { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid #f5f5f5; color: #444; }
+#showcase-pos .spos-an-demo-count { color: #333; font-weight: 600; font-variant-numeric: tabular-nums; }
+#showcase-pos .spos-h-narrative-section { display: none; }
+#showcase-pos .spos-h-narrative-section.spos-open { display: block; }
+#showcase-pos .spos-an-narrative { white-space: pre-wrap; font-size: 0.86rem; line-height: 1.55; background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 0.8rem 0.9rem; color: #333; }
+#showcase-pos .spos-an-narrative-meta { font-size: 0.72rem; color: #999; margin-top: 0.5rem; }
+#showcase-pos .spos-ad-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f2f2f2; font-size: 0.84rem; }
+#showcase-pos .spos-ad-k { color: #666; }
+#showcase-pos .spos-ad-v { color: #222; white-space: nowrap; }
+#showcase-pos .spos-ad-pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+#showcase-pos .spos-ad-pill-on { background: #e8f5e9; color: #2e7d32; }
+#showcase-pos .spos-ad-pill-off { background: #ffebee; color: #c62828; }
+#showcase-pos .spos-ad-pill-mode { background: #e3f2fd; color: #1565c0; }
+#showcase-pos .spos-ad-toggle-wrap { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+#showcase-pos .spos-ad-toggle { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; font-size: 0.82rem; text-align: center; color: #333; }
+#showcase-pos .spos-ad-toggle-active { background: #0073b1; color: #fff; border-color: #0073b1; font-weight: 600; }
+#showcase-pos .spos-ad-empty { color: #999; font-style: italic; font-size: 0.85rem; }
+#showcase-pos .spos-h-queue-empty.spos-gone { display: none; }
+#showcase-pos .spos-h-gen-status.spos-busy { color: #0073b1; font-style: normal; }
+#showcase-pos .spos-h-gen-status.spos-done { color: #2e7d32; font-style: normal; }
+#showcase-pos .spos-ad-variant { display: none; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.8rem; margin-bottom: 0.8rem; }
+#showcase-pos .spos-ad-variant.spos-shown { display: block; }
+#showcase-pos .spos-ad-variant.spos-approved { border-color: #2e7d32; background: #f4faf4; }
+#showcase-pos .spos-ad-hint { font-size: 0.72rem; color: #999; margin-bottom: 0.2rem; }
+#showcase-pos .spos-ad-variant-edit { min-height: 110px; margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.84rem; line-height: 1.45; white-space: pre-wrap; background: #fff; color: #333; }
+#showcase-pos .spos-ad-variant-edit.spos-focus { border-color: #0073b1; box-shadow: 0 0 0 2px rgba(0, 115, 177, 0.15); }
+#showcase-pos .spos-ad-btn-danger { background: #ffebee; color: #c62828; margin-left: 0.5rem; }
+#showcase-pos .spos-ad-label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.7rem 0 0.25rem; }
+#showcase-pos .spos-ad-select { width: 100%; }
+#showcase-pos .spos-ad-actions { margin-top: 0.7rem; }
+#showcase-pos .spos-ad-table { font-size: 0.8rem; }
+#showcase-pos .spos-h-screen-analytics, #showcase-pos .spos-h-screen-advocacy { transition: opacity calc(0.3s / var(--spos-rate)); }
+#showcase-pos .spos-h-screen-advocacy { opacity: 0; visibility: hidden; }
+#showcase-pos .spos-h-screen-advocacy.spos-shown { opacity: 1; visibility: visible; }
+#showcase-pos .spos-h-screen-analytics.spos-gone { opacity: 0; visibility: hidden; }
+#showcase-pos .spos-tp-section.spos-hover { box-shadow: 0 0 0 2px rgba(0, 115, 177, 0.35), 0 1px 3px rgba(0, 0, 0, 0.1); }
 
 /* ---------- Screens inside the topics recording ---------- */
 #showcase-pos .spos-t-screen-topics, #showcase-pos .spos-t-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }

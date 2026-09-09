@@ -1,8 +1,8 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.21)
+// showcase-poc.js  (delivery 3.3.22)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
-// (site_templates/index.html, #showcase-pos). Two recordings live in
+// (site_templates/index.html, #showcase-pos). Three recordings live in
 // one window; a tab row picks which one plays. Only the active
 // recording runs; switching stops the other, resets it, and starts
 // the chosen one from its first frame.
@@ -28,6 +28,16 @@
 //                shows, the Research Monitor narrows to the topic, then
 //                the draft modal opens with Sources Referenced and the
 //                Quality Assessment, ending on Queue for Approval.
+//
+//   "analytics" 1. Analytics page: the cursor walks Advocacy Program
+//                Intelligence, Advocacy Amplification, Posts, Performance
+//                by Topic, the Posting Time Heatmap and Follower
+//                Demographics, scrolling the page, then asks for the
+//                Narrative summary, which appears with every claim cited.
+//             2. Advocacy page: My Participation, the Members table, a
+//                source post is selected and Generate Variant Post runs
+//                behind the gate chain, the member's personalized variant
+//                lands in the Post Variants Queue and is approved.
 //
 // Behavior
 //   - Plays automatically at PLAYBACK_RATE (0.4x).
@@ -447,8 +457,89 @@
       reducedMotion: function () { screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); draftOverlay.classList.add('spos-open'); } };
   }
 
+  // ---------- Recording "analytics" ----------
+  function buildAnalytics(h) {
+    var scrA = h.q('.spos-h-screen-analytics'), scrB = h.q('.spos-h-screen-advocacy'), navAdv = h.q('.spos-h-nav-advocacy');
+    var secIntel = h.q('.spos-h-sec-intel'), secAmp = h.q('.spos-h-sec-amp'), secPosts = h.q('.spos-h-sec-posts'), secTopics = h.q('.spos-h-sec-topics'), secHeat = h.q('.spos-h-sec-heat'), secDemo = h.q('.spos-h-sec-demo');
+    var narBtn = h.q('.spos-h-narrative-btn'), narSec = h.q('.spos-h-narrative-section'), anMsg = h.q('.spos-h-an-msg');
+    var secMe = h.q('.spos-h-sec-me'), secQueue = h.q('.spos-h-sec-queue'), secGen = h.q('.spos-h-sec-generate'), secMembers = h.q('.spos-h-sec-members');
+    var queueEmpty = h.q('.spos-h-queue-empty'), variant = h.q('.spos-h-variant'), variantText = h.q('.spos-h-variant-text'), approve = h.q('.spos-h-approve');
+    var sourceSel = h.q('.spos-h-source-select'), genBtn = h.q('.spos-h-generate'), genStatus = h.q('.spos-h-gen-status'), adMsg = h.q('.spos-h-ad-msg');
+    var required = [scrA, scrB, navAdv, secIntel, secAmp, secPosts, secTopics, secHeat, secDemo, narBtn, narSec, anMsg,
+      secMe, secQueue, secGen, secMembers, queueEmpty, variant, variantText, approve, sourceSel, genBtn, genStatus, adMsg];
+    var START = { x: 300, y: 600 };
+    // Scroll a page screen so `el` sits near the top of the window.
+    // Smooth while playing; instant while the engine is seeking.
+    function scrollTo(screen, el, offset) {
+      var top = Math.max(0, el.offsetTop - (offset == null ? 16 : offset));
+      var instant = !!(screen.closest && screen.closest('.spos-seeking'));
+      if (screen.scrollTo) screen.scrollTo({ top: top, behavior: instant ? 'auto' : 'smooth' }); else screen.scrollTop = top;
+    }
+    var script = [
+      // Scene 1: Analytics
+      { t: 0, run: function () { h.jumpCursor(START); h.say('pageview <b>/app/analytics/</b> (window: last 30 days)'); } },
+      { t: 900, run: h.hoverStep(secIntel, 0, 0, false, 'Advocacy Program Intelligence: <b>79% publish rate</b>, 14,820 connections activated by members') },
+      { t: 2800, run: function () { secIntel.classList.remove('spos-hover'); } },
+      { t: 2900, run: h.hoverStep(secAmp, 0, 0, false, 'Advocacy Amplification: member reach is <b>4.6x</b> the organization page') },
+      { t: 4700, run: function () { secAmp.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secPosts); } },
+      { t: 5600, run: h.hoverStep(secPosts, 0, 0, false, 'Posts: values <b>exactly as LinkedIn returned them</b>, with retrieval time') },
+      { t: 7500, run: function () { secPosts.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secTopics); } },
+      { t: 8400, run: h.hoverStep(secTopics, 0, 0, false, 'Performance by Topic: <b>care-access</b> leads, 21,400 impressions across 2 posts') },
+      { t: 10300, run: function () { secTopics.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secHeat); } },
+      { t: 11200, run: h.hoverStep(secHeat, 0, 0, false, 'Posting Time Heatmap: <b>weekday mornings, 7 to 9</b>, outperform every other slot') },
+      { t: 13100, run: function () { secHeat.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secDemo); } },
+      { t: 14000, run: h.hoverStep(secDemo, 0, 0, false, 'Follower Demographics: Hospitals and Health Care, <b>senior titles</b>, Greater Chicago') },
+      { t: 15900, run: function () { secDemo.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secIntel, 140); } },
+      { t: 16900, run: function () { h.moveCursor(h.center(narBtn, 0, 0)); } },
+      { t: 17800, run: h.hoverStep(narBtn, 0, 0, true, 'hover <b>button#btn-narrative</b> "Narrative summary"') },
+      { t: 18700, run: h.clickStep(narBtn, 0, 0, 'click <b>button#btn-narrative</b> (POST /api/analytics/narrative)') },
+      { t: 18950, run: function () { narBtn.classList.remove('spos-hover'); h.hideBox(); narBtn.classList.add('spos-busy'); narBtn.textContent = 'Writing...'; h.say('model writes the summary from the tables on this page only'); } },
+      { t: 20400, run: function () { narBtn.classList.remove('spos-busy'); narBtn.textContent = 'Narrative summary'; narSec.classList.add('spos-open'); h.say('render <b>#narrative-section</b>: every figure cited, <b>uncited claims blocked</b>'); } },
+      { t: 21300, run: h.hoverStep(narSec, 0, 0, false, 'narrative: care access carried the month, weekday mornings win, member posts activated 14,820 connections') },
+      { t: 23800, run: function () { narSec.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secIntel, 400); } },
+      { t: 24600, run: function () { h.moveCursor(h.center(navAdv, 0, 0)); } },
+      { t: 25500, run: h.hoverStep(navAdv, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Advocacy"') },
+      { t: 26300, run: h.clickStep(navAdv, 0, 0, 'click <b>a.manager-nav-link</b> "Advocacy"') },
+      { t: 26550, run: function () { navAdv.classList.remove('spos-hover'); h.hideBox(); scrA.classList.add('spos-gone'); scrB.classList.add('spos-shown'); h.say('pageview <b>/app/advocacy/</b> (entitlement: employee_advocacy)'); } },
+      // Scene 2: Advocacy
+      { t: 27600, run: h.hoverStep(secMe, 0, 0, false, 'My Participation: <b>connected</b>, manual mode, consent version 3, 2,140 first-degree connections') },
+      { t: 29600, run: function () { secMe.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrB, secMembers); } },
+      { t: 30500, run: h.hoverStep(secMembers, 0, 0, false, 'Members: <b>3 of 4 connected</b>, each with a voice note; enabling never connects anyone, members consent themselves') },
+      { t: 32700, run: function () { secMembers.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrB, secGen); } },
+      { t: 33600, run: h.hoverStep(sourceSel, 0, 0, true, 'hover <b>select#gen-post-id</b> "Source post"') },
+      { t: 34500, run: h.clickStep(sourceSel, 0, 0, 'select source post <b>"What a 20 minute wait actually costs a clinic"</b>') },
+      { t: 34750, run: function () { sourceSel.classList.remove('spos-hover'); h.hideBox(); sourceSel.textContent = 'What a 20 minute wait actually costs a clinic'; } },
+      { t: 35700, run: h.hoverStep(genBtn, 0, 0, true, 'hover <b>button#btn-generate</b> "Generate Variant Post"') },
+      { t: 36600, run: h.clickStep(genBtn, 0, 0, 'click <b>button#btn-generate</b> (POST /api/advocacy/generate)') },
+      { t: 36850, run: function () { genBtn.classList.remove('spos-hover'); h.hideBox(); genBtn.classList.add('spos-busy'); genStatus.classList.add('spos-busy'); genStatus.textContent = 'Generating one variant per connected member (3)...'; h.say('one variant per connected member, in that member\'s voice'); } },
+      { t: 38300, run: function () { h.say('each variant passes the <b>gate chain</b>: injection scan, metric fidelity, output filter, quality'); } },
+      { t: 39900, run: function () { genBtn.classList.remove('spos-busy'); genStatus.classList.remove('spos-busy'); genStatus.classList.add('spos-done'); genStatus.textContent = 'Generated 3 variant(s) across 3 member(s); each member approves their own.'; adMsg.textContent = 'Generated 3 variant(s) across 3 member(s).'; adMsg.classList.add('spos-on'); h.say('3 <b>advocacy_variants</b> rows, status pending_approval'); } },
+      { t: 41100, run: function () { scrollTo(scrB, secQueue); queueEmpty.classList.add('spos-gone'); variant.classList.add('spos-shown'); } },
+      { t: 42000, run: h.hoverStep(variantText, 0, 0, false, 'render <b>.variant-card</b> Variant #31: the post rewritten in Dr. Priya Natarajan\'s voice') },
+      { t: 42600, run: function () { variantText.classList.add('spos-focus'); } },
+      { t: 44800, run: function () { variantText.classList.remove('spos-hover', 'spos-focus'); h.hideBox(); h.say('the member may edit before approving; <b>nothing publishes without their approval</b>'); } },
+      { t: 46200, run: h.hoverStep(approve, 0, 0, true, 'hover <b>button.btn-primary</b> "Approve"') },
+      { t: 47100, run: h.clickStep(approve, 0, 0, 'click <b>button.btn-primary</b> "Approve" (POST /api/advocacy/me/variants/31/approve)') },
+      { t: 47350, run: function () { approve.classList.remove('spos-hover'); h.hideBox(); variant.classList.add('spos-approved'); adMsg.textContent = 'Approved. Publishing to your profile now.'; h.say('approved: published from the <b>member\'s own profile</b> with the member\'s own token'); } },
+      { t: 48900, run: function () { h.say('reach from this post is counted in <b>Activated Reach</b> on Analytics'); } },
+      { t: 50400, run: function () { h.moveCursor(START); h.say('end of recording'); } }
+    ];
+    function reset() {
+      scrA.classList.remove('spos-gone'); scrB.classList.remove('spos-shown');
+      scrA.scrollTop = 0; scrB.scrollTop = 0;
+      [secIntel, secAmp, secPosts, secTopics, secHeat, secDemo, narBtn, narSec, secMe, secMembers, sourceSel, genBtn, variantText, approve, navAdv].forEach(function (el) { el.classList.remove('spos-hover', 'spos-pressed', 'spos-busy', 'spos-focus'); });
+      narSec.classList.remove('spos-open'); narBtn.textContent = 'Narrative summary';
+      anMsg.textContent = ''; anMsg.classList.remove('spos-on'); adMsg.textContent = ''; adMsg.classList.remove('spos-on');
+      sourceSel.textContent = 'Select a published post';
+      genStatus.classList.remove('spos-busy', 'spos-done'); genStatus.textContent = 'No variants generated yet.';
+      queueEmpty.classList.remove('spos-gone'); variant.classList.remove('spos-shown', 'spos-approved');
+    }
+    return { script: script, duration: 52000, reset: reset, required: required, start: START,
+      reducedMotion: function () { narSec.classList.add('spos-open'); } };
+  }
+
   // ---------- Controller ----------
-  var builders = { create: buildCreate, topics: buildTopics };
+  var builders = { create: buildCreate, topics: buildTopics, analytics: buildAnalytics };
   var recordings = {};
   Array.prototype.slice.call(root.querySelectorAll('.spos-recording[data-recording]')).forEach(function (el) {
     var name = el.getAttribute('data-recording');

@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.25)
+// showcase-poc.js  (delivery 3.3.26)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three recordings live in
@@ -80,6 +80,15 @@
 //     scheduled on the recording clock, not on setTimeout, so they
 //     pause with the clock and are dropped on stop and reset. Switching
 //     mid scene leaves no stray callback.
+//   - No forced reflows (3.3.26). The engine never reads layout right
+//     after writing it: the window width comes from a ResizeObserver
+//     rather than clientWidth; transition and animation restarts use
+//     the next animation frame or the Web Animations API rather than
+//     the "void el.offsetWidth" trick; and a tab switch lets the
+//     browser lay out the newly shown stage on its own frame before the
+//     recording starts and measures anything. Geometry reads for the
+//     cursor (getBoundingClientRect) happen inside steps, spaced by the
+//     script, never in the same task as a display toggle.
 // ================================================================
 
 (function () {
@@ -103,6 +112,19 @@
 
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   root.style.setProperty('--spos-rate', String(PLAYBACK_RATE));
+
+  // Window width, observed rather than measured, so fit() is write-only.
+  // The observer reports the frame's size after layout, with no forced
+  // reflow; until its first report the width is read once at startup.
+  var frameWidth = 0;
+  var onFrameResize = null;
+  if (window.ResizeObserver) {
+    new ResizeObserver(function (entries) {
+      var w = entries[0] && entries[0].contentRect ? entries[0].contentRect.width : 0;
+      if (w && w !== frameWidth) { frameWidth = w; if (onFrameResize) onFrameResize(); }
+    }).observe(frame);
+  }
+  function nextFrame(fn) { window.requestAnimationFrame(function () { window.requestAnimationFrame(fn); }); }
 
   // Shared caption in the window bar.
   function say(html) { callout.innerHTML = html; callout.classList.add('spos-on'); }
@@ -133,7 +155,8 @@
     }
 
     function fit() {
-      var s = Math.min(1, frame.clientWidth / STAGE_W);
+      if (!frameWidth) frameWidth = frame.clientWidth;  // startup only, before the observer reports
+      var s = Math.min(1, frameWidth / STAGE_W);
       stage.style.transform = 'scale(' + s + ')';
       scaler.style.height = (STAGE_H * s) + 'px';
     }
@@ -152,14 +175,22 @@
       cursor.style.left = p.x + 'px'; cursor.style.top = p.y + 'px';
     }
     function jumpCursor(p) {
+      // Suppress the transition for this move; lift the suppression on
+      // a later frame once the new position has been applied.
       cursor.classList.add('spos-jump');
       cursor.style.left = p.x + 'px'; cursor.style.top = p.y + 'px';
-      void cursor.offsetWidth;
-      cursor.classList.remove('spos-jump');
+      nextFrame(function () { cursor.classList.remove('spos-jump'); });
     }
     function clickAt(p) {
       ripple.style.left = p.x + 'px'; ripple.style.top = p.y + 'px';
-      ripple.classList.remove('spos-go'); void ripple.offsetWidth; ripple.classList.add('spos-go');
+      if (ripple.animate) {
+        // Web Animations restart cleanly without a reflow; duration follows the playback rate.
+        ripple.animate([{ opacity: 0.9, transform: 'scale(0.6)' }, { opacity: 0, transform: 'scale(4.2)' }],
+          { duration: 550 / PLAYBACK_RATE, easing: 'ease-out', fill: 'forwards' });
+      } else {
+        ripple.classList.remove('spos-go');
+        window.requestAnimationFrame(function () { ripple.classList.add('spos-go'); });
+      }
     }
     function showBox(el) {
       var b = box(el);
@@ -268,8 +299,7 @@
       }
       clock = elapsed;
       runPending();
-      void stage.offsetWidth;
-      stage.classList.remove('spos-seeking');
+      nextFrame(function () { stage.classList.remove('spos-seeking'); });
       lastTs = 0; resumePhase = 'playing';
       if (wasPlaying && !reducedMotion) { phase = 'playing'; raf = window.requestAnimationFrame(tick); } else { phase = 'paused'; }
       notify();
@@ -296,7 +326,7 @@
       // Scene 1: Generate
       { t: 0, run: function () { h.jumpCursor(START); h.say('Monday at the shop. The queue is empty and the week needs a post.'); } },
       { t: 900, run: function () { h.moveCursor(h.center(quickActions, 0, -40)); } },
-      { t: 2000, run: h.hoverStep(btnGenerate, -4, 2, true, '<b>Generate</b>: research first, then a draft, then a second opinion. No topic chosen, so the agent takes the one that is due.') },
+      { t: 2000, run: h.hoverStep(btnGenerate, -4, 2, true, '<b>Generate</b>: research first, then a draft. No topic chosen, the agent uses what is due.') },
       { t: 3600, run: h.clickStep(btnGenerate, -4, 2, 'Go.') },
       { t: 3850, run: function () { btnGenerate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> Auto-select picked Customer Loyalty. The draft saves itself as it goes.'); } },
       { t: 5300, run: function () { h.say('Research: <b>two shopper studies and two trade sources</b>, checked against each other before anything is written.'); } },
@@ -578,8 +608,15 @@
     active = name;
     Array.prototype.slice.call(root.querySelectorAll('.spos-recording[data-recording]')).forEach(function (el) { el.classList.toggle('spos-active', el.getAttribute('data-recording') === name); });
     tabs.forEach(function (t) { var on = t.getAttribute('data-recording') === name; t.classList.toggle('spos-active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
-    recordings[name].start();
     syncControls();
+    // Let the display toggle above get its own layout pass; start on the
+    // next frame so nothing in start() forces a synchronous reflow.
+    var pending = name;
+    window.requestAnimationFrame(function () {
+      if (active !== pending || !recordings[pending]) return;
+      recordings[pending].start();
+      syncControls();
+    });
   }
   tabs.forEach(function (tab) { tab.addEventListener('click', function () { show(tab.getAttribute('data-recording')); }); });
 
@@ -635,7 +672,8 @@
     });
   }
   Object.keys(recordings).forEach(function (k) { recordings[k].onStateChange(syncControls); });
-  window.addEventListener('resize', function () { if (active && recordings[active]) recordings[active].fit(); });
+  onFrameResize = function () { if (active && recordings[active]) recordings[active].fit(); };
+  if (!window.ResizeObserver) window.addEventListener('resize', function () { frameWidth = 0; onFrameResize(); });
 
   var first = (tabs.filter(function (t) { return t.classList.contains('spos-active') && !t.disabled; })[0] || tabs.filter(function (t) { return !t.disabled; })[0]);
   var firstName = first ? first.getAttribute('data-recording') : Object.keys(recordings)[0];

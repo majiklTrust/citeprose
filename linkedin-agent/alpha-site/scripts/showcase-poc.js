@@ -1,8 +1,8 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.27)
+// showcase-poc.js  (delivery 3.3.28)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
-// (site_templates/index.html, #showcase-pos). Three recordings live in
+// (site_templates/index.html, #showcase-pos). Four recordings live in
 // one window; a tab row picks which one plays. Only the active
 // recording runs; switching stops the other, resets it, and starts
 // the chosen one from its first frame.
@@ -41,6 +41,18 @@
 //                source post is selected and Generate Variant Post runs
 //                behind the gate chain, the member's personalized variant
 //                lands in the Post Variants Queue and is approved.
+//
+//   "linkedin" 1. LinkedIn Connection page, nothing connected: the
+//                status rows are all off, Publish as has no setting and
+//                the Organization Page toggle is disabled. Reconnect
+//                LinkedIn starts the single OAuth grant.
+//             2. The authorization step: the broker allows the listed
+//                permissions.
+//             3. Back on the page: connected, refresh token on file,
+//                person URN and expiries filled in, personal profile is
+//                the default destination. Discovery links the brokerage
+//                page, the Organization Page toggle unlocks, Publish as
+//                switches to the page and back to the profile.
 //
 // Behavior
 //   - Plays automatically at PLAYBACK_RATE (0.4x).
@@ -593,8 +605,98 @@
       reducedMotion: function () { narSec.classList.add('spos-open'); } };
   }
 
+  // ---------- Recording "linkedin" ----------
+  function buildLinkedin(h) {
+    var page = h.q('.spos-l-screen-page'), consent = h.q('.spos-l-screen-consent'), allow = h.q('.spos-l-allow');
+    var msg = h.q('.spos-l-msg'), secStatus = h.q('.spos-l-sec-status'), secTarget = h.q('.spos-l-sec-target'), secOrg = h.q('.spos-l-sec-org');
+    var pillConn = h.q('.spos-l-pill-conn'), pillRefresh = h.q('.spos-l-pill-refresh'), pillOrg = h.q('.spos-l-pill-org');
+    var personUrn = h.q('.spos-l-person-urn'), orgUrn = h.q('.spos-l-org-urn'), expAccess = h.q('.spos-l-exp-access'), expRefresh = h.q('.spos-l-exp-refresh');
+    var connect = h.q('.spos-l-connect'), targetCurrent = h.q('.spos-l-target-current'), togPersonal = h.q('.spos-l-toggle-personal'), togOrg = h.q('.spos-l-toggle-org');
+    var orgBody = h.q('.spos-l-org-body'), orgRow = h.q('.spos-l-org-row'), discover = h.q('.spos-l-discover');
+    var required = [page, consent, allow, msg, secStatus, secTarget, secOrg, pillConn, pillRefresh, pillOrg, personUrn, orgUrn, expAccess, expRefresh,
+      connect, targetCurrent, togPersonal, togOrg, orgBody, orgRow, discover];
+    var START = { x: 300, y: 600 };
+    function setPill(el, on, yes, no) { el.textContent = on ? yes : no; el.classList.toggle('spos-ad-pill-on', on); el.classList.toggle('spos-ad-pill-off', !on); }
+    function say2(text) { msg.textContent = text; msg.classList.add('spos-on'); }
+    function scrollTo(screen, el, offset) {
+      var top = Math.max(0, el.offsetTop - (offset == null ? 16 : offset));
+      var instant = !!(screen.closest && screen.closest('.spos-seeking'));
+      if (screen.scrollTo) screen.scrollTo({ top: top, behavior: instant ? 'auto' : 'smooth' }); else screen.scrollTop = top;
+    }
+    var script = [
+      // Scene 1: nothing connected
+      { t: 0, run: function () { h.jumpCursor(START); h.say('A boutique brokerage sets up its workspace. First, <b>LinkedIn</b>.'); } },
+      { t: 1000, run: h.hoverStep(secStatus, 0, 0, false, 'Nothing connected yet. Only booleans and bookmarks live here; <b>token values never leave the server</b>.') },
+      { t: 3000, run: function () { secStatus.classList.remove('spos-hover'); h.hideBox(); } },
+      { t: 3100, run: h.hoverStep(secTarget, 0, 0, false, 'Publish as has no setting yet, and the <b>Organization Page</b> option is locked until a page is linked.') },
+      { t: 5100, run: function () { secTarget.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(connect, 0, 0)); } },
+      { t: 6100, run: h.hoverStep(connect, 0, 0, true, '<b>Reconnect LinkedIn</b> runs the one OAuth grant everything else builds on.') },
+      { t: 7000, run: h.clickStep(connect, 0, 0, 'Off to LinkedIn.') },
+      // Scene 2: authorization
+      { t: 7300, run: function () { connect.classList.remove('spos-hover'); h.hideBox(); page.classList.add('spos-gone'); consent.classList.add('spos-shown'); h.say('LinkedIn asks the broker, not the platform. The permissions are listed in plain words.'); } },
+      { t: 8600, run: function () { h.moveCursor({ x: 500, y: 300 }); } },
+      { t: 9700, run: function () { h.say('Posts on her behalf, the pages she manages, and their reporting. Nothing more.'); } },
+      { t: 11300, run: h.hoverStep(allow, 0, 0, true, '<b>Allow</b>. She can revoke this from LinkedIn at any time.') },
+      { t: 12300, run: h.clickStep(allow, 0, 0, 'Granted.') },
+      // Scene 3: connected
+      { t: 12550, run: function () {
+        allow.classList.remove('spos-hover'); h.hideBox(); consent.classList.remove('spos-shown'); page.classList.remove('spos-gone');
+        say2('LinkedIn connected. Publishing as: personal.');
+        setPill(pillConn, true, 'connected', 'not connected'); setPill(pillRefresh, true, 'yes', 'no');
+        personUrn.textContent = 'urn:li:person:7Xk2mQ9LpR'; expAccess.textContent = 'in 59 days'; expRefresh.textContent = 'in 364 days';
+        togPersonal.classList.add('spos-ad-toggle-active'); targetCurrent.textContent = 'Current setting: new drafts will publish to the Personal profile.';
+        h.say('Back on the page. <b>Connected</b>, refresh token on file, expiries bookmarked. The tokens are stored encrypted.');
+      } },
+      { t: 14300, run: h.hoverStep(secStatus, 0, 0, false, 'The platform refreshes the token on its own before it expires. Nobody logs in twice.') },
+      { t: 16300, run: function () { secStatus.classList.remove('spos-hover'); h.hideBox(); scrollTo(page, secTarget, 120); } },
+      { t: 17200, run: h.hoverStep(togPersonal, 0, 0, true, '<b>Personal profile</b> is the default. Market notes go out under her own name.') },
+      { t: 19000, run: function () { togPersonal.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(discover, 0, 0)); } },
+      { t: 20000, run: h.hoverStep(discover, 0, 0, true, 'Listings belong on the brokerage page. <b>Connect Org Page</b> finds the pages she administers.') },
+      { t: 21100, run: h.clickStep(discover, 0, 0, 'Discovering.') },
+      { t: 21350, run: function () { discover.classList.remove('spos-hover'); h.hideBox(); discover.classList.add('spos-busy'); discover.textContent = 'Discovering...'; h.say('Discovery uses the token already on file. This is linking, not another sign in.'); } },
+      { t: 23000, run: function () {
+        discover.classList.remove('spos-busy'); discover.textContent = 'Connect Org Page (run discovery)';
+        say2('Exactly one administered organization found and connected.');
+        orgBody.classList.add('spos-gone'); orgRow.classList.add('spos-shown');
+        setPill(pillOrg, true, 'configured', 'not configured'); orgUrn.textContent = 'urn:li:organization:4471820';
+        togOrg.classList.remove('spos-l-disabled');
+        h.say('<b>Harbor Lane Realty</b> is the one page she administers. Linked, and the Organization Page option unlocks.');
+      } },
+      // Scene 4: switch destinations
+      { t: 25000, run: function () { scrollTo(page, secTarget, 120); } },
+      { t: 25900, run: h.hoverStep(togOrg, 0, 0, true, '<b>Organization Page</b>: this week the listings go out from the brokerage.') },
+      { t: 26900, run: h.clickStep(togOrg, 0, 0, 'Switched.') },
+      { t: 27150, run: function () {
+        togOrg.classList.remove('spos-hover'); h.hideBox(); togOrg.classList.add('spos-ad-toggle-active'); togPersonal.classList.remove('spos-ad-toggle-active');
+        say2('Publishing as: organization.'); targetCurrent.textContent = 'Current setting: new drafts will publish to the Organization Page.';
+        h.say('New drafts are stamped for the page. Drafts already written keep the destination they were born with.');
+      } },
+      { t: 29200, run: h.hoverStep(togPersonal, 0, 0, true, 'Next week, a market note in her own voice. <b>Personal profile</b> again.') },
+      { t: 30300, run: h.clickStep(togPersonal, 0, 0, 'Switched back.') },
+      { t: 30550, run: function () {
+        togPersonal.classList.remove('spos-hover'); h.hideBox(); togPersonal.classList.add('spos-ad-toggle-active'); togOrg.classList.remove('spos-ad-toggle-active');
+        say2('Publishing as: personal.'); targetCurrent.textContent = 'Current setting: new drafts will publish to the Personal profile.';
+        h.say('One grant, two destinations, chosen per draft. Page posts feed analytics; profile posts stay hers.');
+      } },
+      { t: 32600, run: function () { h.moveCursor(START); h.say('End of recording.'); } }
+    ];
+    function reset() {
+      page.classList.remove('spos-gone'); consent.classList.remove('spos-shown'); page.scrollTop = 0;
+      [secStatus, secTarget, secOrg, connect, allow, togPersonal, togOrg, discover].forEach(function (el) { el.classList.remove('spos-hover', 'spos-pressed', 'spos-busy'); });
+      msg.textContent = ''; msg.classList.remove('spos-on');
+      setPill(pillConn, false, 'connected', 'not connected'); setPill(pillRefresh, false, 'yes', 'no'); setPill(pillOrg, false, 'configured', 'not configured');
+      personUrn.textContent = 'not stored'; orgUrn.textContent = 'not stored'; expAccess.textContent = 'not stored'; expRefresh.textContent = 'not stored';
+      targetCurrent.textContent = 'Current setting: not chosen yet; new drafts cannot resolve a destination until one is selected.';
+      togPersonal.classList.remove('spos-ad-toggle-active'); togOrg.classList.remove('spos-ad-toggle-active'); togOrg.classList.add('spos-l-disabled');
+      orgBody.classList.remove('spos-gone'); orgRow.classList.remove('spos-shown');
+      discover.textContent = 'Connect Org Page (run discovery)';
+    }
+    return { script: script, duration: 34000, reset: reset, required: required, start: START,
+      reducedMotion: function () { setPill(pillConn, true, 'connected', 'not connected'); togPersonal.classList.add('spos-ad-toggle-active'); } };
+  }
+
   // ---------- Controller ----------
-  var builders = { create: buildCreate, topics: buildTopics, analytics: buildAnalytics };
+  var builders = { create: buildCreate, topics: buildTopics, analytics: buildAnalytics, linkedin: buildLinkedin };
   var recordings = {};
   Array.prototype.slice.call(root.querySelectorAll('.spos-recording[data-recording]')).forEach(function (el) {
     var name = el.getAttribute('data-recording');

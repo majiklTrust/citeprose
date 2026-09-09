@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy (3.3.27) -->
+  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy; LinkedIn Connection (3.3.28) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -75,7 +75,7 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.27): three scripted replays a visitor can pick
+    <!-- Showcase replay (3.3.28): four scripted replays a visitor can pick
          between; only the selected one plays. Markup mirrors
          public_templates/dashboard.jsx and public/topics/index.html with
          spos- prefixed classes so app.css does not restyle it. Styles in
@@ -98,7 +98,12 @@
              performance by topic, posting time heatmap, follower
              demographics, narrative summary), then the Advocacy page
              (members, generate variants from a post, a member approves
-             their personalized variant). All figures are illustrative. -->
+             their personalized variant). All figures are illustrative.
+           Recording "linkedin" (boutique real estate brokerage): the
+             LinkedIn Connection page, the single OAuth grant, the status
+             rows filling in, discovering and linking the brokerage page,
+             and switching Publish as between the personal profile and the
+             Organization Page. URNs and dates are illustrative. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -109,6 +114,7 @@
         </h2>
         <div class="spos-tabs" role="tablist" aria-label="Choose a walkthrough">
           <button type="button" class="spos-tab spos-active" role="tab" aria-selected="true" data-recording="create">Create &amp; Publish</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="linkedin">Personal &amp; Organizational</button>
           <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="topics">Topics &amp; Feeds</button>
           <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="analytics">Analytics &amp; Advocacy</button>
         </div>
@@ -682,6 +688,79 @@ If you run a clinic, the numbers in this post are worth a look. If you are a pat
                       <tr><td>Dr. Samuel Okafor</td><td><span class="spos-ad-pill spos-ad-pill-off">no</span></td><td>manual</td><td>none</td><td></td><td>none</td><td><span class="spos-tp-btn spos-ad-btn-danger spos-tp-btn-sm">Disable</span></td></tr>
                     </tbody></table>
                   </div>
+                </div>
+              </div>
+
+              <div class="spos-highlight"></div>
+              <div class="spos-ripple"></div>
+              <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+            </div>
+              </div>
+            </div>
+            <div class="spos-recording" data-recording="linkedin">
+              <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <!-- Screen A: the LinkedIn Connection page (light theme, mirrors public_templates/linkedin-index.html and public/linkedin/linkedin.js) -->
+              <div class="spos-screen spos-tp-screen spos-li-screen spos-l-screen-page">
+                <div class="spos-tp-container spos-li-container">
+                  <div class="spos-tp-nav"><span class="spos-tp-nav-link">Dashboard</span><span class="spos-tp-nav-link spos-tp-nav-active">LinkedIn</span><span class="spos-tp-nav-link">Analytics</span><span class="spos-tp-nav-link">Advocacy</span><span class="spos-tp-nav-link">Image Studio</span><span class="spos-tp-nav-link">Topics</span><span class="spos-tp-nav-link">Feeds</span><span class="spos-tp-nav-link">Billing</span><span class="spos-tp-nav-link">Manage</span></div>
+                  <h1 class="spos-tp-h1">LinkedIn Connection</h1>
+                  <div class="spos-an-subtitle">One OAuth grant powers everything here. Org connection and token controls layer on top of it; nothing re-authenticates twice.</div>
+                  <div class="spos-tp-msg spos-l-msg"></div>
+
+                  <div class="spos-tp-section spos-l-sec-status">
+                    <h2 class="spos-tp-h2">Status</h2>
+                    <div class="spos-an-note-lg">Booleans and bookmarks only. Token values never leave the server.</div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">LinkedIn</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-off spos-l-pill-conn">not connected</span></span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Refresh Token on File</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-off spos-l-pill-refresh">no</span></span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Organization page</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-off spos-l-pill-org">not configured</span></span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Person URN</span><span class="spos-ad-v spos-l-person-urn">not stored</span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Org URN</span><span class="spos-ad-v spos-l-org-urn">not stored</span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Access Token Expiry</span><span class="spos-ad-v spos-l-exp-access">not stored</span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Refresh Token Expiry</span><span class="spos-ad-v spos-l-exp-refresh">not stored</span></div>
+                    <div class="spos-li-actions"><span class="spos-tp-btn spos-tp-btn-primary spos-l-connect">Reconnect LinkedIn</span><span class="spos-li-hint">Re-runs the single OAuth flow. Use it to change scopes, or roughly once a year when the refresh token reaches end of life.</span></div>
+                  </div>
+
+                  <div class="spos-tp-section spos-l-sec-target">
+                    <h2 class="spos-tp-h2">Publish as</h2>
+                    <div class="spos-an-note-lg">Sets where NEW drafts will publish, stamped into each post at the moment it is created. Personal profile: the post appears under the connected person's own LinkedIn profile. Organization Page: the post appears on the connected page and feeds the analytics and advocacy loop.</div>
+                    <div class="spos-an-note-lg spos-l-target-current">Current setting: not chosen yet; new drafts cannot resolve a destination until one is selected.</div>
+                    <div class="spos-ad-toggle-wrap"><span class="spos-ad-toggle spos-l-toggle-personal">Personal profile</span><span class="spos-ad-toggle spos-l-toggle-org spos-l-disabled">Organization Page</span></div>
+                  </div>
+
+                  <div class="spos-tp-section spos-l-sec-org">
+                    <h2 class="spos-tp-h2">Organization Page</h2>
+                    <div class="spos-an-note-lg">Discovery lists the organizations the connected member administers, using the token already on file. This is linking, not authentication.</div>
+                    <div class="spos-ad-empty spos-l-org-body">No organization page connected yet.</div>
+                    <div class="spos-ad-row spos-l-org-row"><span class="spos-ad-k">Connected org</span><span class="spos-ad-v spos-l-org-row-urn">urn:li:organization:4471820</span></div>
+                    <div class="spos-li-actions"><span class="spos-tp-btn spos-tp-btn-secondary spos-l-discover">Connect Org Page (run discovery)</span></div>
+                  </div>
+
+                  <div class="spos-tp-section">
+                    <h2 class="spos-tp-h2">App Credentials</h2>
+                    <div class="spos-an-note-lg">Per-workspace LinkedIn app configuration. Client id and secret are an atomic pair, stored encrypted; leave blank to keep the platform defaults.</div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Workspace app pair</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-mode">using platform default</span></span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen B: the authorization step on LinkedIn (illustrative, no brand marks; the permission list mirrors src/config/linkedin-scopes.js in plain words) -->
+              <div class="spos-screen spos-li-consent spos-l-screen-consent">
+                <div class="spos-li-consent-card">
+                  <div class="spos-li-consent-brand">Sign in to LinkedIn</div>
+                  <div class="spos-li-consent-user"><span class="spos-li-avatar">JE</span><span><b>Jordan Ellis</b><br><span class="spos-li-consent-sub">Broker and Owner, Harbor Lane Realty</span></span></div>
+                  <div class="spos-li-consent-title">Market Intelligence would like to:</div>
+                  <ul class="spos-li-consent-list">
+                    <li>Use your name and photo</li>
+                    <li>Use the primary email address associated with your account</li>
+                    <li>Create, modify, and delete posts, comments, and reactions on your behalf</li>
+                    <li>Retrieve your organizations' posts and administer the pages you manage</li>
+                    <li>Retrieve reporting for your organizations' posts and followers</li>
+                  </ul>
+                  <div class="spos-li-consent-note">You can stop this access at any time from your LinkedIn settings.</div>
+                  <div class="spos-li-consent-actions"><span class="spos-li-consent-cancel">Cancel</span><span class="spos-li-consent-allow spos-l-allow">Allow</span></div>
                 </div>
               </div>
 

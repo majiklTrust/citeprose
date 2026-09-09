@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replay: Create, Edit, Publish (3.3.13) -->
+  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy (3.3.22) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -76,16 +76,28 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.13): a scripted replay of a tenant user
-         activating Create on the dashboard (Create a post modal), then
-         editing the pending post (Edit Post modal), then opening the
-         post detail modal and publishing it. Markup mirrors public_templates/dashboard.jsx with
-         spos- prefixed classes so app.css does not restyle it. Styles
-         in /styles/showcase-poc.css, playback in
-         /scripts/showcase-poc.js (0.4x, loops with a 3 second hold).
-         The caption in the window bar tracks the recorded events.
-         Post text, counts, names and the genres after "no genre" are
-         illustrative. -->
+    <!-- Showcase replay (3.3.22): three scripted replays a visitor can pick
+         between; only the selected one plays. Markup mirrors
+         public_templates/dashboard.jsx and public/topics/index.html with
+         spos- prefixed classes so app.css does not restyle it. Styles in
+         /styles/showcase-poc.css, playback in /scripts/showcase-poc.js
+         (0.4x, loops with a 3 second hold; a player bar below the window
+         with restart, play or pause, a seekable progress bar and a time
+         readout). The caption in the window bar tracks the recorded
+         events. Post text, counts, names, feed names,
+         quality scores and the genres after "no genre" are illustrative.
+           Recording "create": Create a post, Edit Post, publish from the
+             post detail modal.
+           Recording "topics" (finance tenant): add a topic on the Topics
+             page, generate suggestions, save, discover feeds for it, then
+             Generate from Quick Actions and review the draft's Sources
+             Referenced and Quality Assessment.
+           Recording "analytics" (orthopedics and sports medicine practice):
+             the Analytics page (program intelligence, amplification, posts,
+             performance by topic, posting time heatmap, follower
+             demographics, narrative summary), then the Advocacy page
+             (members, generate variants from a post, a member approves
+             their personalized variant). All figures are illustrative. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -94,10 +106,16 @@
           <span class="spos-headline-line">Into <span class="spos-headline-mark">Source-Backed</span> Posts</span>
           <span class="spos-headline-line spos-headline-close">To Publish With Confidence.</span>
         </h2>
+        <div class="spos-tabs" role="tablist" aria-label="Choose a walkthrough">
+          <button type="button" class="spos-tab spos-active" role="tab" aria-selected="true" data-recording="create">Create &amp; Publish</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="topics">Topics &amp; Feeds</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="analytics">Analytics &amp; Advocacy</button>
+        </div>
         <div class="shot-window spos-display">
           <div class="shot-window-bar"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><span class="spos-callout" aria-live="polite"></span></div>
-        <div class="spos-frame">
-          <div class="spos-scaler">
+          <div class="spos-frame">
+            <div class="spos-recording spos-active" data-recording="create">
+              <div class="spos-scaler">
             <div class="spos-stage" aria-hidden="true">
               <div class="spos-screen">
                 <div class="spos-app">
@@ -124,26 +142,26 @@
                       <div class="spos-title">Queue <span class="spos-badge spos-queue-badge">1</span></div>
                       <div class="spos-posts">
                         <div class="spos-post spos-pending-card">
-                          <div class="spos-badges"><span class="spos-topic">cloud-security</span><span class="spos-status spos-pending-status">pending approval</span></div>
-                          <div class="spos-preview spos-pending-preview">Zero Trust is not a product you buy, it is a set of decisions you keep making. This week two reports landed that make the same point from opposite directions...</div>
+                          <div class="spos-badges"><span class="spos-topic">customer-loyalty</span><span class="spos-status spos-pending-status">pending approval</span></div>
+                          <div class="spos-preview spos-pending-preview">Points are not loyalty. Two shopper studies landed this week and both point the same direction: members who redeem within thirty days come back three times as often...</div>
                           <div class="spos-actions spos-pending-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm spos-edit-btn">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">ai-platforms</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Most teams measure model cost per call. The teams that stay in budget measure cost per outcome, and the difference shows up in the ledger within a quarter.</div>
+                          <div class="spos-badges"><span class="spos-topic">holiday-retail</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Holiday hiring starts in September for a reason. The stores that train seasonal staff on the returns desk, not just the register, have a far quieter January.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Evidence, not intent, is what an assessor scores. Three controls where most SMBs have the practice but not the artifact, and how to close that gap.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Nobody remembers the price of the coffee. They remember whether someone said hello. Three low cost changes to the first ten seconds in the store.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                       </div>
                       <div class="spos-title spos-title-gap">Recent Posts</div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-posted">posted</span></div>
-                          <div class="spos-preview">CMMC Level 2 assessments are now scheduling into next spring. If your evidence library is still a folder of screenshots, this is the month to fix that.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Curbside pickup is no longer a pandemic feature. It is a Tuesday. Here is what the customers who use it every week told us they want next.</div>
                         </div>
                       </div>
                     </div>
@@ -164,9 +182,9 @@
                       </div>
                       <div class="spos-panel">
                         <div class="spos-title">Topic Coverage</div>
-                        <div class="spos-cov-row"><span>cloud-security</span><span class="spos-cov-count">14</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
-                        <div class="spos-cov-row"><span>ai-platforms</span><span class="spos-cov-count">9</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
-                        <div class="spos-cov-row"><span>cmmc</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
+                        <div class="spos-cov-row"><span>customer-loyalty</span><span class="spos-cov-count">14</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
+                        <div class="spos-cov-row"><span>holiday-retail</span><span class="spos-cov-count">9</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
+                        <div class="spos-cov-row"><span>store-experience</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
                       </div>
                     </div>
 
@@ -177,7 +195,7 @@
                         <div class="spos-log"><time>09:38:52</time><span class="spos-lvl">info</span><span>post 3a91 moved to pending_approval</span></div>
                         <div class="spos-log"><time>09:38:49</time><span class="spos-lvl">info</span><span>quality review passed (overall 8)</span></div>
                         <div class="spos-log"><time>09:38:31</time><span class="spos-lvl">info</span><span>research: 4 independent sources, corroborated</span></div>
-                        <div class="spos-log"><time>09:37:58</time><span class="spos-lvl">info</span><span>cycle 7f2c1a9e started, topic cloud-security</span></div>
+                        <div class="spos-log"><time>09:37:58</time><span class="spos-lvl">info</span><span>cycle 7f2c1a9e started, topic customer-loyalty</span></div>
                         <div class="spos-log"><time>08:12:04</time><span class="spos-lvl">info</span><span>LinkedIn token refreshed</span></div>
                       </div>
                     </div>
@@ -193,8 +211,8 @@
                     <span class="spos-composer-label">Genre</span>
                     <div class="spos-genres">
                       <div class="spos-genre spos-selected spos-genre-none"><input type="radio" name="spos-genre" checked disabled><span class="spos-genre-main"><span class="spos-genre-name">no genre</span><span class="spos-genre-desc">Start from a blank canvas and write the post yourself.</span></span></div>
-                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A research grounded point of view on one development in the topic.</span></span></div>
-                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">metric_brief</span><span class="spos-genre-desc">Built around one verified metric from the workspace metric store.</span></span></div>
+                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A point of view on one shopper trend, grounded in this week's research.</span></span></div>
+                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">seasonal_brief</span><span class="spos-genre-desc">A short, dated note built around one verified figure for the season.</span></span></div>
                     </div>
                     <div class="spos-composer-actions"><span class="spos-btn spos-btn-primary spos-btn-full">New Post</span></div>
                   </div>
@@ -207,22 +225,22 @@
                     <h3 class="spos-modal-heading-top">Edit Post <span class="spos-dest-badge">ORG</span></h3>
                     <div class="spos-mb">
                       <span class="spos-form-label">Title</span>
-                      <div class="spos-form-input">Zero Trust is a set of decisions, not a purchase</div>
+                      <div class="spos-form-input">Points are not loyalty</div>
                     </div>
                     <div class="spos-mb">
                       <span class="spos-form-label">Content</span>
-                      <div class="spos-form-textarea spos-edit-textarea">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+                      <div class="spos-form-textarea spos-edit-textarea">Points are not loyalty.
 
-This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+Two shopper studies landed this week and both point the same direction: members who redeem a reward within thirty days of joining come back three times as often as members who never redeem. The card in the wallet is not the habit. The first redemption is.
 
-Three decisions worth revisiting this quarter:
-1. Where does a session get re-checked, and by what?
-2. Which service accounts still hold standing privilege?
-3. What is logged when a policy says no?<span class="spos-caret"></span></div>
+Three things worth changing before the holiday rush:
+1. Make the first reward reachable in one visit, not five.
+2. Put the redemption prompt at the register, not in the app.
+3. Thank the redeemer by name the next time they walk in.<span class="spos-caret"></span></div>
                     </div>
                     <div class="spos-mb-lg">
                       <span class="spos-form-label">Hashtags (comma-separated)</span>
-                      <div class="spos-form-input">ZeroTrust, CloudSecurity, CMMC</div>
+                      <div class="spos-form-input">Loyalty, Retail, CustomerExperience</div>
                     </div>
                     <div class="spos-studio-panel"><div class="spos-studio-head">Post Image</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
                     <div class="spos-modal-actions-end">
@@ -236,17 +254,17 @@ Three decisions worth revisiting this quarter:
                 <div class="spos-modal-overlay spos-detail-overlay">
                   <div class="spos-modal spos-detail-modal">
                     <span class="spos-modal-close">&#x2715;</span>
-                    <div class="spos-badges-wrap"><span class="spos-topic">cloud-security</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
-                    <h3 class="spos-modal-heading">Zero Trust is a set of decisions, not a purchase</h3>
-                    <div class="spos-modal-body">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+                    <div class="spos-badges-wrap"><span class="spos-topic">customer-loyalty</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
+                    <h3 class="spos-modal-heading">Points are not loyalty</h3>
+                    <div class="spos-modal-body">Points are not loyalty.
 
-This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+Two shopper studies landed this week and both point the same direction: members who redeem a reward within thirty days of joining come back three times as often as members who never redeem. The card in the wallet is not the habit. The first redemption is.
 
-Three decisions worth revisiting this quarter:
-1. Where does a session get re-checked, and by what?
-2. Which service accounts still hold standing privilege?
-3. What is logged when a policy says no?</div>
-                    <div class="spos-hashtags"><span class="spos-hashtag">#ZeroTrust</span><span class="spos-hashtag">#CloudSecurity</span><span class="spos-hashtag">#CMMC</span></div>
+Three things worth changing before the holiday rush:
+1. Make the first reward reachable in one visit, not five.
+2. Put the redemption prompt at the register, not in the app.
+3. Thank the redeemer by name the next time they walk in.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#Loyalty</span><span class="spos-hashtag">#Retail</span><span class="spos-hashtag">#CustomerExperience</span></div>
                     <div class="spos-modal-rewrite"><span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-xs">Rewrite with AI</span></div>
                     <div class="spos-modal-move">
                       <div class="spos-modal-move-label">Move this post to:</div>
@@ -254,16 +272,16 @@ Three decisions worth revisiting this quarter:
                     </div>
                     <div class="spos-source-list">
                       <div class="spos-section-heading-cyan">Sources (4)</div>
-                      <div class="spos-source-item"><span>Federal audit summary, cloud identity controls</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>Breach post mortem, session re-validation gap</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>Vendor briefing, standing privilege in service accounts</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Industry survey, policy decision logging</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Retail industry association: loyalty program benchmark, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Shopper survey: first redemption and repeat visits</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Regional grocer case study: reward at the register</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Trade press: what a loyalty point costs a small retailer</span><span class="spos-source-tier">B</span></div>
                     </div>
                     <div class="spos-section-divider">
                       <div class="spos-section-heading">Post Image</div>
                       <div class="spos-detail-stack">
                         <div class="spos-image-choice"><input type="radio" name="spos-image" disabled> No image</div>
-                        <div class="spos-image-choice"><input type="radio" name="spos-image" checked disabled> Article image (federal audit summary)</div>
+                        <div class="spos-image-choice"><input type="radio" name="spos-image" checked disabled> Article image (loyalty benchmark report)</div>
                         <div class="spos-studio-panel"><div class="spos-studio-head">Image Studio</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
                       </div>
                     </div>
@@ -282,10 +300,382 @@ Three decisions worth revisiting this quarter:
                 </svg>
               </div>
             </div>
+
+              </div>
+            </div>
+            <div class="spos-recording" data-recording="topics">
+              <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <!-- Screen A: the Topics manager page (light theme, mirrors public/topics/index.html) -->
+              <div class="spos-screen spos-tp-screen spos-t-screen-topics">
+                <div class="spos-tp-container">
+                  <div class="spos-tp-nav"><span class="spos-tp-nav-link spos-t-nav-dashboard">Dashboard</span><span class="spos-tp-nav-link">Feeds</span><span class="spos-tp-nav-link">Analytics</span><span class="spos-tp-nav-link">Image Studio</span><span class="spos-tp-nav-link spos-tp-nav-active">Topics</span><span class="spos-tp-nav-link">Billing</span><span class="spos-tp-nav-link">Manage</span></div>
+                  <h1 class="spos-tp-h1">Topic Management</h1>
+                  <div class="spos-tp-msg spos-t-msg"></div>
+                  <div class="spos-tp-section">
+                    <div class="spos-tp-section-head"><h2 class="spos-tp-h2">New Topic</h2><span class="spos-tp-btn spos-tp-btn-primary spos-t-add-topic">+ Add Topic</span></div>
+                    <div class="spos-tp-form spos-t-create-form">
+                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., First-Time Homebuyers</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Plain language help for buyers in their first year of ownership</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-btn spos-tp-btn-secondary spos-t-suggest">Generate Suggestions</span></div>
+                      <div class="spos-tp-result spos-t-result">
+                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Why an emergency fund starts at $500, not three months of expenses
+The round-up feature that quietly builds a savings habit
+Rate chasing versus staying put: what actually moves the balance
+What the first automatic transfer changes about the second</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#PersonalFinance, #Savings, #CommunityBanking</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Weight (higher = more frequent)</span><div class="spos-tp-input spos-tp-input-sm">1</div></div>
+                        <div class="spos-tp-actions"><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span><span class="spos-tp-btn spos-tp-btn-primary spos-t-save">Save Topic</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="spos-tp-section">
+                    <h2 class="spos-tp-h2">My Topics</h2>
+                    <div class="spos-tp-card spos-t-new-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Emergency Savings Habits</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">emergency-savings-habits</div>
+                      <div class="spos-tp-meta">4 angles, 3 hashtags, <span class="spos-t-mapped-count">0</span> feeds mapped <span class="spos-tp-discover spos-t-discover-link">Discover Feeds</span></div>
+                    </div>
+                    <div class="spos-tp-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">First-Time Homebuyers</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">first-time-homebuyers</div>
+                      <div class="spos-tp-meta">5 angles, 4 hashtags, 3 feeds mapped</div>
+                    </div>
+                    <div class="spos-tp-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Small Business Lending</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">small-business-lending</div>
+                      <div class="spos-tp-meta">3 angles, 3 hashtags, 2 feeds mapped</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Feed discovery modal (mirrors #discover-overlay on public/topics/index.html) -->
+                <div class="spos-tp-overlay spos-t-discover-overlay">
+                  <div class="spos-tp-modal">
+                    <h2 class="spos-tp-h2 spos-t-discover-title">Discovering Feeds for "Emergency Savings Habits"</h2>
+                    <p class="spos-tp-subtitle spos-t-discover-subtitle">Asking AI to suggest feeds, then validating each one...</p>
+                    <div class="spos-tp-loading spos-t-discover-loading">Searching for feeds... This may take 15-30 seconds.</div>
+                    <div class="spos-tp-results spos-t-discover-results">
+                      <div class="spos-tp-dfeed spos-t-dfeed-1"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Savings Habit Lab</span> <span class="spos-tp-dtier">primary</span><div class="spos-tp-dfeed-url">https://savingshabitlab.example/feed.xml</div><div class="spos-tp-dfeed-desc">Weekly research briefs on how households actually save.</div><div class="spos-tp-dfeed-rel">AI: matches all four angles, strongest on automatic transfers and small first balances.</div><ul class="spos-tp-dfeed-hl"><li>Why the first $500 matters more than the target</li></ul></div></div>
+                      <div class="spos-tp-dfeed"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Household Budget Notes</span> <span class="spos-tp-dtier">secondary</span><div class="spos-tp-dfeed-url">https://householdbudgetnotes.example/rss</div><div class="spos-tp-dfeed-desc">Plain language personal finance for working families.</div><div class="spos-tp-dfeed-rel">AI: practical savings habits, light on data, good for examples.</div><ul class="spos-tp-dfeed-hl"><li>The round-up feature, six months in</li></ul></div></div>
+                      <div class="spos-tp-dfeed"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Credit Union Consumer Desk</span> <span class="spos-tp-dtier">secondary</span><div class="spos-tp-dfeed-url">https://cuconsumerdesk.example/feed</div><div class="spos-tp-dfeed-desc">Member education articles from a credit union network.</div><div class="spos-tp-dfeed-rel">AI: covers rate chasing and account switching from the member side.</div><ul class="spos-tp-dfeed-hl"><li>Chasing a higher rate: when it is worth the move</li></ul></div></div>
+                    </div>
+                    <div class="spos-tp-dactions spos-t-discover-actions"><span class="spos-tp-btn spos-tp-btn-primary spos-t-discover-add">Add Selected Feeds</span><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen B: the dashboard; middle column ordered as the real one (AI Model, Quick Actions, Research Monitor) -->
+              <div class="spos-screen spos-t-screen-dash">
+                <div class="spos-app">
+                  <div class="spos-header">
+                    <div>
+                      <div class="spos-header-title">Market Intelligence</div>
+                      <div class="spos-header-subtitle">v{{APPVERSION}}  connected as Jordan Ellis</div>
+                    </div>
+                    <div class="spos-header-controls">
+                      <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
+                      <span class="spos-logout">Logout</span>
+                    </div>
+                  </div>
+                  <div class="spos-stats">
+                    <div class="spos-stat"><div class="spos-stat-label">Total Published</div><div class="spos-stat-value">27</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Posts (10-day)</div><div class="spos-stat-value">2</div><div class="spos-stat-meta">max 4  ready to post</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value">1</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">LinkedIn</div><div class="spos-stat-value spos-stat-value-sm">Connected</div><div class="spos-stat-meta">target: organization</div></div>
+                  </div>
+                  <div class="spos-grid">
+                    <div>
+                      <div class="spos-title">Queue <span class="spos-badge">1</span></div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">first-time-homebuyers</span><span class="spos-status">pending approval</span></div>
+                          <div class="spos-preview">The down payment is not the hard part anymore. Two lender surveys this week say the same thing: closing costs and the first year of ownership are where new buyers get surprised...</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">small-business-lending</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">A line of credit you never draw is not a wasted fee. Three owners on why they opened one in a good year and used it in a bad one.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">fraud-awareness</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Your bank will never ask you to move money to a safe account. The scripts scammers are using this season, and the one question that ends the call.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                      </div>
+                      <div class="spos-title spos-title-gap">Recent Posts</div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">fraud-awareness</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Check fraud is up again. Here is what changed at the branch this year, and what to do before you put one in the mail.</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel"><div class="spos-model-row"><span class="spos-model-label">AI Model</span><span class="spos-model-value">claude-sonnet-4-6</span></div></div>
+                      <div class="spos-panel spos-t-quick-actions">
+                        <div class="spos-title">Quick Actions</div>
+                        <div class="spos-vstack">
+                          <div class="spos-hstack">
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow spos-t-generate">Generate</span>
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Create</span>
+                          </div>
+                          <div class="spos-select spos-t-topic-select">Auto-select topic</div>
+                          <div class="spos-select spos-t-angle-select">Auto-select angle</div>
+                          <div class="spos-toggle-row"><span class="spos-toggle-on">Corroboration ON</span><span class="spos-switch"></span></div>
+                        </div>
+                      </div>
+                      <div class="spos-panel spos-t-monitor">
+                        <div class="spos-title spos-title-flush">Research Monitor <span class="spos-title-meta spos-t-monitor-scope">(all topics)</span></div>
+                        <div class="spos-research-meta">using <span class="spos-cyan spos-t-monitor-using">38</span> articles, last <span class="spos-cyan">20</span> days</div>
+                        <div class="spos-feed-list spos-t-feed-list">
+                          <div class="spos-feed-row"><span class="spos-feed-name">Community Banking Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Consumer Finance Daily (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Local Business Ledger (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Household Money Report (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Regional Economy News (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Savings Habit Lab</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">0</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Household Budget Notes</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">0</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Credit Union Consumer Desk</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">0</span></span></div>
+                        </div>
+                        <span class="spos-btn spos-btn-primary spos-btn-full spos-btn-tight spos-btn-xs">Refresh Feeds Now</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Activity Log</div>
+                        <div class="spos-log"><time>09:41:07</time><span class="spos-lvl">info</span><span>feeds polled: 5 ok, 0 failed, 9 new articles</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Generating Content overlay (mirrors #generate-overlay in public_templates/index.html) -->
+                <div class="spos-gen-overlay spos-t-gen-overlay">
+                  <div class="spos-gen-card">
+                    <div class="spos-gen-spinner"></div>
+                    <div class="spos-gen-title">Generating Content</div>
+                    <div class="spos-gen-sub">Researching sources and composing your post. This may take a moment.</div>
+                    <div class="spos-gen-fine">Your draft is saved automatically.</div>
+                  </div>
+                </div>
+
+                <!-- Draft preview modal (mirrors selectedPost with isPreview) -->
+                <div class="spos-modal-overlay spos-t-draft-overlay">
+                  <div class="spos-modal spos-t-draft-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <div class="spos-badges-wrap"><span class="spos-topic">emergency-savings-habits</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
+                    <h3 class="spos-modal-heading">Why an emergency fund starts at $500</h3>
+                    <div class="spos-modal-body">Three months of expenses is the advice. Five hundred dollars is the habit.
+
+Two numbers from this week's research make the point. The first is how many households cannot cover a surprise car repair without borrowing. The second is how much a balance of just five hundred dollars cuts the odds of an overdraft in the following year.
+
+If you are starting from zero, do not set the three month target yet. Set up one automatic transfer, name the account, and let the first five hundred teach you the rest.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#PersonalFinance</span><span class="spos-hashtag">#Savings</span><span class="spos-hashtag">#CommunityBanking</span></div>
+                    <div class="spos-source-list">
+                      <div class="spos-section-heading-cyan">Sources Referenced</div>
+                      <div class="spos-source-item"><span>Community Banking Weekly: household savings behavior survey, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Consumer Finance Daily: small balances and overdraft rates</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Web search: consumer advocacy column on the first five hundred dollars</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Household Money Report: automatic transfers and account tenure</span><span class="spos-source-tier">B</span></div>
+                    </div>
+                    <div class="spos-quality">
+                      <div class="spos-section-heading">Quality Assessment</div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">hook strength</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">authenticity</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">source grounding</span><div class="spos-quality-bar"><i class="spos-q-9"></i></div><span class="spos-quality-score">9</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">factual caution</span><div class="spos-quality-bar"><i class="spos-q-7"></i></div><span class="spos-quality-score">7</span></div>
+                      <div class="spos-quality-overall">Overall: <strong class="spos-quality-pass">8/10 Pass</strong></div>
+                    </div>
+                    <div class="spos-modal-actions">
+                      <span class="spos-btn spos-btn-approve spos-btn-sm spos-t-queue-btn">Queue for Approval</span>
+                      <span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span>
+                      <span class="spos-btn spos-btn-reject spos-btn-sm">Discard</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="spos-highlight"></div>
+              <div class="spos-ripple"></div>
+              <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+              </div>
+            </div>
+            <div class="spos-recording" data-recording="analytics">
+              <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <!-- Screen A: the Analytics page (light theme, mirrors public_templates/analytics-index.html and public/analytics/analytics.js) -->
+              <div class="spos-screen spos-tp-screen spos-an-screen spos-h-screen-analytics">
+                <div class="spos-tp-container spos-an-container">
+                  <div class="spos-tp-nav"><span class="spos-tp-nav-link">Dashboard</span><span class="spos-tp-nav-link">LinkedIn</span><span class="spos-tp-nav-link spos-tp-nav-active">Analytics</span><span class="spos-tp-nav-link spos-h-nav-advocacy">Advocacy</span><span class="spos-tp-nav-link">Image Studio</span><span class="spos-tp-nav-link">Topics</span><span class="spos-tp-nav-link">Feeds</span><span class="spos-tp-nav-link">Billing</span><span class="spos-tp-nav-link">Manage</span></div>
+                  <h1 class="spos-tp-h1">Analytics</h1>
+                  <div class="spos-an-subtitle">Post performance, topics, timing, and audience for this workspace</div>
+                  <div class="spos-tp-msg spos-h-an-msg"></div>
+                  <div class="spos-an-toolbar"><span class="spos-an-toolbar-label">Window</span><span class="spos-an-select">Last 30 days</span><span class="spos-tp-btn spos-tp-btn-secondary">Reload</span><span class="spos-an-spacer"></span><span class="spos-tp-btn spos-tp-btn-primary spos-h-sync">Sync Now</span><span class="spos-tp-btn spos-tp-btn-primary spos-h-narrative-btn">Narrative summary</span></div>
+
+                  <div class="spos-tp-section spos-h-narrative-section">
+                    <h2 class="spos-tp-h2">Narrative summary</h2>
+                    <div class="spos-an-narrative">Care access carried the month: two posts drew 21,400 impressions and 1,095 clicks, led by "What a 20 minute wait actually costs a clinic" at 12,480 impressions and 58 shares, the most shared post in the window. Patient education was close behind on engagement per impression, with the physical therapy checklist earning 240 likes on 9,760 impressions. Weekday mornings between 7 and 9 outperformed every other slot, and Saturday morning is the only weekend window with measurable reach. Follower growth skewed toward Hospitals and Health Care and senior titles, which matches the clinician led voice of the advocacy program, where 19 member posts activated 14,820 connections against an organization audience of 3,940.</div>
+                    <div class="spos-an-narrative-meta">Window: 30 days. Every figure above is cited from the tables on this page; uncited claims are blocked.</div>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-intel">
+                    <h2 class="spos-tp-h2">Advocacy Program Intelligence <span class="spos-an-badge spos-an-badge-computed">computed</span></h2>
+                    <div class="spos-an-note-lg">First-party program analytics: the variant funnel, member behavior, gate outcomes, content uptake, and activated reach.</div>
+                    <table class="spos-an-table"><thead><tr><th>Measure</th><th>Value</th></tr></thead><tbody>
+                      <tr><td>Variant Funnel</td><td>24 generated, 21 approved, 19 published (79% publish rate)</td></tr>
+                      <tr><td>In Queue / Rejected / Failed</td><td>2 pending, 1 rejected, 2 failed a gate (metric fidelity: 1, injection scan: 1)</td></tr>
+                      <tr><td>Activated Reach</td><td>14,820 connections across 19 published post(s)</td></tr>
+                      <tr><td>Member Reported <span class="spos-an-badge spos-an-badge-pending">self-reported</span></td><td>6,410 impressions, 288 reactions, 41 comments across 12 post(s), latest 2 days ago</td></tr>
+                    </tbody></table>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-amp">
+                    <h2 class="spos-tp-h2">Advocacy Amplification <span class="spos-an-badge spos-an-badge-computed">computed</span></h2>
+                    <div class="spos-an-note-lg">How far workspace content can travel through member profiles versus the organization page.</div>
+                    <table class="spos-an-table"><thead><tr><th>Measure</th><th>Value</th></tr></thead><tbody>
+                      <tr><td>Organization Followers</td><td>3,940 (retrieved 1 day ago)</td></tr>
+                      <tr><td>Total Member Reach (9 members)</td><td>18,275 connections</td></tr>
+                      <tr><td>Amplification Ratio</td><td>4.6x</td></tr>
+                      <tr><td>Posts Amplified</td><td>7 (19 member post(s) published)</td></tr>
+                    </tbody></table>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-posts">
+                    <h2 class="spos-tp-h2">Posts</h2>
+                    <div class="spos-an-note-lg">Values are exactly as LinkedIn returned them, shown with retrieval time.</div>
+                    <table class="spos-an-table"><thead><tr><th>Post</th><th>Topic</th><th class="spos-an-num">Impressions</th><th class="spos-an-num">Clicks</th><th class="spos-an-num">Likes</th><th class="spos-an-num">Comments</th><th class="spos-an-num">Shares</th><th>Retrieved</th></tr></thead><tbody><tr><td><div class="spos-an-post-title">What a 20 minute wait actually costs a clinic</div><div class="spos-an-note">3 weeks ago</div></td><td><span class="spos-an-badge spos-an-badge-topic">care-access</span></td><td class="spos-an-num">12,480</td><td class="spos-an-num">640</td><td class="spos-an-num">312</td><td class="spos-an-num">47</td><td class="spos-an-num">58</td><td class="spos-an-note">1 day ago</td></tr><tr><td><div class="spos-an-post-title">Five questions to ask before your first physical therapy visit</div><div class="spos-an-note">2 weeks ago</div></td><td><span class="spos-an-badge spos-an-badge-topic">patient-education</span></td><td class="spos-an-num">9,760</td><td class="spos-an-num">512</td><td class="spos-an-num">240</td><td class="spos-an-num">31</td><td class="spos-an-num">44</td><td class="spos-an-note">1 day ago</td></tr><tr><td><div class="spos-an-post-title">Why our sports medicine clinic added Saturday hours</div><div class="spos-an-note">12 days ago</div></td><td><span class="spos-an-badge spos-an-badge-topic">care-access</span></td><td class="spos-an-num">8,920</td><td class="spos-an-num">455</td><td class="spos-an-num">201</td><td class="spos-an-num">39</td><td class="spos-an-num">27</td><td class="spos-an-note">1 day ago</td></tr><tr><td><div class="spos-an-post-title">A hip replacement at 70: what recovery really looks like</div><div class="spos-an-note">9 days ago</div></td><td><span class="spos-an-badge spos-an-badge-topic">patient-education</span></td><td class="spos-an-num">7,340</td><td class="spos-an-num">388</td><td class="spos-an-num">178</td><td class="spos-an-num">26</td><td class="spos-an-num">33</td><td class="spos-an-note">1 day ago</td></tr><tr><td><div class="spos-an-post-title">The screening most people skip after 50</div><div class="spos-an-note">5 days ago</div></td><td><span class="spos-an-badge spos-an-badge-topic">preventive-care</span></td><td class="spos-an-num">6,880</td><td class="spos-an-num">402</td><td class="spos-an-num">165</td><td class="spos-an-num">22</td><td class="spos-an-num">29</td><td class="spos-an-note">1 day ago</td></tr></tbody></table>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-topics">
+                    <h2 class="spos-tp-h2">Performance by Topic <span class="spos-an-badge spos-an-badge-computed">computed</span></h2>
+                    <div class="spos-an-note-lg">Aggregates computed by this platform from the stored LinkedIn values.</div>
+                    <table class="spos-an-table"><thead><tr><th>Topic</th><th class="spos-an-num">Measured posts</th><th class="spos-an-num">Impressions</th><th class="spos-an-num">Clicks</th><th class="spos-an-num">Interactions</th><th>Latest retrieval</th></tr></thead><tbody>
+                      <tr><td><span class="spos-an-badge spos-an-badge-topic">care-access</span></td><td class="spos-an-num">2</td><td class="spos-an-num">21,400</td><td class="spos-an-num">1,095</td><td class="spos-an-num">684</td><td class="spos-an-note">1 day ago</td></tr>
+                      <tr><td><span class="spos-an-badge spos-an-badge-topic">patient-education</span></td><td class="spos-an-num">2</td><td class="spos-an-num">17,100</td><td class="spos-an-num">900</td><td class="spos-an-num">552</td><td class="spos-an-note">1 day ago</td></tr>
+                      <tr><td><span class="spos-an-badge spos-an-badge-topic">preventive-care</span></td><td class="spos-an-num">1</td><td class="spos-an-num">6,880</td><td class="spos-an-num">402</td><td class="spos-an-num">216</td><td class="spos-an-note">1 day ago</td></tr>
+                    </tbody></table>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-heat">
+                    <h2 class="spos-tp-h2">Posting Time Heatmap <span class="spos-an-badge spos-an-badge-computed">computed</span></h2>
+                    <div class="spos-an-note-lg">Average impressions by day of week and hour posted (measured posts only).</div>
+                    <div class="spos-hm"><div class="spos-hm-label"></div><div class="spos-hm-hour">0</div><div class="spos-hm-hour">1</div><div class="spos-hm-hour">2</div><div class="spos-hm-hour">3</div><div class="spos-hm-hour">4</div><div class="spos-hm-hour">5</div><div class="spos-hm-hour">6</div><div class="spos-hm-hour">7</div><div class="spos-hm-hour">8</div><div class="spos-hm-hour">9</div><div class="spos-hm-hour">10</div><div class="spos-hm-hour">11</div><div class="spos-hm-hour">12</div><div class="spos-hm-hour">13</div><div class="spos-hm-hour">14</div><div class="spos-hm-hour">15</div><div class="spos-hm-hour">16</div><div class="spos-hm-hour">17</div><div class="spos-hm-hour">18</div><div class="spos-hm-hour">19</div><div class="spos-hm-hour">20</div><div class="spos-hm-hour">21</div><div class="spos-hm-hour">22</div><div class="spos-hm-hour">23</div><div class="spos-hm-label">Mon</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Tue</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Wed</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Thu</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-4"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Fri</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-3"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Sat</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-2"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-label">Sun</div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-1"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div><div class="spos-hm-cell spos-hm-0"></div></div>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-demo">
+                    <h2 class="spos-tp-h2">Follower Demographics</h2>
+                    <div class="spos-an-note-lg">Organization follower counts by industry, seniority, and geography, as returned by LinkedIn.</div>
+                    <div class="spos-an-demo">
+                      <div class="spos-an-demo-col"><h3>industry</h3>
+                        <div class="spos-an-demo-row"><span>Hospitals and Health Care</span><span class="spos-an-demo-count">1,840</span></div>
+                        <div class="spos-an-demo-row"><span>Medical Practices</span><span class="spos-an-demo-count">612</span></div>
+                        <div class="spos-an-demo-row"><span>Wellness and Fitness Services</span><span class="spos-an-demo-count">388</span></div>
+                        <div class="spos-an-demo-row"><span>Insurance</span><span class="spos-an-demo-count">214</span></div>
+                      </div>
+                      <div class="spos-an-demo-col"><h3>seniority</h3>
+                        <div class="spos-an-demo-row"><span>Senior</span><span class="spos-an-demo-count">1,120</span></div>
+                        <div class="spos-an-demo-row"><span>Entry</span><span class="spos-an-demo-count">980</span></div>
+                        <div class="spos-an-demo-row"><span>Manager</span><span class="spos-an-demo-count">640</span></div>
+                        <div class="spos-an-demo-row"><span>Director</span><span class="spos-an-demo-count">310</span></div>
+                      </div>
+                      <div class="spos-an-demo-col"><h3>geo</h3>
+                        <div class="spos-an-demo-row"><span>Greater Chicago Area</span><span class="spos-an-demo-count">2,210</span></div>
+                        <div class="spos-an-demo-row"><span>Milwaukee Area</span><span class="spos-an-demo-count">490</span></div>
+                        <div class="spos-an-demo-row"><span>Indianapolis Area</span><span class="spos-an-demo-count">260</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen B: the Advocacy page (mirrors public_templates/advocacy-index.html and public/advocacy/advocacy.js) -->
+              <div class="spos-screen spos-tp-screen spos-ad-screen spos-h-screen-advocacy">
+                <div class="spos-tp-container spos-ad-container">
+                  <div class="spos-tp-nav"><span class="spos-tp-nav-link">Dashboard</span><span class="spos-tp-nav-link">LinkedIn</span><span class="spos-tp-nav-link">Analytics</span><span class="spos-tp-nav-link spos-tp-nav-active">Advocacy</span><span class="spos-tp-nav-link">Image Studio</span><span class="spos-tp-nav-link">Topics</span><span class="spos-tp-nav-link">Feeds</span><span class="spos-tp-nav-link">Billing</span><span class="spos-tp-nav-link">Manage</span></div>
+                  <h1 class="spos-tp-h1">Advocacy</h1>
+                  <div class="spos-an-subtitle">Amplify workspace content through personal profiles. Your profile, your consent, your approvals.</div>
+                  <div class="spos-tp-msg spos-h-ad-msg"></div>
+
+                  <div class="spos-tp-section spos-h-sec-me">
+                    <h2 class="spos-tp-h2">My Participation</h2>
+                    <div class="spos-an-note-lg">Connecting is your choice alone. In manual mode nothing publishes to your profile without your explicit approval of each post.</div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Enabled</span><span class="spos-ad-v">3 months ago</span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Personal LinkedIn</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-on">connected</span></span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Consent</span><span class="spos-ad-v">3 months ago (version 3)</span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">Mode</span><span class="spos-ad-v"><span class="spos-ad-pill spos-ad-pill-mode">manual</span></span></div>
+                    <div class="spos-ad-row"><span class="spos-ad-k">First-degree connections</span><span class="spos-ad-v">2,140</span></div>
+                    <div class="spos-ad-toggle-wrap"><span class="spos-ad-toggle spos-ad-toggle-active">Manual: I approve every post</span><span class="spos-ad-toggle">Auto: publish approved variants for me</span></div>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-queue">
+                    <h2 class="spos-tp-h2">Post Variants Queue</h2>
+                    <div class="spos-an-note-lg">Variants generated for you from workspace posts. Approve as-is, edit then approve, or reject. Nothing publishes to your profile without your approval.</div>
+                    <div class="spos-ad-empty spos-h-queue-empty">No variants yet. When the owner generates from a workspace post, yours appear here.</div>
+                    <div class="spos-ad-variant spos-h-variant">
+                      <div class="spos-ad-hint">Variant #31 from "What a 20 minute wait actually costs a clinic", 1 minute ago</div>
+                      <div class="spos-ad-variant-edit spos-h-variant-text">I have watched a 20 minute wait turn a patient who arrived ready to talk about their knee into a patient who just wants to leave.
+
+That is the real cost. Not the schedule, the conversation.
+
+Since our practice moved to 10 minute buffers and a text when we run behind, no-shows are down and the first two minutes of every visit are about the patient again.
+
+If you run a clinic, the numbers in this post are worth a look. If you are a patient, ask what your practice does when it runs late. The answer tells you a lot.</div>
+                      <span class="spos-tp-btn spos-tp-btn-primary spos-h-approve">Approve</span><span class="spos-tp-btn spos-ad-btn-danger">Reject</span>
+                    </div>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-generate">
+                    <h2 class="spos-tp-h2">Generate Variants</h2>
+                    <div class="spos-an-note-lg">Creates one personalized variant per connected member from a workspace post, behind the full safety gate chain. Members approve their own.</div>
+                    <span class="spos-ad-label">Source post</span>
+                    <span class="spos-an-select spos-ad-select spos-h-source-select">Select a published post</span>
+                    <div class="spos-ad-actions"><span class="spos-tp-btn spos-tp-btn-primary spos-h-generate">Generate Variant Post</span></div>
+                    <div class="spos-ad-empty spos-h-gen-status">No variants generated yet.</div>
+                  </div>
+
+                  <div class="spos-tp-section spos-h-sec-members">
+                    <h2 class="spos-tp-h2">Members</h2>
+                    <div class="spos-an-note-lg">Enabling adds a member to the program; they still must consent and connect themselves.</div>
+                    <table class="spos-an-table spos-ad-table"><thead><tr><th>Member</th><th>Connected</th><th>Mode</th><th>Consent</th><th>Connections</th><th>Voice note</th><th></th></tr></thead><tbody>
+                      <tr><td>Dr. Priya Natarajan</td><td><span class="spos-ad-pill spos-ad-pill-on">yes</span></td><td>manual</td><td>3 months ago</td><td>2,140</td><td>saved 2 weeks ago</td><td><span class="spos-tp-btn spos-ad-btn-danger spos-tp-btn-sm">Disable</span></td></tr>
+                      <tr><td>Marcus Bell, PT, DPT</td><td><span class="spos-ad-pill spos-ad-pill-on">yes</span></td><td>auto</td><td>2 months ago</td><td>1,380</td><td>saved 1 month ago</td><td><span class="spos-tp-btn spos-ad-btn-danger spos-tp-btn-sm">Disable</span></td></tr>
+                      <tr><td>Elena Ruiz, RN</td><td><span class="spos-ad-pill spos-ad-pill-on">yes</span></td><td>manual</td><td>6 weeks ago</td><td>3,050</td><td>saved 6 weeks ago</td><td><span class="spos-tp-btn spos-ad-btn-danger spos-tp-btn-sm">Disable</span></td></tr>
+                      <tr><td>Dr. Samuel Okafor</td><td><span class="spos-ad-pill spos-ad-pill-off">no</span></td><td>manual</td><td>none</td><td></td><td>none</td><td><span class="spos-tp-btn spos-ad-btn-danger spos-tp-btn-sm">Disable</span></td></tr>
+                    </tbody></table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="spos-highlight"></div>
+              <div class="spos-ripple"></div>
+              <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+            </div>
+              </div>
+            </div>
           </div>
         </div>
+        <div class="spos-player" role="group" aria-label="Recording playback controls">
+          <button type="button" class="spos-pbtn spos-ctl-restart" aria-label="Restart the recording">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+          </button>
+          <button type="button" class="spos-pbtn spos-ctl-play" aria-label="Pause the recording">
+            <svg class="spos-ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg>
+            <svg class="spos-ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          </button>
+          <div class="spos-seek" role="slider" tabindex="0" aria-label="Recording position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="spos-seek-track"><div class="spos-seek-fill"></div><div class="spos-seek-knob"></div></div>
+          </div>
+          <div class="spos-time"><span class="spos-time-cur">0:00</span> / <span class="spos-time-dur">0:00</span></div>
         </div>
-        <p class="spos-footnote">From the dashboard to a new post</p>
+        <p class="spos-footnote" data-recording="create">From the dashboard to a new post</p>
         </div>
       </div>
     </section>

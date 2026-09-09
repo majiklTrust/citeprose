@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.23)
+// showcase-poc.js  (delivery 3.3.24)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three recordings live in
@@ -96,7 +96,6 @@
   var tabs = Array.prototype.slice.call(root.querySelectorAll('.spos-tab[data-recording]'));
   var playBtn = root.querySelector('.spos-ctl-play');
   var restartBtn = root.querySelector('.spos-ctl-restart');
-  var footnotes = Array.prototype.slice.call(root.querySelectorAll('.spos-footnote[data-recording]'));
   if (!frame || !callout) return;
 
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -561,7 +560,6 @@
     active = name;
     Array.prototype.slice.call(root.querySelectorAll('.spos-recording[data-recording]')).forEach(function (el) { el.classList.toggle('spos-active', el.getAttribute('data-recording') === name); });
     tabs.forEach(function (t) { var on = t.getAttribute('data-recording') === name; t.classList.toggle('spos-active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
-    footnotes.forEach(function (f) { f.hidden = f.getAttribute('data-recording') !== name; });
     recordings[name].start();
     syncControls();
   }

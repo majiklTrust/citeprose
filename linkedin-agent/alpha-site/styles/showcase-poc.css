@@ -1,5 +1,5 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.23)
+   showcase-poc.css  (delivery 3.3.24)
    ================================================================
    Marketing site showcase: three scripted replays the visitor picks
    between with a tab row; only the selected one plays.
@@ -22,8 +22,9 @@
        726px of 3.3.7), wrapped in the site's .shot-window frame with
        .shot-window-bar. The event caption lives in the window bar,
        centered over the recording, clear of the three dots on the left.
-     - Headline above and footnote below share the recording's left
-       edge through the .spos-inner column.
+     - The headline and the recording share one left edge through the
+       .spos-inner column. There is no footnote under the recording, by
+       decision (3.3.24); do not add one.
      - Headline treatment: three lines in a stepped cadence; the phrase
        "Source-Backed" carries an underline that draws itself once on
        load, and the closing line is set in the cyan to green gradient
@@ -123,10 +124,6 @@
 #showcase-pos .spos-time { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; min-width: 6.5rem; text-align: right; }
 #showcase-pos .spos-seeking, #showcase-pos .spos-seeking * { transition: none !important; animation-duration: 0s !important; }
 
-#showcase-pos .spos-footnote {
-  margin: 0.45rem 0 0; text-align: left;
-  font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);
-}
 /* The caption is centered over the recording, not left aligned after the
    dots: it is taken out of the bar's flex flow and spans the full bar
    width, with side padding that keeps it clear of the three dots.
@@ -156,7 +153,6 @@
 #showcase-pos .spos-tab:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 #showcase-pos .spos-recording { display: none; }
 #showcase-pos .spos-recording.spos-active { display: block; }
-#showcase-pos .spos-footnote[hidden] { display: none; }
 
 /* ---------- Frame ---------- */
 #showcase-pos .spos-frame {

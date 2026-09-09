@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.26)
+// showcase-poc.js  (delivery 3.3.27)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three recordings live in
@@ -61,7 +61,9 @@
 //   The "create" and "topics" recordings narrate in plain language: what
 //   the person is doing and why it matters, in the tenant's own terms.
 //   The "analytics" recording narrates the numbers the same way. No
-//   selectors or API paths appear in the window bar.
+//   selectors or API paths appear in the window bar. Every caption is
+//   concise and direct and stays within 105 visible characters
+//   (tags excluded, spaces and punctuation included).
 //
 // Constraints honored
 //   - Page CSP is script-src 'self' and style-src 'self'. This file is
@@ -326,11 +328,11 @@
       // Scene 1: Generate
       { t: 0, run: function () { h.jumpCursor(START); h.say('Monday at the shop. The queue is empty and the week needs a post.'); } },
       { t: 900, run: function () { h.moveCursor(h.center(quickActions, 0, -40)); } },
-      { t: 2000, run: h.hoverStep(btnGenerate, -4, 2, true, '<b>Generate</b>: research first, then a draft. No topic chosen, the agent uses what is due.') },
+      { t: 2000, run: h.hoverStep(btnGenerate, -4, 2, true, '<b>Generate</b>: research, draft, then a second opinion. No topic chosen, so the agent takes the one due.') },
       { t: 3600, run: h.clickStep(btnGenerate, -4, 2, 'Go.') },
-      { t: 3850, run: function () { btnGenerate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> Auto-select picked Customer Loyalty. The draft saves itself as it goes.'); } },
-      { t: 5300, run: function () { h.say('Research: <b>two shopper studies and two trade sources</b>, checked against each other before anything is written.'); } },
-      { t: 6900, run: function () { h.say('The draft is written in the voice of the store, from the prompt the store keeps in its vault.'); } },
+      { t: 3850, run: function () { btnGenerate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> Auto-select picked Customer Loyalty. The draft saves as it goes.'); } },
+      { t: 5300, run: function () { h.say('Research: <b>two shopper studies, two trade sources</b>, checked against each other first.'); } },
+      { t: 6900, run: function () { h.say('Drafted in the voice of the store, from the prompt the store keeps in its vault.'); } },
       { t: 8400, run: function () { h.say('Quality review: <b>8 of 10, pass</b>. A second, independent opinion.'); } },
       { t: 9600, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('A draft, with its <b>sources and its scores</b> attached.'); } },
       { t: 10700, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
@@ -349,7 +351,7 @@
       { t: 17700, run: function () { h.moveCursor(h.center(pendingCard, -40, 0)); } },
       { t: 18900, run: h.hoverStep(editBtn, 0, 0, true, 'Edit before it goes anywhere.') },
       { t: 20100, run: h.clickStep(editBtn, 0, 0, 'Open it up.') },
-      { t: 20350, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags, and a picture if the story needs one. <b>Nothing publishes on its own.</b>'); } },
+      { t: 20350, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags, a picture if needed. <b>Nothing publishes on its own.</b>'); } },
       { t: 21400, run: function () { h.moveCursor(h.center(editTextarea, 120, 40)); } },
       { t: 22500, run: h.clickStep(editTextarea, 120, 40, 'A word here, a line there. The draft stays a draft while it is being shaped.') },
       { t: 22700, run: function () { editTextarea.classList.add('spos-focus'); } },
@@ -363,7 +365,7 @@
       { t: 29350, run: function () { pendingCard.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('<b>Strong corroboration</b>: four sources agreed before a word was written.'); } },
       { t: 30500, run: function () { h.moveCursor(h.center(detailModal, 80, 20)); } },
       { t: 31600, run: function () { h.say('Sources listed. Image chosen. Everything a reviewer needs is on one screen.'); detailModal.scrollTop = detailModal.scrollHeight; } },
-      { t: 32600, run: h.hoverStep(publishBtn, 0, 0, true, '<b>Publish</b> sends it to the organization page. Once, and only after a person says so.') },
+      { t: 32600, run: h.hoverStep(publishBtn, 0, 0, true, '<b>Publish</b> sends it to the organization page. Once, and only when a person says so.') },
       { t: 33900, run: h.clickStep(publishBtn, 0, 0, 'Approved by a person. Published by the platform.') },
       { t: 34150, run: function () { publishBtn.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('From pending to posted.'); } },
       { t: 34700, run: function () {
@@ -422,7 +424,7 @@
       { t: 6700, run: h.clickStep(descIn, -120, 0, 'How everyday savers build a cushion, and what a bank can do to make it easier.') },
       { t: 6900, run: h.typeStep(descIn, DESC, 45) },
       { t: 9800, run: function () { descIn.classList.remove('spos-focus'); h.moveCursor(h.center(suggest, 0, 0), true); } },
-      { t: 10600, run: h.hoverStep(suggest, 0, 0, true, '<b>Generate Suggestions</b> asks the model for angles and hashtags that fit the description.') },
+      { t: 10600, run: h.hoverStep(suggest, 0, 0, true, '<b>Generate Suggestions</b> asks the model for angles and hashtags that fit.') },
       { t: 11500, run: h.clickStep(suggest, 0, 0, 'One request.') },
       { t: 11750, run: function () { suggest.classList.remove('spos-hover'); h.hideBox(); suggest.classList.add('spos-busy'); suggest.textContent = 'Generating...'; h.say('The model reads the sentence and proposes four ways into the subject.'); } },
       { t: 13600, run: function () { suggest.classList.remove('spos-busy'); suggest.textContent = 'Generate Suggestions'; result.classList.add('spos-open'); h.say('<b>Four angles, three hashtags</b>, a weight of one. Edit any of them, or keep them.'); } },
@@ -439,13 +441,13 @@
       } },
       // Scene 2: feed discovery for the new topic
       { t: 18200, run: function () { h.moveCursor(h.center(discoverLink, 0, 0)); } },
-      { t: 19300, run: h.hoverStep(discoverLink, 0, 0, true, '<b>Discover Feeds</b>: let the model find sources for this topic instead of hunting for them by hand.') },
+      { t: 19300, run: h.hoverStep(discoverLink, 0, 0, true, '<b>Discover Feeds</b>: the model finds sources for the topic, so nobody hunts by hand.') },
       { t: 20200, run: h.clickStep(discoverLink, 0, 0, 'Searching.') },
       { t: 20450, run: function () { discoverLink.classList.remove('spos-hover'); h.hideBox(); dOverlay.classList.add('spos-open'); h.say('The model proposes candidate feeds.'); } },
       { t: 21700, run: function () { h.say('Then the platform checks its work.'); } },
-      { t: 23000, run: function () { h.say('Each candidate is <b>fetched, parsed and graded</b> before it is offered. Broken feeds never reach the list.'); } },
+      { t: 23000, run: function () { h.say('Each candidate is <b>fetched, parsed and graded</b> first. Broken feeds never reach the list.'); } },
       { t: 24400, run: function () { dLoading.classList.add('spos-done'); dResults.classList.add('spos-open'); dActions.classList.add('spos-open'); dSubtitle.textContent = '3 validated feeds found'; h.say('<b>Three validated feeds</b>, all selected, each with a reason and a recent headline.'); } },
-      { t: 25500, run: h.hoverStep(dRow1, 0, 0, true, '<b>Savings Habit Lab</b>: primary tier, strongest on automatic transfers and small first balances.') },
+      { t: 25500, run: h.hoverStep(dRow1, 0, 0, true, '<b>Savings Habit Lab</b>: primary tier, strongest on automatic transfers and first balances.') },
       { t: 27000, run: function () { dRow1.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(dAdd, 0, 0)); } },
       { t: 28000, run: h.hoverStep(dAdd, 0, 0, true, '<b>Add Selected Feeds</b>.') },
       { t: 28900, run: h.clickStep(dAdd, 0, 0, 'Adding.') },
@@ -454,7 +456,7 @@
         dOverlay.classList.remove('spos-open'); dAdd.classList.remove('spos-busy'); dAdd.textContent = 'Add Selected Feeds';
         msg.textContent = '3 feed(s) added, 3 mapped to topic'; msg.classList.add('spos-on');
         mappedCount.textContent = '3';
-        h.say('<b>Three feeds mapped</b> to the topic. The card says so. Research has somewhere to look.');
+        h.say('<b>Three feeds mapped</b> to the topic. Research has somewhere to look.');
       } },
       // Scene 3: to the dashboard
       { t: 31300, run: function () { h.moveCursor(h.center(navDash, 0, 0)); } },
@@ -473,13 +475,13 @@
         monitorScope.textContent = '(topic: Emergency Savings Habits)'; monitorUsing.textContent = '4';
         feedRows.forEach(function (r, i) { if (i === 0 || i === 4) r.classList.add('spos-dim'); });
         newFeeds.forEach(function (r) { r.classList.add('spos-shown'); });
-        h.say('The Research Monitor narrows to the topic: <b>three new feeds at zero</b>, waiting for their first poll, catchalls kept.');
+        h.say('The Research Monitor narrows to the topic: <b>three new feeds at zero</b>, catchalls kept.');
       } },
       { t: 40200, run: h.hoverStep(generate, 0, 0, true, '<b>Generate</b>. Research first, then a draft.') },
       { t: 41200, run: h.clickStep(generate, 0, 0, 'Go.') },
       { t: 41450, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> The draft saves itself as it goes.'); } },
-      { t: 42800, run: function () { h.say('Research: <b>four independent sources</b>, checked against each other before anything is written.'); } },
-      { t: 44300, run: function () { h.say('The draft is written in the voice of the bank, from the prompt the bank keeps in its vault.'); } },
+      { t: 42800, run: function () { h.say('Research: <b>four independent sources</b>, checked against each other first.'); } },
+      { t: 44300, run: function () { h.say('Drafted in the voice of the bank, from the prompt the bank keeps in its vault.'); } },
       { t: 45800, run: function () { h.say('Quality review: <b>8 of 10, pass</b>. A second, independent opinion.'); } },
       { t: 47000, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('A draft, with its <b>sources and its scores</b> attached.'); } },
       { t: 48200, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
@@ -530,51 +532,51 @@
     }
     var script = [
       // Scene 1: Analytics
-      { t: 0, run: function () { h.jumpCursor(START); h.say('pageview <b>/app/analytics/</b> (window: last 30 days)'); } },
-      { t: 900, run: h.hoverStep(secIntel, 0, 0, false, 'Advocacy Program Intelligence: <b>79% publish rate</b>, 14,820 connections activated by members') },
+      { t: 0, run: function () { h.jumpCursor(START); h.say('A sports medicine practice checks the month. <b>Analytics</b>, last 30 days.'); } },
+      { t: 900, run: h.hoverStep(secIntel, 0, 0, false, 'Program Intelligence: <b>79% publish rate</b>, 14,820 connections activated by members.') },
       { t: 2800, run: function () { secIntel.classList.remove('spos-hover'); } },
-      { t: 2900, run: h.hoverStep(secAmp, 0, 0, false, 'Advocacy Amplification: member reach is <b>4.6x</b> the organization page') },
+      { t: 2900, run: h.hoverStep(secAmp, 0, 0, false, 'Advocacy Amplification: member reach is <b>4.6x</b> the organization page.') },
       { t: 4700, run: function () { secAmp.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secPosts); } },
-      { t: 5600, run: h.hoverStep(secPosts, 0, 0, false, 'Posts: values <b>exactly as LinkedIn returned them</b>, with retrieval time') },
+      { t: 5600, run: h.hoverStep(secPosts, 0, 0, false, 'Posts: values <b>exactly as LinkedIn returned them</b>, with retrieval time.') },
       { t: 7500, run: function () { secPosts.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secTopics); } },
-      { t: 8400, run: h.hoverStep(secTopics, 0, 0, false, 'Performance by Topic: <b>care-access</b> leads, 21,400 impressions across 2 posts') },
+      { t: 8400, run: h.hoverStep(secTopics, 0, 0, false, 'Performance by Topic: <b>care-access</b> leads, 21,400 impressions across 2 posts.') },
       { t: 10300, run: function () { secTopics.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secHeat); } },
-      { t: 11200, run: h.hoverStep(secHeat, 0, 0, false, 'Posting Time Heatmap: <b>weekday mornings, 7 to 9</b>, outperform every other slot') },
+      { t: 11200, run: h.hoverStep(secHeat, 0, 0, false, 'Posting Time Heatmap: <b>weekday mornings, 7 to 9</b>, beat every other slot.') },
       { t: 13100, run: function () { secHeat.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secDemo); } },
-      { t: 14000, run: h.hoverStep(secDemo, 0, 0, false, 'Follower Demographics: Hospitals and Health Care, <b>senior titles</b>, Greater Chicago') },
+      { t: 14000, run: h.hoverStep(secDemo, 0, 0, false, 'Follower Demographics: Hospitals and Health Care, <b>senior titles</b>, Greater Chicago.') },
       { t: 15900, run: function () { secDemo.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secIntel, 140); } },
       { t: 16900, run: function () { h.moveCursor(h.center(narBtn, 0, 0)); } },
-      { t: 17800, run: h.hoverStep(narBtn, 0, 0, true, 'hover <b>button#btn-narrative</b> "Narrative summary"') },
-      { t: 18700, run: h.clickStep(narBtn, 0, 0, 'click <b>button#btn-narrative</b> (POST /api/analytics/narrative)') },
-      { t: 18950, run: function () { narBtn.classList.remove('spos-hover'); h.hideBox(); narBtn.classList.add('spos-busy'); narBtn.textContent = 'Writing...'; h.say('model writes the summary from the tables on this page only'); } },
-      { t: 20400, run: function () { narBtn.classList.remove('spos-busy'); narBtn.textContent = 'Narrative summary'; narSec.classList.add('spos-open'); h.say('render <b>#narrative-section</b>: every figure cited, <b>uncited claims blocked</b>'); } },
-      { t: 21300, run: h.hoverStep(narSec, 0, 0, false, 'narrative: care access carried the month, weekday mornings win, member posts activated 14,820 connections') },
+      { t: 17800, run: h.hoverStep(narBtn, 0, 0, true, '<b>Narrative summary</b> turns the tables into a paragraph.') },
+      { t: 18700, run: h.clickStep(narBtn, 0, 0, 'One request.') },
+      { t: 18950, run: function () { narBtn.classList.remove('spos-hover'); h.hideBox(); narBtn.classList.add('spos-busy'); narBtn.textContent = 'Writing...'; h.say('The model writes the summary from the tables on this page only.'); } },
+      { t: 20400, run: function () { narBtn.classList.remove('spos-busy'); narBtn.textContent = 'Narrative summary'; narSec.classList.add('spos-open'); h.say('Every figure is cited. <b>Uncited claims are blocked.</b>'); } },
+      { t: 21300, run: h.hoverStep(narSec, 0, 0, false, 'Care access carried the month. Weekday mornings win. Members activated 14,820 connections.') },
       { t: 23800, run: function () { narSec.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrA, secIntel, 400); } },
       { t: 24600, run: function () { h.moveCursor(h.center(navAdv, 0, 0)); } },
-      { t: 25500, run: h.hoverStep(navAdv, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Advocacy"') },
-      { t: 26300, run: h.clickStep(navAdv, 0, 0, 'click <b>a.manager-nav-link</b> "Advocacy"') },
-      { t: 26550, run: function () { navAdv.classList.remove('spos-hover'); h.hideBox(); scrA.classList.add('spos-gone'); scrB.classList.add('spos-shown'); h.say('pageview <b>/app/advocacy/</b> (entitlement: employee_advocacy)'); } },
+      { t: 25500, run: h.hoverStep(navAdv, 0, 0, true, 'Now the people who carry it further.') },
+      { t: 26300, run: h.clickStep(navAdv, 0, 0, 'Now the people who carry it further.') },
+      { t: 26550, run: function () { navAdv.classList.remove('spos-hover'); h.hideBox(); scrA.classList.add('spos-gone'); scrB.classList.add('spos-shown'); h.say('<b>Advocacy</b>: clinicians share the practice\'s posts from their own profiles.'); } },
       // Scene 2: Advocacy
-      { t: 27600, run: h.hoverStep(secMe, 0, 0, false, 'My Participation: <b>connected</b>, manual mode, consent version 3, 2,140 first-degree connections') },
+      { t: 27600, run: h.hoverStep(secMe, 0, 0, false, 'My Participation: <b>connected</b>, manual mode, consent v3, 2,140 first-degree connections.') },
       { t: 29600, run: function () { secMe.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrB, secMembers); } },
-      { t: 30500, run: h.hoverStep(secMembers, 0, 0, false, 'Members: <b>3 of 4 connected</b>, each with a voice note; enabling never connects anyone, members consent themselves') },
+      { t: 30500, run: h.hoverStep(secMembers, 0, 0, false, 'Members: <b>3 of 4 connected</b>, each with a voice note. Enabling never connects anyone.') },
       { t: 32700, run: function () { secMembers.classList.remove('spos-hover'); h.hideBox(); scrollTo(scrB, secGen); } },
-      { t: 33600, run: h.hoverStep(sourceSel, 0, 0, true, 'hover <b>select#gen-post-id</b> "Source post"') },
-      { t: 34500, run: h.clickStep(sourceSel, 0, 0, 'select source post <b>"What a 20 minute wait actually costs a clinic"</b>') },
+      { t: 33600, run: h.hoverStep(sourceSel, 0, 0, true, 'Pick the post worth amplifying.') },
+      { t: 34500, run: h.clickStep(sourceSel, 0, 0, '<b>What a 20 minute wait actually costs a clinic.</b>') },
       { t: 34750, run: function () { sourceSel.classList.remove('spos-hover'); h.hideBox(); sourceSel.textContent = 'What a 20 minute wait actually costs a clinic'; } },
-      { t: 35700, run: h.hoverStep(genBtn, 0, 0, true, 'hover <b>button#btn-generate</b> "Generate Variant Post"') },
-      { t: 36600, run: h.clickStep(genBtn, 0, 0, 'click <b>button#btn-generate</b> (POST /api/advocacy/generate)') },
-      { t: 36850, run: function () { genBtn.classList.remove('spos-hover'); h.hideBox(); genBtn.classList.add('spos-busy'); genStatus.classList.add('spos-busy'); genStatus.textContent = 'Generating one variant per connected member (3)...'; h.say('one variant per connected member, in that member\'s voice'); } },
-      { t: 38300, run: function () { h.say('each variant passes the <b>gate chain</b>: injection scan, metric fidelity, output filter, quality'); } },
-      { t: 39900, run: function () { genBtn.classList.remove('spos-busy'); genStatus.classList.remove('spos-busy'); genStatus.classList.add('spos-done'); genStatus.textContent = 'Generated 3 variant(s) across 3 member(s); each member approves their own.'; adMsg.textContent = 'Generated 3 variant(s) across 3 member(s).'; adMsg.classList.add('spos-on'); h.say('3 <b>advocacy_variants</b> rows, status pending_approval'); } },
+      { t: 35700, run: h.hoverStep(genBtn, 0, 0, true, '<b>Generate Variant Post</b>: one per connected member, in their voice.') },
+      { t: 36600, run: h.clickStep(genBtn, 0, 0, 'Go.') },
+      { t: 36850, run: function () { genBtn.classList.remove('spos-hover'); h.hideBox(); genBtn.classList.add('spos-busy'); genStatus.classList.add('spos-busy'); genStatus.textContent = 'Generating one variant per connected member (3)...'; h.say('One variant per connected member, in that member\'s voice.'); } },
+      { t: 38300, run: function () { h.say('Each variant passes the <b>gate chain</b>: injection scan, metric fidelity, output filter, quality.'); } },
+      { t: 39900, run: function () { genBtn.classList.remove('spos-busy'); genStatus.classList.remove('spos-busy'); genStatus.classList.add('spos-done'); genStatus.textContent = 'Generated 3 variant(s) across 3 member(s); each member approves their own.'; adMsg.textContent = 'Generated 3 variant(s) across 3 member(s).'; adMsg.classList.add('spos-on'); h.say('Three variants, each waiting on its member.'); } },
       { t: 41100, run: function () { scrollTo(scrB, secQueue); queueEmpty.classList.add('spos-gone'); variant.classList.add('spos-shown'); } },
-      { t: 42000, run: h.hoverStep(variantText, 0, 0, false, 'render <b>.variant-card</b> Variant #31: the post rewritten in Dr. Priya Natarajan\'s voice') },
+      { t: 42000, run: h.hoverStep(variantText, 0, 0, false, 'Variant #31: the post rewritten in Dr. Priya Natarajan\'s own voice.') },
       { t: 42600, run: function () { variantText.classList.add('spos-focus'); } },
-      { t: 44800, run: function () { variantText.classList.remove('spos-hover', 'spos-focus'); h.hideBox(); h.say('the member may edit before approving; <b>nothing publishes without their approval</b>'); } },
-      { t: 46200, run: h.hoverStep(approve, 0, 0, true, 'hover <b>button.btn-primary</b> "Approve"') },
-      { t: 47100, run: h.clickStep(approve, 0, 0, 'click <b>button.btn-primary</b> "Approve" (POST /api/advocacy/me/variants/31/approve)') },
-      { t: 47350, run: function () { approve.classList.remove('spos-hover'); h.hideBox(); variant.classList.add('spos-approved'); adMsg.textContent = 'Approved. Publishing to your profile now.'; h.say('approved: published from the <b>member\'s own profile</b> with the member\'s own token'); } },
-      { t: 48900, run: function () { h.say('reach from this post is counted in <b>Activated Reach</b> on Analytics'); } },
+      { t: 44800, run: function () { variantText.classList.remove('spos-hover', 'spos-focus'); h.hideBox(); h.say('The member may edit first. <b>Nothing publishes without their approval.</b>'); } },
+      { t: 46200, run: h.hoverStep(approve, 0, 0, true, '<b>Approve</b>. The member decides, not the practice.') },
+      { t: 47100, run: h.clickStep(approve, 0, 0, 'Approved by the member.') },
+      { t: 47350, run: function () { approve.classList.remove('spos-hover'); h.hideBox(); variant.classList.add('spos-approved'); adMsg.textContent = 'Approved. Publishing to your profile now.'; h.say('Approved. Published from the <b>member\'s own profile</b>, with their own token.'); } },
+      { t: 48900, run: function () { h.say('Its reach is counted in <b>Activated Reach</b> on Analytics.'); } },
       { t: 50400, run: function () { h.moveCursor(START); h.say('End of recording.'); } }
     ];
     function reset() {

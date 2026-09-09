@@ -19,10 +19,6 @@
 import cron from "node-cron";
 import {
   getRecentPosts,
-  getPostsByStatus,
-  getAgentState,
-  setAgentState,
-  createPost,
   updatePostStatus,
   logActivity,
   logActivityBestEffort,
@@ -31,7 +27,6 @@ import {
   transitionPostStatus
 } from "./database.js";
 import { PRE_PUB_STATUSES } from "./post-status.js";
-import { generatePost, qualityCheck } from "./content-generator.js";
 import { publishPost, checkPublishCredentials } from "./linkedin-publisher.js";
 import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
@@ -41,6 +36,7 @@ import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-wi
 import { listActiveTenants } from "../tenant/platform-db.js";
 import { dashboardCopy } from "../config/dashboard-copy.js";
 import { platformLog } from "./platform-log.js";
+import { runGenerationCycle } from "../automation/generation-loop.js";
 
 let schedulerJob = null;
 
@@ -50,17 +46,32 @@ const MIN_HOURS = () => parseInt(process.env.MIN_HOURS_BETWEEN_POSTS || "72", 10
 // Must be called inside withTenant. Returns a cadence decision
 // for the current tenant — respects their post history and the
 // global min-hours / max-posts-per-window configuration.
-export async function canPostNow() {
+//
+// 4.25111.60: lookAheadHours (default 0, behavior unchanged at 0).
+// Under auto-post a generated post waits its review window in the
+// queue before it can publish. If generation waited for the floor
+// and then the post waited the window, the two would add up (a post
+// every five days on the defaults instead of three). The generation
+// loop therefore asks "will publishing be permitted lookAheadHours
+// from now" (the review window plus one publishing sweep) and
+// generates when the answer is yes; the publishing loop asks with 0
+// and enforces the real floor, so nothing goes out early.
+export async function canPostNow(lookAheadHours = 0) {
+  const lookAhead = Number.isFinite(lookAheadHours) && lookAheadHours > 0 ? lookAheadHours : 0;
   const recentPosts = await getRecentPosts(getPostsWindowDays());
   const stats = await getPostStats();
 
   // Rule 1: Max posts per configured window
   if (stats.postsInWindow >= getMaxPostsPerWindowDays()) {
-    return {
-      allowed: false,
-      reason: `Already at ${stats.postsInWindow}/${getMaxPostsPerWindowDays()} posts in ${getPostsWindowDays()}-day window`,
-      nextWindowOpens: estimateNextWindow(recentPosts)
-    };
+    const nextWindowOpens = estimateNextWindow(recentPosts);
+    const opensMs = nextWindowOpens === "now" ? Date.now() : new Date(nextWindowOpens).getTime();
+    if (!(lookAhead > 0 && Number.isFinite(opensMs) && opensMs <= Date.now() + lookAhead * 3600 * 1000)) {
+      return {
+        allowed: false,
+        reason: `Already at ${stats.postsInWindow}/${getMaxPostsPerWindowDays()} posts in ${getPostsWindowDays()}-day window`,
+        nextWindowOpens
+      };
+    }
   }
   // Rule 2: Minimum hours between posts
   if (recentPosts.length > 0) {
@@ -72,8 +83,8 @@ export async function canPostNow() {
       : new Date(String(lastPost.posted_at).endsWith("Z") ? lastPost.posted_at : lastPost.posted_at + "Z").getTime();
     const hoursSince = (Date.now() - postedAtMs) / (1000 * 60 * 60);
 
-    if (hoursSince < MIN_HOURS()) {
-      const hoursRemaining = Math.ceil(MIN_HOURS() - hoursSince);
+    if (hoursSince + lookAhead < MIN_HOURS()) {
+      const hoursRemaining = Math.ceil(MIN_HOURS() - hoursSince - lookAhead);
       return {
         allowed: false,
         reason: `Only ${Math.floor(hoursSince)}h since last post; minimum is ${MIN_HOURS()}h`,
@@ -95,109 +106,20 @@ function estimateNextWindow(recentPosts) {
   return agesOut.toISOString();
 }
 
+
 // ── Core Scheduling Loop ─────────────────────────────────────
 // Must be called inside withTenant.
 
-async function schedulerTick(topicId = null) {
-  const mode = await getAgentState("mode");
-  const paused = await getAgentState("paused");
-
-  if (paused === "true") {
-    await logActivity("info", "scheduler_skipped", "Agent is paused");
-    return;
-  }
-
-  // Step 1: Manual-mode hold if there are posts awaiting approval
-  if (mode === "manual") {
-    const pending = await getPostsByStatus("pending_approval");
-    if (pending.length > 0) {
-      await logActivity("info", "scheduler_waiting", `${pending.length} post(s) awaiting manual approval`);
-      return;
-    }
-  }
-
-  // Step 2: Cadence check
-  const cadence = await canPostNow();
-  if (!cadence.allowed) {
-    await logActivity("info", "scheduler_cadence_hold", cadence.reason);
-    return;
-  }
-
-  // Step 3: Generate content (includes research phase)
-  await logActivity("info", "scheduler_generating", "Generating new post content with research");
-
+async function schedulerTick(topicId = null, opts = {}) {
+  // 4.25111.60: the tick's body (the automation gate, the pending
+  // hold, the cadence floor, generation, quality, storage, queueing)
+  // lives in automation/generation-loop.js. This envelope is what
+  // remains of the old tick: the catch that turns a Model Provider
+  // failure into a scheduler_error line carrying the complete
+  // record. forceCycle passes { forced: true }; the cron passes
+  // nothing.
   try {
-    const generated = await generatePost(topicId || null);
-    const cycleId = generated.cycleId || null;
-
-    // Step 3a: Post was blocked due to insufficient sources
-    if (generated.blocked) {
-      await logActivity("info", "post_blocked", {
-        cycleId,
-        topicId: generated.topicId,
-        angle: generated.angle,
-        reason: generated.reason
-      });
-      return;
-    }
-
-    // Step 4: Quality check
-    const quality = await qualityCheck(generated.content, generated.researchSummary, cycleId);
-    await logActivity("info", "quality_check", {
-      cycleId,
-      overall: quality.overall,
-      pass: quality.pass,
-      sourceGrounding: quality.scores?.source_grounding,
-      factualCaution: quality.scores?.factual_caution,
-      factualFlags: quality.factual_flags
-    });
-
-    if (!quality.pass || quality.overall < 6) {
-      await logActivity("warn", "quality_below_threshold", {
-        cycleId,
-        score: quality.overall,
-        feedback: quality.feedback,
-        factualFlags: quality.factual_flags
-      });
-      const retry = await generatePost(null);
-      if (!retry.blocked) {
-        const retryQuality = await qualityCheck(retry.content, retry.researchSummary, retry.cycleId);
-        if (retryQuality.overall > quality.overall) {
-          Object.assign(generated, retry);
-          await logActivity("info", "quality_retry_improved", { cycleId: retry.cycleId, newScore: retryQuality.overall });
-        }
-      }
-    }
-
-    // createPost stores news_context as JSONB — pass the object
-    // directly, no JSON.stringify wrapping.
-    const storedContext = {
-      cycleId,
-      angle: generated.angle,
-      sourcesUsed: generated.sourcesUsed || [],
-      researchSummary: generated.researchSummary || null,
-      qualityScores: quality.scores,
-      factualFlags: quality.factual_flags
-    };
-
-    // Step 5: Save to database
-    const postId = await createPost({
-      topicId: generated.topicId,
-      title: generated.title,
-      content: generated.content,
-      hashtags: generated.hashtags,
-      newsContext: storedContext,
-      scheduledFor: null
-    });
-
-    // Step 6: Route based on mode
-    if (mode === "auto") {
-      await executePost(postId);
-    } else {
-      await updatePostStatus(postId, "pending_approval");
-      await logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
-    }
-
+    return await runGenerationCycle({ topicId: topicId || null, forced: opts.forced === true });
   } catch (err) {
     // 4.25111.38: a tick that died on a Model Provider failure says
     // so, in class terms, instead of burying a raw message.
@@ -207,6 +129,7 @@ async function schedulerTick(topicId = null) {
     // COMPLETE error (raw message, class, wire facts, provider
     // words), never a bare message string.
     await logActivity("error", "scheduler_error", providerFailureLogDetails(err, pf));
+    return { action: "failed", reasonCode: "generation_failed", reason: err.message };
   }
 }
 
@@ -569,5 +492,7 @@ export function stopScheduler() {
 
 export async function forceCycle(topicId = null, userSub = null) {
   await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" }, userSub);
-  return schedulerTick(topicId);
+  // 4.25111.60: a human pressed it, so the automation gate does not
+  // apply; pause, the pending hold and the cadence floor still do.
+  return schedulerTick(topicId, { forced: true });
 }

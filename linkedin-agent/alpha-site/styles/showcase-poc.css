@@ -1,7 +1,7 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.26)
+   showcase-poc.css  (delivery 3.3.28)
    ================================================================
-   Marketing site showcase: three scripted replays the visitor picks
+   Marketing site showcase: four scripted replays the visitor picks
    between with a tab row; only the selected one plays.
      "create": Generate from Quick Actions (Generating Content overlay,
        draft preview with Sources Referenced and Quality Assessment,
@@ -17,6 +17,9 @@
        posts table, performance by topic, posting time heatmap, follower
        demographics, narrative summary), then the Advocacy page (members,
        generate variants, a member approves a personalized variant).
+     "linkedin": the LinkedIn Connection page (status, the OAuth grant,
+       Publish as, Organization Page discovery) with an illustrative
+       authorization step between.
    Rendered at the top of site_templates/index.html.
 
    Layout (3.3.7)
@@ -131,7 +134,7 @@
    width, with side padding that keeps it clear of the three dots.
    alpha.css styles every span in the bar as a 10px dot; that is undone
    here. The bar becomes the positioning context. */
-#showcase-pos .shot-window-bar { position: relative; min-width: 0; }
+#showcase-pos .shot-window-bar { position: relative; min-width: 0; padding: 0 10px;}
 #showcase-pos .shot-window-bar .spos-callout {
   position: absolute; left: 0; right: 0; top: 0; height: 34px; line-height: 34px;
   padding: 0 64px; text-align: center; pointer-events: none;
@@ -142,6 +145,11 @@
 }
 #showcase-pos .shot-window-bar .spos-callout.spos-on { opacity: 1; }
 #showcase-pos .shot-window-bar .spos-callout b { color: var(--accent-cyan); font-weight: 600; }
+
+#showcase-pos .shot-window-bar span {
+  width: 5px;
+  height: 5px;
+}
 
 /* ---------- Picker and recording visibility ---------- */
 #showcase-pos .spos-tabs { display: flex; gap: 0.5rem; margin: 0 0 0.9rem; flex-wrap: wrap; }
@@ -422,6 +430,35 @@
 #showcase-pos .spos-h-screen-advocacy.spos-shown { opacity: 1; visibility: visible; }
 #showcase-pos .spos-h-screen-analytics.spos-gone { opacity: 0; visibility: hidden; }
 #showcase-pos .spos-tp-section.spos-hover { box-shadow: 0 0 0 2px rgba(0, 115, 177, 0.35), 0 1px 3px rgba(0, 0, 0, 0.1); }
+
+/* ---------- LinkedIn Connection page and the authorization step ---------- */
+#showcase-pos .spos-li-screen { overflow: hidden; }
+#showcase-pos .spos-li-container { max-width: 860px; }
+#showcase-pos .spos-li-actions { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; flex-wrap: wrap; }
+#showcase-pos .spos-li-hint { font-size: 0.72rem; color: #999; flex: 1; min-width: 200px; }
+#showcase-pos .spos-l-disabled { opacity: 0.45; }
+#showcase-pos .spos-ad-toggle.spos-hover:not(.spos-ad-toggle-active) { border-color: #0073b1; }
+#showcase-pos .spos-l-org-row { display: none; }
+#showcase-pos .spos-l-org-row.spos-shown { display: flex; }
+#showcase-pos .spos-l-org-body.spos-gone { display: none; }
+#showcase-pos .spos-li-consent { background: #f3f2ef; display: flex; align-items: flex-start; justify-content: center; padding-top: 3rem; opacity: 0; visibility: hidden; transition: opacity calc(0.3s / var(--spos-rate)); }
+#showcase-pos .spos-li-consent::before, #showcase-pos .spos-li-consent::after { display: none; }
+#showcase-pos .spos-li-consent.spos-shown { opacity: 1; visibility: visible; }
+#showcase-pos .spos-l-screen-page { transition: opacity calc(0.3s / var(--spos-rate)); }
+#showcase-pos .spos-l-screen-page.spos-gone { opacity: 0; visibility: hidden; }
+#showcase-pos .spos-li-consent-card { width: 420px; background: #fff; border-radius: 8px; padding: 1.5rem 1.75rem; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); color: #191919; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+#showcase-pos .spos-li-consent-brand { font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem; }
+#showcase-pos .spos-li-consent-user { display: flex; align-items: center; gap: 0.7rem; padding: 0.6rem 0; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; font-size: 0.85rem; }
+#showcase-pos .spos-li-avatar { width: 36px; height: 36px; border-radius: 50%; background: #0a66c2; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex: none; }
+#showcase-pos .spos-li-consent-sub { color: #666; font-size: 0.78rem; }
+#showcase-pos .spos-li-consent-title { font-weight: 600; margin: 1rem 0 0.4rem; font-size: 0.9rem; }
+#showcase-pos .spos-li-consent-list { margin: 0 0 0.75rem 1.1rem; padding: 0; font-size: 0.82rem; line-height: 1.5; color: #333; }
+#showcase-pos .spos-li-consent-note { font-size: 0.74rem; color: #666; margin-bottom: 1rem; }
+#showcase-pos .spos-li-consent-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+#showcase-pos .spos-li-consent-cancel { padding: 0.45rem 1rem; border-radius: 999px; border: 1px solid #666; color: #333; font-weight: 600; font-size: 0.85rem; }
+#showcase-pos .spos-li-consent-allow { padding: 0.45rem 1.2rem; border-radius: 999px; background: #0a66c2; color: #fff; font-weight: 600; font-size: 0.85rem; transition: filter 0.15s, transform 0.1s; }
+#showcase-pos .spos-li-consent-allow.spos-hover { filter: brightness(0.92); }
+#showcase-pos .spos-li-consent-allow.spos-pressed { transform: scale(0.97); }
 
 /* ---------- Screens inside the topics recording ---------- */
 #showcase-pos .spos-t-screen-topics, #showcase-pos .spos-t-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }

@@ -14,6 +14,8 @@
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
+import { readMode, fromLegacy, toLegacy, canAutoGenerate, canAutoPublish } from "../automation/automation-mode.js";
+import { readAutomationSettings } from "../automation/settings.js";
 import {
   getPostStats,
   getAllPosts,
@@ -158,6 +160,9 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     // Tenant-scoped data — only available if caller is authenticated
     // AND has a tenant. Otherwise omit (dashboard handles nulls).
     let stats = null, mode = null, paused = false, corroboration = "enabled";
+    // 4.25111.60: the automation state, canonical. `mode` below stays
+    // the legacy projection the untouched two-way toggle renders.
+    let automation = null;
     let publishTarget = "personal", linkedinOrgConfigured = false;
     let researchStats = null;
     let cadence = null;
@@ -213,9 +218,23 @@ router.get("/api/status", optionalAuth, async (req, res) => {
           tenantRole = tenant.role || null;
           await withTenant(tenant.id, async () => {
             stats = await getPostStats();
-            mode = await getAgentState("mode");
-            const p = await getAgentState("paused");
-            paused = p === "true";
+            // 4.25111.60: one interpreter for the three automation
+            // states. The dashboard's two-way toggle still reads
+            // `mode` as 'auto' or 'manual', so it receives the
+            // projection; `automation` carries the truth.
+            const state = await readMode();
+            const settings = await readAutomationSettings();
+            mode = toLegacy(state.mode);
+            paused = state.paused;
+            automation = {
+              mode: state.mode,
+              generation: canAutoGenerate(state.mode),
+              publishing: canAutoPublish(state.mode),
+              paused: state.paused,
+              source: state.source,
+              reviewWindowHours: settings.reviewWindowHours,
+              holdWhilePending: settings.holdWhilePending
+            };
             corroboration = (await getAgentState("corroboration")) || "enabled";
             organizationManager = ((await getAgentState("organization_manager")) === "disabled") ? "disabled" : "enabled";
             if (tenantRole) {
@@ -303,6 +322,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       } : null,
       serverAddress,
       mode,
+      automation,
       paused,
       corroboration,
       cadence,
@@ -726,15 +746,28 @@ router.post("/api/posts/:id/status", requirePermission("approve_reject_post"), a
 
 // ── Mode Control ─────────────────────────────────────────────
 
+// 4.25111.60: the LEGACY shim. The untouched two-way dashboard
+// toggle still sends 'auto' or 'manual'; those are translated to the
+// canonical automation states ('auto-post', 'auto-generate') by the
+// interpreter and stored canonically, never as the old strings. The
+// route keeps refusing everything else, canonical values included,
+// so the two vocabularies never mix on one route. Removed with the
+// dashboard control delivery; new callers use POST /api/automation/mode.
 router.post("/api/mode", requirePermission("change_mode"), async (req, res) => {
   try {
     const { mode } = req.body;
-    if (!["auto", "manual"].includes(mode)) {
+    // Only the two legacy strings translate; a canonical value (or
+    // anything else) is refused here, exactly as before.
+    const canonical = fromLegacy(mode);
+    if (!canonical) {
       return res.status(400).json({ error: "Mode must be 'auto' or 'manual'" });
     }
     await withTenant(req.tenant.id, async () => {
-      await setAgentState("mode", mode);
+      const before = await readMode();
+      await setAgentState("mode", canonical);
+      await logActivity("info", "automation_mode_changed", { from: before.mode, to: canonical, via: "legacy_toggle", legacyValue: mode }, req.user?.sub || null);
     });
+    platformLog("info", "automation_mode_changed", { tenantId: req.tenant.id, to: canonical, via: "legacy_toggle", sub: req.user?.sub || null });
     res.json({ mode });
   } catch (err) {
     logApiError(req, err);

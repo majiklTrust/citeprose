@@ -704,17 +704,30 @@ export async function getArticleStats(topicSlug = null, deps = {}) {
      ${totalPredicate}`,
     topicSlug ? [topicSlug] : []
   );
+  // 3.3.14: feeds-first. The per-feed rows used to start from
+  // feed_articles, so a feed that had not linked an article yet
+  // (a feed just discovered into a new topic) could never appear and
+  // the owner could not tell whether discovery had worked. The query
+  // now starts from feeds_v2 and LEFT joins the links and the window,
+  // with the age window on the join (a WHERE on a.published_at would
+  // discard the zero rows again). Zero-count rows are kept only for
+  // enabled feeds; a disabled feed still shows while it holds recent
+  // articles, exactly as before, because generation still reads them.
+  // Grouped by f.id so two feeds that share a name are two rows. The
+  // topic filter, its parameters and the tier order are unchanged.
   const byFeed = await c.query(
     `SELECT f.name AS feed_name, f.tier::text AS feed_tier,
             f.is_catchall,
-            COUNT(DISTINCT fa.article_id)::int AS count
-     FROM feed_articles fa
-     JOIN feeds_v2 f ON f.id = fa.feed_id
-     JOIN articles_v2 a ON a.id = fa.article_id
+            COUNT(DISTINCT a.id)::int AS count
+     FROM feeds_v2 f
      ${topicJoin}
-     WHERE a.published_at >= now() - ($1 || ' days')::interval
+     LEFT JOIN feed_articles fa ON fa.feed_id = f.id
+     LEFT JOIN articles_v2 a ON a.id = fa.article_id
+       AND a.published_at >= now() - ($1 || ' days')::interval
+     WHERE true
      ${topicPredicate}
-     GROUP BY f.name, f.tier, f.is_catchall
+     GROUP BY f.name, f.tier, f.is_catchall, f.id, f.enabled
+     HAVING f.enabled = true OR COUNT(DISTINCT a.id) > 0
      ORDER BY CASE f.tier::text
                 WHEN 'authoritative' THEN 1
                 WHEN 'primary' THEN 2

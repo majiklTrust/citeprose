@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "3.3.26",
+  "version": "3.3.28",
   "config": {
     "cssversion": "114",
     "appname": "Market Intelligence",
@@ -71,9 +71,9 @@
     "nodemon": "npx nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "getvars": "echo \"\\nPGHOST:$PGHOST\\nPGPORT:$PGPORT\\nPGUSER:$PGUSER\\nPGDATABASE:$PGDATABASE\"",
     "production": "npm ci --ignore-scripts --omit=dev && npm run getvars && NODE_ENV=production npm run start",
-    "nonproddb": "npm run nonprod",
     "nonprod": "npm run getvars && NODE_ENV=nonprod npm run nodemon",
     "devdb": "export $(cat .env.pg.local | xargs) && npm run nonprod",
+    "watch": "npx nodemon --watch package.json --exec \"npm run pages\"",
     "dev": "export $(cat .env.pg.local | xargs) && npm run getvars && NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001,http://172.16.11.101:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
     "300_": "",
     "kill3001": "lsof -ti:3001 | xargs kill -9",

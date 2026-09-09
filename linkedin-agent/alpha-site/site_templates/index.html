@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replay: Create, Edit, Publish (3.3.13) -->
+  <!-- Showcase replays: Create, Edit, Publish; Topics and Generate (3.3.16) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -76,16 +76,19 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.13): a scripted replay of a tenant user
-         activating Create on the dashboard (Create a post modal), then
-         editing the pending post (Edit Post modal), then opening the
-         post detail modal and publishing it. Markup mirrors public_templates/dashboard.jsx with
-         spos- prefixed classes so app.css does not restyle it. Styles
-         in /styles/showcase-poc.css, playback in
-         /scripts/showcase-poc.js (0.4x, loops with a 3 second hold).
-         The caption in the window bar tracks the recorded events.
-         Post text, counts, names and the genres after "no genre" are
-         illustrative. -->
+    <!-- Showcase replay (3.3.16): two scripted replays a visitor can pick
+         between; only the selected one plays. Markup mirrors
+         public_templates/dashboard.jsx and public/topics/index.html with
+         spos- prefixed classes so app.css does not restyle it. Styles in
+         /styles/showcase-poc.css, playback in /scripts/showcase-poc.js
+         (0.4x, loops with a 3 second hold). The caption in the window bar
+         tracks the recorded events. Post text, counts, names, feed names,
+         quality scores and the genres after "no genre" are illustrative.
+           Recording "create": Create a post, Edit Post, publish from the
+             post detail modal.
+           Recording "topics": add a topic on the Topics page, generate
+             suggestions, save, then Generate from Quick Actions and review
+             the draft's Sources Referenced and Quality Assessment. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -94,10 +97,15 @@
           <span class="spos-headline-line">Into <span class="spos-headline-mark">Source-Backed</span> Posts</span>
           <span class="spos-headline-line spos-headline-close">To Publish With Confidence.</span>
         </h2>
+        <div class="spos-tabs" role="tablist" aria-label="Choose a walkthrough">
+          <button type="button" class="spos-tab spos-active" role="tab" aria-selected="true" data-recording="create">Create, edit, publish</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="topics">New topic to researched draft</button>
+        </div>
         <div class="shot-window spos-display">
           <div class="shot-window-bar"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><span class="spos-callout" aria-live="polite"></span></div>
-        <div class="spos-frame">
-          <div class="spos-scaler">
+          <div class="spos-frame">
+            <div class="spos-recording spos-active" data-recording="create">
+              <div class="spos-scaler">
             <div class="spos-stage" aria-hidden="true">
               <div class="spos-screen">
                 <div class="spos-app">
@@ -282,10 +290,198 @@ Three decisions worth revisiting this quarter:
                 </svg>
               </div>
             </div>
+
+              </div>
+            </div>
+            <div class="spos-recording" data-recording="topics">
+              <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <!-- Screen A: the Topics manager page (light theme, mirrors public/topics/index.html) -->
+              <div class="spos-screen spos-tp-screen spos-t-screen-topics">
+                <div class="spos-tp-container">
+                  <div class="spos-tp-nav"><span class="spos-tp-nav-link spos-t-nav-dashboard">Dashboard</span><span class="spos-tp-nav-link">Feeds</span><span class="spos-tp-nav-link">Analytics</span><span class="spos-tp-nav-link">Image Studio</span><span class="spos-tp-nav-link spos-tp-nav-active">Topics</span><span class="spos-tp-nav-link">Billing</span><span class="spos-tp-nav-link">Manage</span></div>
+                  <h1 class="spos-tp-h1">Topic Management</h1>
+                  <div class="spos-tp-msg spos-t-msg"></div>
+                  <div class="spos-tp-section">
+                    <div class="spos-tp-section-head"><h2 class="spos-tp-h2">New Topic</h2><span class="spos-tp-btn spos-tp-btn-primary spos-t-add-topic">+ Add Topic</span></div>
+                    <div class="spos-tp-form spos-t-create-form">
+                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., Cloud Migration Strategy</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Practical guidance for moving workloads to the cloud</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-btn spos-tp-btn-secondary spos-t-suggest">Generate Suggestions</span></div>
+                      <div class="spos-tp-result spos-t-result">
+                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Where identity spend actually goes, and what to cut first
+Why standing privilege is the line item nobody owns
+What a Zero Trust budget looks like after the first audit
+Vendor consolidation: when one platform is cheaper than three</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#ZeroTrust, #CloudSecurity, #SecurityBudget</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Weight (higher = more frequent)</span><div class="spos-tp-input spos-tp-input-sm">1</div></div>
+                        <div class="spos-tp-actions"><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span><span class="spos-tp-btn spos-tp-btn-primary spos-t-save">Save Topic</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="spos-tp-section">
+                    <h2 class="spos-tp-h2">My Topics</h2>
+                    <div class="spos-tp-card spos-t-new-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Zero Trust Budgeting</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">zero-trust-budgeting</div>
+                      <div class="spos-tp-meta">4 angles, 3 hashtags, 0 feeds mapped <span class="spos-tp-discover">Discover feeds</span></div>
+                    </div>
+                    <div class="spos-tp-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Cloud Security</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">cloud-security</div>
+                      <div class="spos-tp-meta">5 angles, 4 hashtags, 3 feeds mapped</div>
+                    </div>
+                    <div class="spos-tp-card">
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">AI Platforms</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">ai-platforms</div>
+                      <div class="spos-tp-meta">3 angles, 3 hashtags, 2 feeds mapped</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen B: the dashboard; middle column ordered as the real one (AI Model, Quick Actions, Research Monitor) -->
+              <div class="spos-screen spos-t-screen-dash">
+                <div class="spos-app">
+                  <div class="spos-header">
+                    <div>
+                      <div class="spos-header-title">Market Intelligence</div>
+                      <div class="spos-header-subtitle">v{{APPVERSION}}  connected as Jordan Ellis</div>
+                    </div>
+                    <div class="spos-header-controls">
+                      <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
+                      <span class="spos-logout">Logout</span>
+                    </div>
+                  </div>
+                  <div class="spos-stats">
+                    <div class="spos-stat"><div class="spos-stat-label">Total Published</div><div class="spos-stat-value">27</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Posts (10-day)</div><div class="spos-stat-value">2</div><div class="spos-stat-meta">max 4  ready to post</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value">1</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">LinkedIn</div><div class="spos-stat-value spos-stat-value-sm">Connected</div><div class="spos-stat-meta">target: organization</div></div>
+                  </div>
+                  <div class="spos-grid">
+                    <div>
+                      <div class="spos-title">Queue <span class="spos-badge">1</span></div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">cloud-security</span><span class="spos-status">pending approval</span></div>
+                          <div class="spos-preview">Zero Trust is not a product you buy, it is a set of decisions you keep making. This week two reports landed that make the same point from opposite directions...</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">ai-platforms</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Most teams measure model cost per call. The teams that stay in budget measure cost per outcome, and the difference shows up in the ledger within a quarter.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Evidence, not intent, is what an assessor scores. Three controls where most SMBs have the practice but not the artifact, and how to close that gap.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                      </div>
+                      <div class="spos-title spos-title-gap">Recent Posts</div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">CMMC Level 2 assessments are now scheduling into next spring. If your evidence library is still a folder of screenshots, this is the month to fix that.</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel"><div class="spos-model-row"><span class="spos-model-label">AI Model</span><span class="spos-model-value">claude-sonnet-4-6</span></div></div>
+                      <div class="spos-panel spos-t-quick-actions">
+                        <div class="spos-title">Quick Actions</div>
+                        <div class="spos-vstack">
+                          <div class="spos-hstack">
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow spos-t-generate">Generate</span>
+                            <span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Create</span>
+                          </div>
+                          <div class="spos-select spos-t-topic-select">Auto-select topic</div>
+                          <div class="spos-select spos-t-angle-select">Auto-select angle</div>
+                          <div class="spos-toggle-row"><span class="spos-toggle-on">Corroboration ON</span><span class="spos-switch"></span></div>
+                        </div>
+                      </div>
+                      <div class="spos-panel spos-t-monitor">
+                        <div class="spos-title spos-title-flush">Research Monitor <span class="spos-title-meta spos-t-monitor-scope">(all topics)</span></div>
+                        <div class="spos-research-meta">using <span class="spos-cyan spos-t-monitor-using">38</span> articles, last <span class="spos-cyan">20</span> days</div>
+                        <div class="spos-feed-list spos-t-feed-list">
+                          <div class="spos-feed-row"><span class="spos-feed-name">Cloud Security Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">MIT Technology Review (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Ars Technica (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Wired (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">ZDNet (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
+                        </div>
+                        <span class="spos-btn spos-btn-primary spos-btn-full spos-btn-tight spos-btn-xs">Refresh Feeds Now</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Activity Log</div>
+                        <div class="spos-log"><time>09:41:07</time><span class="spos-lvl">info</span><span>feeds polled: 6 ok, 0 failed, 11 new articles</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Generating Content overlay (mirrors #generate-overlay in public_templates/index.html) -->
+                <div class="spos-gen-overlay spos-t-gen-overlay">
+                  <div class="spos-gen-card">
+                    <div class="spos-gen-spinner"></div>
+                    <div class="spos-gen-title">Generating Content</div>
+                    <div class="spos-gen-sub">Researching sources and composing your post. This may take a moment.</div>
+                    <div class="spos-gen-fine">Your draft is saved automatically.</div>
+                  </div>
+                </div>
+
+                <!-- Draft preview modal (mirrors selectedPost with isPreview) -->
+                <div class="spos-modal-overlay spos-t-draft-overlay">
+                  <div class="spos-modal spos-t-draft-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <div class="spos-badges-wrap"><span class="spos-topic">zero-trust-budgeting</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
+                    <h3 class="spos-modal-heading">Where identity spend actually goes</h3>
+                    <div class="spos-modal-body">Most Zero Trust budgets are not spent on Zero Trust. They are spent on renewals for tools that verify identity once, at the front door, and never again.
+
+Two numbers from this week's research make the point. The first is how much of a typical security budget sits in identity and access line items. The second is how few of those tools re-check a session after it starts.
+
+If your budget review is coming up, start with one question for every identity tool: when does it say no a second time?</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#ZeroTrust</span><span class="spos-hashtag">#CloudSecurity</span><span class="spos-hashtag">#SecurityBudget</span></div>
+                    <div class="spos-source-list">
+                      <div class="spos-section-heading-cyan">Sources Referenced</div>
+                      <div class="spos-source-item"><span>Cloud Security Weekly: identity spend survey, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>MIT Technology Review: the session re-validation gap</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Web search: analyst note on standing privilege costs</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Ars Technica: post mortem, front door only verification</span><span class="spos-source-tier">B</span></div>
+                    </div>
+                    <div class="spos-quality">
+                      <div class="spos-section-heading">Quality Assessment</div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">hook strength</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">authenticity</span><div class="spos-quality-bar"><i class="spos-q-8"></i></div><span class="spos-quality-score">8</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">source grounding</span><div class="spos-quality-bar"><i class="spos-q-9"></i></div><span class="spos-quality-score">9</span></div>
+                      <div class="spos-quality-row"><span class="spos-quality-label">factual caution</span><div class="spos-quality-bar"><i class="spos-q-7"></i></div><span class="spos-quality-score">7</span></div>
+                      <div class="spos-quality-overall">Overall: <strong class="spos-quality-pass">8/10 Pass</strong></div>
+                    </div>
+                    <div class="spos-modal-actions">
+                      <span class="spos-btn spos-btn-approve spos-btn-sm spos-t-queue-btn">Queue for Approval</span>
+                      <span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span>
+                      <span class="spos-btn spos-btn-reject spos-btn-sm">Discard</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="spos-highlight"></div>
+              <div class="spos-ripple"></div>
+              <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+              </div>
+            </div>
           </div>
         </div>
-        </div>
-        <p class="spos-footnote">From the dashboard to a new post</p>
+        <p class="spos-footnote" data-recording="create">From the dashboard to a new post</p>
+        <p class="spos-footnote" data-recording="topics" hidden>From a new topic to a researched draft</p>
         </div>
       </div>
     </section>

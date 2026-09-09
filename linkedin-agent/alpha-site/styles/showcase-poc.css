@@ -1,9 +1,15 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.13)
+   showcase-poc.css  (delivery 3.3.16)
    ================================================================
-   Marketing site showcase: a scripted replay of a tenant user
-   activating the Create CTA (Create a post modal), editing the pending
-   post (Edit Post modal), and publishing it from the post detail modal.
+   Marketing site showcase: two scripted replays the visitor picks
+   between with a tab row; only the selected one plays.
+     "create": the Create CTA (Create a post modal), editing the pending
+       post (Edit Post modal), publishing from the post detail modal.
+     "topics": the Topics page (add a topic, Generate Suggestions, Save
+       Topic), then the dashboard (pick topic and angle, Generate, the
+       Generating Content overlay, the Research Monitor narrowing to the
+       topic, the draft modal with Sources Referenced and Quality
+       Assessment).
    Rendered at the top of site_templates/index.html.
 
    Layout (3.3.7)
@@ -105,6 +111,20 @@
 }
 #showcase-pos .shot-window-bar .spos-callout.spos-on { opacity: 1; }
 #showcase-pos .shot-window-bar .spos-callout b { color: var(--accent-cyan); font-weight: 600; }
+
+/* ---------- Picker and recording visibility ---------- */
+#showcase-pos .spos-tabs { display: flex; gap: 0.5rem; margin: 0 0 0.9rem; flex-wrap: wrap; }
+#showcase-pos .spos-tab {
+  appearance: none; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary);
+  font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.45rem 0.9rem; border-radius: 999px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+#showcase-pos .spos-tab:hover { border-color: var(--border-active); color: var(--text-primary); }
+#showcase-pos .spos-tab.spos-active { border-color: var(--accent-cyan); color: var(--text-primary); background: rgba(6, 182, 212, 0.12); }
+#showcase-pos .spos-tab:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+#showcase-pos .spos-recording { display: none; }
+#showcase-pos .spos-recording.spos-active { display: block; }
+#showcase-pos .spos-footnote[hidden] { display: none; }
 
 /* ---------- Frame ---------- */
 #showcase-pos .spos-frame {
@@ -241,6 +261,100 @@
 #showcase-pos .spos-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
 #showcase-pos .spos-genre-desc { font-size: 0.76rem; color: #777; }
 #showcase-pos .spos-composer-actions .spos-btn-primary { background: #3b82f6; }
+
+/* ---------- Research Monitor card (mirrors the real middle column card) ---------- */
+#showcase-pos .spos-title-flush { margin-bottom: 0; display: flex; align-items: baseline; gap: 0.35rem; }
+#showcase-pos .spos-title-meta { font-size: 0.75rem; font-weight: 400; color: var(--text-secondary); }
+#showcase-pos .spos-cyan { color: var(--accent-cyan); }
+#showcase-pos .spos-research-meta { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); margin: 0.25rem 0 0.5rem; }
+#showcase-pos .spos-feed-list { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.6rem; }
+#showcase-pos .spos-feed-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--text-secondary); transition: opacity calc(0.4s / var(--spos-rate)); }
+#showcase-pos .spos-feed-row.spos-dim { opacity: 0.3; }
+#showcase-pos .spos-feed-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#showcase-pos .spos-feed-meta { display: flex; align-items: center; gap: 0.35rem; flex: none; }
+#showcase-pos .spos-feed-tier { font-family: var(--font-mono); font-size: 0.55rem; padding: 0.05rem 0.3rem; border-radius: 4px; background: rgba(6, 182, 212, 0.12); color: var(--accent-cyan); }
+#showcase-pos .spos-feed-count { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.6rem; }
+
+/* ---------- Topics page (light theme, mirrors public/topics/index.html) ---------- */
+#showcase-pos .spos-tp-screen { background: #f5f5f5; color: #333; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+#showcase-pos .spos-tp-screen::before, #showcase-pos .spos-tp-screen::after { display: none; }
+#showcase-pos .spos-tp-container { max-width: 900px; margin: 0 auto; padding: 0.9rem 2rem; }
+#showcase-pos .spos-tp-nav { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.6rem; background: #fff; border-radius: 6px; padding: 0.3rem 0.4rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+#showcase-pos .spos-tp-nav-link { font-size: 0.8rem; color: #0073b1; padding: 0.3rem 0.6rem; border-radius: 4px; }
+#showcase-pos .spos-tp-nav-link.spos-hover { background: rgba(0, 115, 177, 0.08); }
+#showcase-pos .spos-tp-nav-active { color: #333; font-weight: 600; }
+#showcase-pos .spos-tp-h1 { font-size: 1.35rem; font-weight: 700; margin: 0 0 0.5rem; color: #333; }
+#showcase-pos .spos-tp-h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.75rem; color: #333; }
+#showcase-pos .spos-tp-msg { display: none; padding: 0.55rem 0.75rem; border-radius: 4px; margin-bottom: 0.75rem; font-size: 0.85rem; background: #e8f5e9; color: #2e7d32; }
+#showcase-pos .spos-tp-msg.spos-on { display: block; }
+#showcase-pos .spos-tp-section { background: #fff; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+#showcase-pos .spos-tp-section-head { display: flex; justify-content: space-between; align-items: center; }
+#showcase-pos .spos-tp-section-head .spos-tp-h2 { margin: 0; }
+#showcase-pos .spos-tp-btn { display: inline-block; padding: 0.4rem 0.85rem; border-radius: 4px; font-size: 0.85rem; line-height: 1.2; transition: background 0.15s, transform 0.1s, filter 0.1s; }
+#showcase-pos .spos-tp-btn-primary { background: #0073b1; color: #fff; }
+#showcase-pos .spos-tp-btn-primary.spos-hover { background: #005a8d; }
+#showcase-pos .spos-tp-btn-secondary { background: #e0e0e0; color: #333; }
+#showcase-pos .spos-tp-btn-secondary.spos-hover { background: #ccc; }
+#showcase-pos .spos-tp-btn.spos-pressed { transform: scale(0.97); filter: brightness(0.92); }
+#showcase-pos .spos-tp-btn.spos-busy { opacity: 0.5; }
+#showcase-pos .spos-tp-form { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee; }
+#showcase-pos .spos-tp-form.spos-open { display: block; }
+#showcase-pos .spos-tp-row { margin-bottom: 0.45rem; }
+#showcase-pos .spos-tp-label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8rem; color: #555; }
+#showcase-pos .spos-tp-input { padding: 0.35rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333; min-height: 1.9rem; white-space: nowrap; overflow: hidden; }
+#showcase-pos .spos-tp-input.spos-focus { border-color: #0073b1; box-shadow: 0 0 0 2px rgba(0, 115, 177, 0.15); }
+#showcase-pos .spos-tp-input-sm { width: 80px; }
+#showcase-pos .spos-tp-ph { color: #999; }
+#showcase-pos .spos-tp-input.spos-focus .spos-tp-ph, #showcase-pos .spos-tp-input.spos-typed-on .spos-tp-ph { display: none; }
+#showcase-pos .spos-tp-input .spos-caret { display: none; width: 1px; height: 1em; background: #333; vertical-align: text-bottom; margin-left: 1px; animation: spos-caret 1s steps(2) infinite; }
+#showcase-pos .spos-tp-input.spos-focus .spos-caret { display: inline-block; }
+#showcase-pos .spos-tp-textarea { padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.82rem; line-height: 1.45; background: #fff; color: #333; white-space: pre-wrap; }
+#showcase-pos .spos-tp-result { display: none; margin-top: 0.5rem; }
+#showcase-pos .spos-tp-result.spos-open { display: block; }
+#showcase-pos .spos-tp-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+#showcase-pos .spos-tp-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.6rem; background: #fff; transition: opacity calc(0.35s / var(--spos-rate)), transform calc(0.35s / var(--spos-rate)); }
+#showcase-pos .spos-tp-card.spos-enter { opacity: 0; transform: translateY(-6px); }
+#showcase-pos .spos-t-new-card { display: none; }
+#showcase-pos .spos-t-new-card.spos-shown { display: block; }
+#showcase-pos .spos-tp-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+#showcase-pos .spos-tp-topic-name { font-weight: 600; font-size: 0.95rem; }
+#showcase-pos .spos-tp-meta { font-size: 0.75rem; color: #888; margin-top: 0.15rem; }
+#showcase-pos .spos-tp-scope { display: inline-block; padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.72rem; font-weight: 600; background: #f3e5f5; color: #7b1fa2; }
+#showcase-pos .spos-tp-weight { display: inline-block; background: #fff3e0; color: #e65100; padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.72rem; }
+#showcase-pos .spos-tp-toggle { font-size: 0.75rem; color: #0073b1; text-decoration: underline; }
+#showcase-pos .spos-tp-discover { color: #2e7d32; text-decoration: underline; }
+
+/* ---------- Screens inside the topics recording ---------- */
+#showcase-pos .spos-t-screen-topics, #showcase-pos .spos-t-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }
+#showcase-pos .spos-t-screen-dash { opacity: 0; visibility: hidden; }
+#showcase-pos .spos-t-screen-dash.spos-shown { opacity: 1; visibility: visible; }
+#showcase-pos .spos-t-screen-topics.spos-gone { opacity: 0; visibility: hidden; }
+#showcase-pos .spos-select.spos-hover { border-color: var(--border-active); }
+#showcase-pos .spos-t-angle-select { display: none; }
+#showcase-pos .spos-t-angle-select.spos-shown { display: block; }
+
+/* ---------- Generating Content overlay (mirrors app.css .overlay-backdrop / .overlay-card) ---------- */
+#showcase-pos .spos-gen-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 110; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity calc(var(--spos-fade-ms) / var(--spos-rate)) ease, visibility 0s linear calc(var(--spos-fade-ms) / var(--spos-rate)); }
+#showcase-pos .spos-gen-overlay.spos-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+#showcase-pos .spos-gen-card { background: #fff; border-radius: 8px; padding: 2rem 3rem; text-align: center; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); max-width: 420px; }
+#showcase-pos .spos-gen-spinner { width: 40px; height: 40px; margin: 0 auto 1rem; border: 3px solid #e0e0e0; border-top-color: #0073b1; border-radius: 50%; animation: spos-spin calc(1s / var(--spos-rate)) linear infinite; }
+@keyframes spos-spin { to { transform: rotate(360deg); } }
+#showcase-pos .spos-gen-title { font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: 0.5rem; }
+#showcase-pos .spos-gen-sub { font-size: 0.85rem; color: #888; }
+#showcase-pos .spos-gen-fine { font-size: 0.75rem; color: #aaa; margin-top: 1rem; }
+
+/* ---------- Quality Assessment panel (mirrors app.css .quality-*) ---------- */
+#showcase-pos .spos-quality { margin-top: 1.5rem; padding: 1rem; background: var(--bg-secondary); border-radius: var(--radius-sm); }
+#showcase-pos .spos-quality-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+#showcase-pos .spos-quality-label { font-size: 0.75rem; color: var(--text-muted); width: 140px; font-family: var(--font-mono); }
+#showcase-pos .spos-quality-bar { flex: 1; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden; }
+#showcase-pos .spos-quality-bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent-green); }
+#showcase-pos .spos-q-9 { width: 90%; }
+#showcase-pos .spos-q-8 { width: 80%; }
+#showcase-pos .spos-q-7 { width: 70%; }
+#showcase-pos .spos-quality-score { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
+#showcase-pos .spos-quality-overall { margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); }
+#showcase-pos .spos-quality-pass { color: var(--accent-green); }
 
 /* ---------- Dashboard modals (mirror app.css .modal-overlay / .modal-content) ---------- */
 #showcase-pos .spos-modal-overlay {

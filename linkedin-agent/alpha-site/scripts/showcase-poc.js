@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.16)
+// showcase-poc.js  (delivery 3.3.17)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Two recordings live in
@@ -279,8 +279,8 @@
     var required = [screenTopics, screenDash, addTopic, createForm, nameIn, descIn, suggest, result, save, msg, newCard, navDash,
       quickActions, topicSel, angleSel, generate, monitor, monitorScope, monitorUsing, feedList, genOverlay, draftOverlay, draftModal, queueBtn];
     var START = { x: 300, y: 600 };
-    var NAME = 'Zero Trust Budgeting';
-    var DESC = 'Where identity spend actually goes, and what to cut first';
+    var NAME = 'Returns and Refund Policy';
+    var DESC = 'How a generous return policy wins repeat customers without feeding fraud';
     var feedRows = feedList ? Array.prototype.slice.call(feedList.querySelectorAll('.spos-feed-row')) : [];
     var script = [
       // Scene 1: the Topics page
@@ -308,7 +308,7 @@
         msg.textContent = 'Topic created'; msg.classList.add('spos-on');
         newCard.classList.add('spos-shown', 'spos-enter');
         h.later(function () { newCard.classList.remove('spos-enter'); }, 60);
-        h.say('saved: <b>topics</b> row zero-trust-budgeting, listed under My Topics');
+        h.say('saved: <b>topics</b> row returns-and-refund-policy, listed under My Topics');
       } },
       { t: 18300, run: function () { h.moveCursor(h.center(navDash, 0, 0)); } },
       { t: 19400, run: h.hoverStep(navDash, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Dashboard"') },
@@ -317,15 +317,15 @@
       // Scene 2: the dashboard
       { t: 21500, run: function () { h.moveCursor(h.center(quickActions, 0, -30)); } },
       { t: 22600, run: h.hoverStep(topicSel, 0, 0, true, 'hover <b>select.topic-selector</b>') },
-      { t: 23500, run: h.clickStep(topicSel, 0, 0, 'select topic <b>"Zero Trust Budgeting"</b>') },
+      { t: 23500, run: h.clickStep(topicSel, 0, 0, 'select topic <b>"Returns and Refund Policy"</b>') },
       { t: 23750, run: function () { topicSel.classList.remove('spos-hover'); h.hideBox(); topicSel.textContent = NAME; angleSel.classList.add('spos-shown'); h.say('render angle picker (topic defines 4 angles)'); } },
       { t: 24800, run: h.hoverStep(angleSel, 0, 0, true, 'hover <b>select.topic-selector</b> (angle)') },
-      { t: 25700, run: h.clickStep(angleSel, 0, 0, 'select angle <b>"Where identity spend actually goes"</b>') },
+      { t: 25700, run: h.clickStep(angleSel, 0, 0, 'select angle <b>"Why a 90 day return window pays for itself"</b>') },
       { t: 25950, run: function () {
-        angleSel.classList.remove('spos-hover'); h.hideBox(); angleSel.textContent = 'Where identity spend actually goes';
-        monitorScope.textContent = '(topic: Zero Trust Budgeting)'; monitorUsing.textContent = '4';
+        angleSel.classList.remove('spos-hover'); h.hideBox(); angleSel.textContent = 'Why a 90 day return window pays for itself';
+        monitorScope.textContent = '(topic: Returns and Refund Policy)'; monitorUsing.textContent = '4';
         feedRows.forEach(function (r, i) { if (i === 0 || i === 4) r.classList.add('spos-dim'); });
-        h.say('Research Monitor narrows to the topic (GET /api/research/stats?topic=zero-trust-budgeting)');
+        h.say('Research Monitor narrows to the topic (GET /api/research/stats?topic=returns-and-refund-policy)');
       } },
       { t: 27200, run: h.hoverStep(generate, 0, 0, true, 'hover <b>button.btn-primary</b> "Generate"') },
       { t: 28200, run: h.clickStep(generate, 0, 0, 'click <b>button.btn-primary</b> "Generate" (POST /api/generate-preview)') },

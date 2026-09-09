@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replays: Create, Edit, Publish; Topics and Generate (3.3.16) -->
+  <!-- Showcase replays: Create, Edit, Publish; Topics and Generate (3.3.17) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -76,7 +76,7 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.16): two scripted replays a visitor can pick
+    <!-- Showcase replay (3.3.17): two scripted replays a visitor can pick
          between; only the selected one plays. Markup mirrors
          public_templates/dashboard.jsx and public/topics/index.html with
          spos- prefixed classes so app.css does not restyle it. Styles in
@@ -132,26 +132,26 @@
                       <div class="spos-title">Queue <span class="spos-badge spos-queue-badge">1</span></div>
                       <div class="spos-posts">
                         <div class="spos-post spos-pending-card">
-                          <div class="spos-badges"><span class="spos-topic">cloud-security</span><span class="spos-status spos-pending-status">pending approval</span></div>
-                          <div class="spos-preview spos-pending-preview">Zero Trust is not a product you buy, it is a set of decisions you keep making. This week two reports landed that make the same point from opposite directions...</div>
+                          <div class="spos-badges"><span class="spos-topic">customer-loyalty</span><span class="spos-status spos-pending-status">pending approval</span></div>
+                          <div class="spos-preview spos-pending-preview">Points are not loyalty. Two shopper studies landed this week and both point the same direction: members who redeem within thirty days come back three times as often...</div>
                           <div class="spos-actions spos-pending-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm spos-edit-btn">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">ai-platforms</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Most teams measure model cost per call. The teams that stay in budget measure cost per outcome, and the difference shows up in the ledger within a quarter.</div>
+                          <div class="spos-badges"><span class="spos-topic">holiday-retail</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Holiday hiring starts in September for a reason. The stores that train seasonal staff on the returns desk, not just the register, have a far quieter January.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Evidence, not intent, is what an assessor scores. Three controls where most SMBs have the practice but not the artifact, and how to close that gap.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Nobody remembers the price of the coffee. They remember whether someone said hello. Three low cost changes to the first ten seconds in the store.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                       </div>
                       <div class="spos-title spos-title-gap">Recent Posts</div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-posted">posted</span></div>
-                          <div class="spos-preview">CMMC Level 2 assessments are now scheduling into next spring. If your evidence library is still a folder of screenshots, this is the month to fix that.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Curbside pickup is no longer a pandemic feature. It is a Tuesday. Here is what the customers who use it every week told us they want next.</div>
                         </div>
                       </div>
                     </div>
@@ -172,9 +172,9 @@
                       </div>
                       <div class="spos-panel">
                         <div class="spos-title">Topic Coverage</div>
-                        <div class="spos-cov-row"><span>cloud-security</span><span class="spos-cov-count">14</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
-                        <div class="spos-cov-row"><span>ai-platforms</span><span class="spos-cov-count">9</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
-                        <div class="spos-cov-row"><span>cmmc</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
+                        <div class="spos-cov-row"><span>customer-loyalty</span><span class="spos-cov-count">14</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
+                        <div class="spos-cov-row"><span>holiday-retail</span><span class="spos-cov-count">9</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
+                        <div class="spos-cov-row"><span>store-experience</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
                       </div>
                     </div>
 
@@ -185,7 +185,7 @@
                         <div class="spos-log"><time>09:38:52</time><span class="spos-lvl">info</span><span>post 3a91 moved to pending_approval</span></div>
                         <div class="spos-log"><time>09:38:49</time><span class="spos-lvl">info</span><span>quality review passed (overall 8)</span></div>
                         <div class="spos-log"><time>09:38:31</time><span class="spos-lvl">info</span><span>research: 4 independent sources, corroborated</span></div>
-                        <div class="spos-log"><time>09:37:58</time><span class="spos-lvl">info</span><span>cycle 7f2c1a9e started, topic cloud-security</span></div>
+                        <div class="spos-log"><time>09:37:58</time><span class="spos-lvl">info</span><span>cycle 7f2c1a9e started, topic customer-loyalty</span></div>
                         <div class="spos-log"><time>08:12:04</time><span class="spos-lvl">info</span><span>LinkedIn token refreshed</span></div>
                       </div>
                     </div>
@@ -201,8 +201,8 @@
                     <span class="spos-composer-label">Genre</span>
                     <div class="spos-genres">
                       <div class="spos-genre spos-selected spos-genre-none"><input type="radio" name="spos-genre" checked disabled><span class="spos-genre-main"><span class="spos-genre-name">no genre</span><span class="spos-genre-desc">Start from a blank canvas and write the post yourself.</span></span></div>
-                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A research grounded point of view on one development in the topic.</span></span></div>
-                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">metric_brief</span><span class="spos-genre-desc">Built around one verified metric from the workspace metric store.</span></span></div>
+                      <div class="spos-genre spos-genre-insight"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">insight</span><span class="spos-genre-desc">A point of view on one shopper trend, grounded in this week's research.</span></span></div>
+                      <div class="spos-genre"><input type="radio" name="spos-genre" disabled><span class="spos-genre-main"><span class="spos-genre-name">seasonal_brief</span><span class="spos-genre-desc">A short, dated note built around one verified figure for the season.</span></span></div>
                     </div>
                     <div class="spos-composer-actions"><span class="spos-btn spos-btn-primary spos-btn-full">New Post</span></div>
                   </div>
@@ -215,22 +215,22 @@
                     <h3 class="spos-modal-heading-top">Edit Post <span class="spos-dest-badge">ORG</span></h3>
                     <div class="spos-mb">
                       <span class="spos-form-label">Title</span>
-                      <div class="spos-form-input">Zero Trust is a set of decisions, not a purchase</div>
+                      <div class="spos-form-input">Points are not loyalty</div>
                     </div>
                     <div class="spos-mb">
                       <span class="spos-form-label">Content</span>
-                      <div class="spos-form-textarea spos-edit-textarea">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+                      <div class="spos-form-textarea spos-edit-textarea">Points are not loyalty.
 
-This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+Two shopper studies landed this week and both point the same direction: members who redeem a reward within thirty days of joining come back three times as often as members who never redeem. The card in the wallet is not the habit. The first redemption is.
 
-Three decisions worth revisiting this quarter:
-1. Where does a session get re-checked, and by what?
-2. Which service accounts still hold standing privilege?
-3. What is logged when a policy says no?<span class="spos-caret"></span></div>
+Three things worth changing before the holiday rush:
+1. Make the first reward reachable in one visit, not five.
+2. Put the redemption prompt at the register, not in the app.
+3. Thank the redeemer by name the next time they walk in.<span class="spos-caret"></span></div>
                     </div>
                     <div class="spos-mb-lg">
                       <span class="spos-form-label">Hashtags (comma-separated)</span>
-                      <div class="spos-form-input">ZeroTrust, CloudSecurity, CMMC</div>
+                      <div class="spos-form-input">Loyalty, Retail, CustomerExperience</div>
                     </div>
                     <div class="spos-studio-panel"><div class="spos-studio-head">Post Image</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
                     <div class="spos-modal-actions-end">
@@ -244,17 +244,17 @@ Three decisions worth revisiting this quarter:
                 <div class="spos-modal-overlay spos-detail-overlay">
                   <div class="spos-modal spos-detail-modal">
                     <span class="spos-modal-close">&#x2715;</span>
-                    <div class="spos-badges-wrap"><span class="spos-topic">cloud-security</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
-                    <h3 class="spos-modal-heading">Zero Trust is a set of decisions, not a purchase</h3>
-                    <div class="spos-modal-body">Zero Trust is not a product you buy, it is a set of decisions you keep making.
+                    <div class="spos-badges-wrap"><span class="spos-topic">customer-loyalty</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
+                    <h3 class="spos-modal-heading">Points are not loyalty</h3>
+                    <div class="spos-modal-body">Points are not loyalty.
 
-This week two reports landed that make the same point from opposite directions: one from a federal audit, one from a breach post mortem. Both found the same gap: identity was verified once at the front door and never again.
+Two shopper studies landed this week and both point the same direction: members who redeem a reward within thirty days of joining come back three times as often as members who never redeem. The card in the wallet is not the habit. The first redemption is.
 
-Three decisions worth revisiting this quarter:
-1. Where does a session get re-checked, and by what?
-2. Which service accounts still hold standing privilege?
-3. What is logged when a policy says no?</div>
-                    <div class="spos-hashtags"><span class="spos-hashtag">#ZeroTrust</span><span class="spos-hashtag">#CloudSecurity</span><span class="spos-hashtag">#CMMC</span></div>
+Three things worth changing before the holiday rush:
+1. Make the first reward reachable in one visit, not five.
+2. Put the redemption prompt at the register, not in the app.
+3. Thank the redeemer by name the next time they walk in.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#Loyalty</span><span class="spos-hashtag">#Retail</span><span class="spos-hashtag">#CustomerExperience</span></div>
                     <div class="spos-modal-rewrite"><span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-xs">Rewrite with AI</span></div>
                     <div class="spos-modal-move">
                       <div class="spos-modal-move-label">Move this post to:</div>
@@ -262,16 +262,16 @@ Three decisions worth revisiting this quarter:
                     </div>
                     <div class="spos-source-list">
                       <div class="spos-section-heading-cyan">Sources (4)</div>
-                      <div class="spos-source-item"><span>Federal audit summary, cloud identity controls</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>Breach post mortem, session re-validation gap</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>Vendor briefing, standing privilege in service accounts</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Industry survey, policy decision logging</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Retail industry association: loyalty program benchmark, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Shopper survey: first redemption and repeat visits</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Regional grocer case study: reward at the register</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Trade press: what a loyalty point costs a small retailer</span><span class="spos-source-tier">B</span></div>
                     </div>
                     <div class="spos-section-divider">
                       <div class="spos-section-heading">Post Image</div>
                       <div class="spos-detail-stack">
                         <div class="spos-image-choice"><input type="radio" name="spos-image" disabled> No image</div>
-                        <div class="spos-image-choice"><input type="radio" name="spos-image" checked disabled> Article image (federal audit summary)</div>
+                        <div class="spos-image-choice"><input type="radio" name="spos-image" checked disabled> Article image (loyalty benchmark report)</div>
                         <div class="spos-studio-panel"><div class="spos-studio-head">Image Studio</div><div class="spos-studio-row"><span class="spos-studio-label">Story Lens</span><span class="spos-studio-select">editorial_photo</span><span class="spos-btn spos-btn-primary spos-btn-sm">Generate</span></div></div>
                       </div>
                     </div>
@@ -305,15 +305,15 @@ Three decisions worth revisiting this quarter:
                   <div class="spos-tp-section">
                     <div class="spos-tp-section-head"><h2 class="spos-tp-h2">New Topic</h2><span class="spos-tp-btn spos-tp-btn-primary spos-t-add-topic">+ Add Topic</span></div>
                     <div class="spos-tp-form spos-t-create-form">
-                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., Cloud Migration Strategy</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
-                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Practical guidance for moving workloads to the cloud</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., Holiday Gift Guides</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Practical guidance for the busiest weeks of the year</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
                       <div class="spos-tp-row"><span class="spos-tp-btn spos-tp-btn-secondary spos-t-suggest">Generate Suggestions</span></div>
                       <div class="spos-tp-result spos-t-result">
-                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Where identity spend actually goes, and what to cut first
-Why standing privilege is the line item nobody owns
-What a Zero Trust budget looks like after the first audit
-Vendor consolidation: when one platform is cheaper than three</div></div>
-                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#ZeroTrust, #CloudSecurity, #SecurityBudget</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Why a 90 day return window pays for itself
+The returns desk is your second most visited store
+Free returns without the fraud: what the data shows
+Turning a refund into the next visit</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#Retail, #ReturnsPolicy, #CustomerExperience</div></div>
                         <div class="spos-tp-row"><span class="spos-tp-label">Weight (higher = more frequent)</span><div class="spos-tp-input spos-tp-input-sm">1</div></div>
                         <div class="spos-tp-actions"><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span><span class="spos-tp-btn spos-tp-btn-primary spos-t-save">Save Topic</span></div>
                       </div>
@@ -322,18 +322,18 @@ Vendor consolidation: when one platform is cheaper than three</div></div>
                   <div class="spos-tp-section">
                     <h2 class="spos-tp-h2">My Topics</h2>
                     <div class="spos-tp-card spos-t-new-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Zero Trust Budgeting</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">zero-trust-budgeting</div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Returns and Refund Policy</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">returns-and-refund-policy</div>
                       <div class="spos-tp-meta">4 angles, 3 hashtags, 0 feeds mapped <span class="spos-tp-discover">Discover feeds</span></div>
                     </div>
                     <div class="spos-tp-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Cloud Security</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">cloud-security</div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Customer Loyalty</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">customer-loyalty</div>
                       <div class="spos-tp-meta">5 angles, 4 hashtags, 3 feeds mapped</div>
                     </div>
                     <div class="spos-tp-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">AI Platforms</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">ai-platforms</div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Holiday Retail Season</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">holiday-retail</div>
                       <div class="spos-tp-meta">3 angles, 3 hashtags, 2 feeds mapped</div>
                     </div>
                   </div>
@@ -364,26 +364,26 @@ Vendor consolidation: when one platform is cheaper than three</div></div>
                       <div class="spos-title">Queue <span class="spos-badge">1</span></div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cloud-security</span><span class="spos-status">pending approval</span></div>
-                          <div class="spos-preview">Zero Trust is not a product you buy, it is a set of decisions you keep making. This week two reports landed that make the same point from opposite directions...</div>
+                          <div class="spos-badges"><span class="spos-topic">customer-loyalty</span><span class="spos-status">pending approval</span></div>
+                          <div class="spos-preview">Points are not loyalty. Two shopper studies landed this week and both point the same direction: members who redeem within thirty days come back three times as often...</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">ai-platforms</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Most teams measure model cost per call. The teams that stay in budget measure cost per outcome, and the difference shows up in the ledger within a quarter.</div>
+                          <div class="spos-badges"><span class="spos-topic">holiday-retail</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Holiday hiring starts in September for a reason. The stores that train seasonal staff on the returns desk, not just the register, have a far quieter January.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Evidence, not intent, is what an assessor scores. Three controls where most SMBs have the practice but not the artifact, and how to close that gap.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Nobody remembers the price of the coffee. They remember whether someone said hello. Three low cost changes to the first ten seconds in the store.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                       </div>
                       <div class="spos-title spos-title-gap">Recent Posts</div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">cmmc</span><span class="spos-status spos-status-posted">posted</span></div>
-                          <div class="spos-preview">CMMC Level 2 assessments are now scheduling into next spring. If your evidence library is still a folder of screenshots, this is the month to fix that.</div>
+                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Curbside pickup is no longer a pandemic feature. It is a Tuesday. Here is what the customers who use it every week told us they want next.</div>
                         </div>
                       </div>
                     </div>
@@ -405,11 +405,11 @@ Vendor consolidation: when one platform is cheaper than three</div></div>
                         <div class="spos-title spos-title-flush">Research Monitor <span class="spos-title-meta spos-t-monitor-scope">(all topics)</span></div>
                         <div class="spos-research-meta">using <span class="spos-cyan spos-t-monitor-using">38</span> articles, last <span class="spos-cyan">20</span> days</div>
                         <div class="spos-feed-list spos-t-feed-list">
-                          <div class="spos-feed-row"><span class="spos-feed-name">Cloud Security Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">MIT Technology Review (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Ars Technica (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Wired (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">ZDNet (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Retail Customer Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Shopper Insights Daily (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Main Street Business Journal (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Consumer Trends Report (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Local Commerce News (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
                         </div>
                         <span class="spos-btn spos-btn-primary spos-btn-full spos-btn-tight spos-btn-xs">Refresh Feeds Now</span>
                       </div>
@@ -437,20 +437,20 @@ Vendor consolidation: when one platform is cheaper than three</div></div>
                 <div class="spos-modal-overlay spos-t-draft-overlay">
                   <div class="spos-modal spos-t-draft-modal">
                     <span class="spos-modal-close">&#x2715;</span>
-                    <div class="spos-badges-wrap"><span class="spos-topic">zero-trust-budgeting</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
-                    <h3 class="spos-modal-heading">Where identity spend actually goes</h3>
-                    <div class="spos-modal-body">Most Zero Trust budgets are not spent on Zero Trust. They are spent on renewals for tools that verify identity once, at the front door, and never again.
+                    <div class="spos-badges-wrap"><span class="spos-topic">returns-and-refund-policy</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
+                    <h3 class="spos-modal-heading">Why a 90 day return window pays for itself</h3>
+                    <div class="spos-modal-body">A 30 day return window feels safe. It is also the reason a lot of gifts never get bought.
 
-Two numbers from this week's research make the point. The first is how much of a typical security budget sits in identity and access line items. The second is how few of those tools re-check a session after it starts.
+Two numbers from this week's research make the point. The first is how many holiday shoppers check the return policy before they check the price. The second is how rarely a longer window actually raises the return rate; most people who plan to return do it in the first week either way.
 
-If your budget review is coming up, start with one question for every identity tool: when does it say no a second time?</div>
-                    <div class="spos-hashtags"><span class="spos-hashtag">#ZeroTrust</span><span class="spos-hashtag">#CloudSecurity</span><span class="spos-hashtag">#SecurityBudget</span></div>
+If you are setting policy for the season, try this: extend the window to 90 days, print it on the receipt, and watch what it does to gift purchases.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#Retail</span><span class="spos-hashtag">#ReturnsPolicy</span><span class="spos-hashtag">#CustomerExperience</span></div>
                     <div class="spos-source-list">
                       <div class="spos-section-heading-cyan">Sources Referenced</div>
-                      <div class="spos-source-item"><span>Cloud Security Weekly: identity spend survey, 2026</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>MIT Technology Review: the session re-validation gap</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Web search: analyst note on standing privilege costs</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Ars Technica: post mortem, front door only verification</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Retail Customer Weekly: holiday returns policy survey, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Shopper Insights Daily: return windows and gift purchases</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Web search: consumer finance column on return windows</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Main Street Business Journal: a regional chain's 90 day pilot</span><span class="spos-source-tier">B</span></div>
                     </div>
                     <div class="spos-quality">
                       <div class="spos-section-heading">Quality Assessment</div>

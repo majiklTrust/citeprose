@@ -271,26 +271,6 @@ export async function createRegistrationInvite(email, invitedBySub, apiKey = nul
   return { ...reg, keyProvided: !!apiKey };
 }
 
-// 4.25111.78: did THIS login create the workspace through its own
-// self-registration? The registration row carries the creator's
-// subject (invited_by_sub = self:<sub>) and, once claimed, the tenant.
-// The tenant resolver uses this to let a buyer who has not verified
-// their email claim the owner invitation of the workspace they made:
-// the session proves the identity that created it, so the email
-// verification gate (which protects invitations addressed to OTHER
-// people) does not apply. Any other pending invitation keeps the gate.
-export async function isSelfRegisteredOwner(tenantId, sub) {
-  if (typeof tenantId !== "string" || typeof sub !== "string" || !sub) return false;
-  const { rows } = await query(
-    `SELECT 1 FROM tenant_registrations
-      WHERE tenant_id = $1 AND status = 'claimed' AND invited_by_sub = $2
-      LIMIT 1`,
-    [tenantId, `self:${sub}`]
-  );
-  return rows.length > 0;
-}
-
-
 /**
  * Validate a registration token. Returns the registration row
  * if valid (pending or active, not expired). Returns null otherwise.

@@ -1,12 +1,13 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.17)
+   showcase-poc.css  (delivery 3.3.18)
    ================================================================
    Marketing site showcase: two scripted replays the visitor picks
    between with a tab row; only the selected one plays.
      "create": the Create CTA (Create a post modal), editing the pending
        post (Edit Post modal), publishing from the post detail modal.
      "topics": the Topics page (add a topic, Generate Suggestions, Save
-       Topic), then the dashboard (pick topic and angle, Generate, the
+       Topic, Discover Feeds modal, Add Selected Feeds), then the
+       dashboard (pick topic and angle, Generate, the
        Generating Content overlay, the Research Monitor narrowing to the
        topic, the draft modal with Sources Referenced and Quality
        Assessment).
@@ -323,6 +324,32 @@
 #showcase-pos .spos-tp-weight { display: inline-block; background: #fff3e0; color: #e65100; padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.72rem; }
 #showcase-pos .spos-tp-toggle { font-size: 0.75rem; color: #0073b1; text-decoration: underline; }
 #showcase-pos .spos-tp-discover { color: #2e7d32; text-decoration: underline; }
+
+/* ---------- Feed discovery modal (mirrors .discover-overlay / .discover-modal on the Topics page) ---------- */
+#showcase-pos .spos-tp-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 1.5rem 1rem; opacity: 0; visibility: hidden; transition: opacity calc(var(--spos-fade-ms) / var(--spos-rate)) ease, visibility 0s linear calc(var(--spos-fade-ms) / var(--spos-rate)); }
+#showcase-pos .spos-tp-overlay.spos-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+#showcase-pos .spos-tp-modal { width: 100%; max-width: 700px; max-height: 92%; overflow: hidden; background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); color: #333; }
+#showcase-pos .spos-tp-modal .spos-tp-h2 { margin-bottom: 0.3rem; }
+#showcase-pos .spos-tp-subtitle { font-size: 0.82rem; color: #666; margin: 0 0 0.75rem; }
+#showcase-pos .spos-tp-loading { text-align: center; padding: 2rem; color: #999; font-size: 0.9rem; }
+#showcase-pos .spos-tp-loading.spos-done { display: none; }
+#showcase-pos .spos-tp-results { display: none; }
+#showcase-pos .spos-tp-results.spos-open { display: block; }
+#showcase-pos .spos-tp-dfeed { display: flex; gap: 0.75rem; align-items: flex-start; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; transition: border-color 0.15s; }
+#showcase-pos .spos-tp-dfeed.spos-hover { border-color: #0073b1; }
+#showcase-pos .spos-tp-check { flex: none; width: 16px; height: 16px; margin-top: 0.15rem; border-radius: 3px; background: #0073b1; position: relative; }
+#showcase-pos .spos-tp-check::after { content: ''; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+#showcase-pos .spos-tp-dfeed-info { flex: 1; min-width: 0; }
+#showcase-pos .spos-tp-dfeed-name { font-weight: 600; font-size: 0.9rem; }
+#showcase-pos .spos-tp-dtier { display: inline-block; padding: 0.05rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; background: #fff3e0; color: #e65100; }
+#showcase-pos .spos-tp-dfeed-url { font-size: 0.7rem; color: #999; word-break: break-all; }
+#showcase-pos .spos-tp-dfeed-desc { font-size: 0.78rem; color: #555; margin-top: 0.15rem; font-style: italic; }
+#showcase-pos .spos-tp-dfeed-rel { font-size: 0.76rem; color: #0073b1; margin-top: 0.2rem; }
+#showcase-pos .spos-tp-dfeed-hl { font-size: 0.74rem; color: #666; margin: 0.25rem 0 0 1rem; padding: 0; }
+#showcase-pos .spos-tp-dactions { display: none; gap: 0.75rem; margin-top: 0.9rem; }
+#showcase-pos .spos-tp-dactions.spos-open { display: flex; }
+#showcase-pos .spos-t-new-feed { display: none; }
+#showcase-pos .spos-t-new-feed.spos-shown { display: flex; }
 
 /* ---------- Screens inside the topics recording ---------- */
 #showcase-pos .spos-t-screen-topics, #showcase-pos .spos-t-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }

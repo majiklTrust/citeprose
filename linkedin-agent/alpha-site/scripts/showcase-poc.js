@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.17)
+// showcase-poc.js  (delivery 3.3.18)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Two recordings live in
@@ -20,7 +20,10 @@
 //                sentence description, Generate Suggestions (angles and
 //                hashtags fill in), Save Topic, the card appears under
 //                My Topics.
-//             2. Dashboard: pick the new topic and one of its angles in
+//             2. Discover Feeds on the new card: the discovery modal
+//                asks the model for feeds and validates each one, three
+//                rows come back checked, Add Selected Feeds maps them.
+//             3. Dashboard: pick the new topic and one of its angles in
 //                Quick Actions, Generate, the Generating Content overlay
 //                shows, the Research Monitor narrows to the topic, then
 //                the draft modal opens with Sources Referenced and the
@@ -132,6 +135,7 @@
     }
     function hideBox() { hl.classList.remove('spos-on'); }
     function q(sel) { return recEl.querySelector(sel); }
+    function qAll(sel) { return recEl.querySelectorAll(sel); }
 
     function hoverStep(el, dx, dy, fast, caption) {
       return function () {
@@ -161,7 +165,7 @@
       };
     }
 
-    var h = { q: q, later: later, center: center, moveCursor: moveCursor, jumpCursor: jumpCursor, clickAt: clickAt,
+    var h = { q: q, qAll: qAll, later: later, center: center, moveCursor: moveCursor, jumpCursor: jumpCursor, clickAt: clickAt,
       showBox: showBox, hideBox: hideBox, say: say, hush: hush, hoverStep: hoverStep, clickStep: clickStep, typeStep: typeStep };
     var built = build(h);
     if (!built) return null;
@@ -273,15 +277,20 @@
     var addTopic = h.q('.spos-t-add-topic'), createForm = h.q('.spos-t-create-form'), nameIn = h.q('.spos-t-name'), descIn = h.q('.spos-t-desc');
     var suggest = h.q('.spos-t-suggest'), result = h.q('.spos-t-result'), save = h.q('.spos-t-save'), msg = h.q('.spos-t-msg'), newCard = h.q('.spos-t-new-card');
     var navDash = h.q('.spos-t-nav-dashboard');
+    var discoverLink = h.q('.spos-t-discover-link'), mappedCount = h.q('.spos-t-mapped-count');
+    var dOverlay = h.q('.spos-t-discover-overlay'), dSubtitle = h.q('.spos-t-discover-subtitle'), dLoading = h.q('.spos-t-discover-loading');
+    var dResults = h.q('.spos-t-discover-results'), dRow1 = h.q('.spos-t-dfeed-1'), dActions = h.q('.spos-t-discover-actions'), dAdd = h.q('.spos-t-discover-add');
+    var newFeeds = Array.prototype.slice.call(h.qAll('.spos-t-new-feed'));
     var quickActions = h.q('.spos-t-quick-actions'), topicSel = h.q('.spos-t-topic-select'), angleSel = h.q('.spos-t-angle-select'), generate = h.q('.spos-t-generate');
     var monitor = h.q('.spos-t-monitor'), monitorScope = h.q('.spos-t-monitor-scope'), monitorUsing = h.q('.spos-t-monitor-using'), feedList = h.q('.spos-t-feed-list');
     var genOverlay = h.q('.spos-t-gen-overlay'), draftOverlay = h.q('.spos-t-draft-overlay'), draftModal = h.q('.spos-t-draft-modal'), queueBtn = h.q('.spos-t-queue-btn');
     var required = [screenTopics, screenDash, addTopic, createForm, nameIn, descIn, suggest, result, save, msg, newCard, navDash,
+      discoverLink, mappedCount, dOverlay, dSubtitle, dLoading, dResults, dRow1, dActions, dAdd,
       quickActions, topicSel, angleSel, generate, monitor, monitorScope, monitorUsing, feedList, genOverlay, draftOverlay, draftModal, queueBtn];
     var START = { x: 300, y: 600 };
-    var NAME = 'Returns and Refund Policy';
-    var DESC = 'How a generous return policy wins repeat customers without feeding fraud';
-    var feedRows = feedList ? Array.prototype.slice.call(feedList.querySelectorAll('.spos-feed-row')) : [];
+    var NAME = 'Emergency Savings Habits';
+    var DESC = 'How everyday savers build a cushion, and what a bank can do to make it easier';
+    var feedRows = feedList ? Array.prototype.slice.call(feedList.querySelectorAll('.spos-feed-row:not(.spos-t-new-feed)')) : [];
     var script = [
       // Scene 1: the Topics page
       { t: 0, run: function () { h.jumpCursor(START); h.say('pageview <b>/app/topics/</b>'); } },
@@ -308,37 +317,58 @@
         msg.textContent = 'Topic created'; msg.classList.add('spos-on');
         newCard.classList.add('spos-shown', 'spos-enter');
         h.later(function () { newCard.classList.remove('spos-enter'); }, 60);
-        h.say('saved: <b>topics</b> row returns-and-refund-policy, listed under My Topics');
+        h.say('saved: <b>topics</b> row emergency-savings-habits, listed under My Topics');
       } },
-      { t: 18300, run: function () { h.moveCursor(h.center(navDash, 0, 0)); } },
-      { t: 19400, run: h.hoverStep(navDash, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Dashboard"') },
-      { t: 20200, run: h.clickStep(navDash, 0, 0, 'click <b>a.manager-nav-link</b> "Dashboard"') },
-      { t: 20450, run: function () { navDash.classList.remove('spos-hover'); h.hideBox(); screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); h.say('pageview <b>/app/</b>'); } },
+      // Scene 2: feed discovery for the new topic
+      { t: 18200, run: function () { h.moveCursor(h.center(discoverLink, 0, 0)); } },
+      { t: 19300, run: h.hoverStep(discoverLink, 0, 0, true, 'hover <b>a.discover-feeds-link</b> "Discover Feeds"') },
+      { t: 20200, run: h.clickStep(discoverLink, 0, 0, 'click <b>a.discover-feeds-link</b> (POST /api/feeds/discover)') },
+      { t: 20450, run: function () { discoverLink.classList.remove('spos-hover'); h.hideBox(); dOverlay.classList.add('spos-open'); h.say('render <b>#discover-overlay</b> "Discovering Feeds for Emergency Savings Habits"'); } },
+      { t: 21700, run: function () { h.say('model proposes candidate feeds for the topic'); } },
+      { t: 23000, run: function () { h.say('validating each feed: fetch, parse, grade, egress allowlist'); } },
+      { t: 24400, run: function () { dLoading.classList.add('spos-done'); dResults.classList.add('spos-open'); dActions.classList.add('spos-open'); dSubtitle.textContent = '3 validated feeds found'; h.say('render results: <b>3 validated feeds</b>, all selected'); } },
+      { t: 25500, run: h.hoverStep(dRow1, 0, 0, true, 'hover <b>.discover-feed</b> "Savings Habit Lab" (primary)') },
+      { t: 27000, run: function () { dRow1.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(dAdd, 0, 0)); } },
+      { t: 28000, run: h.hoverStep(dAdd, 0, 0, true, 'hover <b>button#discover-add-btn</b> "Add Selected Feeds"') },
+      { t: 28900, run: h.clickStep(dAdd, 0, 0, 'click <b>button#discover-add-btn</b> (POST /api/feeds/add)') },
+      { t: 29150, run: function () { dAdd.classList.remove('spos-hover'); h.hideBox(); dAdd.classList.add('spos-busy'); dAdd.textContent = 'Adding...'; } },
+      { t: 30300, run: function () {
+        dOverlay.classList.remove('spos-open'); dAdd.classList.remove('spos-busy'); dAdd.textContent = 'Add Selected Feeds';
+        msg.textContent = '3 feed(s) added, 3 mapped to topic'; msg.classList.add('spos-on');
+        mappedCount.textContent = '3';
+        h.say('saved: 3 <b>feeds_v2</b> rows, 3 <b>feed_topics</b> mappings; card shows 3 feeds mapped');
+      } },
+      // Scene 3: to the dashboard
+      { t: 31300, run: function () { h.moveCursor(h.center(navDash, 0, 0)); } },
+      { t: 32400, run: h.hoverStep(navDash, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Dashboard"') },
+      { t: 33200, run: h.clickStep(navDash, 0, 0, 'click <b>a.manager-nav-link</b> "Dashboard"') },
+      { t: 33450, run: function () { navDash.classList.remove('spos-hover'); h.hideBox(); screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); h.say('pageview <b>/app/</b>'); } },
       // Scene 2: the dashboard
-      { t: 21500, run: function () { h.moveCursor(h.center(quickActions, 0, -30)); } },
-      { t: 22600, run: h.hoverStep(topicSel, 0, 0, true, 'hover <b>select.topic-selector</b>') },
-      { t: 23500, run: h.clickStep(topicSel, 0, 0, 'select topic <b>"Returns and Refund Policy"</b>') },
-      { t: 23750, run: function () { topicSel.classList.remove('spos-hover'); h.hideBox(); topicSel.textContent = NAME; angleSel.classList.add('spos-shown'); h.say('render angle picker (topic defines 4 angles)'); } },
-      { t: 24800, run: h.hoverStep(angleSel, 0, 0, true, 'hover <b>select.topic-selector</b> (angle)') },
-      { t: 25700, run: h.clickStep(angleSel, 0, 0, 'select angle <b>"Why a 90 day return window pays for itself"</b>') },
-      { t: 25950, run: function () {
-        angleSel.classList.remove('spos-hover'); h.hideBox(); angleSel.textContent = 'Why a 90 day return window pays for itself';
-        monitorScope.textContent = '(topic: Returns and Refund Policy)'; monitorUsing.textContent = '4';
+      { t: 34500, run: function () { h.moveCursor(h.center(quickActions, 0, -30)); } },
+      { t: 35600, run: h.hoverStep(topicSel, 0, 0, true, 'hover <b>select.topic-selector</b>') },
+      { t: 36500, run: h.clickStep(topicSel, 0, 0, 'select topic <b>"Emergency Savings Habits"</b>') },
+      { t: 36750, run: function () { topicSel.classList.remove('spos-hover'); h.hideBox(); topicSel.textContent = NAME; angleSel.classList.add('spos-shown'); h.say('render angle picker (topic defines 4 angles)'); } },
+      { t: 37800, run: h.hoverStep(angleSel, 0, 0, true, 'hover <b>select.topic-selector</b> (angle)') },
+      { t: 38700, run: h.clickStep(angleSel, 0, 0, 'select angle <b>"Why an emergency fund starts at $500"</b>') },
+      { t: 38950, run: function () {
+        angleSel.classList.remove('spos-hover'); h.hideBox(); angleSel.textContent = 'Why an emergency fund starts at $500';
+        monitorScope.textContent = '(topic: Emergency Savings Habits)'; monitorUsing.textContent = '4';
         feedRows.forEach(function (r, i) { if (i === 0 || i === 4) r.classList.add('spos-dim'); });
-        h.say('Research Monitor narrows to the topic (GET /api/research/stats?topic=returns-and-refund-policy)');
+        newFeeds.forEach(function (r) { r.classList.add('spos-shown'); });
+        h.say('Research Monitor narrows to the topic: 3 new feeds at 0, catchalls kept (GET /api/research/stats?topic=emergency-savings-habits)');
       } },
-      { t: 27200, run: h.hoverStep(generate, 0, 0, true, 'hover <b>button.btn-primary</b> "Generate"') },
-      { t: 28200, run: h.clickStep(generate, 0, 0, 'click <b>button.btn-primary</b> "Generate" (POST /api/generate-preview)') },
-      { t: 28450, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('render <b>#generate-overlay</b> "Generating Content"'); } },
-      { t: 29800, run: function () { h.say('research: 4 independent sources, corroborated brief'); } },
-      { t: 31300, run: function () { h.say('generation: draft written from the vaulted prompt'); } },
-      { t: 32800, run: function () { h.say('quality review: overall 8/10, pass'); } },
-      { t: 34000, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('render <b>.modal-overlay</b> draft preview (isPreview, draft saved)'); } },
-      { t: 35200, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
-      { t: 36300, run: function () { h.say('scroll <b>.modal-content</b> to Sources Referenced'); draftModal.scrollTop = Math.round(draftModal.scrollHeight * 0.45); } },
-      { t: 38000, run: function () { h.say('scroll <b>.modal-content</b> to Quality Assessment'); draftModal.scrollTop = draftModal.scrollHeight; } },
-      { t: 39500, run: h.hoverStep(queueBtn, 0, 0, true, 'hover <b>button.btn-approve</b> "Queue for Approval"') },
-      { t: 41000, run: function () { queueBtn.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(START); h.say('end of recording'); } }
+      { t: 40200, run: h.hoverStep(generate, 0, 0, true, 'hover <b>button.btn-primary</b> "Generate"') },
+      { t: 41200, run: h.clickStep(generate, 0, 0, 'click <b>button.btn-primary</b> "Generate" (POST /api/generate-preview)') },
+      { t: 41450, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('render <b>#generate-overlay</b> "Generating Content"'); } },
+      { t: 42800, run: function () { h.say('research: 4 independent sources, corroborated brief'); } },
+      { t: 44300, run: function () { h.say('generation: draft written from the vaulted prompt'); } },
+      { t: 45800, run: function () { h.say('quality review: overall 8/10, pass'); } },
+      { t: 47000, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('render <b>.modal-overlay</b> draft preview (isPreview, draft saved)'); } },
+      { t: 48200, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
+      { t: 49300, run: function () { h.say('scroll <b>.modal-content</b> to Sources Referenced'); draftModal.scrollTop = Math.round(draftModal.scrollHeight * 0.45); } },
+      { t: 51000, run: function () { h.say('scroll <b>.modal-content</b> to Quality Assessment'); draftModal.scrollTop = draftModal.scrollHeight; } },
+      { t: 52500, run: h.hoverStep(queueBtn, 0, 0, true, 'hover <b>button.btn-approve</b> "Queue for Approval"') },
+      { t: 54000, run: function () { queueBtn.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(START); h.say('end of recording'); } }
     ];
     function reset() {
       screenTopics.classList.remove('spos-gone'); screenDash.classList.remove('spos-shown');
@@ -348,12 +378,17 @@
       suggest.textContent = 'Generate Suggestions';
       msg.textContent = ''; msg.classList.remove('spos-on');
       newCard.classList.remove('spos-shown', 'spos-enter');
+      dOverlay.classList.remove('spos-open'); dLoading.classList.remove('spos-done'); dResults.classList.remove('spos-open'); dActions.classList.remove('spos-open');
+      dSubtitle.textContent = 'Asking AI to suggest feeds, then validating each one...';
+      [discoverLink, dRow1, dAdd].forEach(function (el) { el.classList.remove('spos-hover', 'spos-pressed', 'spos-busy'); });
+      dAdd.textContent = 'Add Selected Feeds'; mappedCount.textContent = '0';
+      newFeeds.forEach(function (r) { r.classList.remove('spos-shown'); });
       topicSel.textContent = 'Auto-select topic'; angleSel.textContent = 'Auto-select angle'; angleSel.classList.remove('spos-shown');
       monitorScope.textContent = '(all topics)'; monitorUsing.textContent = '38';
       feedRows.forEach(function (r) { r.classList.remove('spos-dim'); });
       genOverlay.classList.remove('spos-open'); draftOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0;
     }
-    return { script: script, duration: 42500, reset: reset, required: required, start: START,
+    return { script: script, duration: 55500, reset: reset, required: required, start: START,
       reducedMotion: function () { screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); draftOverlay.classList.add('spos-open'); } };
   }
 

@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v=114" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v=114" />
-  <!-- Showcase replays: Create, Edit, Publish; Topics and Generate (3.3.17) -->
+  <!-- Showcase replays: Create, Edit, Publish; Topics, Discovery and Generate (3.3.18) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v=114" />
 </head>
 <body>
@@ -76,7 +76,7 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.17): two scripted replays a visitor can pick
+    <!-- Showcase replay (3.3.18): two scripted replays a visitor can pick
          between; only the selected one plays. Markup mirrors
          public_templates/dashboard.jsx and public/topics/index.html with
          spos- prefixed classes so app.css does not restyle it. Styles in
@@ -86,9 +86,10 @@
          quality scores and the genres after "no genre" are illustrative.
            Recording "create": Create a post, Edit Post, publish from the
              post detail modal.
-           Recording "topics": add a topic on the Topics page, generate
-             suggestions, save, then Generate from Quick Actions and review
-             the draft's Sources Referenced and Quality Assessment. -->
+           Recording "topics" (finance tenant): add a topic on the Topics
+             page, generate suggestions, save, discover feeds for it, then
+             Generate from Quick Actions and review the draft's Sources
+             Referenced and Quality Assessment. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -112,7 +113,7 @@
                   <div class="spos-header">
                     <div>
                       <div class="spos-header-title">Market Intelligence</div>
-                      <div class="spos-header-subtitle">v3.3.17  connected as Jordan Ellis</div>
+                      <div class="spos-header-subtitle">v3.3.18  connected as Jordan Ellis</div>
                     </div>
                     <div class="spos-header-controls">
                       <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
@@ -305,15 +306,15 @@ Three things worth changing before the holiday rush:
                   <div class="spos-tp-section">
                     <div class="spos-tp-section-head"><h2 class="spos-tp-h2">New Topic</h2><span class="spos-tp-btn spos-tp-btn-primary spos-t-add-topic">+ Add Topic</span></div>
                     <div class="spos-tp-form spos-t-create-form">
-                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., Holiday Gift Guides</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
-                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Practical guidance for the busiest weeks of the year</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Topic Name</span><div class="spos-tp-input spos-t-name"><span class="spos-tp-ph">e.g., First-Time Homebuyers</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
+                      <div class="spos-tp-row"><span class="spos-tp-label">Description (one sentence)</span><div class="spos-tp-input spos-t-desc"><span class="spos-tp-ph">Plain language help for buyers in their first year of ownership</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div></div>
                       <div class="spos-tp-row"><span class="spos-tp-btn spos-tp-btn-secondary spos-t-suggest">Generate Suggestions</span></div>
                       <div class="spos-tp-result spos-t-result">
-                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Why a 90 day return window pays for itself
-The returns desk is your second most visited store
-Free returns without the fraud: what the data shows
-Turning a refund into the next visit</div></div>
-                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#Retail, #ReturnsPolicy, #CustomerExperience</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Content Angles</span><div class="spos-tp-textarea">Why an emergency fund starts at $500, not three months of expenses
+The round-up feature that quietly builds a savings habit
+Rate chasing versus staying put: what actually moves the balance
+What the first automatic transfer changes about the second</div></div>
+                        <div class="spos-tp-row"><span class="spos-tp-label">Hashtags</span><div class="spos-tp-input">#PersonalFinance, #Savings, #CommunityBanking</div></div>
                         <div class="spos-tp-row"><span class="spos-tp-label">Weight (higher = more frequent)</span><div class="spos-tp-input spos-tp-input-sm">1</div></div>
                         <div class="spos-tp-actions"><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span><span class="spos-tp-btn spos-tp-btn-primary spos-t-save">Save Topic</span></div>
                       </div>
@@ -322,20 +323,35 @@ Turning a refund into the next visit</div></div>
                   <div class="spos-tp-section">
                     <h2 class="spos-tp-h2">My Topics</h2>
                     <div class="spos-tp-card spos-t-new-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Returns and Refund Policy</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">returns-and-refund-policy</div>
-                      <div class="spos-tp-meta">4 angles, 3 hashtags, 0 feeds mapped <span class="spos-tp-discover">Discover feeds</span></div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Emergency Savings Habits</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 1</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">emergency-savings-habits</div>
+                      <div class="spos-tp-meta">4 angles, 3 hashtags, <span class="spos-t-mapped-count">0</span> feeds mapped <span class="spos-tp-discover spos-t-discover-link">Discover Feeds</span></div>
                     </div>
                     <div class="spos-tp-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Customer Loyalty</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">customer-loyalty</div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">First-Time Homebuyers</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 3</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">first-time-homebuyers</div>
                       <div class="spos-tp-meta">5 angles, 4 hashtags, 3 feeds mapped</div>
                     </div>
                     <div class="spos-tp-card">
-                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Holiday Retail Season</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
-                      <div class="spos-tp-meta">holiday-retail</div>
+                      <div class="spos-tp-card-head"><span><span class="spos-tp-topic-name">Small Business Lending</span> <span class="spos-tp-scope">personal</span> <span class="spos-tp-weight">weight: 2</span></span><span class="spos-tp-toggle">Details</span></div>
+                      <div class="spos-tp-meta">small-business-lending</div>
                       <div class="spos-tp-meta">3 angles, 3 hashtags, 2 feeds mapped</div>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Feed discovery modal (mirrors #discover-overlay on public/topics/index.html) -->
+                <div class="spos-tp-overlay spos-t-discover-overlay">
+                  <div class="spos-tp-modal">
+                    <h2 class="spos-tp-h2 spos-t-discover-title">Discovering Feeds for "Emergency Savings Habits"</h2>
+                    <p class="spos-tp-subtitle spos-t-discover-subtitle">Asking AI to suggest feeds, then validating each one...</p>
+                    <div class="spos-tp-loading spos-t-discover-loading">Searching for feeds... This may take 15-30 seconds.</div>
+                    <div class="spos-tp-results spos-t-discover-results">
+                      <div class="spos-tp-dfeed spos-t-dfeed-1"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Savings Habit Lab</span> <span class="spos-tp-dtier">primary</span><div class="spos-tp-dfeed-url">https://savingshabitlab.example/feed.xml</div><div class="spos-tp-dfeed-desc">Weekly research briefs on how households actually save.</div><div class="spos-tp-dfeed-rel">AI: matches all four angles, strongest on automatic transfers and small first balances.</div><ul class="spos-tp-dfeed-hl"><li>Why the first $500 matters more than the target</li></ul></div></div>
+                      <div class="spos-tp-dfeed"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Household Budget Notes</span> <span class="spos-tp-dtier">secondary</span><div class="spos-tp-dfeed-url">https://householdbudgetnotes.example/rss</div><div class="spos-tp-dfeed-desc">Plain language personal finance for working families.</div><div class="spos-tp-dfeed-rel">AI: practical savings habits, light on data, good for examples.</div><ul class="spos-tp-dfeed-hl"><li>The round-up feature, six months in</li></ul></div></div>
+                      <div class="spos-tp-dfeed"><span class="spos-tp-check"></span><div class="spos-tp-dfeed-info"><span class="spos-tp-dfeed-name">Credit Union Consumer Desk</span> <span class="spos-tp-dtier">secondary</span><div class="spos-tp-dfeed-url">https://cuconsumerdesk.example/feed</div><div class="spos-tp-dfeed-desc">Member education articles from a credit union network.</div><div class="spos-tp-dfeed-rel">AI: covers rate chasing and account switching from the member side.</div><ul class="spos-tp-dfeed-hl"><li>Chasing a higher rate: when it is worth the move</li></ul></div></div>
+                    </div>
+                    <div class="spos-tp-dactions spos-t-discover-actions"><span class="spos-tp-btn spos-tp-btn-primary spos-t-discover-add">Add Selected Feeds</span><span class="spos-tp-btn spos-tp-btn-secondary">Cancel</span></div>
                   </div>
                 </div>
               </div>
@@ -346,7 +362,7 @@ Turning a refund into the next visit</div></div>
                   <div class="spos-header">
                     <div>
                       <div class="spos-header-title">Market Intelligence</div>
-                      <div class="spos-header-subtitle">v3.3.17  connected as Jordan Ellis</div>
+                      <div class="spos-header-subtitle">v3.3.18  connected as Jordan Ellis</div>
                     </div>
                     <div class="spos-header-controls">
                       <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
@@ -364,26 +380,26 @@ Turning a refund into the next visit</div></div>
                       <div class="spos-title">Queue <span class="spos-badge">1</span></div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">customer-loyalty</span><span class="spos-status">pending approval</span></div>
-                          <div class="spos-preview">Points are not loyalty. Two shopper studies landed this week and both point the same direction: members who redeem within thirty days come back three times as often...</div>
+                          <div class="spos-badges"><span class="spos-topic">first-time-homebuyers</span><span class="spos-status">pending approval</span></div>
+                          <div class="spos-preview">The down payment is not the hard part anymore. Two lender surveys this week say the same thing: closing costs and the first year of ownership are where new buyers get surprised...</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">holiday-retail</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Holiday hiring starts in September for a reason. The stores that train seasonal staff on the returns desk, not just the register, have a far quieter January.</div>
+                          <div class="spos-badges"><span class="spos-topic">small-business-lending</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">A line of credit you never draw is not a wasted fee. Three owners on why they opened one in a good year and used it in a bad one.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-draft">draft</span></div>
-                          <div class="spos-preview">Nobody remembers the price of the coffee. They remember whether someone said hello. Three low cost changes to the first ten seconds in the store.</div>
+                          <div class="spos-badges"><span class="spos-topic">fraud-awareness</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">Your bank will never ask you to move money to a safe account. The scripts scammers are using this season, and the one question that ends the call.</div>
                           <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
                         </div>
                       </div>
                       <div class="spos-title spos-title-gap">Recent Posts</div>
                       <div class="spos-posts">
                         <div class="spos-post">
-                          <div class="spos-badges"><span class="spos-topic">store-experience</span><span class="spos-status spos-status-posted">posted</span></div>
-                          <div class="spos-preview">Curbside pickup is no longer a pandemic feature. It is a Tuesday. Here is what the customers who use it every week told us they want next.</div>
+                          <div class="spos-badges"><span class="spos-topic">fraud-awareness</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Check fraud is up again. Here is what changed at the branch this year, and what to do before you put one in the mail.</div>
                         </div>
                       </div>
                     </div>
@@ -405,11 +421,14 @@ Turning a refund into the next visit</div></div>
                         <div class="spos-title spos-title-flush">Research Monitor <span class="spos-title-meta spos-t-monitor-scope">(all topics)</span></div>
                         <div class="spos-research-meta">using <span class="spos-cyan spos-t-monitor-using">38</span> articles, last <span class="spos-cyan">20</span> days</div>
                         <div class="spos-feed-list spos-t-feed-list">
-                          <div class="spos-feed-row"><span class="spos-feed-name">Retail Customer Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Shopper Insights Daily (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Main Street Business Journal (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Consumer Trends Report (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
-                          <div class="spos-feed-row"><span class="spos-feed-name">Local Commerce News (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Community Banking Weekly</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">12</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Consumer Finance Daily (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">9</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Local Business Ledger (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">8</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Household Money Report (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">6</span></span></div>
+                          <div class="spos-feed-row"><span class="spos-feed-name">Regional Economy News (Catchall)</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">3</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Savings Habit Lab</span><span class="spos-feed-meta"><span class="spos-feed-tier">prim</span><span class="spos-feed-count">0</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Household Budget Notes</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">0</span></span></div>
+                          <div class="spos-feed-row spos-t-new-feed"><span class="spos-feed-name">Credit Union Consumer Desk</span><span class="spos-feed-meta"><span class="spos-feed-tier">sec</span><span class="spos-feed-count">0</span></span></div>
                         </div>
                         <span class="spos-btn spos-btn-primary spos-btn-full spos-btn-tight spos-btn-xs">Refresh Feeds Now</span>
                       </div>
@@ -417,7 +436,7 @@ Turning a refund into the next visit</div></div>
                     <div>
                       <div class="spos-panel">
                         <div class="spos-title">Activity Log</div>
-                        <div class="spos-log"><time>09:41:07</time><span class="spos-lvl">info</span><span>feeds polled: 6 ok, 0 failed, 11 new articles</span></div>
+                        <div class="spos-log"><time>09:41:07</time><span class="spos-lvl">info</span><span>feeds polled: 5 ok, 0 failed, 9 new articles</span></div>
                       </div>
                     </div>
                   </div>
@@ -437,20 +456,20 @@ Turning a refund into the next visit</div></div>
                 <div class="spos-modal-overlay spos-t-draft-overlay">
                   <div class="spos-modal spos-t-draft-modal">
                     <span class="spos-modal-close">&#x2715;</span>
-                    <div class="spos-badges-wrap"><span class="spos-topic">returns-and-refund-policy</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
-                    <h3 class="spos-modal-heading">Why a 90 day return window pays for itself</h3>
-                    <div class="spos-modal-body">A 30 day return window feels safe. It is also the reason a lot of gifts never get bought.
+                    <div class="spos-badges-wrap"><span class="spos-topic">emergency-savings-habits</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span><span class="spos-status spos-status-draft">draft</span></div>
+                    <h3 class="spos-modal-heading">Why an emergency fund starts at $500</h3>
+                    <div class="spos-modal-body">Three months of expenses is the advice. Five hundred dollars is the habit.
 
-Two numbers from this week's research make the point. The first is how many holiday shoppers check the return policy before they check the price. The second is how rarely a longer window actually raises the return rate; most people who plan to return do it in the first week either way.
+Two numbers from this week's research make the point. The first is how many households cannot cover a surprise car repair without borrowing. The second is how much a balance of just five hundred dollars cuts the odds of an overdraft in the following year.
 
-If you are setting policy for the season, try this: extend the window to 90 days, print it on the receipt, and watch what it does to gift purchases.</div>
-                    <div class="spos-hashtags"><span class="spos-hashtag">#Retail</span><span class="spos-hashtag">#ReturnsPolicy</span><span class="spos-hashtag">#CustomerExperience</span></div>
+If you are starting from zero, do not set the three month target yet. Set up one automatic transfer, name the account, and let the first five hundred teach you the rest.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#PersonalFinance</span><span class="spos-hashtag">#Savings</span><span class="spos-hashtag">#CommunityBanking</span></div>
                     <div class="spos-source-list">
                       <div class="spos-section-heading-cyan">Sources Referenced</div>
-                      <div class="spos-source-item"><span>Retail Customer Weekly: holiday returns policy survey, 2026</span><span class="spos-source-tier">A</span></div>
-                      <div class="spos-source-item"><span>Shopper Insights Daily: return windows and gift purchases</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Web search: consumer finance column on return windows</span><span class="spos-source-tier">B</span></div>
-                      <div class="spos-source-item"><span>Main Street Business Journal: a regional chain's 90 day pilot</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Community Banking Weekly: household savings behavior survey, 2026</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Consumer Finance Daily: small balances and overdraft rates</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Web search: consumer advocacy column on the first five hundred dollars</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Household Money Report: automatic transfers and account tenure</span><span class="spos-source-tier">B</span></div>
                     </div>
                     <div class="spos-quality">
                       <div class="spos-section-heading">Quality Assessment</div>
@@ -852,7 +871,7 @@ If you are setting policy for the season, try this: extend the window to 90 days
     <div class="site-container footer-inner">
       <p class="footer-copy">
         &copy; 2026 majiklTrust, Market Intelligence, LLC.
-        <span class="footer-copy-version">v3.3.17-114</span>
+        <span class="footer-copy-version">v3.3.18-114</span>
       </p>
       <nav class="footer-nav" aria-label="Footer">
         <a href="signup.html">Sign Up</a>

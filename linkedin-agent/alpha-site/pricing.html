@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Plans and pricing for Market Intelligence: four subscription tiers, billed per workspace." />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <title>Pricing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    /* The billing page's idiom (public_templates/billing-index.html):
+       one quiet column, serif display headings, kicker labels, ruled
+       sections, accent-left cards. The plan card rules are the billing
+       page's, verbatim, so the cards render as they do at /app/billing.
+       Self-contained; no app stylesheets. */
+    :root {
+      --ink: #0f0f0f; --paper: #f7f5f0; --rule: #d6d0c4;
+      --accent: #1a3a5c; --accent-lt: #e8edf2; --muted: #6b6659;
+      --gap: 1.5rem;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; font-size: 1rem; line-height: 1.55; }
+    main { max-width: 52rem; margin: 0 auto; padding: 1.75rem 1.5rem 2.5rem; }
+    .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.78rem; font-weight: 500; margin: 0 0 0.75rem; }
+    h1 { font-family: 'Playfair Display', serif; font-weight: 600; font-size: clamp(1.6rem, 4vw, 2.1rem); line-height: 1.15; margin: 0 0 0.35rem; }
+    .byline { color: var(--muted); font-size: 0.95rem; margin: 0 0 var(--gap); }
+    h2 { font-family: 'Playfair Display', serif; font-weight: 600; font-size: 1.3rem; margin: var(--gap) 0 0.6rem; padding-top: var(--gap); border-top: 1px solid var(--rule); }
+    p { margin: 0; }
+    p + p { margin-top: 1rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    a { color: var(--accent); }
+    .topbar { max-width: 52rem; margin: 0 auto; padding: 1rem 1.5rem 0; display: flex; justify-content: space-between; align-items: baseline; }
+    .topbar a { text-decoration: none; font-size: 0.9rem; }
+    .btn { font: inherit; font-weight: 500; padding: 0.25rem 0.55rem; border: 1px solid var(--accent); background: var(--accent); color: #fffdf9; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn:hover { background: #142e49; }
+
+    /* The plan list: the billing page's rules, one card per tier */
+    .pricing-grid { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; margin: 0.9rem 0 0; padding: 0; }
+    @media (max-width: 640px) { .pricing-grid { grid-template-columns: 1fr; } }
+    .plan { background: var(--accent-lt); border-left: 3px solid var(--accent); padding: 0.85rem 1rem; position: relative; display: flex; flex-direction: column; }
+    .plan .tag { display: block; font-weight: 500; color: var(--accent); margin-bottom: 0.2rem; letter-spacing: 0.03em; }
+    .plan .price { font-family: 'Playfair Display', serif; font-size: 1.45rem; margin: 0.1rem 0; min-height: 1.6em; }
+    .plan .cur { color: var(--muted); font-size: 0.85rem; }
+    .plan .desc { margin-top: 0.4rem; margin-bottom: 0.55rem; }
+    .plan .subscribe-btn { margin-top: auto; align-self: flex-start; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/">Home</a>
+    <a href="/auth/login">Already have a login? Sign in</a>
+  </div>
+  <main>
+    <p class="kicker">Pricing</p>
+    <h1>Plans And Pricing.</h1>
+    <p class="byline">All plans renew automatically every 30 days, billed in USD per workspace.</p>
+
+    <p>Every plan is a complete workspace: your topics, your sources, research-backed drafts, review before anything is published, and publishing to LinkedIn on your approval. The tiers differ in who works in the workspace and what it can produce.</p>
+
+    <h2>Choose A Plan</h2>
+    <p>All financial transactions are handled through our partner platform. Select a service tier and complete your purchase in their secure web portal. Your workspace activates immediately after payment is confirmed.</p>
+    <ul class="pricing-grid">
+      <li class="plan" data-plan="individual">
+        <span class="tag">Individual</span>
+        <div class="price"></div>
+        <div class="cur">Pricing available from our authorized sales partner.</div>
+        <p class="desc">Single user productivity.</p>
+        <a class="subscribe-btn btn" data-tier="individual" href="#">Purchase</a>
+      </li>
+      <li class="plan" data-plan="business">
+        <span class="tag">Business</span>
+        <div class="price"></div>
+        <div class="cur">Pricing available from our authorized sales partner.</div>
+        <p class="desc">Team insights and productivity.</p>
+        <a class="subscribe-btn btn" data-tier="business" href="#">Purchase</a>
+      </li>
+      <li class="plan" data-plan="individual_plus">
+        <span class="tag">Individual Plus</span>
+        <div class="price"></div>
+        <div class="cur">Pricing available from our authorized sales partner.</div>
+        <p class="desc">High quality AI image generation.</p>
+        <a class="subscribe-btn btn" data-tier="individual_plus" href="#">Purchase</a>
+      </li>
+      <li class="plan" data-plan="business_plus">
+        <span class="tag">Business Plus</span>
+        <div class="price"></div>
+        <div class="cur">Pricing available from our authorized sales partner.</div>
+        <p class="desc">AI image generation and employee advocacy.</p>
+        <a class="subscribe-btn btn" data-tier="business_plus" href="#">Purchase</a>
+      </li>
+    </ul>
+
+    <h2>Renewal, Grace Period</h2>
+    <p>Subscriptions renew automatically every 30 days. New Individual and Business subscriptions include a 5-day grace period: your workspace activates as soon as checkout completes, and the first billing cycle begins when the grace period ends. Individual Plus and Business Plus begin billing at checkout.</p>
+    <p>If a renewal payment cannot be completed, your workspace keeps access for a short time while payment is retried. Accepted currency: USD.</p>
+
+    <h2>Refund, Dispute Policy</h2>
+    <p>We want you to be satisfied with Market Intelligence. Because we sell access to a digital software service and not physical goods, the following terms apply. If you believe a charge is incorrect, contact us within 30 days of the charge at <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> and we will review it promptly. Where a billing error is ours, we refund it. Partial billing periods are not refunded when you cancel; your access continues to the end of the paid period.</p>
+    <p>If you dispute a charge with your card issuer, we will provide the issuer with records of the subscription and its use. We would rather resolve it with you directly first.</p>
+
+    <h2>Cancellation Policy</h2>
+    <p>You can cancel your subscription at any time. Cancellation stops future renewals; your workspace keeps access until the end of the current paid period, and no further charges occur after that. To cancel, contact <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a> from the email on the account.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about billing, plans, or a custom arrangement: <a href="mailto:accountadmin@***REMOVED***">accountadmin@***REMOVED***</a>.</p>
+  </main>
+
+  <script>
+  (function () {
+    'use strict';
+    // Live prices from GET /api/pricing, applied exactly as billing.js
+    // applies the catalog on /app/billing: name, description, price and
+    // currency line, written with textContent only, and only the fields
+    // the catalog supplies; the static copy above is the fallback.
+    // The price is text here (on the billing page it is the checkout
+    // link). The Purchase links always show; their destinations are
+    // this one map, to be determined.
+    var PURCHASE_HREF = {
+      individual: '#',
+      individual_plus: '#',
+      business: '#',
+      business_plus: '#'
+    };
+
+    function applyCatalog(catalog) {
+      if (!catalog) return;
+      var cards = document.querySelectorAll('.plan[data-plan]');
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        var info = catalog[card.getAttribute('data-plan')];
+        if (!info) continue;
+        var el;
+        if (info.name && (el = card.querySelector('.tag'))) el.textContent = info.name;
+        if (info.description && (el = card.querySelector('.desc'))) el.textContent = info.description;
+        if (typeof info.amount === 'number' && (el = card.querySelector('.price'))) {
+          var whole = Math.floor(info.amount / 100).toLocaleString('en-US');
+          var per = info.interval ? ' / ' + info.interval : ' / month';
+          el.textContent = '$' + whole + per;
+        }
+        if (info.currency && (el = card.querySelector('.cur'))) {
+          el.textContent = info.currency + ', billed ' + (info.interval === 'year' ? 'yearly' : 'monthly');
+        }
+      }
+    }
+
+    function applyPurchaseLinks() {
+      var links = document.querySelectorAll('.subscribe-btn[data-tier]');
+      for (var i = 0; i < links.length; i++) {
+        var href = PURCHASE_HREF[links[i].getAttribute('data-tier')];
+        links[i].setAttribute('href', typeof href === 'string' && href ? href : '#');
+      }
+    }
+
+    applyPurchaseLinks();
+    fetch('/api/pricing', { credentials: 'omit' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { applyCatalog(data && data.catalog); })
+      .catch(function () { /* static copy stands */ });
+  })();
+  </script>
+</body>
+</html>

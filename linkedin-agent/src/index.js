@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v3.3.26
+// v4.25111.77
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -79,6 +79,7 @@ export function createApp(ctx) {
     withTenant, findTenantByAuthIdentity, storeCredential,
     setAgentState,
     invalidateTokenCache,
+    createPricingRoutes,
     createPlatformAdminRoutes,
     createBillingRoutes
   } = ctx;
@@ -845,6 +846,10 @@ export function createApp(ctx) {
   // exempts this path so a suspended owner can always reactivate.
   instance.use("/api/billing", createBillingRoutes());
 
+  // Public plan read for ***REMOVED***/pricing.html (no auth, no tenant).
+  // Must be before apiRoutes (api.js's guard 404s unknown /api/*).
+  instance.use("/api/pricing", createPricingRoutes());
+
   // Topics API routes — mounted at /api/topics. Blanket middleware
   // requires manage_own_topics (blocks viewers). Per-handler checks
   // enforce manage_topics for global operations.
@@ -976,6 +981,7 @@ export async function buildAppForTests() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
+  const { default: createPricingRoutes } = await import("./routes/pricing-api.js");
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1009,6 +1015,7 @@ export async function buildAppForTests() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createPricingRoutes,
     createBillingRoutes,
     adminPageGate: createAdminPageGate(),
     platformAdminPageGate: createPlatformAdminPageGate()
@@ -1090,6 +1097,7 @@ export async function start() {
   const { findTenantByAuthIdentity }     = await import("./tenant/platform-db.js");
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
+  const { default: createPricingRoutes } = await import("./routes/pricing-api.js");
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1134,6 +1142,7 @@ export async function start() {
     setAgentState,
     invalidateTokenCache,
     createPlatformAdminRoutes,
+    createPricingRoutes,
     createBillingRoutes,
     adminPageGate: createAdminPageGate(),
     platformAdminPageGate: createPlatformAdminPageGate()
@@ -1146,7 +1155,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  3.3.26
+║           LinkedIn AI Content Agent  4.25111.77
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "3.3.24",
+  "version": "3.3.25",
   "config": {
     "cssversion": "114",
     "appname": "Market Intelligence",
@@ -29,7 +29,20 @@
         "linkedinStatusNoToken": "",
         "linkedinStatusNotConfirmed": "",
         "linkedInConnected": "Connected",
-        "linkedInDisconnected": "Not Connected"
+        "linkedInDisconnected": "Not Connected",
+        "automationControlLabel": "Control Center",
+        "automationStateManual": "Manual",
+        "automationStateAutoGenerate": "Agentic",
+        "automationStateAutoPost": "Auto-Post",
+        "automationStateManualTitle": "The agent does nothing on its own.",
+        "automationStateAutoGenerateTitle": "The agent writes and queues posts.",
+        "automationStateAutoPostTitle": "The agent will write and publish posts once the review window expires.",
+        "automationChangeFailedAlertPrefix": "Failed to change automation state: ",
+        "reviewWindowNote": "Queued posts will publish after {hours} hours.",
+        "forceCycleButton": "⟳ Force Scheduler Cycle",
+        "forceCycleTitle": "run the scheduler cycle now",
+        "forceCycleDisabledTitle": "Active in auto-generate mode.",
+        "quickActionsLabel": "Post Composition"
       }
     }
   },

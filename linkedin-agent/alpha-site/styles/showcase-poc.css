@@ -1,10 +1,12 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.24)
+   showcase-poc.css  (delivery 3.3.25)
    ================================================================
    Marketing site showcase: three scripted replays the visitor picks
    between with a tab row; only the selected one plays.
-     "create": the Create CTA (Create a post modal), editing the pending
-       post (Edit Post modal), publishing from the post detail modal.
+     "create": Generate from Quick Actions (Generating Content overlay,
+       draft preview with Sources Referenced and Quality Assessment,
+       Queue for Approval), editing the queued post (Edit Post modal),
+       publishing from the post detail modal.
      "topics": the Topics page (add a topic, Generate Suggestions, Save
        Topic, Discover Feeds modal, Add Selected Feeds), then the
        dashboard (pick topic and angle, Generate, the
@@ -214,7 +216,7 @@
 #showcase-pos .spos-title-gap { margin-top: 1.1rem; }
 #showcase-pos .spos-badge { background: var(--accent-blue); color: #fff; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-family: var(--font-mono); }
 #showcase-pos .spos-posts { display: flex; flex-direction: column; gap: 0.75rem; }
-#showcase-pos .spos-post { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem 1rem; transition: border-color 0.2s, background 0.2s, opacity calc(0.4s / var(--spos-rate)); }
+#showcase-pos .spos-post { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem 1rem; transition: border-color 0.2s, background 0.2s, opacity calc(0.4s / var(--spos-rate)), transform calc(0.4s / var(--spos-rate)); }
 #showcase-pos .spos-badges { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; }
 #showcase-pos .spos-topic { font-size: 0.68rem; font-family: var(--font-mono); padding: 0.1rem 0.45rem; border-radius: 6px; background: rgba(139, 92, 246, 0.18); color: #a78bfa; }
 #showcase-pos .spos-status { font-size: 0.68rem; font-family: var(--font-mono); padding: 0.1rem 0.45rem; border-radius: 6px; background: var(--glow-amber); color: var(--accent-amber); }
@@ -263,32 +265,6 @@
 #showcase-pos .spos-log { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-secondary); padding: 0.25rem 0; border-bottom: 1px solid rgba(42, 53, 72, 0.6); display: flex; gap: 0.5rem; }
 #showcase-pos .spos-log time { color: var(--text-muted); flex: none; }
 #showcase-pos .spos-log .spos-lvl { color: var(--accent-green); flex: none; }
-
-/* ---------- Composer modal (mirrors dashboard.jsx Composer) ---------- */
-#showcase-pos .spos-composer-overlay {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 100; display: flex; justify-content: center; align-items: flex-start;
-  padding: 2rem 1rem; opacity: 0; visibility: hidden;
-  transition: opacity calc(var(--spos-fade-ms) / var(--spos-rate)) ease, visibility 0s linear calc(var(--spos-fade-ms) / var(--spos-rate));
-}
-#showcase-pos .spos-composer-overlay.spos-open { opacity: 1; visibility: visible; transition-delay: 0s; }
-#showcase-pos .spos-composer {
-  background: #fff; border-radius: 8px; width: 100%; max-width: 640px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); color: #222;
-  transform: translateY(10px) scale(0.98); transition: transform calc(var(--spos-fade-ms) / var(--spos-rate)) ease;
-}
-#showcase-pos .spos-composer-overlay.spos-open .spos-composer { transform: none; }
-#showcase-pos .spos-composer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-#showcase-pos .spos-composer-title { font-size: 1.2rem; font-weight: 700; color: #222; margin: 0; }
-#showcase-pos .spos-composer-close { background: none; border: none; font-size: 1.2rem; color: #666; line-height: 1; }
-#showcase-pos .spos-composer-label { display: block; font-size: 0.78rem; font-weight: 600; color: #555; margin: 0.8rem 0 0.3rem; }
-#showcase-pos .spos-genres { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
-#showcase-pos .spos-genre { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #ddd; border-radius: 6px; transition: border-color 0.15s, background 0.15s; }
-#showcase-pos .spos-genre.spos-selected { border-color: #2563eb; background: #eff5ff; }
-#showcase-pos .spos-genre.spos-hover { border-color: #93c5fd; }
-#showcase-pos .spos-genre input { margin-top: 0.2rem; }
-#showcase-pos .spos-genre-main { display: flex; flex-direction: column; gap: 0.1rem; }
-#showcase-pos .spos-genre-name { font-size: 0.85rem; font-weight: 600; color: #333; }
-#showcase-pos .spos-genre-desc { font-size: 0.76rem; color: #777; }
-#showcase-pos .spos-composer-actions .spos-btn-primary { background: #3b82f6; }
 
 /* ---------- Research Monitor card (mirrors the real middle column card) ---------- */
 #showcase-pos .spos-title-flush { margin-bottom: 0; display: flex; align-items: baseline; gap: 0.35rem; }
@@ -536,6 +512,8 @@
 #showcase-pos .spos-btn-approve.spos-pressed, #showcase-pos .spos-btn-edit.spos-pressed { transform: scale(0.97); filter: brightness(0.92); }
 #showcase-pos .spos-post.spos-hover { border-color: var(--border-active); background: var(--bg-card-hover); }
 #showcase-pos .spos-post.spos-published { opacity: 0.35; }
+#showcase-pos .spos-pending-card.spos-c-hidden { display: none; }
+#showcase-pos .spos-post.spos-enter { opacity: 0; transform: translateY(-6px); }
 
 /* ---------- Cursor, click ripple, highlight, callout ---------- */
 #showcase-pos .spos-cursor {
@@ -555,6 +533,6 @@
 @media (prefers-reduced-motion: reduce) {
   #showcase-pos .spos-headline-mark { animation: none; background-size: 100% 3px; }
   #showcase-pos .spos-cursor, #showcase-pos .spos-ripple, #showcase-pos .spos-highlight { display: none; }
-  #showcase-pos .spos-composer-overlay { opacity: 1; visibility: visible; transition: none; }
-  #showcase-pos .spos-composer { transform: none; transition: none; }
+  #showcase-pos .spos-modal-overlay.spos-open, #showcase-pos .spos-gen-overlay.spos-open { transition: none; }
+  #showcase-pos .spos-modal { transform: none; transition: none; }
 }

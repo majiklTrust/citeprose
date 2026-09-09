@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.24)
+// showcase-poc.js  (delivery 3.3.25)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three recordings live in
@@ -7,14 +7,17 @@
 // recording runs; switching stops the other, resets it, and starts
 // the chosen one from its first frame.
 //
-//   "create"  1. Create: hover and click the Create CTA, the Create a
-//                post modal opens, a genre is hovered, the modal closes.
-//             2. Edit: click Edit on the pending queue card, the Edit
-//                Post modal opens, the Content field takes focus, Save
-//                Changes is clicked.
-//             3. Publish: click the pending card, the post detail modal
-//                opens, it scrolls to the actions, Publish is clicked,
-//                the queue and the stat cards reflect it.
+//   "create"  1. Generate: click Generate in Quick Actions, the Generating
+//                Content overlay shows while the caption walks research,
+//                drafting and quality review, then the draft preview opens
+//                with Sources Referenced and the Quality Assessment, and
+//                Queue for Approval puts it in the queue.
+//             2. Edit: click Edit on the queued card, the Edit Post modal
+//                opens, the Content field takes focus, Save Changes is
+//                clicked.
+//             3. Publish: click the card, the post detail modal opens, it
+//                scrolls to the actions, Publish is clicked, the queue and
+//                the stat cards reflect it.
 //
 //   "topics"  1. Topics page: + Add Topic, type the name and the one
 //                sentence description, Generate Suggestions (angles and
@@ -279,66 +282,81 @@
 
   // ---------- Recording "create" ----------
   function buildCreate(h) {
-    var composer = h.q('.spos-composer-overlay'), composerClose = h.q('.spos-composer-close'), btnCreate = h.q('.spos-btn-create'), quickActions = h.q('.spos-quick-actions');
-    var genreNone = h.q('.spos-genre-none'), genreInsight = h.q('.spos-genre-insight');
+    var btnGenerate = h.q('.spos-btn-generate'), quickActions = h.q('.spos-quick-actions');
+    var genOverlay = h.q('.spos-c-gen-overlay'), draftOverlay = h.q('.spos-c-draft-overlay'), draftModal = h.q('.spos-c-draft-modal'), queueBtn = h.q('.spos-c-queue-btn');
     var pendingCard = h.q('.spos-pending-card'), editBtn = h.q('.spos-edit-btn');
     var editOverlay = h.q('.spos-edit-overlay'), editTextarea = h.q('.spos-edit-textarea'), editSave = h.q('.spos-edit-save');
     var detailOverlay = h.q('.spos-detail-overlay'), detailModal = h.q('.spos-detail-modal'), publishBtn = h.q('.spos-publish-btn');
     var pendingStatus = h.q('.spos-pending-status'), pendingActions = h.q('.spos-pending-actions'), queueBadge = h.q('.spos-queue-badge');
     var statPublished = h.q('.spos-stat-published'), statPending = h.q('.spos-stat-pending');
-    var required = [composer, composerClose, btnCreate, quickActions, genreNone, genreInsight, pendingCard, editBtn, editOverlay, editTextarea, editSave,
+    var required = [btnGenerate, quickActions, genOverlay, draftOverlay, draftModal, queueBtn, pendingCard, editBtn, editOverlay, editTextarea, editSave,
       detailOverlay, detailModal, publishBtn, pendingStatus, pendingActions, queueBadge, statPublished, statPending];
     var START = { x: 300, y: 600 };
     var script = [
-      { t: 0, run: function () { h.jumpCursor(START); } },
+      // Scene 1: Generate
+      { t: 0, run: function () { h.jumpCursor(START); h.say('Monday at the shop. The queue is empty and the week needs a post.'); } },
       { t: 900, run: function () { h.moveCursor(h.center(quickActions, 0, -40)); } },
-      { t: 2000, run: h.hoverStep(btnCreate, 4, 2, true, 'Monday at the shop. One post is waiting, and a new idea is forming. <b>Create</b> opens a blank page.') },
-      { t: 3400, run: h.clickStep(btnCreate, 4, 2, 'One click.') },
-      { t: 3650, run: function () { btnCreate.classList.remove('spos-hover'); h.hideBox(); composer.classList.add('spos-open'); h.say('Pick a genre first. <b>no genre</b> is a clean canvas; the others carry the house style of the store.'); } },
-      { t: 4600, run: function () { h.moveCursor(h.center(genreNone, -160, 0)); } },
-      { t: 5700, run: h.hoverStep(genreInsight, -180, 0, true, '<b>insight</b> turns one shopper trend into a point of view, grounded in current research.') },
-      { t: 7200, run: function () { genreInsight.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(composerClose, 0, 0)); } },
-      { t: 8300, run: h.clickStep(composerClose, 0, 0, 'Not today. The post already in the queue comes first.') },
-      { t: 8500, run: function () { composer.classList.remove('spos-open'); h.say('Back to the queue.'); } },
-      { t: 9500, run: function () { h.moveCursor(h.center(pendingCard, -40, 0)); } },
-      { t: 10700, run: h.hoverStep(editBtn, 0, 0, true, '<b>Points are not loyalty</b>, drafted this morning from two shopper studies, waits for a decision.') },
-      { t: 12000, run: h.clickStep(editBtn, 0, 0, 'Edit before it goes anywhere.') },
-      { t: 12250, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags, and a picture if the story needs one. <b>Nothing publishes on its own.</b>'); } },
-      { t: 13300, run: function () { h.moveCursor(h.center(editTextarea, 120, 40)); } },
-      { t: 14400, run: h.clickStep(editTextarea, 120, 40, 'A word here, a line there. The draft stays a draft while it is being shaped.') },
-      { t: 14600, run: function () { editTextarea.classList.add('spos-focus'); } },
-      { t: 16200, run: function () { editTextarea.classList.remove('spos-focus'); h.moveCursor(h.center(editSave, 0, 0)); } },
-      { t: 17300, run: h.hoverStep(editSave, 0, 0, true, '<b>Save Changes</b> keeps it in the queue, edited, still waiting for a person.') },
-      { t: 18300, run: h.clickStep(editSave, 0, 0, 'Saved.') },
-      { t: 18550, run: function () { editSave.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.remove('spos-open'); h.say('The edit is in. Now the decision.'); } },
-      { t: 19600, run: h.hoverStep(pendingCard, -60, -6, false, 'Open the post itself to see what it was built from.') },
-      { t: 21000, run: h.clickStep(pendingCard, -60, -6, 'The whole story, with its receipts.') },
-      { t: 21250, run: function () { pendingCard.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('<b>Strong corroboration</b>: four sources agreed before a word was written.'); } },
-      { t: 22400, run: function () { h.moveCursor(h.center(detailModal, 80, 20)); } },
-      { t: 23500, run: function () { h.say('Sources listed. Image chosen. Everything a reviewer needs is on one screen.'); detailModal.scrollTop = detailModal.scrollHeight; } },
-      { t: 24500, run: h.hoverStep(publishBtn, 0, 0, true, '<b>Publish</b> sends it to the organization page. Once, and only after a person says so.') },
-      { t: 25800, run: h.clickStep(publishBtn, 0, 0, 'Approved by a person. Published by the platform.') },
-      { t: 26050, run: function () { publishBtn.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('From pending to posted.'); } },
-      { t: 26600, run: function () {
+      { t: 2000, run: h.hoverStep(btnGenerate, -4, 2, true, '<b>Generate</b>: research first, then a draft, then a second opinion. No topic chosen, so the agent takes the one that is due.') },
+      { t: 3600, run: h.clickStep(btnGenerate, -4, 2, 'Go.') },
+      { t: 3850, run: function () { btnGenerate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> Auto-select picked Customer Loyalty. The draft saves itself as it goes.'); } },
+      { t: 5300, run: function () { h.say('Research: <b>two shopper studies and two trade sources</b>, checked against each other before anything is written.'); } },
+      { t: 6900, run: function () { h.say('The draft is written in the voice of the store, from the prompt the store keeps in its vault.'); } },
+      { t: 8400, run: function () { h.say('Quality review: <b>8 of 10, pass</b>. A second, independent opinion.'); } },
+      { t: 9600, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('A draft, with its <b>sources and its scores</b> attached.'); } },
+      { t: 10700, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
+      { t: 11800, run: function () { h.say('<b>Sources Referenced</b>: four, tiered, every one behind a claim in the post.'); draftModal.scrollTop = Math.round(draftModal.scrollHeight * 0.45); } },
+      { t: 13500, run: function () { h.say('<b>Quality Assessment</b>: hook, authenticity, source grounding, factual caution.'); draftModal.scrollTop = draftModal.scrollHeight; } },
+      { t: 15000, run: h.hoverStep(queueBtn, 0, 0, true, '<b>Queue for Approval</b>. The draft waits for a person.') },
+      { t: 16100, run: h.clickStep(queueBtn, 0, 0, 'Queued.') },
+      { t: 16350, run: function () {
+        queueBtn.classList.remove('spos-hover'); h.hideBox(); draftOverlay.classList.remove('spos-open');
+        pendingCard.classList.remove('spos-c-hidden'); pendingCard.classList.add('spos-enter');
+        h.later(function () { pendingCard.classList.remove('spos-enter'); }, 60);
+        queueBadge.textContent = '1'; statPending.textContent = '1';
+        h.say('<b>Points are not loyalty</b> is in the queue, pending approval.');
+      } },
+      // Scene 2: Edit
+      { t: 17700, run: function () { h.moveCursor(h.center(pendingCard, -40, 0)); } },
+      { t: 18900, run: h.hoverStep(editBtn, 0, 0, true, 'Edit before it goes anywhere.') },
+      { t: 20100, run: h.clickStep(editBtn, 0, 0, 'Open it up.') },
+      { t: 20350, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags, and a picture if the story needs one. <b>Nothing publishes on its own.</b>'); } },
+      { t: 21400, run: function () { h.moveCursor(h.center(editTextarea, 120, 40)); } },
+      { t: 22500, run: h.clickStep(editTextarea, 120, 40, 'A word here, a line there. The draft stays a draft while it is being shaped.') },
+      { t: 22700, run: function () { editTextarea.classList.add('spos-focus'); } },
+      { t: 24300, run: function () { editTextarea.classList.remove('spos-focus'); h.moveCursor(h.center(editSave, 0, 0)); } },
+      { t: 25400, run: h.hoverStep(editSave, 0, 0, true, '<b>Save Changes</b> keeps it in the queue, edited, still waiting for a person.') },
+      { t: 26400, run: h.clickStep(editSave, 0, 0, 'Saved.') },
+      { t: 26650, run: function () { editSave.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.remove('spos-open'); h.say('The edit is in. Now the decision.'); } },
+      // Scene 3: Publish from the post detail modal
+      { t: 27700, run: h.hoverStep(pendingCard, -60, -6, false, 'Open the post itself to see what it was built from.') },
+      { t: 29100, run: h.clickStep(pendingCard, -60, -6, 'The whole story, with its receipts.') },
+      { t: 29350, run: function () { pendingCard.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('<b>Strong corroboration</b>: four sources agreed before a word was written.'); } },
+      { t: 30500, run: function () { h.moveCursor(h.center(detailModal, 80, 20)); } },
+      { t: 31600, run: function () { h.say('Sources listed. Image chosen. Everything a reviewer needs is on one screen.'); detailModal.scrollTop = detailModal.scrollHeight; } },
+      { t: 32600, run: h.hoverStep(publishBtn, 0, 0, true, '<b>Publish</b> sends it to the organization page. Once, and only after a person says so.') },
+      { t: 33900, run: h.clickStep(publishBtn, 0, 0, 'Approved by a person. Published by the platform.') },
+      { t: 34150, run: function () { publishBtn.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('From pending to posted.'); } },
+      { t: 34700, run: function () {
         pendingStatus.textContent = 'posted'; pendingStatus.classList.add('spos-status-posted');
         pendingActions.style.visibility = 'hidden'; pendingCard.classList.add('spos-published');
         queueBadge.textContent = '0'; statPending.textContent = '0'; statPublished.textContent = '28';
         h.say('<b>Twenty eight published.</b> Queue empty. Back to the floor.');
       } },
-      { t: 27800, run: function () { h.moveCursor(START); } },
-      { t: 28600, run: function () { h.say('End of recording.'); } }
+      { t: 35900, run: function () { h.moveCursor(START); } },
+      { t: 36700, run: function () { h.say('End of recording.'); } }
     ];
     function reset() {
-      composer.classList.remove('spos-open'); editOverlay.classList.remove('spos-open'); detailOverlay.classList.remove('spos-open');
-      var touched = [btnCreate, genreInsight, editBtn, editSave, pendingCard, publishBtn, composerClose, editTextarea];
+      genOverlay.classList.remove('spos-open'); draftOverlay.classList.remove('spos-open'); editOverlay.classList.remove('spos-open'); detailOverlay.classList.remove('spos-open');
+      draftModal.scrollTop = 0; detailModal.scrollTop = 0;
+      var touched = [btnGenerate, queueBtn, editBtn, editSave, pendingCard, publishBtn, editTextarea];
       for (var i = 0; i < touched.length; i++) { touched[i].classList.remove('spos-hover', 'spos-pressed', 'spos-focus'); }
-      detailModal.scrollTop = 0;
+      pendingCard.classList.add('spos-c-hidden'); pendingCard.classList.remove('spos-enter', 'spos-published');
       pendingStatus.textContent = 'pending approval'; pendingStatus.classList.remove('spos-status-posted');
-      pendingActions.style.visibility = ''; pendingCard.classList.remove('spos-published');
-      queueBadge.textContent = '1'; statPending.textContent = '1'; statPublished.textContent = '27';
+      pendingActions.style.visibility = '';
+      queueBadge.textContent = '0'; statPending.textContent = '0'; statPublished.textContent = '27';
     }
-    return { script: script, duration: 29500, reset: reset, required: required, start: START,
-      reducedMotion: function () { composer.classList.add('spos-open'); } };
+    return { script: script, duration: 37700, reset: reset, required: required, start: START,
+      reducedMotion: function () { draftOverlay.classList.add('spos-open'); } };
   }
 
   // ---------- Recording "topics" ----------

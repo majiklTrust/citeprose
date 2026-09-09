@@ -68,28 +68,28 @@
         <div class="price"></div>
         <div class="cur">Pricing available from our authorized sales partner.</div>
         <p class="desc">Single user productivity.</p>
-        <a class="subscribe-btn btn" data-tier="individual" href="#">Purchase</a>
+        <a class="subscribe-btn btn" data-tier="individual" href="/checkout/individual">Purchase</a>
       </li>
       <li class="plan" data-plan="business">
         <span class="tag">Business</span>
         <div class="price"></div>
         <div class="cur">Pricing available from our authorized sales partner.</div>
         <p class="desc">Team insights and productivity.</p>
-        <a class="subscribe-btn btn" data-tier="business" href="#">Purchase</a>
+        <a class="subscribe-btn btn" data-tier="business" href="/checkout/business">Purchase</a>
       </li>
       <li class="plan" data-plan="individual_plus">
         <span class="tag">Individual Plus</span>
         <div class="price"></div>
         <div class="cur">Pricing available from our authorized sales partner.</div>
         <p class="desc">High quality AI image generation.</p>
-        <a class="subscribe-btn btn" data-tier="individual_plus" href="#">Purchase</a>
+        <a class="subscribe-btn btn" data-tier="individual_plus" href="/checkout/individual_plus">Purchase</a>
       </li>
       <li class="plan" data-plan="business_plus">
         <span class="tag">Business Plus</span>
         <div class="price"></div>
         <div class="cur">Pricing available from our authorized sales partner.</div>
         <p class="desc">AI image generation and employee advocacy.</p>
-        <a class="subscribe-btn btn" data-tier="business_plus" href="#">Purchase</a>
+        <a class="subscribe-btn btn" data-tier="business_plus" href="/checkout/business_plus">Purchase</a>
       </li>
     </ul>
 
@@ -116,13 +116,14 @@
     // currency line, written with textContent only, and only the fields
     // the catalog supplies; the static copy above is the fallback.
     // The price is text here (on the billing page it is the checkout
-    // link). The Purchase links always show; their destinations are
-    // this one map, to be determined.
+    // link). The Purchase links always show and lead to the purchase
+    // door on this server (/checkout/<tier>): sign up if needed, then
+    // Stripe. The Payment Link itself is never on this page.
     var PURCHASE_HREF = {
-      individual: '#',
-      individual_plus: '#',
-      business: '#',
-      business_plus: '#'
+      individual: '/checkout/individual',
+      individual_plus: '/checkout/individual_plus',
+      business: '/checkout/business',
+      business_plus: '/checkout/business_plus'
     };
 
     function applyCatalog(catalog) {

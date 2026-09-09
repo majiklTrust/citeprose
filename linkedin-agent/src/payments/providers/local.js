@@ -43,13 +43,25 @@ export const localProvider = {
     try { body = JSON.parse(rawBody.toString("utf8")); } catch { return refuse("signed body is not JSON", headers); }
     if (!body || typeof body !== "object") return refuse("signed body is not an object", headers);
     if (!EVENT_TYPES.includes(body.type)) return refuse(`unknown event type ${String(body.type).slice(0, 40)}`, headers);
-    if (typeof body.tenantId !== "string" || !/^[0-9a-f-]{36}$/.test(body.tenantId)) return refuse("tenantId missing or malformed", headers);
+    // 4.25111.78: a message may name the subscription instead of the
+    // tenant (a renewal); a tenantId, when given, must be well formed.
+    const hasSubRef = typeof body.subscriptionRef === "string" && body.subscriptionRef.length > 0;
+    if (body.tenantId === undefined || body.tenantId === null) {
+      if (!hasSubRef) return refuse("tenantId missing or malformed", headers);
+    } else if (typeof body.tenantId !== "string" || !/^[0-9a-f-]{36}$/.test(body.tenantId)) {
+      return refuse("tenantId missing or malformed", headers);
+    }
     return {
       type: body.type,
-      tenantId: body.tenantId,
+      tenantId: typeof body.tenantId === "string" ? body.tenantId : null,
       tier: typeof body.tier === "string" ? body.tier : null,
       trial: body.trial === true,
       providerEventRef: typeof body.ref === "string" ? `local:${body.ref}` : null,
+      // 4.25111.78: optional processor references, so the lab can play
+      // a checkout that names a customer and a subscription and a
+      // renewal that names only the subscription.
+      providerCustomerRef: typeof body.customerRef === "string" && body.customerRef ? body.customerRef : null,
+      providerSubscriptionRef: typeof body.subscriptionRef === "string" && body.subscriptionRef ? body.subscriptionRef : null,
       occurredAt: typeof body.occurredAt === "string" ? body.occurredAt : null
     };
   }

@@ -13,7 +13,7 @@
 //   { id, slug, name, status, role, created_at, updated_at }
 // ═══════════════════════════════════════════════════════════════
 
-import { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite } from "./platform-db.js";
+import { findTenantByAuthIdentity, findPendingInviteByEmail, claimInvite, isSelfRegisteredOwner } from "./platform-db.js";
 import { platformLog } from "../services/platform-log.js";
 
 export function createTenantResolver() {
@@ -77,10 +77,19 @@ export function createTenantResolver() {
           // and numeric impostors. The gate sits at the claim
           // decision itself, so existing members (Path 1) and users
           // with no invite (generic denial below) are unaffected.
+          // 4.25111.78 (owner's ruling: Auth0 email verification is
+          // optional): the one invitation an unverified login may claim
+          // is the owner invitation of the workspace that login created
+          // itself through self-registration. The session proves that
+          // identity; the gate stays for every other invitation.
           if (req.user.emailVerified !== true) {
-            platformLog("warn", "tenant_resolve_unverified_email", { sub: req.user.sub });
-            res.status(403).json({ error: "Email address not verified. Please verify your email before joining a workspace." });
-            return;
+            const own = await isSelfRegisteredOwner(invite.tenant_id, req.user.sub);
+            if (!own) {
+              platformLog("warn", "tenant_resolve_unverified_email", { sub: req.user.sub });
+              res.status(403).json({ error: "Email address not verified. Please verify your email before joining a workspace." });
+              return;
+            }
+            platformLog("info", "tenant_resolve_self_registered_owner", { sub: req.user.sub, tenantId: invite.tenant_id });
           }
           const claimed = await claimInvite(invite.id, provider, req.user.sub);
 

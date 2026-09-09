@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v3.3.28
+// v4.25111.79
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -80,6 +80,7 @@ export function createApp(ctx) {
     setAgentState,
     invalidateTokenCache,
     createPricingRoutes,
+    createCheckoutRoutes,
     createPlatformAdminRoutes,
     createBillingRoutes
   } = ctx;
@@ -173,6 +174,10 @@ export function createApp(ctx) {
       const { applyEvent } = await import("./services/subscription-lifecycle.js");
       const out = await applyEvent(event, provider.name);
       if (out.duplicate) return res.status(200).json({ ok: true, duplicate: true });
+      // 4.25111.78: a verified message about nothing we know (an
+      // unknown reference, or a workspace not created yet) is answered
+      // 200 so the processor stops retrying; the reason is on the log.
+      if (out.ignored) return res.status(200).json({ ok: true, ignored: true });
       if (out.refused) return res.status(422).json({ error: "Event refused" });
       if (out.raced) return res.status(409).json({ error: "State changed; retry" });
       res.json({ ok: true });
@@ -257,7 +262,12 @@ export function createApp(ctx) {
         <a href="/">Back to home</a>
       `);
     }
-    const state = generateOAuthState();
+    // 4.25111.78: the login may name where to come back to
+    // (?returnTo=...). The state helper keeps it, and only when it is
+    // on the exact-match allowlist in security.js; anything else
+    // lands on /app as before. The purchase door uses this to bring a
+    // new buyer back to /checkout/<tier> after Auth0 sign up.
+    const state = generateOAuthState(req.query.returnTo);
     // Self-service signup (2.5.111 line): /auth/login?signup=1 asks
     // the provider for its SIGNUP screen. Only the presence of the
     // flag travels; no caller value reaches the provider.
@@ -280,7 +290,8 @@ export function createApp(ctx) {
       `);
     }
 
-    if (!validateOAuthState(state)) {
+    const stateVerdict = validateOAuthState(state);
+    if (!stateVerdict) {
       return res.status(403).send(`
         <h2>Authorization Failed</h2>
         <p>Invalid or expired OAuth state. Please try again.</p>
@@ -328,7 +339,7 @@ export function createApp(ctx) {
         role: tenantInfo.role,
         newUser: !tenantInfo.slug
       });
-      return res.redirect("/app");
+      return res.redirect(stateVerdict.returnTo || "/app");
     } catch (err) {
       platformLog("error", "auth_callback_failed", {
         error: err.message,
@@ -850,6 +861,11 @@ export function createApp(ctx) {
   // Must be before apiRoutes (api.js's guard 404s unknown /api/*).
   instance.use("/api/pricing", createPricingRoutes());
 
+  // The purchase door and the return from Stripe (4.25111.78):
+  // browser routes, no tenant, session read directly. Public, so the
+  // router carries its own per-address ceiling and answers no-store.
+  instance.use("/checkout", createCheckoutRoutes());
+
   // Topics API routes — mounted at /api/topics. Blanket middleware
   // requires manage_own_topics (blocks viewers). Per-handler checks
   // enforce manage_topics for global operations.
@@ -982,6 +998,7 @@ export async function buildAppForTests() {
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
   const { default: createPricingRoutes } = await import("./routes/pricing-api.js");
+  const { default: createCheckoutRoutes } = await import("./routes/checkout-pages.js");
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1016,6 +1033,7 @@ export async function buildAppForTests() {
     invalidateTokenCache,
     createPlatformAdminRoutes,
     createPricingRoutes,
+    createCheckoutRoutes,
     createBillingRoutes,
     adminPageGate: createAdminPageGate(),
     platformAdminPageGate: createPlatformAdminPageGate()
@@ -1098,6 +1116,7 @@ export async function start() {
   const { storeCredential }              = await import("./tenant/credential-store.js");
   const { default: createBillingRoutes } = await import("./routes/billing-api.js");
   const { default: createPricingRoutes } = await import("./routes/pricing-api.js");
+  const { default: createCheckoutRoutes } = await import("./routes/checkout-pages.js");
   const { default: createPlatformAdminRoutes, createPlatformAdminPageGate } = await import("./routes/platform-admin-api.js");
   const { default: composeRoutes }       = await import("./routes/compose-api.js");
   const { default: analyticsRoutes }     = await import("./routes/analytics-api.js");
@@ -1143,6 +1162,7 @@ export async function start() {
     invalidateTokenCache,
     createPlatformAdminRoutes,
     createPricingRoutes,
+    createCheckoutRoutes,
     createBillingRoutes,
     adminPageGate: createAdminPageGate(),
     platformAdminPageGate: createPlatformAdminPageGate()
@@ -1155,7 +1175,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  3.3.28
+║           LinkedIn AI Content Agent  4.25111.79
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

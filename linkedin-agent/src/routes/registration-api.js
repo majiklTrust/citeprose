@@ -681,17 +681,34 @@ router.post("/complete", async (req, res) => {
       // Don't fail — the admin can create the invite manually
     }
 
+    // 4.25111.78: a purchase that began on the public pricing page
+    // settles here. A paid purchase row for this registration (or for
+    // this login) becomes the new tenant's subscription now; an unpaid
+    // one is bound to the tenant so the processor's later message
+    // lands on it. Never fails the registration: the workspace exists
+    // either way and the subscription can still arrive by message.
+    let landing = null;
+    try {
+      const { settlePurchaseForRegistration } = await import("../services/purchase-settlement.js");
+      const settled = await settlePurchaseForRegistration(reg, tenantId);
+      landing = settled && settled.landing ? settled.landing : null;
+    } catch (settleErr) {
+      platformLog("error", "registration_purchase_settle_failed", { tenantId, registrationId: reg.id, error: settleErr && settleErr.message });
+    }
+
     platformLog("info", "registration_complete", {
       tenantId,
       slug,
-      email: reg.email
+      email: reg.email,
+      purchased: !!landing
     });
 
     res.json({
       success: true,
       tenantId,
       slug,
-      loginUrl: "/auth/login"
+      loginUrl: "/auth/login",
+      landing: landing || "/app"
     });
   } catch (err) {
     platformLog("error", "registration_complete_failed", { error: err.message });

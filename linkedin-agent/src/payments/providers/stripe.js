@@ -97,6 +97,18 @@ function extractTenantId(obj) {
 }
 
 // Stripe event type -> normalized lifecycle event type.
+function extractSubscriptionRef(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const candidates = [
+    obj.subscription,
+    obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.subscription
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && /^sub_[A-Za-z0-9]+$/.test(c)) return c;
+  }
+  return null;
+}
+
 const TYPE_MAP = {
   "checkout.session.completed": "checkout_completed",
   "invoice.payment_succeeded": "payment_succeeded",
@@ -128,7 +140,17 @@ export const stripeProvider = {
 
     const obj = body.data && body.data.object;
     const tenantId = extractTenantId(obj);
-    if (!tenantId) return { ignored: true, reason: "verified event carries no tenant mapping" };
+    // 4.25111.78: the Stripe customer and subscription travel with the
+    // event. A checkout session names both; an invoice names the
+    // subscription (top level on older API versions, under
+    // parent.subscription_details on Basil and later). A message with
+    // no tenant id but a subscription reference is still deliverable:
+    // the lifecycle resolves the tenant by the reference it recorded
+    // at checkout. With neither, nothing can be mapped and the event
+    // is ignored as before.
+    const providerCustomerRef = obj && typeof obj.customer === "string" ? obj.customer : null;
+    const providerSubscriptionRef = extractSubscriptionRef(obj);
+    if (!tenantId && !providerSubscriptionRef) return { ignored: true, reason: "verified event carries no tenant mapping" };
 
     return {
       type: mapped,
@@ -136,6 +158,8 @@ export const stripeProvider = {
       tier: obj && obj.metadata && typeof obj.metadata.tier === "string" ? obj.metadata.tier : null,
       trial: !!(obj && obj.metadata && obj.metadata.trial === "true"),
       providerEventRef: typeof body.id === "string" ? `stripe:${body.id}` : null,
+      providerCustomerRef,
+      providerSubscriptionRef,
       occurredAt: Number.isFinite(body.created) ? new Date(body.created * 1000).toISOString() : null
     };
   }

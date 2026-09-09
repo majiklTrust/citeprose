@@ -31,6 +31,10 @@ export default function createBillingRoutes() {
 
   // ── The subscription, honestly ───────────────────────────────
   router.get("/", async (req, res) => {
+    // 4.25111.78: tenant-specific JSON (checkout links carry the
+    // tenant id) is never cacheable by anything between us and the
+    // browser.
+    res.set("Cache-Control", "no-store");
     try {
       const { getSubscription } = await import("../services/entitlements.js");
       const { tierCapabilities } = await import("../config/entitlements.js");

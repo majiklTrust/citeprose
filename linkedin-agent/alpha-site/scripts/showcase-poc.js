@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.22)
+// showcase-poc.js  (delivery 3.3.23)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Three recordings live in
@@ -53,6 +53,12 @@
 //   - Cursor travel, click ripple, modal fades and the caption in the
 //     window bar are scaled by the same rate through --spos-rate, set on
 //     the section by this script and read by showcase-poc.css.
+//
+// Captions
+//   The "create" and "topics" recordings narrate in plain language: what
+//   the person is doing and why it matters, in the tenant's own terms.
+//   The "analytics" recording narrates the numbers the same way. No
+//   selectors or API paths appear in the window bar.
 //
 // Constraints honored
 //   - Page CSP is script-src 'self' and style-src 'self'. This file is
@@ -287,41 +293,41 @@
     var script = [
       { t: 0, run: function () { h.jumpCursor(START); } },
       { t: 900, run: function () { h.moveCursor(h.center(quickActions, 0, -40)); } },
-      { t: 2000, run: h.hoverStep(btnCreate, 4, 2, true, 'hover <b>button.btn-primary</b> "Create"') },
-      { t: 3400, run: h.clickStep(btnCreate, 4, 2, 'click <b>button.btn-primary</b> "Create"') },
-      { t: 3650, run: function () { btnCreate.classList.remove('spos-hover'); h.hideBox(); composer.classList.add('spos-open'); h.say('render <b>.composer-overlay</b> (setShowComposer(true))'); } },
+      { t: 2000, run: h.hoverStep(btnCreate, 4, 2, true, 'Monday at the shop. One post is waiting, and a new idea is forming. <b>Create</b> opens a blank page.') },
+      { t: 3400, run: h.clickStep(btnCreate, 4, 2, 'One click.') },
+      { t: 3650, run: function () { btnCreate.classList.remove('spos-hover'); h.hideBox(); composer.classList.add('spos-open'); h.say('Pick a genre first. <b>no genre</b> is a clean canvas; the others carry the house style of the store.'); } },
       { t: 4600, run: function () { h.moveCursor(h.center(genreNone, -160, 0)); } },
-      { t: 5700, run: h.hoverStep(genreInsight, -180, 0, true, 'hover <b>label.composer-genre</b> "insight"') },
+      { t: 5700, run: h.hoverStep(genreInsight, -180, 0, true, '<b>insight</b> turns one shopper trend into a point of view, grounded in current research.') },
       { t: 7200, run: function () { genreInsight.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(composerClose, 0, 0)); } },
-      { t: 8300, run: h.clickStep(composerClose, 0, 0, 'click <b>button.composer-close</b>') },
-      { t: 8500, run: function () { composer.classList.remove('spos-open'); h.say('close <b>.composer-overlay</b>'); } },
+      { t: 8300, run: h.clickStep(composerClose, 0, 0, 'Not today. The post already in the queue comes first.') },
+      { t: 8500, run: function () { composer.classList.remove('spos-open'); h.say('Back to the queue.'); } },
       { t: 9500, run: function () { h.moveCursor(h.center(pendingCard, -40, 0)); } },
-      { t: 10700, run: h.hoverStep(editBtn, 0, 0, true, 'hover <b>button.btn-edit</b> "Edit" (post 3a91, pending_approval)') },
-      { t: 12000, run: h.clickStep(editBtn, 0, 0, 'click <b>button.btn-edit</b> "Edit"') },
-      { t: 12250, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('render <b>.modal-overlay</b> Edit Post (openEditModal)'); } },
+      { t: 10700, run: h.hoverStep(editBtn, 0, 0, true, '<b>Points are not loyalty</b>, drafted this morning from two shopper studies, waits for a decision.') },
+      { t: 12000, run: h.clickStep(editBtn, 0, 0, 'Edit before it goes anywhere.') },
+      { t: 12250, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags, and a picture if the story needs one. <b>Nothing publishes on its own.</b>'); } },
       { t: 13300, run: function () { h.moveCursor(h.center(editTextarea, 120, 40)); } },
-      { t: 14400, run: h.clickStep(editTextarea, 120, 40, 'focus <b>textarea.form-textarea</b> "Content"') },
+      { t: 14400, run: h.clickStep(editTextarea, 120, 40, 'A word here, a line there. The draft stays a draft while it is being shaped.') },
       { t: 14600, run: function () { editTextarea.classList.add('spos-focus'); } },
       { t: 16200, run: function () { editTextarea.classList.remove('spos-focus'); h.moveCursor(h.center(editSave, 0, 0)); } },
-      { t: 17300, run: h.hoverStep(editSave, 0, 0, true, 'hover <b>button.btn-approve</b> "Save Changes"') },
-      { t: 18300, run: h.clickStep(editSave, 0, 0, 'click <b>button.btn-approve</b> "Save Changes" (PATCH /api/posts/3a91)') },
-      { t: 18550, run: function () { editSave.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.remove('spos-open'); h.say('close <b>.modal-overlay</b> Edit Post, draft saved'); } },
-      { t: 19600, run: h.hoverStep(pendingCard, -60, -6, false, 'hover <b>.post-card</b> (post 3a91)') },
-      { t: 21000, run: h.clickStep(pendingCard, -60, -6, 'click <b>.post-card</b> (setSelectedPost)') },
-      { t: 21250, run: function () { pendingCard.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('render <b>.modal-overlay</b> post detail (pending_approval)'); } },
+      { t: 17300, run: h.hoverStep(editSave, 0, 0, true, '<b>Save Changes</b> keeps it in the queue, edited, still waiting for a person.') },
+      { t: 18300, run: h.clickStep(editSave, 0, 0, 'Saved.') },
+      { t: 18550, run: function () { editSave.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.remove('spos-open'); h.say('The edit is in. Now the decision.'); } },
+      { t: 19600, run: h.hoverStep(pendingCard, -60, -6, false, 'Open the post itself to see what it was built from.') },
+      { t: 21000, run: h.clickStep(pendingCard, -60, -6, 'The whole story, with its receipts.') },
+      { t: 21250, run: function () { pendingCard.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('<b>Strong corroboration</b>: four sources agreed before a word was written.'); } },
       { t: 22400, run: function () { h.moveCursor(h.center(detailModal, 80, 20)); } },
-      { t: 23500, run: function () { h.say('scroll <b>.modal-content</b> to the actions'); detailModal.scrollTop = detailModal.scrollHeight; } },
-      { t: 24500, run: h.hoverStep(publishBtn, 0, 0, true, 'hover <b>button.btn-approve</b> "Publish"') },
-      { t: 25800, run: h.clickStep(publishBtn, 0, 0, 'click <b>button.btn-approve</b> "Publish" (POST /api/posts/3a91/approve)') },
-      { t: 26050, run: function () { publishBtn.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('close <b>.modal-overlay</b>, status pending_approval to posted'); } },
+      { t: 23500, run: function () { h.say('Sources listed. Image chosen. Everything a reviewer needs is on one screen.'); detailModal.scrollTop = detailModal.scrollHeight; } },
+      { t: 24500, run: h.hoverStep(publishBtn, 0, 0, true, '<b>Publish</b> sends it to the organization page. Once, and only after a person says so.') },
+      { t: 25800, run: h.clickStep(publishBtn, 0, 0, 'Approved by a person. Published by the platform.') },
+      { t: 26050, run: function () { publishBtn.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('From pending to posted.'); } },
       { t: 26600, run: function () {
         pendingStatus.textContent = 'posted'; pendingStatus.classList.add('spos-status-posted');
         pendingActions.style.visibility = 'hidden'; pendingCard.classList.add('spos-published');
         queueBadge.textContent = '0'; statPending.textContent = '0'; statPublished.textContent = '28';
-        h.say('published: <b>posts.status</b> posted, <b>linkedin_id</b> stamped');
+        h.say('<b>Twenty eight published.</b> Queue empty. Back to the floor.');
       } },
       { t: 27800, run: function () { h.moveCursor(START); } },
-      { t: 28600, run: function () { h.say('end of recording'); } }
+      { t: 28600, run: function () { h.say('End of recording.'); } }
     ];
     function reset() {
       composer.classList.remove('spos-open'); editOverlay.classList.remove('spos-open'); detailOverlay.classList.remove('spos-open');
@@ -358,82 +364,82 @@
     var feedRows = feedList ? Array.prototype.slice.call(feedList.querySelectorAll('.spos-feed-row:not(.spos-t-new-feed)')) : [];
     var script = [
       // Scene 1: the Topics page
-      { t: 0, run: function () { h.jumpCursor(START); h.say('pageview <b>/app/topics/</b>'); } },
-      { t: 900, run: h.hoverStep(addTopic, 0, 0, false, 'hover <b>button#toggle-create-btn</b> "+ Add Topic"') },
-      { t: 2200, run: h.clickStep(addTopic, 0, 0, 'click <b>button#toggle-create-btn</b> "+ Add Topic"') },
-      { t: 2450, run: function () { addTopic.classList.remove('spos-hover'); h.hideBox(); createForm.classList.add('spos-open'); h.say('render <b>#create-form</b>'); } },
+      { t: 0, run: function () { h.jumpCursor(START); h.say('A community bank wants to talk about saving. Every post starts with a <b>topic</b>.'); } },
+      { t: 900, run: h.hoverStep(addTopic, 0, 0, false, '<b>+ Add Topic</b>. A topic is what the agent researches and writes about.') },
+      { t: 2200, run: h.clickStep(addTopic, 0, 0, 'Name it. Describe it in one sentence.') },
+      { t: 2450, run: function () { addTopic.classList.remove('spos-hover'); h.hideBox(); createForm.classList.add('spos-open'); h.say('Two fields are enough to start.'); } },
       { t: 3300, run: function () { h.moveCursor(h.center(nameIn, -120, 0), true); } },
-      { t: 4000, run: h.clickStep(nameIn, -120, 0, 'focus <b>input#topic-name</b>') },
+      { t: 4000, run: h.clickStep(nameIn, -120, 0, '<b>Emergency Savings Habits.</b>') },
       { t: 4200, run: h.typeStep(nameIn, NAME, 70) },
       { t: 6000, run: function () { nameIn.classList.remove('spos-focus'); h.moveCursor(h.center(descIn, -120, 0), true); } },
-      { t: 6700, run: h.clickStep(descIn, -120, 0, 'focus <b>input#topic-desc</b>') },
+      { t: 6700, run: h.clickStep(descIn, -120, 0, 'How everyday savers build a cushion, and what a bank can do to make it easier.') },
       { t: 6900, run: h.typeStep(descIn, DESC, 45) },
       { t: 9800, run: function () { descIn.classList.remove('spos-focus'); h.moveCursor(h.center(suggest, 0, 0), true); } },
-      { t: 10600, run: h.hoverStep(suggest, 0, 0, true, 'hover <b>button#generate-btn</b> "Generate Suggestions"') },
-      { t: 11500, run: h.clickStep(suggest, 0, 0, 'click <b>button#generate-btn</b> (POST /api/topics/generate)') },
-      { t: 11750, run: function () { suggest.classList.remove('spos-hover'); h.hideBox(); suggest.classList.add('spos-busy'); suggest.textContent = 'Generating...'; h.say('model proposes <b>content angles</b> and <b>hashtags</b> for the topic'); } },
-      { t: 13600, run: function () { suggest.classList.remove('spos-busy'); suggest.textContent = 'Generate Suggestions'; result.classList.add('spos-open'); h.say('render <b>#generate-result</b>: 4 angles, 3 hashtags, weight 1'); } },
+      { t: 10600, run: h.hoverStep(suggest, 0, 0, true, '<b>Generate Suggestions</b> asks the model for angles and hashtags that fit the description.') },
+      { t: 11500, run: h.clickStep(suggest, 0, 0, 'One request.') },
+      { t: 11750, run: function () { suggest.classList.remove('spos-hover'); h.hideBox(); suggest.classList.add('spos-busy'); suggest.textContent = 'Generating...'; h.say('The model reads the sentence and proposes four ways into the subject.'); } },
+      { t: 13600, run: function () { suggest.classList.remove('spos-busy'); suggest.textContent = 'Generate Suggestions'; result.classList.add('spos-open'); h.say('<b>Four angles, three hashtags</b>, a weight of one. Edit any of them, or keep them.'); } },
       { t: 14700, run: function () { h.moveCursor(h.center(save, 0, 0)); } },
-      { t: 15800, run: h.hoverStep(save, 0, 0, true, 'hover <b>button#save-topic-btn</b> "Save Topic"') },
-      { t: 16700, run: h.clickStep(save, 0, 0, 'click <b>button#save-topic-btn</b> (POST /api/topics)') },
+      { t: 15800, run: h.hoverStep(save, 0, 0, true, '<b>Save Topic</b>.') },
+      { t: 16700, run: h.clickStep(save, 0, 0, 'Saved.') },
       { t: 16950, run: function () {
         save.classList.remove('spos-hover'); h.hideBox();
         createForm.classList.remove('spos-open'); result.classList.remove('spos-open');
         msg.textContent = 'Topic created'; msg.classList.add('spos-on');
         newCard.classList.add('spos-shown', 'spos-enter');
         h.later(function () { newCard.classList.remove('spos-enter'); }, 60);
-        h.say('saved: <b>topics</b> row emergency-savings-habits, listed under My Topics');
+        h.say('Listed under My Topics. <b>Zero feeds mapped</b>, for now.');
       } },
       // Scene 2: feed discovery for the new topic
       { t: 18200, run: function () { h.moveCursor(h.center(discoverLink, 0, 0)); } },
-      { t: 19300, run: h.hoverStep(discoverLink, 0, 0, true, 'hover <b>a.discover-feeds-link</b> "Discover Feeds"') },
-      { t: 20200, run: h.clickStep(discoverLink, 0, 0, 'click <b>a.discover-feeds-link</b> (POST /api/feeds/discover)') },
-      { t: 20450, run: function () { discoverLink.classList.remove('spos-hover'); h.hideBox(); dOverlay.classList.add('spos-open'); h.say('render <b>#discover-overlay</b> "Discovering Feeds for Emergency Savings Habits"'); } },
-      { t: 21700, run: function () { h.say('model proposes candidate feeds for the topic'); } },
-      { t: 23000, run: function () { h.say('validating each feed: fetch, parse, grade, egress allowlist'); } },
-      { t: 24400, run: function () { dLoading.classList.add('spos-done'); dResults.classList.add('spos-open'); dActions.classList.add('spos-open'); dSubtitle.textContent = '3 validated feeds found'; h.say('render results: <b>3 validated feeds</b>, all selected'); } },
-      { t: 25500, run: h.hoverStep(dRow1, 0, 0, true, 'hover <b>.discover-feed</b> "Savings Habit Lab" (primary)') },
+      { t: 19300, run: h.hoverStep(discoverLink, 0, 0, true, '<b>Discover Feeds</b>: let the model find sources for this topic instead of hunting for them by hand.') },
+      { t: 20200, run: h.clickStep(discoverLink, 0, 0, 'Searching.') },
+      { t: 20450, run: function () { discoverLink.classList.remove('spos-hover'); h.hideBox(); dOverlay.classList.add('spos-open'); h.say('The model proposes candidate feeds.'); } },
+      { t: 21700, run: function () { h.say('Then the platform checks its work.'); } },
+      { t: 23000, run: function () { h.say('Each candidate is <b>fetched, parsed and graded</b> before it is offered. Broken feeds never reach the list.'); } },
+      { t: 24400, run: function () { dLoading.classList.add('spos-done'); dResults.classList.add('spos-open'); dActions.classList.add('spos-open'); dSubtitle.textContent = '3 validated feeds found'; h.say('<b>Three validated feeds</b>, all selected, each with a reason and a recent headline.'); } },
+      { t: 25500, run: h.hoverStep(dRow1, 0, 0, true, '<b>Savings Habit Lab</b>: primary tier, strongest on automatic transfers and small first balances.') },
       { t: 27000, run: function () { dRow1.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(dAdd, 0, 0)); } },
-      { t: 28000, run: h.hoverStep(dAdd, 0, 0, true, 'hover <b>button#discover-add-btn</b> "Add Selected Feeds"') },
-      { t: 28900, run: h.clickStep(dAdd, 0, 0, 'click <b>button#discover-add-btn</b> (POST /api/feeds/add)') },
+      { t: 28000, run: h.hoverStep(dAdd, 0, 0, true, '<b>Add Selected Feeds</b>.') },
+      { t: 28900, run: h.clickStep(dAdd, 0, 0, 'Adding.') },
       { t: 29150, run: function () { dAdd.classList.remove('spos-hover'); h.hideBox(); dAdd.classList.add('spos-busy'); dAdd.textContent = 'Adding...'; } },
       { t: 30300, run: function () {
         dOverlay.classList.remove('spos-open'); dAdd.classList.remove('spos-busy'); dAdd.textContent = 'Add Selected Feeds';
         msg.textContent = '3 feed(s) added, 3 mapped to topic'; msg.classList.add('spos-on');
         mappedCount.textContent = '3';
-        h.say('saved: 3 <b>feeds_v2</b> rows, 3 <b>feed_topics</b> mappings; card shows 3 feeds mapped');
+        h.say('<b>Three feeds mapped</b> to the topic. The card says so. Research has somewhere to look.');
       } },
       // Scene 3: to the dashboard
       { t: 31300, run: function () { h.moveCursor(h.center(navDash, 0, 0)); } },
-      { t: 32400, run: h.hoverStep(navDash, 0, 0, true, 'hover <b>a.manager-nav-link</b> "Dashboard"') },
-      { t: 33200, run: h.clickStep(navDash, 0, 0, 'click <b>a.manager-nav-link</b> "Dashboard"') },
-      { t: 33450, run: function () { navDash.classList.remove('spos-hover'); h.hideBox(); screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); h.say('pageview <b>/app/</b>'); } },
+      { t: 32400, run: h.hoverStep(navDash, 0, 0, true, 'Back to the dashboard.') },
+      { t: 33200, run: h.clickStep(navDash, 0, 0, 'Back to the dashboard.') },
+      { t: 33450, run: function () { navDash.classList.remove('spos-hover'); h.hideBox(); screenTopics.classList.add('spos-gone'); screenDash.classList.add('spos-shown'); h.say('The dashboard, with a new topic in the list.'); } },
       // Scene 2: the dashboard
       { t: 34500, run: function () { h.moveCursor(h.center(quickActions, 0, -30)); } },
-      { t: 35600, run: h.hoverStep(topicSel, 0, 0, true, 'hover <b>select.topic-selector</b>') },
-      { t: 36500, run: h.clickStep(topicSel, 0, 0, 'select topic <b>"Emergency Savings Habits"</b>') },
-      { t: 36750, run: function () { topicSel.classList.remove('spos-hover'); h.hideBox(); topicSel.textContent = NAME; angleSel.classList.add('spos-shown'); h.say('render angle picker (topic defines 4 angles)'); } },
-      { t: 37800, run: h.hoverStep(angleSel, 0, 0, true, 'hover <b>select.topic-selector</b> (angle)') },
-      { t: 38700, run: h.clickStep(angleSel, 0, 0, 'select angle <b>"Why an emergency fund starts at $500"</b>') },
+      { t: 35600, run: h.hoverStep(topicSel, 0, 0, true, 'Pick the topic.') },
+      { t: 36500, run: h.clickStep(topicSel, 0, 0, '<b>Emergency Savings Habits</b>.') },
+      { t: 36750, run: function () { topicSel.classList.remove('spos-hover'); h.hideBox(); topicSel.textContent = NAME; angleSel.classList.add('spos-shown'); h.say('It has angles now, so an <b>angle picker</b> appears beneath it.'); } },
+      { t: 37800, run: h.hoverStep(angleSel, 0, 0, true, 'Pick the angle.') },
+      { t: 38700, run: h.clickStep(angleSel, 0, 0, '<b>Why an emergency fund starts at $500</b>.') },
       { t: 38950, run: function () {
         angleSel.classList.remove('spos-hover'); h.hideBox(); angleSel.textContent = 'Why an emergency fund starts at $500';
         monitorScope.textContent = '(topic: Emergency Savings Habits)'; monitorUsing.textContent = '4';
         feedRows.forEach(function (r, i) { if (i === 0 || i === 4) r.classList.add('spos-dim'); });
         newFeeds.forEach(function (r) { r.classList.add('spos-shown'); });
-        h.say('Research Monitor narrows to the topic: 3 new feeds at 0, catchalls kept (GET /api/research/stats?topic=emergency-savings-habits)');
+        h.say('The Research Monitor narrows to the topic: <b>three new feeds at zero</b>, waiting for their first poll, catchalls kept.');
       } },
-      { t: 40200, run: h.hoverStep(generate, 0, 0, true, 'hover <b>button.btn-primary</b> "Generate"') },
-      { t: 41200, run: h.clickStep(generate, 0, 0, 'click <b>button.btn-primary</b> "Generate" (POST /api/generate-preview)') },
-      { t: 41450, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('render <b>#generate-overlay</b> "Generating Content"'); } },
-      { t: 42800, run: function () { h.say('research: 4 independent sources, corroborated brief'); } },
-      { t: 44300, run: function () { h.say('generation: draft written from the vaulted prompt'); } },
-      { t: 45800, run: function () { h.say('quality review: overall 8/10, pass'); } },
-      { t: 47000, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('render <b>.modal-overlay</b> draft preview (isPreview, draft saved)'); } },
+      { t: 40200, run: h.hoverStep(generate, 0, 0, true, '<b>Generate</b>. Research first, then a draft.') },
+      { t: 41200, run: h.clickStep(generate, 0, 0, 'Go.') },
+      { t: 41450, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); genOverlay.classList.add('spos-open'); h.say('<b>Generating Content.</b> The draft saves itself as it goes.'); } },
+      { t: 42800, run: function () { h.say('Research: <b>four independent sources</b>, checked against each other before anything is written.'); } },
+      { t: 44300, run: function () { h.say('The draft is written in the voice of the bank, from the prompt the bank keeps in its vault.'); } },
+      { t: 45800, run: function () { h.say('Quality review: <b>8 of 10, pass</b>. A second, independent opinion.'); } },
+      { t: 47000, run: function () { genOverlay.classList.remove('spos-open'); draftModal.scrollTop = 0; draftOverlay.classList.add('spos-open'); h.say('A draft, with its <b>sources and its scores</b> attached.'); } },
       { t: 48200, run: function () { h.moveCursor(h.center(draftModal, 60, 40)); } },
-      { t: 49300, run: function () { h.say('scroll <b>.modal-content</b> to Sources Referenced'); draftModal.scrollTop = Math.round(draftModal.scrollHeight * 0.45); } },
-      { t: 51000, run: function () { h.say('scroll <b>.modal-content</b> to Quality Assessment'); draftModal.scrollTop = draftModal.scrollHeight; } },
-      { t: 52500, run: h.hoverStep(queueBtn, 0, 0, true, 'hover <b>button.btn-approve</b> "Queue for Approval"') },
-      { t: 54000, run: function () { queueBtn.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(START); h.say('end of recording'); } }
+      { t: 49300, run: function () { h.say('<b>Sources Referenced</b>: four, tiered, every one behind a claim in the post.'); draftModal.scrollTop = Math.round(draftModal.scrollHeight * 0.45); } },
+      { t: 51000, run: function () { h.say('<b>Quality Assessment</b>: hook, authenticity, source grounding, factual caution.'); draftModal.scrollTop = draftModal.scrollHeight; } },
+      { t: 52500, run: h.hoverStep(queueBtn, 0, 0, true, '<b>Queue for Approval</b>. A person decides what happens next.') },
+      { t: 54000, run: function () { queueBtn.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(START); h.say('End of recording.'); } }
     ];
     function reset() {
       screenTopics.classList.remove('spos-gone'); screenDash.classList.remove('spos-shown');
@@ -522,7 +528,7 @@
       { t: 47100, run: h.clickStep(approve, 0, 0, 'click <b>button.btn-primary</b> "Approve" (POST /api/advocacy/me/variants/31/approve)') },
       { t: 47350, run: function () { approve.classList.remove('spos-hover'); h.hideBox(); variant.classList.add('spos-approved'); adMsg.textContent = 'Approved. Publishing to your profile now.'; h.say('approved: published from the <b>member\'s own profile</b> with the member\'s own token'); } },
       { t: 48900, run: function () { h.say('reach from this post is counted in <b>Activated Reach</b> on Analytics'); } },
-      { t: 50400, run: function () { h.moveCursor(START); h.say('end of recording'); } }
+      { t: 50400, run: function () { h.moveCursor(START); h.say('End of recording.'); } }
     ];
     function reset() {
       scrA.classList.remove('spos-gone'); scrB.classList.remove('spos-shown');

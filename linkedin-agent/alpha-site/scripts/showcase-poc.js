@@ -1,5 +1,5 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.18)
+// showcase-poc.js  (delivery 3.3.20)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
 // (site_templates/index.html, #showcase-pos). Two recordings live in
@@ -32,8 +32,14 @@
 // Behavior
 //   - Plays automatically at PLAYBACK_RATE (0.4x).
 //   - Holds for END_PAUSE_MS (3000, wall time) on the final frame,
-//     resets, and repeats forever. There are no transport controls; the
-//     only control is the recording picker.
+//     resets, and repeats forever.
+//   - A player bar below the window: restart, play or pause, a seekable
+//     progress bar (click, or arrow keys when focused) and a time
+//     readout in wall clock seconds. Pausing freezes the recording
+//     clock, so scheduled steps and the deferred hover and typing
+//     callbacks wait too; only a CSS transition already in flight
+//     finishes. Seeking rebuilds the frame instantly by replaying every
+//     step up to the target with transitions suppressed.
 //   - Cursor travel, click ripple, modal fades and the caption in the
 //     window bar are scaled by the same rate through --spos-rate, set on
 //     the section by this script and read by showcase-poc.css.
@@ -51,8 +57,10 @@
 //     tab is disabled rather than throwing.
 //   - requestAnimationFrame stops in background tabs; the frame delta
 //     is clamped so a returning tab resumes where it paused.
-//   - Every pending timer a recording schedules is tracked and cleared
-//     on stop and reset, so switching mid scene leaves no stray callback.
+//   - Deferred callbacks (hover follow-ups, typing, button states) are
+//     scheduled on the recording clock, not on setTimeout, so they
+//     pause with the clock and are dropped on stop and reset. Switching
+//     mid scene leaves no stray callback.
 // ================================================================
 
 (function () {
@@ -70,6 +78,8 @@
   var frame = root.querySelector('.spos-frame');
   var callout = root.querySelector('.spos-callout');
   var tabs = Array.prototype.slice.call(root.querySelectorAll('.spos-tab[data-recording]'));
+  var playBtn = root.querySelector('.spos-ctl-play');
+  var restartBtn = root.querySelector('.spos-ctl-restart');
   var footnotes = Array.prototype.slice.call(root.querySelectorAll('.spos-footnote[data-recording]'));
   if (!frame || !callout) return;
 
@@ -91,13 +101,18 @@
     var hl = recEl.querySelector('.spos-highlight');
     if (!scaler || !stage || !cursor || !ripple || !hl) return null;
 
-    var timers = [];
-    function later(fn, ms) {
-      var id = setTimeout(function () { timers = timers.filter(function (t) { return t !== id; }); fn(); }, ms / PLAYBACK_RATE);
-      timers.push(id);
-      return id;
+    // Deferred work runs on the recording clock (scaled ms), so it
+    // pauses with playback and is discarded by clearPending().
+    var pending = [], clock = 0;
+    function later(fn, ms) { pending.push({ due: clock + ms, fn: fn }); }
+    function clearPending() { pending = []; }
+    function runPending() {
+      var ready = pending.filter(function (p) { return p.due <= clock; });
+      if (!ready.length) return;
+      pending = pending.filter(function (p) { return p.due > clock; });
+      ready.sort(function (a, b) { return a.due - b.due; });
+      for (var i = 0; i < ready.length; i++) ready[i].fn();
     }
-    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 
     function fit() {
       var s = Math.min(1, frame.clientWidth / STAGE_W);
@@ -171,40 +186,80 @@
     if (!built) return null;
     for (var i = 0; i < built.required.length; i++) { if (!built.required[i]) return null; }
 
-    var elapsed = 0, lastTs = 0, fired = [], running = false, pauseId = 0, raf = 0;
+    // phase: 'stopped' | 'playing' | 'holding' (end pause) | 'paused'
+    var elapsed = 0, lastTs = 0, fired = [], phase = 'stopped', raf = 0, holdLeft = 0, resumePhase = 'playing';
     function reset() {
-      clearTimers(); fired = []; elapsed = 0; lastTs = 0;
+      clearPending(); fired = []; elapsed = 0; clock = 0; lastTs = 0; holdLeft = 0;
       hideBox(); hush();
       built.reset();
       jumpCursor(built.start);
     }
     function tick(ts) {
-      if (!running) return;
-      if (lastTs) elapsed += Math.min(ts - lastTs, MAX_FRAME_DELTA_MS) * PLAYBACK_RATE;
+      if (phase !== 'playing' && phase !== 'holding') return;
+      var dt = lastTs ? Math.min(ts - lastTs, MAX_FRAME_DELTA_MS) : 0;
       lastTs = ts;
+      if (phase === 'holding') {
+        holdLeft -= dt;
+        if (holdLeft <= 0) { reset(); phase = 'playing'; }
+        raf = window.requestAnimationFrame(tick);
+        return;
+      }
+      elapsed += dt * PLAYBACK_RATE; clock = elapsed;
       for (var i = 0; i < built.script.length; i++) {
         if (!fired[i] && elapsed >= built.script[i].t) { fired[i] = true; built.script[i].run(); }
       }
-      if (elapsed >= built.duration) {
-        pauseId = setTimeout(function () { if (!running) return; reset(); raf = window.requestAnimationFrame(tick); }, END_PAUSE_MS);
-        return;
-      }
+      runPending();
+      if (elapsed >= built.duration) { phase = 'holding'; holdLeft = END_PAUSE_MS; }
       raf = window.requestAnimationFrame(tick);
     }
+    function play() {
+      if (phase === 'playing' || phase === 'holding') return;
+      if (phase === 'paused') { phase = resumePhase; lastTs = 0; raf = window.requestAnimationFrame(tick); notify(); return; }
+      reset(); phase = 'playing'; lastTs = 0; raf = window.requestAnimationFrame(tick); notify();
+    }
+    function pause() {
+      if (phase !== 'playing' && phase !== 'holding') return;
+      resumePhase = phase; phase = 'paused';
+      if (raf) window.cancelAnimationFrame(raf); raf = 0;
+      notify();
+    }
+    function restart() { stop(); play(); }
     function start() {
       fit();
-      if (reducedMotion) { reset(); built.reducedMotion(); return; }
-      running = true; reset();
-      raf = window.requestAnimationFrame(tick);
+      if (reducedMotion) { reset(); built.reducedMotion(); phase = 'stopped'; notify(); return; }
+      phase = 'stopped'; play();
     }
     function stop() {
-      running = false;
-      if (raf) window.cancelAnimationFrame(raf);
-      if (pauseId) clearTimeout(pauseId);
-      raf = 0; pauseId = 0;
+      phase = 'stopped';
+      if (raf) window.cancelAnimationFrame(raf); raf = 0;
       reset();
     }
-    return { start: start, stop: stop, fit: fit };
+    function isPlaying() { return phase === 'playing' || phase === 'holding'; }
+    function progress() { return { elapsed: Math.min(elapsed, built.duration), duration: built.duration, phase: phase }; }
+    // Jump to `t` (scaled ms): rebuild the frame by replaying every step
+    // up to t with transitions suppressed, then continue in the state
+    // playback was in (playing stays playing, paused stays paused).
+    function seek(t) {
+      var wasPlaying = isPlaying() || phase === 'stopped';
+      if (raf) window.cancelAnimationFrame(raf); raf = 0;
+      stage.classList.add('spos-seeking');
+      reset();
+      elapsed = Math.max(0, Math.min(t, built.duration));
+      for (var i = 0; i < built.script.length; i++) {
+        if (built.script[i].t <= elapsed) { fired[i] = true; clock = built.script[i].t; built.script[i].run(); }
+      }
+      clock = elapsed;
+      runPending();
+      void stage.offsetWidth;
+      stage.classList.remove('spos-seeking');
+      lastTs = 0; resumePhase = 'playing';
+      if (wasPlaying && !reducedMotion) { phase = 'playing'; raf = window.requestAnimationFrame(tick); } else { phase = 'paused'; }
+      notify();
+    }
+    function notify() { if (onState) onState(); }
+    var onState = null;
+    function onStateChange(fn) { onState = fn; }
+    return { start: start, stop: stop, fit: fit, play: play, pause: pause, restart: restart, seek: seek, progress: progress, isPlaying: isPlaying, onStateChange: onStateChange };
   }
 
   // ---------- Recording "create" ----------
@@ -411,8 +466,62 @@
     tabs.forEach(function (t) { var on = t.getAttribute('data-recording') === name; t.classList.toggle('spos-active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
     footnotes.forEach(function (f) { f.hidden = f.getAttribute('data-recording') !== name; });
     recordings[name].start();
+    syncControls();
   }
   tabs.forEach(function (tab) { tab.addEventListener('click', function () { show(tab.getAttribute('data-recording')); }); });
+
+  // Player bar below the window.
+  var seekEl = root.querySelector('.spos-seek'), seekFill = root.querySelector('.spos-seek-fill'), seekKnob = root.querySelector('.spos-seek-knob');
+  var timeCur = root.querySelector('.spos-time-cur'), timeDur = root.querySelector('.spos-time-dur');
+  function fmt(scaledMs) {
+    var sec = Math.max(0, Math.round(scaledMs / PLAYBACK_RATE / 1000));
+    return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  }
+  function syncControls() {
+    var rec = active ? recordings[active] : null;
+    var disabled = !rec || reducedMotion;
+    if (playBtn) {
+      playBtn.disabled = disabled;
+      var playing = rec ? rec.isPlaying() : false;
+      playBtn.classList.toggle('spos-playing', playing);
+      playBtn.setAttribute('aria-label', playing ? 'Pause the recording' : 'Play the recording');
+    }
+    if (restartBtn) restartBtn.disabled = disabled;
+    if (seekEl) seekEl.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+  function paintProgress() {
+    var rec = active ? recordings[active] : null;
+    if (!rec || !seekFill) return;
+    var p = rec.progress(), frac = p.duration ? p.elapsed / p.duration : 0;
+    seekFill.style.width = (frac * 100) + '%';
+    if (seekKnob) seekKnob.style.left = (frac * 100) + '%';
+    if (seekEl) seekEl.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+    if (timeCur) timeCur.textContent = fmt(p.elapsed);
+    if (timeDur) timeDur.textContent = fmt(p.duration);
+  }
+  (function progressLoop() { paintProgress(); window.requestAnimationFrame(progressLoop); })();
+  function seekToFraction(frac) {
+    var rec = active ? recordings[active] : null;
+    if (!rec || reducedMotion) return;
+    var p = rec.progress();
+    rec.seek(Math.max(0, Math.min(1, frac)) * p.duration);
+    paintProgress(); syncControls();
+  }
+  if (playBtn) playBtn.addEventListener('click', function () { var rec = recordings[active]; if (!rec) return; if (rec.isPlaying()) rec.pause(); else rec.play(); syncControls(); });
+  if (restartBtn) restartBtn.addEventListener('click', function () { var rec = recordings[active]; if (!rec) return; rec.restart(); syncControls(); });
+  if (seekEl) {
+    seekEl.addEventListener('click', function (e) { var r = seekEl.getBoundingClientRect(); if (r.width) seekToFraction((e.clientX - r.left) / r.width); });
+    seekEl.addEventListener('keydown', function (e) {
+      var rec = active ? recordings[active] : null; if (!rec) return;
+      var p = rec.progress(), frac = p.duration ? p.elapsed / p.duration : 0, step = 0.05;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { seekToFraction(frac + step); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { seekToFraction(frac - step); e.preventDefault(); }
+      else if (e.key === 'Home') { seekToFraction(0); e.preventDefault(); }
+      else if (e.key === 'End') { seekToFraction(1); e.preventDefault(); }
+      else if (e.key === ' ' || e.key === 'Enter') { if (rec.isPlaying()) rec.pause(); else rec.play(); syncControls(); e.preventDefault(); }
+    });
+  }
+  Object.keys(recordings).forEach(function (k) { recordings[k].onStateChange(syncControls); });
   window.addEventListener('resize', function () { if (active && recordings[active]) recordings[active].fit(); });
 
   var first = (tabs.filter(function (t) { return t.classList.contains('spos-active') && !t.disabled; })[0] || tabs.filter(function (t) { return !t.disabled; })[0]);

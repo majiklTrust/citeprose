@@ -1,5 +1,5 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.18)
+   showcase-poc.css  (delivery 3.3.20)
    ================================================================
    Marketing site showcase: two scripted replays the visitor picks
    between with a tab row; only the selected one plays.
@@ -62,7 +62,7 @@
    margin auto. The recording must fill the .spos-inner column instead,
    so the cap is lifted here; without this line the column width above
    has no effect and the 560px window sits at the column's left edge. */
-#showcase-pos .spos-display { max-width: none; width: 100%; margin: 0; }
+#showcase-pos .spos-display { max-width: none; width: 100%; margin: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
 /* ---------- Headline ---------- */
 #showcase-pos .spos-headline {
@@ -91,7 +91,34 @@
   #showcase-pos .spos-headline-line:nth-child(2), #showcase-pos .spos-headline-line:nth-child(3) { padding-left: 0; }
 }
 
-/* ---------- Footnote ---------- */
+/* ---------- Player bar (below the window; media player conventions) ---------- */
+#showcase-pos .spos-player {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-top: 0; padding: 0.45rem 0.6rem;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 10px 10px;
+}
+#showcase-pos .spos-pbtn {
+  appearance: none; border: 0; background: transparent; color: var(--text-primary); width: 34px; height: 34px;
+  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+#showcase-pos .spos-pbtn svg { width: 20px; height: 20px; fill: currentColor; }
+#showcase-pos .spos-pbtn:hover { background: var(--bg-card-hover); color: var(--accent-cyan); }
+#showcase-pos .spos-pbtn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+#showcase-pos .spos-pbtn[disabled] { opacity: 0.4; cursor: default; }
+#showcase-pos .spos-ctl-play .spos-ico-pause { display: none; }
+#showcase-pos .spos-ctl-play.spos-playing .spos-ico-play { display: none; }
+#showcase-pos .spos-ctl-play.spos-playing .spos-ico-pause { display: block; }
+#showcase-pos .spos-seek { flex: 1; min-width: 0; height: 24px; display: flex; align-items: center; cursor: pointer; }
+#showcase-pos .spos-seek:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; border-radius: 4px; }
+#showcase-pos .spos-seek-track { position: relative; width: 100%; height: 4px; border-radius: 2px; background: var(--border); }
+#showcase-pos .spos-seek:hover .spos-seek-track { height: 6px; }
+#showcase-pos .spos-seek-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: var(--accent-cyan); }
+#showcase-pos .spos-seek-knob { position: absolute; top: 50%; left: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2); opacity: 0; transition: opacity 0.15s; }
+#showcase-pos .spos-seek:hover .spos-seek-knob, #showcase-pos .spos-seek:focus-visible .spos-seek-knob { opacity: 1; }
+#showcase-pos .spos-time { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; min-width: 6.5rem; text-align: right; }
+#showcase-pos .spos-seeking, #showcase-pos .spos-seeking * { transition: none !important; animation-duration: 0s !important; }
+
 #showcase-pos .spos-footnote {
   margin: 0.45rem 0 0; text-align: left;
   font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);

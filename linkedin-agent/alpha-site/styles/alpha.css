@@ -720,7 +720,7 @@
   .featlist-grid { grid-template-columns: 1fr; }
 }
 
-.hero-mobile-nav { display: none; }
+.hero-mobile-nav { display: none; padding-top: 1.0rem; }
 
 @media (max-width: 768px) {
   .hero-mobile-nav {

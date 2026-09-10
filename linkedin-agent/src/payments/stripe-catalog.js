@@ -13,8 +13,13 @@ const TTL_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 4000;
 
 let cache = { at: 0, data: null };
+// 4.25111.81: the one outbound fetch in progress, shared by every
+// caller that arrives while it runs. Before this, a cold or expired
+// cache meant every concurrent request (the pricing page is public)
+// opened its own pair of Stripe calls for up to TIMEOUT_MS each.
+let inFlight = null;
 
-export function _resetCatalogCache() { cache = { at: 0, data: null }; }
+export function _resetCatalogCache() { cache = { at: 0, data: null }; inFlight = null; }
 
 export function getStripeCatalogKey(env = process.env) {
   const k = env.STRIPE_CATALOG_KEY || env.STRIPE_SECRET_KEY;
@@ -72,6 +77,15 @@ export async function fetchStripeCatalog(env = process.env) {
   if (!key) return null;
   const now = Date.now();
   if (cache.data && now - cache.at < TTL_MS) return cache.data;
+  if (inFlight && inFlight.key === key) return inFlight.promise;
+  const promise = fetchFresh(key, now).finally(() => {
+    if (inFlight && inFlight.promise === promise) inFlight = null;
+  });
+  inFlight = { key, promise };
+  return promise;
+}
+
+async function fetchFresh(key, now) {
   try {
     const [products, prices] = await Promise.all([
       stripeGet("/products?active=true&limit=100", key),

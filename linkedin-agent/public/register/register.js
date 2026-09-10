@@ -234,7 +234,7 @@
         // 4.25111.78: a registration that began with a purchase on the
         // pricing page is told where to land by the server (the billing
         // page); the value is a same-origin path or ignored.
-        var landing = (typeof data.landing === 'string' && /^\/[A-Za-z0-9_\/-]*$/.test(data.landing)) ? data.landing : '/app';
+        var landing = (typeof data.landing === 'string' && /^\/(?!\/)[A-Za-z0-9_\/-]*$/.test(data.landing)) ? data.landing : '/app';
         setTimeout(function () { window.location.href = landing; }, 2500);
       })
       .catch(function (err) {

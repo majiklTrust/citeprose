@@ -8,12 +8,41 @@
 // minute, answered 429 with Retry-After beyond it. In memory, per
 // process, bounded (old windows are swept; the map is capped), and
 // fail-open on anything unexpected: a limiter must never be the
-// reason a page is down. req.ip honours trust proxy, so behind the
-// CDN it is the visitor's address, not the edge's.
+// reason a page is down.
+//
+// 4.25111.81: the address is derived here, not taken from req.ip.
+// The application sets trust proxy to true, which makes req.ip the
+// LEFTMOST X-Forwarded-For entry, and that entry is written by the
+// client, so a caller who changed the header on every request got a
+// fresh bucket every time and the ceiling meant nothing. Proxies
+// append one entry each, so the trustworthy entry is counted from
+// the RIGHT: with TRUSTED_PROXY_HOPS proxies in front of Node (1 by
+// default), the entry that many places from the right is the address
+// the outermost proxy saw. Fewer entries than hops, or 0 hops (Node
+// answering directly, as in a development environment), falls back to
+// the TCP peer. Set TRUSTED_PROXY_HOPS to the real number of proxies:
+// too low throttles every visitor together behind the proxy, too
+// high trusts a client-written entry.
 // ═══════════════════════════════════════════════════════════════
 
 const WINDOW_MS = 60 * 1000;
 const MAX_TRACKED = 10000;
+const DEFAULT_HOPS = 1;
+
+export function trustedProxyHops(env = process.env) {
+  const n = Number(env.TRUSTED_PROXY_HOPS);
+  return Number.isInteger(n) && n >= 0 && n <= 10 ? n : DEFAULT_HOPS;
+}
+
+export function clientAddress(req, env = process.env) {
+  const peer = (req && req.socket && req.socket.remoteAddress) || "unknown";
+  const hops = trustedProxyHops(env);
+  if (hops === 0) return peer;
+  const raw = req && req.headers ? req.headers["x-forwarded-for"] : null;
+  const list = typeof raw === "string" ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  if (list.length < hops) return peer;
+  return list[list.length - hops];
+}
 
 export function createRequestLimiter({ limit = 120, windowMs = WINDOW_MS, name = "public" } = {}) {
   const hits = new Map();
@@ -29,7 +58,7 @@ export function createRequestLimiter({ limit = 120, windowMs = WINDOW_MS, name =
 
   return function requestLimiter(req, res, next) {
     try {
-      const key = String(req.ip || req.socket?.remoteAddress || "unknown");
+      const key = String(clientAddress(req));
       const now = Date.now();
       let entry = hits.get(key);
       if (!entry || now - entry.start >= windowMs) {

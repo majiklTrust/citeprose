@@ -41,6 +41,7 @@ import { createRequestLimiter } from "../services/request-limiter.js";
 
 const PER_ADDRESS_PER_MINUTE = 30;
 const REGISTER_PAGE = "/app/register#token=";
+const RETURN_PAGE = "/checkout/return";
 const BILLING_PAGE = "/app/billing";
 const APP_PAGE = "/app";
 
@@ -107,6 +108,19 @@ export default function createCheckoutRoutes() {
       const sub = session.user.sub;
       const email = typeof session.user.email === "string" ? session.user.email.trim() : "";
       if (await membership(sub)) return res.redirect(BILLING_PAGE);
+      // 4.25111.81: a login that already paid and never finished setup
+      // is never sent to pay again. Before this, the check below ran
+      // only against the registration minted for this click, so a paid
+      // row on an aged-out registration (five days by default) was
+      // invisible here and the buyer was sent to Stripe a second time.
+      // The return page owns the resume path (live token or a fresh
+      // registration for the same login).
+      const store = await import("../tenant/checkout-store.js");
+      const paidBefore = await store.findOpenForLogin(sub);
+      if (paidBefore && paidBefore.status === "paid") {
+        platformLog("info", "checkout_resumed", { checkoutId: paidBefore.id, sub, tier });
+        return res.redirect(RETURN_PAGE);
+      }
       if (!email || !email.includes("@")) {
         return page(res, 403, "No email on this login", "Your login carries no email address, so a workspace cannot be set up for it.");
       }
@@ -130,7 +144,6 @@ export default function createCheckoutRoutes() {
         res.set("Retry-After", "2");
         return page(res, 503, "One moment", "Setup is being prepared. Go back and press Purchase again.");
       }
-      const store = await import("../tenant/checkout-store.js");
       const row = await store.openCheckout({ registrationId: reg.id, authSub: sub, email, tier });
       if (row.status === "paid") {
         // Already paid and not yet set up: the register page is the

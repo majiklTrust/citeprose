@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/app/styles/app.css?v={{CSSVERSION}}" />
   <!-- Marketing-specific components and scoped overrides -->
   <link rel="stylesheet" href="/styles/alpha.css?v={{CSSVERSION}}" />
-  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy; LinkedIn Connection (3.3.28) -->
+  <!-- Showcase replays: Create and Publish; Topics and Feeds; Analytics and Advocacy; LinkedIn Connection; Image Studio (3.3.29) -->
   <link rel="stylesheet" href="/styles/showcase-poc.css?v={{CSSVERSION}}" />
 </head>
 <body>
@@ -75,7 +75,7 @@
   </div>
 
   <main id="main">
-    <!-- Showcase replay (3.3.28): four scripted replays a visitor can pick
+    <!-- Showcase replay (3.3.29): five scripted replays a visitor can pick
          between; only the selected one plays. Markup mirrors
          public_templates/dashboard.jsx and public/topics/index.html with
          spos- prefixed classes so app.css does not restyle it. Styles in
@@ -103,7 +103,13 @@
              LinkedIn Connection page, the single OAuth grant, the status
              rows filling in, discovering and linking the brokerage page,
              and switching Publish as between the personal profile and the
-             Organization Page. URNs and dates are illustrative. -->
+             Organization Page. URNs and dates are illustrative.
+           Recording "imagestudio" (family garden center): edit the post
+             waiting for approval, render a picture with the in-post Image
+             Studio panel, attach it, save, publish from the post detail
+             modal, then the post as it appears in the feed. The picture
+             is an inline SVG illustration; the feed view is illustrative
+             and carries no brand marks. -->
     <section id="showcase-pos" class="spos-section" aria-labelledby="showcase-pos-headline">
       <div class="site-container">
         <div class="spos-inner">
@@ -114,8 +120,9 @@
         </h2>
         <div class="spos-tabs" role="tablist" aria-label="Choose a walkthrough">
           <button type="button" class="spos-tab spos-active" role="tab" aria-selected="true" data-recording="create">Create &amp; Publish</button>
-          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="linkedin">Personal &amp; Organizational</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="imagestudio">Image Studio</button>
           <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="topics">Topics &amp; Feeds</button>
+          <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="linkedin">Post To Your Org</button>
           <button type="button" class="spos-tab" role="tab" aria-selected="false" data-recording="analytics">Analytics &amp; Advocacy</button>
         </div>
         <div class="shot-window spos-display">
@@ -761,6 +768,173 @@ If you run a clinic, the numbers in this post are worth a look. If you are a pat
                   </ul>
                   <div class="spos-li-consent-note">You can stop this access at any time from your LinkedIn settings.</div>
                   <div class="spos-li-consent-actions"><span class="spos-li-consent-cancel">Cancel</span><span class="spos-li-consent-allow spos-l-allow">Allow</span></div>
+                </div>
+              </div>
+
+              <div class="spos-highlight"></div>
+              <div class="spos-ripple"></div>
+              <svg class="spos-cursor" viewBox="0 0 22 30" aria-hidden="true">
+                <path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+            </div>
+              </div>
+            </div>
+            <div class="spos-recording" data-recording="imagestudio">
+              <div class="spos-scaler">
+            <div class="spos-stage" aria-hidden="true">
+              <svg width="0" height="0" aria-hidden="true" class="spos-i-defs"><defs>
+                <linearGradient id="spos-i-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe3b3"/><stop offset="0.55" stop-color="#f9c789"/><stop offset="1" stop-color="#e9a86a"/></linearGradient>
+                <linearGradient id="spos-i-hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb36b"/><stop offset="1" stop-color="#5f8a45"/></linearGradient>
+                <symbol id="spos-i-fall" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">
+                  <rect width="640" height="360" fill="url(#spos-i-sky)"/>
+                  <circle cx="500" cy="96" r="52" fill="#fff4d6" opacity="0.9"/>
+                  <path d="M0 250 Q160 190 320 235 T640 220 L640 360 L0 360 Z" fill="url(#spos-i-hill)"/>
+                  <path d="M0 292 Q200 262 400 290 T640 280 L640 360 L0 360 Z" fill="#4c7239"/>
+                  <g fill="#d9772e"><circle cx="70" cy="300" r="22"/><circle cx="130" cy="312" r="26"/><circle cx="196" cy="304" r="24"/><circle cx="262" cy="316" r="27"/><circle cx="330" cy="306" r="23"/><circle cx="392" cy="318" r="26"/><circle cx="458" cy="308" r="24"/><circle cx="524" cy="320" r="27"/><circle cx="590" cy="310" r="23"/></g>
+                  <g fill="#f2a24a"><circle cx="100" cy="332" r="18"/><circle cx="164" cy="340" r="19"/><circle cx="230" cy="334" r="17"/><circle cx="296" cy="342" r="19"/><circle cx="362" cy="336" r="18"/><circle cx="428" cy="344" r="19"/><circle cx="494" cy="338" r="17"/><circle cx="560" cy="344" r="19"/></g>
+                  <g fill="#7a4a2a"><rect x="86" y="318" width="28" height="30" rx="3"/><rect x="216" y="322" width="28" height="30" rx="3"/><rect x="348" y="324" width="28" height="30" rx="3"/><rect x="480" y="326" width="28" height="30" rx="3"/></g>
+                  <g><rect x="402" y="176" width="10" height="92" rx="5" fill="#2f3a2a"/><path d="M407 176 q-24 -34 -6 -60 q22 26 6 60 z" fill="#1f3d2b"/><ellipse cx="407" cy="270" rx="26" ry="6" fill="#000" opacity="0.15"/></g>
+                  <g><path d="M120 250 l8 -46 h18 l8 46 z" fill="#3b3b3b"/><circle cx="137" cy="196" r="12" fill="#3b3b3b"/><path d="M110 254 l24 -12 l24 12 v6 h-48 z" fill="#3b3b3b"/></g>
+                </symbol></defs></svg>
+              <div class="spos-screen spos-i-screen-dash">
+                <div class="spos-app">
+                  <div class="spos-header">
+                    <div>
+                      <div class="spos-header-title">Market Intelligence</div>
+                      <div class="spos-header-subtitle">v{{APPVERSION}}  connected as Jordan Ellis</div>
+                    </div>
+                    <div class="spos-header-controls">
+                      <div class="spos-mode"><span>Mode</span><span class="spos-track"></span><span class="spos-mode-value">MANUAL</span></div>
+                      <span class="spos-logout">Logout</span>
+                    </div>
+                  </div>
+                  <div class="spos-stats">
+                    <div class="spos-stat"><div class="spos-stat-label">Total Published</div><div class="spos-stat-value spos-i-stat-published">41</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Posts (10-day)</div><div class="spos-stat-value">3</div><div class="spos-stat-meta">max 4  ready to post</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">Pending Approval</div><div class="spos-stat-value spos-i-stat-pending">1</div></div>
+                    <div class="spos-stat"><div class="spos-stat-label">LinkedIn</div><div class="spos-stat-value spos-stat-value-sm">Connected</div><div class="spos-stat-meta">target: organization</div></div>
+                  </div>
+                  <div class="spos-grid">
+                    <div>
+                      <div class="spos-title">Queue <span class="spos-badge spos-i-queue-badge">1</span></div>
+                      <div class="spos-posts">
+                        <div class="spos-post spos-i-card">
+                          <div class="spos-badges"><span class="spos-topic">fall-planting</span><span class="spos-status spos-i-status">pending approval</span></div>
+                          <div class="spos-i-card-body"><div class="spos-i-thumb"><svg class="spos-i-img" viewBox="0 0 640 360" aria-hidden="true"><use href="#spos-i-fall"/></svg></div><div class="spos-preview">Fall is the second spring. Every September we hear the same question at the register: is it too late to plant? For perennials, shrubs and most trees...</div></div>
+                          <div class="spos-actions spos-i-actions"><span class="spos-btn spos-btn-approve spos-btn-sm">Approve</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm spos-i-edit-btn">Edit</span></div>
+                        </div>
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">houseplants</span><span class="spos-status spos-status-draft">draft</span></div>
+                          <div class="spos-preview">The plant that survives your apartment is the one that matches your window, not the one that matches your shelf. A quick guide by light, not by looks.</div>
+                          <div class="spos-actions"><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                        </div>
+                      </div>
+                      <div class="spos-title spos-title-gap">Recent Posts</div>
+                      <div class="spos-posts">
+                        <div class="spos-post">
+                          <div class="spos-badges"><span class="spos-topic">workshops</span><span class="spos-status spos-status-posted">posted</span></div>
+                          <div class="spos-preview">Saturday's bulb workshop sold out in a day. Second session added, and this time we are bringing the tulips that actually come back.</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel"><div class="spos-model-row"><span class="spos-model-label">AI Model</span><span class="spos-model-value">claude-sonnet-4-6</span></div></div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Quick Actions</div>
+                        <div class="spos-vstack">
+                          <div class="spos-hstack"><span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Generate</span><span class="spos-btn spos-btn-primary spos-btn-tight spos-btn-grow">Create</span></div>
+                          <div class="spos-select">Auto-select topic</div>
+                          <div class="spos-toggle-row"><span class="spos-toggle-on">Corroboration ON</span><span class="spos-switch"></span></div>
+                        </div>
+                      </div>
+                      <div class="spos-panel">
+                        <div class="spos-title">Topic Coverage</div>
+                        <div class="spos-cov-row"><span>fall-planting</span><span class="spos-cov-count">11</span></div><div class="spos-cov-bar spos-cov-78"><i></i></div>
+                        <div class="spos-cov-row"><span>houseplants</span><span class="spos-cov-count">7</span></div><div class="spos-cov-bar spos-cov-52"><i></i></div>
+                        <div class="spos-cov-row"><span>workshops</span><span class="spos-cov-count">4</span></div><div class="spos-cov-bar spos-cov-24"><i></i></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="spos-panel"><div class="spos-title">Activity Log</div><div class="spos-log"><time>07:12:40</time><span class="spos-lvl">info</span><span>feeds polled: 5 ok, 0 failed, 8 new articles</span></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Edit Post modal with the in-post Image Studio panel (mirrors editingPost + ImageStudioPanel in dashboard.jsx) -->
+                <div class="spos-modal-overlay spos-i-edit-overlay">
+                  <div class="spos-modal spos-modal-narrow spos-i-edit-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <h3 class="spos-modal-heading-top">Edit Post <span class="spos-dest-badge">ORG</span></h3>
+                    <div class="spos-mb"><span class="spos-form-label">Title</span><div class="spos-form-input">Fall is the second spring</div></div>
+                    <div class="spos-mb"><span class="spos-form-label">Content</span><div class="spos-form-textarea spos-i-content">Fall is the second spring.
+
+Every September we hear the same question at the register: is it too late to plant? For perennials, shrubs and most trees, the answer is that this is the best window of the year. The soil is warm, the air is cool, and the roots get six weeks of growing before the first hard frost.
+
+Three things we tell every customer this month:
+1. Plant, water deeply once a week, and stop feeding.
+2. Mums are for color now; put the perennials in for next year.
+3. Mulch after the first frost, not before it.</div></div>
+                    <div class="spos-mb-lg"><span class="spos-form-label">Hashtags (comma-separated)</span><div class="spos-form-input">FallPlanting, GardenCenter, Perennials</div></div>
+                    <div class="spos-is-panel spos-i-panel">
+                      <div class="spos-is-head">Generate with AI</div>
+                      <div class="spos-is-lens-row"><span class="spos-is-lens-label">Story Lens</span><span class="spos-is-lens spos-i-lens">Editorial Photo</span></div>
+                      <div class="spos-is-prompt spos-i-prompt"><span class="spos-tp-ph">Describe the image to generate</span><span class="spos-tp-typed"></span><span class="spos-caret"></span></div>
+                      <div class="spos-is-actions">
+                        <span class="spos-btn spos-btn-primary spos-btn-sm spos-i-generate">Generate</span>
+                        <span class="spos-btn spos-btn-ghost spos-btn-sm">From Library</span>
+                        <span class="spos-btn spos-btn-approve spos-btn-sm spos-i-attach">Attach to Post</span>
+                        <span class="spos-is-ok spos-i-attached">AI image attached <span class="spos-btn spos-btn-ghost spos-btn-sm">Detach</span></span>
+                      </div>
+                      <div class="spos-is-preview spos-i-preview"><div class="spos-is-shimmer"></div><svg class="spos-i-img" viewBox="0 0 640 360" aria-hidden="true"><use href="#spos-i-fall"/></svg><div class="spos-is-meta">editorial_photo, 16:9, metadata stripped, stored in the library</div></div>
+                    </div>
+                    <div class="spos-modal-actions-end"><span class="spos-btn spos-btn-ghost spos-btn-sm">Cancel</span><span class="spos-btn spos-btn-approve spos-btn-sm spos-i-save">Save Changes</span></div>
+                  </div>
+                </div>
+
+                <!-- Post detail modal (mirrors selectedPost, pending_approval, with the attached AI image) -->
+                <div class="spos-modal-overlay spos-i-detail-overlay">
+                  <div class="spos-modal spos-i-detail-modal">
+                    <span class="spos-modal-close">&#x2715;</span>
+                    <div class="spos-badges-wrap"><span class="spos-topic">fall-planting</span><span class="spos-corr-badge">strong corroboration</span><span class="spos-dest-badge">ORG</span></div>
+                    <h3 class="spos-modal-heading">Fall is the second spring</h3>
+                    <div class="spos-modal-body">Fall is the second spring.
+
+Every September we hear the same question at the register: is it too late to plant? For perennials, shrubs and most trees, the answer is that this is the best window of the year. The soil is warm, the air is cool, and the roots get six weeks of growing before the first hard frost.
+
+Three things we tell every customer this month:
+1. Plant, water deeply once a week, and stop feeding.
+2. Mums are for color now; put the perennials in for next year.
+3. Mulch after the first frost, not before it.</div>
+                    <div class="spos-hashtags"><span class="spos-hashtag">#FallPlanting</span><span class="spos-hashtag">#GardenCenter</span><span class="spos-hashtag">#Perennials</span></div>
+                    <div class="spos-source-list">
+                      <div class="spos-section-heading-cyan">Sources (3)</div>
+                      <div class="spos-source-item"><span>State extension service: fall planting calendar for zone 5</span><span class="spos-source-tier">A</span></div>
+                      <div class="spos-source-item"><span>Nursery trade weekly: soil temperature and root establishment</span><span class="spos-source-tier">B</span></div>
+                      <div class="spos-source-item"><span>Regional weather service: first frost dates, 2026 outlook</span><span class="spos-source-tier">B</span></div>
+                    </div>
+                    <div class="spos-section-divider">
+                      <div class="spos-section-heading">Post Image</div>
+                      <div class="spos-detail-stack">
+                        <div class="spos-image-choice"><input type="radio" name="spos-i-image" checked disabled> AI image attached (#212, editorial_photo)</div>
+                        <div class="spos-is-preview spos-is-preview-sm"><svg class="spos-i-img" viewBox="0 0 640 360" aria-hidden="true"><use href="#spos-i-fall"/></svg></div>
+                      </div>
+                    </div>
+                    <div class="spos-modal-actions"><span class="spos-btn spos-btn-approve spos-btn-sm spos-i-publish">Publish</span><span class="spos-btn spos-btn-reject spos-btn-sm">Reject</span><span class="spos-btn spos-btn-edit spos-btn-sm">Edit</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen B: the post as it appears in a professional network feed (illustrative, no brand marks) -->
+              <div class="spos-screen spos-li-feed spos-i-screen-feed">
+                <div class="spos-li-feed-card">
+                  <div class="spos-li-feed-head"><span class="spos-li-avatar spos-li-avatar-org">MG</span><div><div class="spos-li-feed-name">Meadowbrook Garden Center</div><div class="spos-li-feed-sub">1,860 followers, just now</div></div></div>
+                  <div class="spos-li-feed-text">Fall is the second spring.
+
+Every September we hear the same question at the register: is it too late to plant? For perennials, shrubs and most trees, the answer is that this is the best window of the year.</div>
+                  <div class="spos-li-feed-more">...see more</div>
+                  <div class="spos-li-feed-img"><svg class="spos-i-img" viewBox="0 0 640 360" aria-hidden="true"><use href="#spos-i-fall"/></svg></div>
+                  <div class="spos-li-feed-tags">#FallPlanting #GardenCenter #Perennials</div>
+                  <div class="spos-li-feed-actions"><span>Like</span><span>Comment</span><span>Repost</span><span>Send</span></div>
                 </div>
               </div>
 

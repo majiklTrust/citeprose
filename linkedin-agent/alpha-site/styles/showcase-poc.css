@@ -1,7 +1,7 @@
 /* ================================================================
-   showcase-poc.css  (delivery 3.3.28)
+   showcase-poc.css  (delivery 3.3.29)
    ================================================================
-   Marketing site showcase: four scripted replays the visitor picks
+   Marketing site showcase: five scripted replays the visitor picks
    between with a tab row; only the selected one plays.
      "create": Generate from Quick Actions (Generating Content overlay,
        draft preview with Sources Referenced and Quality Assessment,
@@ -20,7 +20,10 @@
      "linkedin": the LinkedIn Connection page (status, the OAuth grant,
        Publish as, Organization Page discovery) with an illustrative
        authorization step between.
-   Rendered at the top of site_templates/index.html.
+     "imagestudio": Edit Post with the in-post Image Studio panel
+       (Story Lens, prompt, Generate, preview, Attach to Post), Save,
+       publish from the post detail modal, then the post in the feed.
+   Rendered at the top of site_templates/alpha-index.html.
 
    Layout (3.3.7)
      - One recording, centered, 871px wide (3.3.9: 20 percent over the
@@ -459,6 +462,60 @@
 #showcase-pos .spos-li-consent-allow { padding: 0.45rem 1.2rem; border-radius: 999px; background: #0a66c2; color: #fff; font-weight: 600; font-size: 0.85rem; transition: filter 0.15s, transform 0.1s; }
 #showcase-pos .spos-li-consent-allow.spos-hover { filter: brightness(0.92); }
 #showcase-pos .spos-li-consent-allow.spos-pressed { transform: scale(0.97); }
+
+/* ---------- In-post Image Studio panel (mirrors app.css .image-studio-*) and the rendered picture ---------- */
+#showcase-pos .spos-i-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+#showcase-pos .spos-i-img { display: block; width: 100%; height: 100%; }
+#showcase-pos .spos-is-panel { margin-top: 0.25rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); padding: 0.7rem 0.8rem; }
+#showcase-pos .spos-is-head { font-size: 0.8rem; font-weight: 700; color: var(--accent-blue); margin-bottom: 0.5rem; }
+#showcase-pos .spos-is-lens-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+#showcase-pos .spos-is-lens-label { font-size: 0.78rem; color: var(--text-secondary); }
+#showcase-pos .spos-is-lens { flex: 1; font-size: 0.8rem; border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 1.6rem 0.3rem 0.5rem; background: var(--bg-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238899b0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E") no-repeat right 0.5rem center; color: var(--text-primary); }
+#showcase-pos .spos-is-lens.spos-hover { border-color: var(--border-active); }
+#showcase-pos .spos-is-prompt { min-height: 2.6rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text-primary); font-size: 0.82rem; line-height: 1.4; white-space: pre-wrap; }
+#showcase-pos .spos-is-prompt.spos-focus { border-color: var(--border-active); box-shadow: 0 0 0 2px var(--glow-blue); }
+#showcase-pos .spos-is-prompt .spos-tp-ph { color: var(--text-muted); }
+#showcase-pos .spos-is-prompt.spos-focus .spos-tp-ph, #showcase-pos .spos-is-prompt.spos-typed-on .spos-tp-ph { display: none; }
+#showcase-pos .spos-is-prompt .spos-caret { display: none; width: 1px; height: 1em; background: var(--text-primary); vertical-align: text-bottom; margin-left: 1px; animation: spos-caret 1s steps(2) infinite; }
+#showcase-pos .spos-is-prompt.spos-focus .spos-caret { display: inline-block; }
+#showcase-pos .spos-is-actions { display: flex; align-items: center; gap: 0.5rem; margin: 0.55rem 0; flex-wrap: wrap; }
+#showcase-pos .spos-i-attach, #showcase-pos .spos-i-attached { display: none; }
+#showcase-pos .spos-i-attach.spos-shown { display: inline-block; }
+#showcase-pos .spos-i-attached.spos-shown { display: inline-flex; align-items: center; gap: 0.5rem; }
+#showcase-pos .spos-is-ok { font-size: 0.78rem; color: var(--accent-green); font-weight: 600; }
+#showcase-pos .spos-is-preview { position: relative; display: none; width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--bg-primary); border: 1px solid var(--border); }
+#showcase-pos .spos-is-preview.spos-shown { display: block; }
+#showcase-pos .spos-is-preview .spos-i-img { opacity: 0; transition: opacity calc(0.8s / var(--spos-rate)); }
+#showcase-pos .spos-is-preview.spos-ready .spos-i-img { opacity: 1; }
+#showcase-pos .spos-is-shimmer { position: absolute; inset: 0; background: linear-gradient(100deg, var(--bg-card) 20%, var(--bg-card-hover) 50%, var(--bg-card) 80%); background-size: 200% 100%; animation: spos-shimmer calc(1.4s / var(--spos-rate)) linear infinite; }
+#showcase-pos .spos-is-preview.spos-ready .spos-is-shimmer { display: none; }
+@keyframes spos-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+#showcase-pos .spos-is-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 0.3rem 0.5rem; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-secondary); background: rgba(10, 14, 23, 0.72); opacity: 0; transition: opacity calc(0.4s / var(--spos-rate)); }
+#showcase-pos .spos-is-preview.spos-ready .spos-is-meta { opacity: 1; }
+#showcase-pos .spos-is-preview-sm { display: block; max-width: 320px; }
+#showcase-pos .spos-is-preview-sm .spos-i-img { opacity: 1; }
+#showcase-pos .spos-is-preview-sm .spos-is-shimmer { display: none; }
+#showcase-pos .spos-i-card-body { display: flex; gap: 0.6rem; align-items: flex-start; }
+#showcase-pos .spos-i-thumb { display: none; flex: none; width: 76px; aspect-ratio: 16 / 9; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+#showcase-pos .spos-i-thumb.spos-shown { display: block; }
+#showcase-pos .spos-i-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }
+#showcase-pos .spos-i-screen-dash.spos-gone { opacity: 0; visibility: hidden; }
+
+/* ---------- The post as it appears in a professional network feed (illustrative) ---------- */
+#showcase-pos .spos-li-feed { background: #f3f2ef; display: flex; align-items: flex-start; justify-content: center; padding-top: 1.5rem; opacity: 0; visibility: hidden; transition: opacity calc(0.3s / var(--spos-rate)); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #191919; }
+#showcase-pos .spos-li-feed::before, #showcase-pos .spos-li-feed::after { display: none; }
+#showcase-pos .spos-li-feed.spos-shown { opacity: 1; visibility: visible; }
+#showcase-pos .spos-li-feed-card { width: 560px; background: #fff; border-radius: 8px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.08); overflow: hidden; }
+#showcase-pos .spos-li-feed-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1rem 0.4rem; }
+#showcase-pos .spos-li-avatar-org { border-radius: 6px; background: #4c7239; width: 44px; height: 44px; font-size: 0.9rem; }
+#showcase-pos .spos-li-feed-name { font-weight: 600; font-size: 0.9rem; }
+#showcase-pos .spos-li-feed-sub { font-size: 0.74rem; color: #666; }
+#showcase-pos .spos-li-feed-text { padding: 0.3rem 1rem 0; font-size: 0.86rem; line-height: 1.45; white-space: pre-wrap; }
+#showcase-pos .spos-li-feed-more { padding: 0 1rem 0.5rem; font-size: 0.8rem; color: #666; }
+#showcase-pos .spos-li-feed-img { width: 100%; aspect-ratio: 16 / 9; }
+#showcase-pos .spos-li-feed-tags { padding: 0.5rem 1rem 0; font-size: 0.82rem; color: #0a66c2; font-weight: 600; }
+#showcase-pos .spos-li-feed-actions { display: flex; justify-content: space-around; padding: 0.6rem 0.5rem 0.7rem; margin-top: 0.4rem; border-top: 1px solid #e6e6e6; font-size: 0.82rem; font-weight: 600; color: #444; }
+#showcase-pos .spos-li-feed-actions.spos-hover { color: #0a66c2; }
 
 /* ---------- Screens inside the topics recording ---------- */
 #showcase-pos .spos-t-screen-topics, #showcase-pos .spos-t-screen-dash { transition: opacity calc(0.3s / var(--spos-rate)); }

@@ -18,6 +18,9 @@
 //   liveTokenForRegistration the return page needs the token that
 //                      opens the register page (read-only on
 //                      tenant_registrations).
+//   setSession         4.25111.82: the Checkout Session the server
+//                      minted for this row (the latest; an earlier one
+//                      is expired at the processor when re-tiering).
 //   markPaid           checkout_completed: paid_event_ref is unique,
 //                      so a replayed message updates nothing.
 //   bindTenant         the register page created the workspace
@@ -34,7 +37,8 @@ import { pool } from "../db/pool.js";
 const q = (deps) => deps.query || ((sql, params) => pool.query(sql, params));
 
 const COLUMNS = `id, registration_id, auth_sub, email, tier, status, provider, paid_event_ref, paid_tier, paid_trial,
-  provider_customer_ref, provider_subscription_ref, occurred_at, paid_at, tenant_id, applied_at, created_at, updated_at`;
+  provider_customer_ref, provider_subscription_ref, provider_session_ref, occurred_at, paid_at, tenant_id, applied_at,
+  created_at, updated_at`;
 
 export async function openCheckout({ registrationId, authSub, email, tier }, deps = {}) {
   // The partial unique index (one open row per registration) makes
@@ -88,6 +92,15 @@ export async function findBySubscription(providerSubscriptionRef, deps = {}) {
       WHERE provider_subscription_ref = $1
       ORDER BY created_at DESC LIMIT 1`,
     [providerSubscriptionRef]
+  );
+  return r.rows[0] || null;
+}
+
+export async function setSession(id, sessionRef, deps = {}) {
+  const r = await q(deps)(
+    `UPDATE registration_checkouts SET provider_session_ref = $2, updated_at = now()
+      WHERE id = $1 AND status = 'started' RETURNING ${COLUMNS}`,
+    [id, sessionRef]
   );
   return r.rows[0] || null;
 }

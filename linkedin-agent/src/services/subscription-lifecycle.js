@@ -101,6 +101,14 @@ export async function applyEvent(event, providerName) {
   const { pool } = await import("../db/pool.js");
   const { platformLog } = await import("./platform-log.js");
   const settlement = await import("./purchase-settlement.js");
+  // 4.25111.82: a checkout message is verified against the
+  // processor's own record of the session before anything is
+  // written; a mismatch is held (answered 200, nothing applied,
+  // reason on the log). The processor-specific work lives behind
+  // purchase-settlement.js; this file stays processor-blind.
+  const gate = await settlement.verifyEvent(event, providerName);
+  if (gate.held) return { held: true, reason: gate.held };
+  event = gate.event;
   const subject = await settlement.resolveEventSubject(event);
   if (subject.ignored) {
     platformLog("info", "payment_event_unmapped", { type: event.type, reason: subject.reason, ref: event.providerEventRef || null });

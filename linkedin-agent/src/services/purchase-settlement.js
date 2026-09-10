@@ -7,10 +7,22 @@
 // naming a purchase row (registration_checkouts, checkout-store.js)
 // instead. This module is the seam between the two:
 //
+//   verifyEvent          4.25111.82: a checkout_completed from Stripe
+//                        is not applied on the webhook's word. The
+//                        session is read back from Stripe by id and
+//                        every fact (reference, tier, trial, payer
+//                        email, customer and subscription refs) is
+//                        taken from that record, or the message is
+//                        HELD: nothing written, the reason logged as
+//                        payment_attribution_held, 200 to the
+//                        processor. A transport failure throws so the
+//                        webhook answers 500 and Stripe retries.
 //   resolveEventSubject  what a processor message is about: a tenant
 //                        (by id, or by the Stripe subscription it
-//                        names), a purchase row that has no tenant
-//                        yet, or nothing we know (ignored, logged).
+//                        names), a purchase row (by the purchase id
+//                        this server wrote into the session's
+//                        metadata) that has no tenant yet, or nothing
+//                        we know (ignored, logged).
 //   applyToCheckout      checkout_completed for a purchase row: mark
 //                        it paid with the tier actually charged and
 //                        the Stripe customer and subscription refs.
@@ -43,8 +55,37 @@ async function deps() {
   return { pool, platformLog, store };
 }
 
+// -> { event } (possibly replaced by the verified facts) | { held }
+export async function verifyEvent(event, providerName) {
+  if (providerName !== "stripe" || !event || event.type !== "checkout_completed") return { event };
+  const { platformLog } = await deps();
+  const { verifyCompletedSession } = await import("../payments/stripe-checkout.js");
+  const v = await verifyCompletedSession(event.providerSessionRef);
+  if (!v.ok) {
+    platformLog("warn", "payment_attribution_held", {
+      sessionRef: event.providerSessionRef || null, ref: event.providerEventRef || null, reason: v.held
+    });
+    return { held: v.held };
+  }
+  const f = v.facts;
+  return {
+    event: {
+      ...event,
+      tenantId: f.subject === "tenant" ? f.referenceId : null,
+      checkoutId: f.subject === "checkout" ? f.referenceId : null,
+      tier: f.tier, trial: f.trial, payerEmail: f.email,
+      providerCustomerRef: f.customerRef, providerSubscriptionRef: f.subscriptionRef, verified: true
+    }
+  };
+}
+
 export async function resolveEventSubject(event) {
   const { pool, store } = await deps();
+  if (event && typeof event.checkoutId === "string" && UUID_SHAPE.test(event.checkoutId)) {
+    const row = await store.findById(event.checkoutId);
+    if (row) return row.tenant_id ? { kind: "tenant", tenantId: row.tenant_id, checkout: row } : { kind: "checkout", row };
+    return { ignored: true, reason: "unknown purchase reference" };
+  }
   if (event && typeof event.tenantId === "string" && UUID_SHAPE.test(event.tenantId)) {
     const t = await pool.query(`SELECT 1 FROM tenants WHERE id = $1`, [event.tenantId]);
     if (t.rows.length) return { kind: "tenant", tenantId: event.tenantId };
@@ -72,6 +113,12 @@ export async function applyToCheckout(row, event, providerName) {
   if (typeof event.tier !== "string" || !TIERS.includes(event.tier)) {
     platformLog("warn", "payment_event_refused", { checkoutId: row.id, type: event.type, reason: "unknown tier" });
     return { refused: "unknown tier" };
+  }
+  // 4.25111.82: a verified Stripe message names the payer; the row
+  // names who the door sold to. They must be the same person.
+  if (event.verified === true && String(event.payerEmail || "").toLowerCase() !== String(row.email || "").toLowerCase()) {
+    platformLog("warn", "payment_attribution_held", { checkoutId: row.id, sessionRef: event.providerSessionRef || null, reason: "payer is not the buyer on the purchase row" });
+    return { held: "payer is not the buyer on the purchase row" };
   }
   let paid;
   try {

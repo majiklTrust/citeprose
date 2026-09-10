@@ -12,14 +12,14 @@ const STRIPE_API = "https://api.stripe.com/v1";
 const TTL_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 4000;
 
-let cache = { at: 0, data: null };
+let cache = { at: 0, data: null, prices: null };
 // 4.25111.81: the one outbound fetch in progress, shared by every
 // caller that arrives while it runs. Before this, a cold or expired
 // cache meant every concurrent request (the pricing page is public)
 // opened its own pair of Stripe calls for up to TIMEOUT_MS each.
 let inFlight = null;
 
-export function _resetCatalogCache() { cache = { at: 0, data: null }; inFlight = null; }
+export function _resetCatalogCache() { cache = { at: 0, data: null, prices: null }; inFlight = null; }
 
 export function getStripeCatalogKey(env = process.env) {
   const k = env.STRIPE_CATALOG_KEY || env.STRIPE_SECRET_KEY;
@@ -57,6 +57,47 @@ export function buildCatalog(productsPayload, pricesPayload) {
   return Object.keys(out).length > 0 ? out : null;
 }
 
+// 4.25111.82. Pure companion of buildCatalog: the same payloads, but
+// the fact Checkout needs rather than the facts the page shows: each
+// tier's default price id (the price the pricing page displays is the
+// price the session charges, by construction). Kept apart from the
+// display catalog so price ids never travel to the browser.
+export function buildTierPrices(productsPayload, pricesPayload) {
+  const products = (productsPayload && Array.isArray(productsPayload.data)) ? productsPayload.data : [];
+  const prices = (pricesPayload && Array.isArray(pricesPayload.data)) ? pricesPayload.data : [];
+  const priceIds = new Set();
+  for (const pr of prices) {
+    if (pr && typeof pr.id === "string" && pr.active !== false) priceIds.add(pr.id);
+  }
+  const out = Object.create(null);
+  for (const p of products) {
+    if (!p || p.active !== true) continue;
+    const tier = p.metadata && typeof p.metadata.tier === "string" ? p.metadata.tier : null;
+    if (!tier || typeof p.default_price !== "string" || !priceIds.has(p.default_price)) continue;
+    out[tier] = { priceId: p.default_price };
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+// The tier -> price map, fetched (or served from the same cache) as
+// the display catalog. null when Stripe is not configured or the
+// fetch failed: the caller decides what an absent price means.
+export async function getTierPrices(env = process.env) {
+  const key = getStripeCatalogKey(env);
+  if (!key) return null;
+  if (cache.prices && Date.now() - cache.at < TTL_MS) return cache.prices;
+  await fetchStripeCatalog(env);
+  return cache.prices;
+}
+
+export function tierForPriceId(prices, priceId) {
+  if (!prices || typeof priceId !== "string") return null;
+  for (const tier of Object.keys(prices)) {
+    if (prices[tier] && prices[tier].priceId === priceId) return tier;
+  }
+  return null;
+}
+
 async function stripeGet(path, key) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -92,7 +133,7 @@ async function fetchFresh(key, now) {
       stripeGet("/prices?active=true&limit=100", key)
     ]);
     const catalog = buildCatalog(products, prices);
-    if (catalog) cache = { at: now, data: catalog };
+    if (catalog) cache = { at: now, data: catalog, prices: buildTierPrices(products, prices) };
     return catalog;
   } catch {
     // Fail closed to static display; never let a catalog hiccup

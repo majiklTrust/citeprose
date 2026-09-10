@@ -1,28 +1,33 @@
 // ═══════════════════════════════════════════════════════════════
-// checkout-pages.js: from Purchase on the public page to Stripe and back
+// checkout-pages.js: from Purchase to Stripe Checkout and back
 // ═══════════════════════════════════════════════════════════════
-// 4.25111.78. Two browser routes, no JSON API.
+// 4.25111.78, reworked in 4.25111.82. Two browser routes, no JSON API.
 //
 //   GET /checkout/:tier    the door. Signed out: to Auth0 sign up with
 //                          this door as the return target. Signed in
-//                          and already a member of a workspace: to
-//                          /app/billing, where that workspace's own
-//                          checkout lives. Otherwise: mint or reuse the
-//                          buyer's self-registration, open (or re-tier)
-//                          the purchase row whose id is the
-//                          client_reference_id, log checkout_started,
-//                          and 302 to the Payment Link with the email
-//                          filled in. The Payment Link base and the id
-//                          are joined here and nowhere the browser can
-//                          read before this redirect.
+//                          and a member of a workspace: when that
+//                          member may manage billing and the workspace
+//                          may start a fresh subscription, a Checkout
+//                          Session bound to the TENANT is created and
+//                          the browser is sent to it; otherwise to
+//                          /app/billing. Signed in with no workspace:
+//                          mint or reuse the buyer's self-registration,
+//                          open (or re-tier) the purchase row, create a
+//                          Checkout Session bound to that ROW, remember
+//                          the session on the row, and send the browser
+//                          to it. The session is created by this server
+//                          with the secret key (payments/stripe-checkout.js):
+//                          the price, the locked email and the reference
+//                          live in Stripe's record, not in the URL.
 //   GET /checkout/return   the fixed after-payment address every
-//                          Payment Link points at. It trusts nothing in
+//                          session points at. It trusts nothing in
 //                          the URL: it looks the buyer up by login,
 //                          finds the open purchase, and sends them to
 //                          the register page with a live token (or to
 //                          /app/billing when the workspace exists).
 //                          "Paid" is decided by the processor's signed
-//                          message alone, never by arriving here.
+//                          message, verified against Stripe's record of
+//                          the session, never by arriving here.
 //
 // Precautions for a public door: every answer is no-store; a
 // per-address ceiling sits in front; the tier is checked against
@@ -34,8 +39,8 @@
 import express from "express";
 import { TIERS } from "../config/entitlements.js";
 import { readSession } from "../auth/session.js";
-import { getPaymentLinkBase, buildCheckoutUrl } from "../payments/checkout-links.js";
 import { getPaymentsProviderName } from "../payments/provider.js";
+import { isCheckoutAvailable, createCheckoutSession, expireCheckoutSession } from "../payments/stripe-checkout.js";
 import { platformLog } from "../services/platform-log.js";
 import { createRequestLimiter } from "../services/request-limiter.js";
 
@@ -60,6 +65,45 @@ function page(res, status, title, text) {
 async function membership(sub) {
   const { findTenantByAuthIdentity } = await import("../tenant/platform-db.js");
   return findTenantByAuthIdentity("auth0", sub);
+}
+
+// The address Stripe sends the buyer back to. PUBLIC_ORIGIN when the
+// operator set it (the registration links use the same rule), else
+// the request's own scheme and host.
+function publicOrigin(req) {
+  const configured = process.env.PUBLIC_ORIGIN;
+  if (typeof configured === "string" && /^https?:\/\/[^/]+$/.test(configured.trim())) return configured.trim();
+  return req.protocol + "://" + req.get("host");
+}
+
+function purchasesOffline(res) {
+  return page(res, 409, "Purchase is not available", "This plan cannot be purchased online on this server. Contact us to arrange it.");
+}
+
+function tryAgain(res) {
+  res.set("Retry-After", "2");
+  return page(res, 503, "One moment", "The payment page could not be prepared. Go back and press Purchase again.");
+}
+
+// A member's Purchase click: the billing page's Purchase links lead
+// here. The workspace, not a purchase row, is the reference; the
+// permission and the fresh-checkout rule are the billing route's own.
+async function ownerCheckout(req, res, tenant, tier, email, sub) {
+  const { hasPermission } = await import("../tenant/platform-db.js");
+  if (!(await hasPermission(tenant.role, "manage_billing"))) return res.redirect(BILLING_PAGE);
+  const { getSubscription } = await import("../services/entitlements.js");
+  const { getFreshCheckoutAllowed } = await import("../services/billing-policy.js");
+  const current = await getSubscription(tenant.id);
+  if (!getFreshCheckoutAllowed(current ? current.state : null)) return res.redirect(BILLING_PAGE);
+  if (!email || !email.includes("@")) return page(res, 403, "No email on this login", "Your login carries no email address, so a payment page cannot be prepared for it.");
+  if (getPaymentsProviderName() !== "stripe" || !isCheckoutAvailable()) return purchasesOffline(res);
+  const session = await createCheckoutSession({ subject: "tenant", referenceId: tenant.id, tier, email, origin: publicOrigin(req) });
+  if (!session) {
+    platformLog("error", "checkout_session_failed", { tenantId: tenant.id, tier, from: "billing" });
+    return tryAgain(res);
+  }
+  platformLog("info", "checkout_started", { tenantId: tenant.id, sessionRef: session.id, tier, sub, from: "billing" });
+  return res.redirect(302, session.url);
 }
 
 export default function createCheckoutRoutes() {
@@ -107,7 +151,8 @@ export default function createCheckoutRoutes() {
       if (!session) return res.redirect(loginUrl("/checkout/" + tier, true));
       const sub = session.user.sub;
       const email = typeof session.user.email === "string" ? session.user.email.trim() : "";
-      if (await membership(sub)) return res.redirect(BILLING_PAGE);
+      const tenant = await membership(sub);
+      if (tenant) return ownerCheckout(req, res, tenant, tier, email, sub);
       // 4.25111.81: a login that already paid and never finished setup
       // is never sent to pay again. Before this, the check below ran
       // only against the registration minted for this click, so a paid
@@ -124,9 +169,7 @@ export default function createCheckoutRoutes() {
       if (!email || !email.includes("@")) {
         return page(res, 403, "No email on this login", "Your login carries no email address, so a workspace cannot be set up for it.");
       }
-      if (getPaymentsProviderName() !== "stripe" || getPaymentLinkBase(tier) === null) {
-        return page(res, 409, "Purchase is not available", "This plan cannot be purchased online on this server. Contact us to arrange it.");
-      }
+      if (getPaymentsProviderName() !== "stripe" || !isCheckoutAvailable()) return purchasesOffline(res);
       const { attemptSelfRegistration, SELF_REG_OUTCOME } = await import("../tenant/self-registration-store.js");
       const verdict = await attemptSelfRegistration(email, sub);
       if (!verdict || !verdict.token) {
@@ -151,9 +194,22 @@ export default function createCheckoutRoutes() {
         const token = await store.liveTokenForRegistration(row.registration_id);
         return res.redirect(token ? REGISTER_PAGE + encodeURIComponent(token) : APP_PAGE);
       }
-      const url = buildCheckoutUrl(getPaymentLinkBase(tier), row.id, email);
-      platformLog("info", "checkout_started", { checkoutId: row.id, registrationId: reg.id, tier, sub, from: "pricing" });
-      return res.redirect(302, url);
+      const created = await createCheckoutSession({ subject: "checkout", referenceId: row.id, tier, email, origin: publicOrigin(req) });
+      if (!created) {
+        platformLog("error", "checkout_session_failed", { checkoutId: row.id, tier, from: "pricing" });
+        return tryAgain(res);
+      }
+      // One payable link at a time: a re-tier closes the previous
+      // session at the processor (best effort; an expired session
+      // cannot be paid, and a paid one is verified against its own
+      // record regardless).
+      if (row.provider_session_ref && row.provider_session_ref !== created.id) {
+        const closed = await expireCheckoutSession(row.provider_session_ref);
+        if (!closed) platformLog("warn", "checkout_session_expire_failed", { checkoutId: row.id, sessionRef: row.provider_session_ref });
+      }
+      await store.setSession(row.id, created.id);
+      platformLog("info", "checkout_started", { checkoutId: row.id, registrationId: reg.id, sessionRef: created.id, tier, sub, from: "pricing" });
+      return res.redirect(302, created.url);
     } catch (err) {
       platformLog("error", "checkout_door_failed", { tier, error: err && err.message });
       return page(res, 500, "Something went wrong", "We could not start your purchase right now. Please try again in a moment.");

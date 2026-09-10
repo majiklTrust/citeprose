@@ -1,9 +1,9 @@
 // ================================================================
-// showcase-poc.js  (delivery 3.3.28)
+// showcase-poc.js  (delivery 3.3.29)
 // ================================================================
 // Drives the showcase replays at the top of the marketing homepage
-// (site_templates/index.html, #showcase-pos). Four recordings live in
-// one window; a tab row picks which one plays. Only the active
+// (site_templates/alpha-index.html, #showcase-pos). Five recordings live
+// in one window; a tab row picks which one plays. Only the active
 // recording runs; switching stops the other, resets it, and starts
 // the chosen one from its first frame.
 //
@@ -53,6 +53,14 @@
 //                the default destination. Discovery links the brokerage
 //                page, the Organization Page toggle unlocks, Publish as
 //                switches to the page and back to the profile.
+//
+//   "imagestudio" 1. Dashboard: Edit on the post waiting for approval.
+//             2. Edit Post modal, in-post Image Studio panel: Story Lens,
+//                a typed prompt, Generate (Working...), the budget gate,
+//                the render, Attach to Post, Save Changes; the queue
+//                card gains a thumbnail.
+//             3. Post detail modal shows the attached image; Publish.
+//             4. The post as it appears in the feed, picture and all.
 //
 // Behavior
 //   - Plays automatically at PLAYBACK_RATE (0.4x).
@@ -695,8 +703,76 @@
       reducedMotion: function () { setPill(pillConn, true, 'connected', 'not connected'); togPersonal.classList.add('spos-ad-toggle-active'); } };
   }
 
+  // ---------- Recording "imagestudio" ----------
+  function buildImageStudio(h) {
+    var dash = h.q('.spos-i-screen-dash'), feed = h.q('.spos-i-screen-feed');
+    var card = h.q('.spos-i-card'), cardStatus = h.q('.spos-i-status'), cardActions = h.q('.spos-i-actions'), thumb = h.q('.spos-i-thumb'), editBtn = h.q('.spos-i-edit-btn');
+    var queueBadge = h.q('.spos-i-queue-badge'), statPending = h.q('.spos-i-stat-pending'), statPublished = h.q('.spos-i-stat-published');
+    var editOverlay = h.q('.spos-i-edit-overlay'), editModal = h.q('.spos-i-edit-modal'), panel = h.q('.spos-i-panel'), lens = h.q('.spos-i-lens'), prompt = h.q('.spos-i-prompt');
+    var generate = h.q('.spos-i-generate'), attach = h.q('.spos-i-attach'), attached = h.q('.spos-i-attached'), preview = h.q('.spos-i-preview'), save = h.q('.spos-i-save');
+    var detailOverlay = h.q('.spos-i-detail-overlay'), detailModal = h.q('.spos-i-detail-modal'), publish = h.q('.spos-i-publish');
+    var feedActions = h.q('.spos-li-feed-actions');
+    var required = [dash, feed, card, cardStatus, cardActions, thumb, editBtn, queueBadge, statPending, statPublished, editOverlay, editModal, panel, lens, prompt,
+      generate, attach, attached, preview, save, detailOverlay, detailModal, publish, feedActions];
+    var START = { x: 300, y: 600 };
+    var PROMPT = 'Late September at the nursery, first light on rows of mums, one customer choosing hers';
+    var script = [
+      // Scene 1: the post waiting for approval
+      { t: 0, run: function () { h.jumpCursor(START); h.say('A garden center, mid September. One post is waiting, and it has no picture.'); } },
+      { t: 900, run: function () { h.moveCursor(h.center(card, -40, 0)); } },
+      { t: 2000, run: h.hoverStep(editBtn, 0, 0, true, '<b>Fall is the second spring</b>: the words are ready. Edit it before it goes out.') },
+      { t: 3200, run: h.clickStep(editBtn, 0, 0, 'Open it up.') },
+      { t: 3450, run: function () { editBtn.classList.remove('spos-hover'); h.hideBox(); editModal.scrollTop = 0; editOverlay.classList.add('spos-open'); h.say('Title, body, hashtags. Below them, <b>Generate with AI</b>: Image Studio inside the post.'); } },
+      { t: 4700, run: function () { h.moveCursor(h.center(editModal, 60, 40)); editModal.scrollTop = editModal.scrollHeight; } },
+      // Scene 2: Image Studio
+      { t: 5900, run: h.hoverStep(lens, 0, 0, true, '<b>Story Lens: Editorial Photo.</b> The picture follows the story, not the other way round.') },
+      { t: 7600, run: function () { lens.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(h.center(prompt, -80, 0), true); } },
+      { t: 8300, run: h.clickStep(prompt, -80, 0, 'Describe the picture in a sentence.') },
+      { t: 8500, run: h.typeStep(prompt, PROMPT, 40) },
+      { t: 12300, run: function () { prompt.classList.remove('spos-focus'); h.moveCursor(h.center(generate, 0, 0), true); } },
+      { t: 13100, run: h.hoverStep(generate, 0, 0, true, '<b>Generate.</b> The spend estimate is checked against the image budget first.') },
+      { t: 14100, run: h.clickStep(generate, 0, 0, 'Go.') },
+      { t: 14350, run: function () { generate.classList.remove('spos-hover'); h.hideBox(); generate.classList.add('spos-busy'); generate.textContent = 'Working...'; preview.classList.add('spos-shown'); editModal.scrollTop = editModal.scrollHeight; h.say('Budget cleared. <b>Rendering</b> with the workspace image model.'); } },
+      { t: 16000, run: function () { h.say('Every figure the brief carries is checked against the post. No invented numbers in the picture.'); } },
+      { t: 17800, run: function () { preview.classList.add('spos-ready'); generate.classList.remove('spos-busy'); generate.textContent = 'Regenerate'; attach.classList.add('spos-shown'); editModal.scrollTop = editModal.scrollHeight; h.say('<b>Rendered.</b> Metadata stripped, stored in the library, charged to the ledger once.'); } },
+      { t: 19600, run: h.hoverStep(attach, 0, 0, true, '<b>Attach to Post.</b> The picture is stamped to this post.') },
+      { t: 20600, run: h.clickStep(attach, 0, 0, 'Attached.') },
+      { t: 20850, run: function () { attach.classList.remove('spos-hover', 'spos-shown'); h.hideBox(); attached.classList.add('spos-shown'); h.say('<b>AI image attached.</b> Detach is one click away if the words change.'); } },
+      { t: 22200, run: h.hoverStep(save, 0, 0, true, '<b>Save Changes.</b> Still a post waiting for approval, now with its picture.') },
+      { t: 23200, run: h.clickStep(save, 0, 0, 'Saved.') },
+      { t: 23450, run: function () { save.classList.remove('spos-hover'); h.hideBox(); editOverlay.classList.remove('spos-open'); thumb.classList.add('spos-shown'); h.say('The queue card shows the thumbnail. Now the decision.'); } },
+      // Scene 3: publish
+      { t: 24700, run: h.hoverStep(card, -60, -6, false, 'Open the post to review everything it will publish with.') },
+      { t: 26000, run: h.clickStep(card, -60, -6, 'The whole story.') },
+      { t: 26250, run: function () { card.classList.remove('spos-hover'); h.hideBox(); detailModal.scrollTop = 0; detailOverlay.classList.add('spos-open'); h.say('Three sources, strong corroboration, and the picture chosen under <b>Post Image</b>.'); } },
+      { t: 27400, run: function () { h.moveCursor(h.center(detailModal, 80, 20)); } },
+      { t: 28400, run: function () { h.say('The image is validated again before LinkedIn sees it: type, size, and a clean upload.'); detailModal.scrollTop = detailModal.scrollHeight; } },
+      { t: 29600, run: h.hoverStep(publish, 0, 0, true, '<b>Publish</b> to the garden center page. Once, and only when a person says so.') },
+      { t: 30800, run: h.clickStep(publish, 0, 0, 'Approved by a person. Published by the platform.') },
+      { t: 31050, run: function () { publish.classList.remove('spos-hover'); h.hideBox(); detailOverlay.classList.remove('spos-open'); h.say('Image uploaded first, post created with it, LinkedIn id stamped.'); } },
+      { t: 31600, run: function () { cardStatus.textContent = 'posted'; cardStatus.classList.add('spos-status-posted'); cardActions.style.visibility = 'hidden'; card.classList.add('spos-published'); queueBadge.textContent = '0'; statPending.textContent = '0'; statPublished.textContent = '42'; h.say('From pending to posted. <b>Forty two published.</b>'); } },
+      // Scene 4: live in the feed
+      { t: 33000, run: function () { dash.classList.add('spos-gone'); feed.classList.add('spos-shown'); h.say('And this is what the followers see: the words, the picture, the page.'); } },
+      { t: 34200, run: function () { h.moveCursor({ x: 500, y: 420 }); } },
+      { t: 35400, run: h.hoverStep(feedActions, 0, 0, false, 'Live on the <b>Meadowbrook Garden Center</b> page, with the picture made three minutes ago.') },
+      { t: 37400, run: function () { feedActions.classList.remove('spos-hover'); h.hideBox(); h.moveCursor(START); h.say('End of recording.'); } }
+    ];
+    function reset() {
+      dash.classList.remove('spos-gone'); feed.classList.remove('spos-shown');
+      editOverlay.classList.remove('spos-open'); detailOverlay.classList.remove('spos-open'); editModal.scrollTop = 0; detailModal.scrollTop = 0;
+      [card, editBtn, lens, prompt, generate, attach, save, publish, feedActions].forEach(function (el) { el.classList.remove('spos-hover', 'spos-pressed', 'spos-focus', 'spos-busy', 'spos-typed-on'); });
+      var typed = prompt.querySelector('.spos-tp-typed'); if (typed) typed.textContent = '';
+      generate.textContent = 'Generate'; attach.classList.remove('spos-shown'); attached.classList.remove('spos-shown');
+      preview.classList.remove('spos-shown', 'spos-ready'); thumb.classList.remove('spos-shown');
+      cardStatus.textContent = 'pending approval'; cardStatus.classList.remove('spos-status-posted'); cardActions.style.visibility = ''; card.classList.remove('spos-published');
+      queueBadge.textContent = '1'; statPending.textContent = '1'; statPublished.textContent = '41';
+    }
+    return { script: script, duration: 38500, reset: reset, required: required, start: START,
+      reducedMotion: function () { editOverlay.classList.add('spos-open'); preview.classList.add('spos-shown', 'spos-ready'); attached.classList.add('spos-shown'); } };
+  }
+
   // ---------- Controller ----------
-  var builders = { create: buildCreate, topics: buildTopics, analytics: buildAnalytics, linkedin: buildLinkedin };
+  var builders = { create: buildCreate, topics: buildTopics, analytics: buildAnalytics, linkedin: buildLinkedin, imagestudio: buildImageStudio };
   var recordings = {};
   Array.prototype.slice.call(root.querySelectorAll('.spos-recording[data-recording]')).forEach(function (el) {
     var name = el.getAttribute('data-recording');

@@ -13,7 +13,8 @@
 // STRIPE_PAYMENT_LINK_<TIER> variables are no longer read.
 //
 // Fail-closed at every step: a provider other than stripe, or no
-// secret key to create sessions with, yields no link at all.
+// Stripe key (STRIPE_CATALOG_KEY) to create sessions with, yields no
+// link at all.
 // =================================================================
 
 import { getPaymentsProviderName } from "./provider.js";

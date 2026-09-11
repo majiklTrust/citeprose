@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.82",
+  "version": "4.25111.84",
   "config": {
     "cssversion": "115",
     "appname": "Market Intelligence",
@@ -80,8 +80,9 @@
     "secret": "node -e \"console.log(require('crypto').randomBytes(128).toString('hex'))\"",
     "350_": "",
     "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",
+    "stripe":"npm run s-login && npm run s-listen",
     "s-login": "stripe login",
-    "s-listen": "npm run s-login && stripe listen --forward-to localhost:3001/api/payments/webhook",
+    "s-listen": "stripe listen --forward-to localhost:3001/api/payments/webhook",
     "s-checkout": "stripe trigger checkout.session.completed --add checkout_session:client_reference_id=$ACC --add checkout_session:metadata.tier=individual",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",

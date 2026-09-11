@@ -18,7 +18,9 @@
 //      events inherit the mapping.
 //   3. Point the webhook endpoint at /api/payments/webhook and
 //      set STRIPE_WEBHOOK_SECRET from the endpoint's whsec_ value.
-//   4. Set PAYMENTS_PROVIDER=stripe, STRIPE_SECRET_KEY, and restart.
+//   4. Set PAYMENTS_PROVIDER=stripe and STRIPE_CATALOG_KEY (a restricted
+//      key with Products: read, Prices: read, Checkout Sessions: write),
+//      and restart.
 //
 // 4.25111.82: client_reference_id is no longer a tenant carrier. It is
 // a query parameter the browser writes on a Payment Link, so it was

@@ -6,7 +6,7 @@
 // so anyone could point the official payment page at a purchase row
 // (or tenant) of their choosing and have a third party pay it. Here
 // the binding between "who is paying" and "what is being paid for" is
-// made by this server, inside Stripe's own record, with the secret
+// made by this server, inside Stripe's own record, with the Stripe
 // key: nothing in the URL the buyer receives can re-point it.
 //
 //   createCheckoutSession  one session per Purchase click: the tier's
@@ -32,12 +32,16 @@
 //                          payable link exists (best effort).
 //
 // No SDK: form-encoded POST and JSON GET over native fetch, timeout
-// bounded. Requires STRIPE_SECRET_KEY (sk_...); the restricted
-// catalog key cannot create sessions. Absent key: purchases are not
-// available and the door says so.
+// bounded. The key is the one the catalog already uses
+// (STRIPE_CATALOG_KEY, raw text in .env; STRIPE_SECRET_KEY remains
+// the 3.3.26 fallback name). A restricted key serves as long as it
+// carries Products: read, Prices: read and Checkout Sessions: write;
+// a create refused by Stripe for a missing permission is logged with
+// Stripe's own message. Absent key: purchases are not available and
+// the door says so.
 // ═══════════════════════════════════════════════════════════════
 import { TIERS, trialEligible, getTrialDays } from "../config/entitlements.js";
-import { getTierPrices, tierForPriceId } from "./stripe-catalog.js";
+import { getStripeCatalogKey, getTierPrices, tierForPriceId } from "./stripe-catalog.js";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 const TIMEOUT_MS = 6000;
@@ -45,13 +49,13 @@ const SESSION_TTL_SECONDS = 60 * 60;
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SESSION_SHAPE = /^cs_[A-Za-z0-9_]+$/;
 
-export function getStripeSecretKey(env = process.env) {
-  const k = env.STRIPE_SECRET_KEY;
-  return typeof k === "string" && k.startsWith("sk_") ? k : null;
+// One key for every outbound Stripe call the application makes.
+export function getStripeCheckoutKey(env = process.env) {
+  return getStripeCatalogKey(env);
 }
 
 export function isCheckoutAvailable(env = process.env) {
-  return getStripeSecretKey(env) !== null;
+  return getStripeCheckoutKey(env) !== null;
 }
 
 // The application's trial rule is the single source of truth for the
@@ -87,18 +91,20 @@ async function stripeCall(method, path, key, form) {
 }
 
 // subject: "checkout" (a purchase row, no tenant yet) or "tenant".
-// Returns { id, url } or null (the reason is logged by the caller).
+// Returns { id, url } on success, or { error } naming the reason (an
+// input the server refused, or Stripe's own status and message) so
+// the door can log it. Never throws for a Stripe refusal.
 export async function createCheckoutSession({ subject, referenceId, tier, email, origin }, env = process.env) {
-  const key = getStripeSecretKey(env);
-  if (!key) return null;
-  if (!["checkout", "tenant"].includes(subject)) return null;
-  if (typeof referenceId !== "string" || !UUID_SHAPE.test(referenceId)) return null;
-  if (typeof tier !== "string" || !TIERS.includes(tier)) return null;
-  if (typeof email !== "string" || !email.includes("@")) return null;
-  if (typeof origin !== "string" || !/^https?:\/\/[^/]+$/.test(origin)) return null;
+  const key = getStripeCheckoutKey(env);
+  if (!key) return { error: "no Stripe key configured" };
+  if (!["checkout", "tenant"].includes(subject)) return { error: "unknown subject" };
+  if (typeof referenceId !== "string" || !UUID_SHAPE.test(referenceId)) return { error: "reference is not a uuid" };
+  if (typeof tier !== "string" || !TIERS.includes(tier)) return { error: "unknown tier" };
+  if (typeof email !== "string" || !email.includes("@")) return { error: "no email" };
+  if (typeof origin !== "string" || !/^https?:\/\/[^/]+$/.test(origin)) return { error: "origin is not an https origin" };
   const prices = await getTierPrices(env);
   const price = prices && prices[tier] ? prices[tier].priceId : null;
-  if (!price) return null;
+  if (!price) return { error: "no default price for tier " + tier + " in the catalog" };
   const refKey = subject === "tenant" ? "tenant_id" : "checkout_id";
   const trialDays = trialDaysFor(tier);
   const form = {
@@ -117,16 +123,25 @@ export async function createCheckoutSession({ subject, referenceId, tier, email,
     expires_at: String(Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS)
   };
   if (trialDays > 0) form["subscription_data[trial_period_days]"] = String(trialDays);
-  const r = await stripeCall("POST", "/checkout/sessions", key, form);
+  let r;
+  try {
+    r = await stripeCall("POST", "/checkout/sessions", key, form);
+  } catch (err) {
+    return { error: "stripe unreachable: " + (err && err.message ? err.message : String(err)) };
+  }
   const s = r.body;
-  if (!r.ok || !s || typeof s.id !== "string" || !SESSION_SHAPE.test(s.id) || typeof s.url !== "string" || !s.url.startsWith("https://")) {
-    return null;
+  if (!r.ok) {
+    const msg = s && s.error && typeof s.error.message === "string" ? s.error.message : "no message";
+    return { error: "stripe " + r.status + ": " + msg };
+  }
+  if (!s || typeof s.id !== "string" || !SESSION_SHAPE.test(s.id) || typeof s.url !== "string" || !s.url.startsWith("https://")) {
+    return { error: "stripe answered without a session id and url" };
   }
   return { id: s.id, url: s.url };
 }
 
 export async function expireCheckoutSession(sessionId, env = process.env) {
-  const key = getStripeSecretKey(env);
+  const key = getStripeCheckoutKey(env);
   if (!key || typeof sessionId !== "string" || !SESSION_SHAPE.test(sessionId)) return false;
   try {
     const r = await stripeCall("POST", "/checkout/sessions/" + encodeURIComponent(sessionId) + "/expire", key, {});
@@ -143,8 +158,8 @@ function lowerEmail(v) {
 // -> { ok: true, facts } | { ok: false, held: reason }
 // throws StripeTransportError when Stripe could not be consulted.
 export async function verifyCompletedSession(sessionId, env = process.env) {
-  const key = getStripeSecretKey(env);
-  if (!key) throw new StripeTransportError("STRIPE_SECRET_KEY is not set");
+  const key = getStripeCheckoutKey(env);
+  if (!key) throw new StripeTransportError("no Stripe key configured");
   if (typeof sessionId !== "string" || !SESSION_SHAPE.test(sessionId)) return { ok: false, held: "session reference missing" };
   const r = await stripeCall("GET", "/checkout/sessions/" + encodeURIComponent(sessionId) + "?expand[]=line_items", key, null);
   if (r.status === 404) return { ok: false, held: "session not found at the processor" };

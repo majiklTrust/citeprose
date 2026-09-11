@@ -16,7 +16,7 @@
 //                          Checkout Session bound to that ROW, remember
 //                          the session on the row, and send the browser
 //                          to it. The session is created by this server
-//                          with the secret key (payments/stripe-checkout.js):
+//                          with the Stripe key (payments/stripe-checkout.js):
 //                          the price, the locked email and the reference
 //                          live in Stripe's record, not in the URL.
 //   GET /checkout/return   the fixed after-payment address every
@@ -98,8 +98,8 @@ async function ownerCheckout(req, res, tenant, tier, email, sub) {
   if (!email || !email.includes("@")) return page(res, 403, "No email on this login", "Your login carries no email address, so a payment page cannot be prepared for it.");
   if (getPaymentsProviderName() !== "stripe" || !isCheckoutAvailable()) return purchasesOffline(res);
   const session = await createCheckoutSession({ subject: "tenant", referenceId: tenant.id, tier, email, origin: publicOrigin(req) });
-  if (!session) {
-    platformLog("error", "checkout_session_failed", { tenantId: tenant.id, tier, from: "billing" });
+  if (!session || !session.url) {
+    platformLog("error", "checkout_session_failed", { tenantId: tenant.id, tier, from: "billing", reason: session && session.error ? session.error : "unknown" });
     return tryAgain(res);
   }
   platformLog("info", "checkout_started", { tenantId: tenant.id, sessionRef: session.id, tier, sub, from: "billing" });
@@ -195,8 +195,8 @@ export default function createCheckoutRoutes() {
         return res.redirect(token ? REGISTER_PAGE + encodeURIComponent(token) : APP_PAGE);
       }
       const created = await createCheckoutSession({ subject: "checkout", referenceId: row.id, tier, email, origin: publicOrigin(req) });
-      if (!created) {
-        platformLog("error", "checkout_session_failed", { checkoutId: row.id, tier, from: "pricing" });
+      if (!created || !created.url) {
+        platformLog("error", "checkout_session_failed", { checkoutId: row.id, tier, from: "pricing", reason: created && created.error ? created.error : "unknown" });
         return tryAgain(res);
       }
       // One payable link at a time: a re-tier closes the previous

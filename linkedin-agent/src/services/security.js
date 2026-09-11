@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 // 4.25111.60: the automation state vocabulary is owned by the
 // interpreter; isValidMode delegates so the two can never drift.
+import { TIERS } from "../config/entitlements.js";
 import { isMode } from "../automation/automation-mode.js";
 
 // ── HTML Escaping ────────────────────────────────────────────
@@ -25,7 +26,13 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 // other value (absolute URLs, protocol-relative //host, traversal)
 // collapses to the dashboard, so the OAuth flow can never become
 // an open redirect.
-const RETURN_TO_ALLOWLIST = ["/app", "/app/", "/app/linkedin/", "/app/advocacy/", "/app/analytics/"];
+// 4.25111.78: the purchase door (/checkout/<tier>, one exact entry
+// per tier) and the return from Stripe (/checkout/return) join the
+// list, still exact-match: no query, no prefix, no pattern.
+const RETURN_TO_ALLOWLIST = [
+  "/app", "/app/", "/app/linkedin/", "/app/advocacy/", "/app/analytics/",
+  "/checkout/return", ...TIERS.map((t) => "/checkout/" + t)
+];
 
 export function sanitizeReturnTo(value) {
   const v = String(value || "");

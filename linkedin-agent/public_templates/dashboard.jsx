@@ -1504,7 +1504,7 @@
             </div>
           </div>
           <div className="header-subtitle">
-            v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'linkedin not connected'}
+            <span>v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'LinkedIn Not Connected'} · </span>
             <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
           </div>
           {/* Stats */}

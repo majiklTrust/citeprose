@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "3.3.29",
+  "version": "4.25111.84",
   "config": {
-    "cssversion": "116",
+    "cssversion": "119",
     "appname": "Market Intelligence",
     "dashboard": {
       "copy": {
@@ -71,8 +71,11 @@
     "nodemon": "npx nodemon --require ./scripts/suppress-warnings.cjs --require ./scripts/traffic-monitor.cjs src/index.js",
     "getvars": "echo \"\\nPGHOST:$PGHOST\\nPGPORT:$PGPORT\\nPGUSER:$PGUSER\\nPGDATABASE:$PGDATABASE\"",
     "production": "npm ci --ignore-scripts --omit=dev && npm run getvars && NODE_ENV=production npm run start",
-    "nonprod": "npm run getvars && NODE_ENV=nonprod npm run nodemon",
-    "devdb": "export $(cat .env.pg.local | xargs) && npm run nonprod",
+    "nonprod": "npm run getvars && NODE_ENV=nonprod npm run nodemon 2>&1 | tee -a /tmp/${npm_package_name}.log",
+    "nonprod1": "npm run getvars && NODE_ENV=nonprod cross-env-shell \"npm run nodemon | pino-pretty\"",
+    "skip-git": "git update-index --skip-worktree ../linkedin-agent/src/services/platform-log.js",
+    "copy-dev-logger": "cp ../linkedin-agent-dev/src/services/platform-log.js ../linkedin-agent-dev/src/services/logger.js ./src/services/ && npm run skip-git",
+    "devdb": "npm run copy-dev-logger && export $(cat .env.pg.local | xargs) && npm run nonprod",
     "watch": "npx nodemon --watch package.json --exec \"npm run pages\"",
     "dev": "export $(cat .env.pg.local | xargs) && npm run getvars && NODE_ENV=dev DEV_BYPASS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001,http://172.16.11.101:3001 DEV_BYPASS_SUB=\"***REMOVED***\" npm run nodemon",
     "300_": "",
@@ -80,8 +83,9 @@
     "secret": "node -e \"console.log(require('crypto').randomBytes(128).toString('hex'))\"",
     "350_": "",
     "cloudflared": "echo mobile testing, navigate to https://dev.majikl.net && dig https://dev.majikl.net && cloudflared tunnel run linkedin-dev",
+    "stripe": "npm run s-login && npm run s-listen",
     "s-login": "stripe login",
-    "s-listen": "npm run s-login && stripe listen --forward-to localhost:3001/api/payments/webhook",
+    "s-listen": "stripe listen --forward-to localhost:3001/api/payments/webhook",
     "s-checkout": "stripe trigger checkout.session.completed --add checkout_session:client_reference_id=$ACC --add checkout_session:metadata.tier=individual",
     "status": "curl -s http://localhost:3001/api/status | python3 -m json.tool",
     "login": "curl -I http://localhost:3001/auth/login",
@@ -181,8 +185,11 @@
   },
   "devDependencies": {
     "@stripe/cli": "^1.44.0",
+    "cross-env": "10.1.0",
     "esbuild": "0.28.2",
     "json-stringify-safe": "^5.0.1",
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "pino": "10.3.1",
+    "pino-pretty": "13.1.3"
   }
 }

@@ -15,6 +15,19 @@
 // refuse every provider event: comp is processor-free by design
 // and only the platform-admin revoke path changes it. Import
 // discipline: DB modules arrive lazily.
+//
+// 4.25111.78: a sale may begin before its workspace exists (the
+// public pricing page). applyEvent first asks purchase-settlement.js
+// what the message is about: a tenant (by id, or by the processor's
+// subscription reference when the message carries no tenant id, as
+// renewal invoices do), a purchase row with no tenant yet (marked
+// paid there, applied when the register page creates the workspace),
+// or nothing we know (ignored, logged, answered 200 so the processor
+// stops retrying). The tenant path below is unchanged in its
+// ordering and guards; it now also records the processor's customer
+// and subscription references on the subscription, which is what
+// lets the next invoice find the tenant, and closes a purchase row
+// that was bound to the tenant before the message arrived.
 // =================================================================
 
 import { TIERS, getTrialDays, getCycleDays, trialEligible } from "../config/entitlements.js";
@@ -87,6 +100,22 @@ export async function applyEvent(event, providerName) {
   // answer a replay gets.
   const { pool } = await import("../db/pool.js");
   const { platformLog } = await import("./platform-log.js");
+  const settlement = await import("./purchase-settlement.js");
+  // 4.25111.82: a checkout message is verified against the
+  // processor's own record of the session before anything is
+  // written; a mismatch is held (answered 200, nothing applied,
+  // reason on the log). The processor-specific work lives behind
+  // purchase-settlement.js; this file stays processor-blind.
+  const gate = await settlement.verifyEvent(event, providerName);
+  if (gate.held) return { held: true, reason: gate.held };
+  event = gate.event;
+  const subject = await settlement.resolveEventSubject(event);
+  if (subject.ignored) {
+    platformLog("info", "payment_event_unmapped", { type: event.type, reason: subject.reason, ref: event.providerEventRef || null });
+    return { ignored: true, reason: subject.reason };
+  }
+  if (subject.kind === "checkout") return settlement.applyToCheckout(subject.row, event, providerName);
+  const tenantId = subject.tenantId;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -101,7 +130,7 @@ export async function applyEvent(event, providerName) {
     const { rows: subRows } = await client.query(
       `SELECT tenant_id, tier, state, comp, pending_tier, period_start, period_end
          FROM subscriptions WHERE tenant_id = $1 FOR UPDATE`,
-      [event.tenantId]);
+      [tenantId]);
     const sub = subRows[0] || null;
 
     const verdict = transition(sub, event);
@@ -109,10 +138,10 @@ export async function applyEvent(event, providerName) {
       await client.query(
         `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, detail, occurred_at)
          VALUES ($1, $2, $3, $4, $5, NULL, $6, $7)`,
-        [event.tenantId, providerName, event.providerEventRef, event.type,
+        [tenantId, providerName, event.providerEventRef, event.type,
          sub ? sub.state : "none", `refused: ${verdict.invalid}`, event.occurredAt]);
       await client.query("COMMIT");
-      platformLog("warn", "payment_event_refused", { tenantId: event.tenantId, type: event.type, reason: verdict.invalid });
+      platformLog("warn", "payment_event_refused", { tenantId: tenantId, type: event.type, reason: verdict.invalid });
       return { refused: verdict.invalid };
     }
 
@@ -120,34 +149,54 @@ export async function applyEvent(event, providerName) {
     let changed;
     if (!sub) {
       const { rowCount } = await client.query(
-        `INSERT INTO subscriptions (tenant_id, tier, state, comp, pending_tier, period_start, period_end, provider)
-         VALUES ($1, $2, $3, false, NULL, $4, $5, $6)
+        `INSERT INTO subscriptions (tenant_id, tier, state, comp, pending_tier, period_start, period_end, provider,
+                                    provider_customer_ref, provider_subscription_ref)
+         VALUES ($1, $2, $3, false, NULL, $4, $5, $6, $7, $8)
          ON CONFLICT (tenant_id) DO NOTHING`,
-        [event.tenantId, n.tier, n.state, n.period_start, n.period_end, providerName]);
+        [tenantId, n.tier, n.state, n.period_start, n.period_end, providerName,
+         event.providerCustomerRef || null, event.providerSubscriptionRef || null]);
       changed = rowCount === 1;
     } else {
       const { rowCount } = await client.query(
         `UPDATE subscriptions
             SET tier = $2, state = $3, pending_tier = $4, period_start = $5, period_end = $6,
-                provider = COALESCE($7, provider), updated_at = now()
+                provider = COALESCE($7, provider),
+                provider_customer_ref = COALESCE($9, provider_customer_ref),
+                provider_subscription_ref = COALESCE($10, provider_subscription_ref),
+                updated_at = now()
           WHERE tenant_id = $1 AND state = $8`,
-        [event.tenantId, n.tier, n.state, n.pending_tier, n.period_start, n.period_end, providerName, sub.state]);
+        [tenantId, n.tier, n.state, n.pending_tier, n.period_start, n.period_end, providerName, sub.state,
+         event.providerCustomerRef || null, event.providerSubscriptionRef || null]);
       changed = rowCount === 1;
     }
     if (!changed) {
       await client.query("ROLLBACK");
-      platformLog("warn", "payment_event_raced", { tenantId: event.tenantId, type: event.type });
+      platformLog("warn", "payment_event_raced", { tenantId: tenantId, type: event.type });
       return { raced: true };
     }
     await client.query(
       `INSERT INTO payment_events (tenant_id, provider, provider_event_ref, event_type, prev_state, next_state, tier, occurred_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [event.tenantId, providerName, event.providerEventRef, event.type,
+      [tenantId, providerName, event.providerEventRef, event.type,
        sub ? sub.state : "none", n.state, n.tier, event.occurredAt]);
     await client.query("COMMIT");
     platformLog("info", "subscription_transition", {
-      tenantId: event.tenantId, from: sub ? sub.state : "none", to: n.state, tier: n.tier, type: event.type
+      tenantId: tenantId, from: sub ? sub.state : "none", to: n.state, tier: n.tier, type: event.type
     });
+    if (subject.checkout && event.type === "checkout_completed") {
+      // The workspace was created before this message arrived; the
+      // purchase row that carried the sale closes with its facts.
+      try {
+        const store = await import("../tenant/checkout-store.js");
+        await store.markSettled({
+          id: subject.checkout.id, tenantId, provider: providerName, paidEventRef: event.providerEventRef,
+          paidTier: n.tier, paidTrial: event.trial === true, providerCustomerRef: event.providerCustomerRef,
+          providerSubscriptionRef: event.providerSubscriptionRef, occurredAt: event.occurredAt
+        });
+      } catch (closeErr) {
+        platformLog("warn", "checkout_close_failed", { checkoutId: subject.checkout.id, tenantId, error: closeErr && closeErr.message });
+      }
+    }
     return { ok: true, state: n.state, tier: n.tier };
   } catch (err) {
     try { await client.query("ROLLBACK"); } catch { /* connection already gone */ }

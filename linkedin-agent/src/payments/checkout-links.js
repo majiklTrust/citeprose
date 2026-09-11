@@ -1,41 +1,37 @@
 // =================================================================
-// Checkout link construction (2.4.26). The Payment Links surface
-// of the Stripe provider, extracted from the billing route so the
-// route stays provider-blind and this logic stays pure and
-// verifiable. No SDK, no network: dashboard-created links carried
-// in environment, tenant identity appended server-side.
+// Checkout link construction (2.4.26). Extracted from the billing
+// route so the route stays provider-blind and this logic stays pure
+// and verifiable. No SDK, no network.
 //
-// Fail-closed at every step: unknown provider, absent env, or a
-// non-https value each yield no link at all.
+// 4.25111.82: Payment Links are retired. A Payment Link carried the
+// tenant (or purchase) reference as a query parameter the browser
+// wrote, so the official payment page could be pointed at any
+// reference by anyone. The links the billing page and the public
+// pricing page show now lead to the checkout door (/checkout/<tier>),
+// where the server creates a Checkout Session bound to the caller's
+// own workspace or purchase (payments/stripe-checkout.js). The
+// STRIPE_PAYMENT_LINK_<TIER> variables are no longer read.
+//
+// Fail-closed at every step: a provider other than stripe, or no
+// Stripe key (STRIPE_CATALOG_KEY) to create sessions with, yields no
+// link at all.
 // =================================================================
 
 import { getPaymentsProviderName } from "./provider.js";
 import { TIERS } from "../config/entitlements.js";
+import { isCheckoutAvailable } from "./stripe-checkout.js";
 
-// Env names derive from TIERS (2.4.53): STRIPE_PAYMENT_LINK_ plus
-// the uppercased tier. No hand-maintained map to drift from the
-// tier set. SECURITY: the TIERS membership gate below is load-
-// bearing, never derive an env name from caller input, or the
-// tier argument becomes an environment-probing primitive.
-export function getPaymentLinkBase(tier, env = process.env) {
+// The door path for a tier. SECURITY: the TIERS membership gate is
+// load-bearing; never build a path from caller input.
+export function getCheckoutDoorPath(tier) {
   if (typeof tier !== "string" || !TIERS.includes(tier)) return null;
-  const raw = env["STRIPE_PAYMENT_LINK_" + tier.toUpperCase()];
-  if (!raw || typeof raw !== "string" || !raw.startsWith("https://")) return null;
-  return raw;
-}
-
-export function buildCheckoutUrl(base, tenantId, email) {
-  if (!base || !tenantId) return null;
-  let url = base + (base.includes("?") ? "&" : "?")
-    + "client_reference_id=" + encodeURIComponent(tenantId);
-  if (email) url += "&prefilled_email=" + encodeURIComponent(email);
-  return url;
+  return "/checkout/" + tier;
 }
 
 // 2.5.95: the Stripe no-code Customer Portal login link. Same
-// contract as the payment links: a static env-configured URL, no
-// SDK, no outbound calls. Absent or non-https resolves null and the
-// page hides the affordance (fail closed).
+// contract as before: a static env-configured URL, no SDK, no
+// outbound calls. Absent or non-https resolves null and the page
+// hides the affordance (fail closed).
 export function getCustomerPortalUrl(env = process.env) {
   const raw = env.STRIPE_CUSTOMER_PORTAL_URL;
   const url = typeof raw === "string" ? raw.trim() : "";
@@ -43,13 +39,11 @@ export function getCustomerPortalUrl(env = process.env) {
 }
 
 export function getCheckoutLinksForTenant(tenantId, email, tiers, env = process.env, providerName = getPaymentsProviderName()) {
-  if (providerName !== "stripe") return null;
+  if (providerName !== "stripe" || !isCheckoutAvailable(env)) return null;
   const links = {};
   for (const tier of tiers || []) {
-    const base = getPaymentLinkBase(tier, env);
-    if (!base) continue;
-    const url = buildCheckoutUrl(base, tenantId, email);
-    if (url) links[tier] = url;
+    const path = getCheckoutDoorPath(tier);
+    if (path) links[tier] = path;
   }
   return Object.keys(links).length > 0 ? links : null;
 }

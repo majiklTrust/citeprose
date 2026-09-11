@@ -29,7 +29,8 @@ import {
   activateRegistrationToken,
   completeRegistration,
   getRegistrationAdminKey,
-  clearRegistrationKey
+  clearRegistrationKey,
+  claimInvite
 } from "../tenant/platform-db.js";
 import { validateProviderKey } from "../llm/client.js";
 import { isTextProviderAvailable, textGenerationNotice, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
@@ -666,12 +667,15 @@ router.post("/complete", async (req, res) => {
     // When they log in via Auth0, the resolver claims this invite
     // and creates their owner membership.
     // Invites table has no RLS — platform-level query.
+    let inviteId = null;
     try {
-      await query(
+      const inv = await query(
         `INSERT INTO invites (tenant_id, email, email_domain, role, invited_by)
-         VALUES ($1, $2, split_part($2, '@', 2), 'owner'::member_role, 'system:registration')`,
+         VALUES ($1, $2, split_part($2, '@', 2), 'owner'::member_role, 'system:registration')
+         RETURNING id`,
         [tenantId, reg.email]
       );
+      inviteId = inv.rows[0] ? inv.rows[0].id : null;
     } catch (inviteErr) {
       platformLog("error", "registration_invite_creation_failed", {
         tenantId,
@@ -681,17 +685,54 @@ router.post("/complete", async (req, res) => {
       // Don't fail — the admin can create the invite manually
     }
 
+    // 4.25111.80: a self registration was minted by a login the
+    // session proved (invited_by_sub = self:<sub>). The owner invite
+    // is claimed for that login here, in the request that created the
+    // workspace, so the membership exists before the owner reaches any
+    // page. Both claim-on-login paths (/api/status and the tenant
+    // resolver) require a verified email, and the owner's ruling is
+    // that verification is optional; the person who created the
+    // workspace must not be locked out of it by that gate. Invite link
+    // registrations from an administrator keep the claim on login.
+    const selfSub = typeof reg.invited_by_sub === "string" && reg.invited_by_sub.startsWith("self:")
+      ? reg.invited_by_sub.slice(5) : null;
+    if (inviteId && selfSub) {
+      try {
+        const owned = await claimInvite(inviteId, inferAuthProvider(selfSub) || "auth0", selfSub);
+        platformLog(owned ? "info" : "warn", "registration_owner_claimed", { tenantId, sub: selfSub, claimed: !!owned });
+      } catch (claimErr) {
+        platformLog("error", "registration_owner_claim_failed", { tenantId, sub: selfSub, error: claimErr && claimErr.message });
+      }
+    }
+
+    // 4.25111.78: a purchase that began on the public pricing page
+    // settles here. A paid purchase row for this registration (or for
+    // this login) becomes the new tenant's subscription now; an unpaid
+    // one is bound to the tenant so the processor's later message
+    // lands on it. Never fails the registration: the workspace exists
+    // either way and the subscription can still arrive by message.
+    let landing = null;
+    try {
+      const { settlePurchaseForRegistration } = await import("../services/purchase-settlement.js");
+      const settled = await settlePurchaseForRegistration(reg, tenantId);
+      landing = settled && settled.landing ? settled.landing : null;
+    } catch (settleErr) {
+      platformLog("error", "registration_purchase_settle_failed", { tenantId, registrationId: reg.id, error: settleErr && settleErr.message });
+    }
+
     platformLog("info", "registration_complete", {
       tenantId,
       slug,
-      email: reg.email
+      email: reg.email,
+      purchased: !!landing
     });
 
     res.json({
       success: true,
       tenantId,
       slug,
-      loginUrl: "/auth/login"
+      loginUrl: "/auth/login",
+      landing: landing || "/app"
     });
   } catch (err) {
     platformLog("error", "registration_complete_failed", { error: err.message });

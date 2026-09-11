@@ -9,15 +9,25 @@
 // window. Zero new dependencies; the seam stays clean.
 //
 // ACTIVATION CHECKLIST (when the Stripe account unlocks):
-//   1. Create one price per tier in TIERS (config/entitlements.js)
-//      with metadata.tier set accordingly.
-//   2. Checkout sessions must carry metadata.tenant_id (and
-//      metadata.trial = "true" where the grace period applies);
-//      subscriptions created from them should copy both so
-//      invoice events inherit the mapping.
+//   1. Create one product per tier in TIERS (config/entitlements.js)
+//      with metadata.tier set accordingly and a default price.
+//   2. Checkout sessions are created by this server
+//      (payments/stripe-checkout.js) and carry metadata.tier,
+//      metadata.trial, and exactly one of metadata.tenant_id or
+//      metadata.checkout_id; the subscription copies them so invoice
+//      events inherit the mapping.
 //   3. Point the webhook endpoint at /api/payments/webhook and
 //      set STRIPE_WEBHOOK_SECRET from the endpoint's whsec_ value.
-//   4. Set PAYMENTS_PROVIDER=stripe and restart.
+//   4. Set PAYMENTS_PROVIDER=stripe and STRIPE_CATALOG_KEY (a restricted
+//      key with Products: read, Prices: read, Checkout Sessions: write),
+//      and restart.
+//
+// 4.25111.82: client_reference_id is no longer a tenant carrier. It is
+// a query parameter the browser writes on a Payment Link, so it was
+// the one field an outsider could choose. Only metadata written by
+// this server maps an event; a checkout.session.completed also names
+// its session (cs_...), which the settlement reads back from Stripe
+// before anything is applied.
 // =================================================================
 
 import crypto from "node:crypto";
@@ -81,14 +91,13 @@ function verifySignature(headers, rawBody, secret, nowSeconds) {
 // The tenant mapping rides Stripe metadata, set at checkout
 // creation per the activation checklist. Every fallback is a
 // place Stripe legitimately carries it; anything else refuses.
-function extractTenantId(obj) {
+function extractMetadataId(obj, field) {
   if (!obj || typeof obj !== "object") return null;
   const candidates = [
-    obj.metadata && obj.metadata.tenant_id,
-    obj.client_reference_id,
-    obj.subscription_details && obj.subscription_details.metadata && obj.subscription_details.metadata.tenant_id,
+    obj.metadata && obj.metadata[field],
+    obj.subscription_details && obj.subscription_details.metadata && obj.subscription_details.metadata[field],
     obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.metadata
-      && obj.parent.subscription_details.metadata.tenant_id
+      && obj.parent.subscription_details.metadata[field]
   ];
   for (const c of candidates) {
     if (typeof c === "string" && UUID_SHAPE.test(c)) return c;
@@ -96,7 +105,27 @@ function extractTenantId(obj) {
   return null;
 }
 
+function extractTenantId(obj) { return extractMetadataId(obj, "tenant_id"); }
+function extractCheckoutId(obj) { return extractMetadataId(obj, "checkout_id"); }
+
+function extractSessionRef(obj, stripeType) {
+  if (stripeType !== "checkout.session.completed" || !obj || typeof obj.id !== "string") return null;
+  return /^cs_[A-Za-z0-9_]+$/.test(obj.id) ? obj.id : null;
+}
+
 // Stripe event type -> normalized lifecycle event type.
+function extractSubscriptionRef(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const candidates = [
+    obj.subscription,
+    obj.parent && obj.parent.subscription_details && obj.parent.subscription_details.subscription
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && /^sub_[A-Za-z0-9]+$/.test(c)) return c;
+  }
+  return null;
+}
+
 const TYPE_MAP = {
   "checkout.session.completed": "checkout_completed",
   "invoice.payment_succeeded": "payment_succeeded",
@@ -128,14 +157,32 @@ export const stripeProvider = {
 
     const obj = body.data && body.data.object;
     const tenantId = extractTenantId(obj);
-    if (!tenantId) return { ignored: true, reason: "verified event carries no tenant mapping" };
+    // 4.25111.78: the Stripe customer and subscription travel with the
+    // event. A checkout session names both; an invoice names the
+    // subscription (top level on older API versions, under
+    // parent.subscription_details on Basil and later). A message with
+    // no tenant id but a subscription reference is still deliverable:
+    // the lifecycle resolves the tenant by the reference it recorded
+    // at checkout. With neither, nothing can be mapped and the event
+    // is ignored as before.
+    const providerCustomerRef = obj && typeof obj.customer === "string" ? obj.customer : null;
+    const providerSubscriptionRef = extractSubscriptionRef(obj);
+    const checkoutId = extractCheckoutId(obj);
+    const providerSessionRef = extractSessionRef(obj, body.type);
+    if (!tenantId && !checkoutId && !providerSubscriptionRef && !providerSessionRef) {
+      return { ignored: true, reason: "verified event carries no tenant mapping" };
+    }
 
     return {
       type: mapped,
       tenantId,
+      checkoutId,
+      providerSessionRef,
       tier: obj && obj.metadata && typeof obj.metadata.tier === "string" ? obj.metadata.tier : null,
       trial: !!(obj && obj.metadata && obj.metadata.trial === "true"),
       providerEventRef: typeof body.id === "string" ? `stripe:${body.id}` : null,
+      providerCustomerRef,
+      providerSubscriptionRef,
       occurredAt: Number.isFinite(body.created) ? new Date(body.created * 1000).toISOString() : null
     };
   }

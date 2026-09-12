@@ -19,6 +19,9 @@
       { mode: 'auto-generate', title: DASHBOARD_COPY.automationStateAutoGenerateTitle },
       { mode: 'auto-post', title: DASHBOARD_COPY.automationStateAutoPostTitle }
     ];
+    //
+    const POSTS_API_FETCH_URI = DASHBOARD_COPY.POSTS_API_FETCH_URI;
+    const LOGS_API_FETCH_URI = DASHBOARD_COPY.LOGS_API_FETCH_URI;
     // 4.25111.66: whether this server offers auto-post at all
     // (ENABLE_AUTO_POST, default no). The answer travels in the
     // automation object the automation route returns
@@ -723,8 +726,8 @@
           setStatus(statusRes);
 
           const [postsRes, logsRes] = await Promise.all([
-            authFetch(`${API}/api/posts?limit=30`, { headers: bgHeaders }).then(r => r.json()),
-            authFetch(`${API}/api/logs?limit=40`, { headers: bgHeaders }).then(r => r.json()),
+            authFetch(`${API}${POSTS_API_FETCH_URI}`, { headers: bgHeaders }).then(r => r.json()),
+            authFetch(`${API}${LOGS_API_FETCH_URI}`, { headers: bgHeaders }).then(r => r.json()),
           ]);
           setPosts(postsRes.posts || []);
           setLogs(logsRes.logs || []);
@@ -1495,17 +1498,17 @@
                 the database holds, uppercased; the control that changes
                 it is the Automation card in the middle column. Two
                 colors: manual amber, the automated states green. */}
-            <div className="mode-switch">
-              <span className="mode-label">Mode</span>
-              <span className={`mode-value ${status.automation?.mode === 'manual' ? 'mode-manual' : 'mode-auto'}`}>
-                {String(status.automation?.mode || '').toUpperCase()}
-              </span>
-            </div>
+              <div className="mode-switch">
+                <span className="mode-label">Mode</span>
+                <span className={`mode-value ${status.automation?.mode === 'manual' ? 'mode-manual' : 'mode-auto'}`}>
+                  {String(status.automation?.mode || '').toUpperCase()}
+                </span>
+              </div>
             </div>
           </div>
           <div className="header-subtitle">
-            <span>v{{VERSION}} · {status.linkedinConnected ? `connected as ${status.linkedinProfile}` : 'LinkedIn Not Connected'} · </span>
-            <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span>
+            <span className="user-name">{status.user.name || status.user.email || status.user.sub}</span> · <span>v{{VERSION}}</span>
+            <span> · {status.linkedinConnected ? `LinkedIn Connected as ${status.linkedinProfile}` : 'LinkedIn Not Connected'}</span>
           </div>
           {/* Stats */}
           <div className="stats-grid">

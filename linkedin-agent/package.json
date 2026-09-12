@@ -6,6 +6,8 @@
     "appname": "Market Intelligence",
     "dashboard": {
       "copy": {
+        "POSTS_API_FETCH_URI": "/api/posts?limit=500",
+        "LOGS_API_FETCH_URI": "/api/logs?limit=100",
         "approveFailedAlertPrefix": "Failed to approve: ",
         "requeueFailedAlertPrefix": "Failed to requeue: ",
         "cardRequeueButton": "↩ Requeue",

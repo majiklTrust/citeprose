@@ -675,6 +675,8 @@ body::after {
 .ai-model-row { display: flex; align-items: center; justify-content: space-between; }
 .ai-model-label { font-size: 0.75rem; color: var(--text-muted); }
 .ai-model-value { font-size: 0.8rem; font-family: var(--font-mono, monospace); color: var(--accent-cyan); }
+/* 4.25111.90: no model selected; the amber the header uses for manual. */
+.ai-model-value.ai-model-missing { color: var(--accent-amber); }
 
 /* Research Monitor */
 .research-meta {

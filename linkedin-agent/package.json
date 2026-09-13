@@ -1,6 +1,6 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.87",
+  "version": "4.25111.090",
   "config": {
     "cssversion": "119",
     "appname": "Market Intelligence",
@@ -8,6 +8,7 @@
       "copy": {
         "POSTS_API_FETCH_URI": "/api/posts?limit=500",
         "LOGS_API_FETCH_URI": "/api/logs?limit=100",
+        "FORCE_CYCLE_API_FETCH_URI": "/api/force-cycle",
         "approveFailedAlertPrefix": "Failed to approve: ",
         "requeueFailedAlertPrefix": "Failed to requeue: ",
         "cardRequeueButton": "↩ Requeue",

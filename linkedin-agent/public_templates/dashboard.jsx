@@ -22,6 +22,7 @@
     //
     const POSTS_API_FETCH_URI = DASHBOARD_COPY.POSTS_API_FETCH_URI;
     const LOGS_API_FETCH_URI = DASHBOARD_COPY.LOGS_API_FETCH_URI;
+    const FORCE_CYCLE_API_FETCH_URI = DASHBOARD_COPY.FORCE_CYCLE_API_FETCH_URI;
     // 4.25111.66: whether this server offers auto-post at all
     // (ENABLE_AUTO_POST, default no). The answer travels in the
     // automation object the automation route returns
@@ -1051,14 +1052,14 @@
       async function handleForceCycle() {
         setLoading(l => ({ ...l, forceCycle: true }));
         try {
-          await mutate(`${API}/api/force-cycle`, {
+          const res = await mutate(`${API}${FORCE_CYCLE_API_FETCH_URI}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topicId: selectedTopic || undefined })
           });
           setTimeout(fetchAll, 2000);
         } catch (err) {
-          alert('Failed to start cycle: ' + err.message);
+          alert('Failed to start cycle: ' + (err.detail || err.message));
         } finally {
           setLoading(l => ({ ...l, forceCycle: false }));
         }
@@ -1498,12 +1499,12 @@
                 the database holds, uppercased; the control that changes
                 it is the Automation card in the middle column. Two
                 colors: manual amber, the automated states green. */}
-              <div className="mode-switch">
-                <span className="mode-label">Mode</span>
-                <span className={`mode-value ${status.automation?.mode === 'manual' ? 'mode-manual' : 'mode-auto'}`}>
-                  {String(status.automation?.mode || '').toUpperCase()}
-                </span>
-              </div>
+            <div className="mode-switch">
+              <span className="mode-label">Mode</span>
+              <span className={`mode-value ${status.automation?.mode === 'manual' ? 'mode-manual' : 'mode-auto'}`}>
+                {String(status.automation?.mode || '').toUpperCase()}
+              </span>
+            </div>
             </div>
           </div>
           <div className="header-subtitle">
@@ -1729,16 +1730,20 @@
             {/* Controls (middle column) */}
             <div>
               {/* AI Model */}
-              {status.anthropicModel && (
-                <div className="sidebar-panel ai-model-card">
-                  <div className="ai-model-row">
-                    <span className="ai-model-label">AI Model</span>
-                    <span className="ai-model-value">
-                      {status.anthropicModel}
-                    </span>
-                  </div>
+              {/* 4.25111.90: the card is always shown. A workspace
+                  with no model used to show the sentinel "not set"
+                  here and nothing else; now the server sends null and
+                  the card says so in the amber the header uses for
+                  manual, so the missing model is visible before any
+                  click. */}
+              <div className="sidebar-panel ai-model-card">
+                <div className="ai-model-row">
+                  <span className="ai-model-label">AI Model</span>
+                  <span className={`ai-model-value ${status.anthropicModel ? '' : 'ai-model-missing'}`}>
+                    {status.anthropicModel || 'not configured'}
+                  </span>
                 </div>
-              )}
+              </div>
               {/* Automation state (4.25111.62): the three states as a
                   radio list, labels from the stored values, descriptions
                   from copy, the choice posted to /api/automation/mode.

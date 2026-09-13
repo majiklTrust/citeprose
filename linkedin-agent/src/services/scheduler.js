@@ -28,6 +28,17 @@
 // waits for the cycle: startForcedCycle claims synchronously, answers
 // the request, and runs the cycle detached under the same envelope
 // the cron uses; the trail and the run row carry the outcome.
+//
+// 4.25111.96: the outcome also reaches the platform log, with the
+// tenant, so an operator answers "what did this workspace's cycles
+// do" from the per-tenant platform query without the tenant trail:
+// generation_run_finished for every run that was claimed (warn when
+// it failed, info otherwise; carries runId, trigger, requestedBy,
+// action, reasonCode, a bounded reason, postId, cycleId, and whether
+// the row closed), generation_run_skipped for every claim refused
+// because a run was open (names the run in flight). A held run
+// (paused, cadence) was silent off the trail until now: that was the
+// silence behind defect D2.
 
 import cron from "node-cron";
 import {
@@ -181,6 +192,10 @@ async function claimCycle({ trigger, userSub = null, topicId = null }) {
     await logActivity("info", trigger === "cron" ? "scheduler_tick_skipped" : "force_cycle_skipped", {
       reasonCode: "cycle_in_progress", runId: a.runId || null, trigger: a.trigger || null, startedAt: a.startedAt || null
     }, userSub);
+    platformLog("info", "generation_run_skipped", {
+      tenantId: currentTenantIdOrNull(), trigger, requestedBy: userSub,
+      reasonCode: "cycle_in_progress", runId: a.runId || null, runTrigger: a.trigger || null, startedAt: a.startedAt || null
+    });
   }
   return claim;
 }
@@ -193,6 +208,10 @@ function skipped(claim) {
   };
 }
 
+// The decision's reason text as carried on the platform log event
+// (the run row keeps up to 1024 through finishGenerationRun).
+const PLATFORM_REASON_MAX_CHARS = 300;
+
 async function executeClaimedRun({ runId, trigger, userSub = null, topicId = null, forced = false }) {
   let decision = { action: "failed", reasonCode: "generation_failed", reason: "cycle ended without a decision" };
   try {
@@ -204,11 +223,20 @@ async function executeClaimedRun({ runId, trigger, userSub = null, topicId = nul
     decision = { action: "failed", reasonCode: "generation_failed", reason: err.message };
     throw err;
   } finally {
+    let rowClosed = false;
     try {
-      await finishGenerationRun(runId, decision);
+      rowClosed = await finishGenerationRun(runId, decision);
     } catch (finishErr) {
       platformLog("error", "generation_run_finish_failed", { tenantId: currentTenantIdOrNull(), runId, error: finishErr.message });
     }
+    // 4.25111.96: every claimed run reports its outcome to the platform
+    // log, whatever happened to the row.
+    platformLog(decision.action === "failed" ? "warn" : "info", "generation_run_finished", {
+      tenantId: currentTenantIdOrNull(), runId, trigger, requestedBy: userSub,
+      action: decision.action, reasonCode: decision.reasonCode || null,
+      reason: typeof decision.reason === "string" ? decision.reason.slice(0, PLATFORM_REASON_MAX_CHARS) : null,
+      postId: decision.postId || null, cycleId: decision.cycleId || null, rowClosed
+    });
   }
 }
 

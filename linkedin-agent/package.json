@@ -1,12 +1,12 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.94",
+  "version": "4.25111.96",
   "config": {
-    "cssversion": "119",
+    "cssversion": "120",
     "appname": "Market Intelligence",
     "dashboard": {
       "copy": {
-        "POSTS_API_FETCH_URI": "/api/posts?limit=500",
+        "POSTS_API_FETCH_URI": "/api/posts?limit=20",
         "LOGS_API_FETCH_URI": "/api/logs?limit=20",
         "FORCE_CYCLE_API_FETCH_URI": "/api/force-cycle",
         "DASHBOARD_POLL_INTERVAL_MS": "300000",
@@ -46,7 +46,14 @@
         "forceCycleButton": "⟳ Force Scheduler Cycle",
         "forceCycleTitle": "run the scheduler cycle now",
         "forceCycleDisabledTitle": "Active in auto-generate mode.",
-        "quickActionsLabel": "Post Composition"
+        "quickActionsLabel": "Post Composition",
+        "forceCycleStartFailedAlertPrefix": "Failed to start cycle: ",
+        "forceCycleOutcomeGenerated": "The cycle finished: a new post is waiting in the review queue.\nYou may need to refresh your browser.",
+        "forceCycleOutcomePaused": "The cycle did not run because the agent is paused. Select AUTO-GENERATE on the Automation card and press Force Scheduler Cycle again.",
+        "forceCycleOutcomeCadence": "The cycle finished without a new post: the posting cadence is not open yet. {reason}",
+        "forceCycleOutcomeBlocked": "The cycle finished without a new post: the research did not find enough independent sources. {reason}",
+        "forceCycleOutcomeFailed": "The cycle failed. {reason} See the Activity Log for the full record.",
+        "forceCycleOutcomeOther": "The cycle finished without a new post. {reason}"
       }
     }
   },

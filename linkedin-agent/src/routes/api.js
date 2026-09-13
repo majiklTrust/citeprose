@@ -14,7 +14,7 @@
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
-import { readMode, fromLegacy, toLegacy, canAutoGenerate, canAutoPublish, pausedForMode } from "../automation/automation-mode.js";
+import { readMode, fromLegacy, toLegacy, canAutoGenerate, canAutoPublish, pausedForMode, presentedMode } from "../automation/automation-mode.js";
 import { readAutomationSettings } from "../automation/settings.js";
 import {
   getPostStats,
@@ -56,7 +56,14 @@ import { classifyProviderError, providerFailureLogDetails } from "../llm/provide
 import { platformLog } from "../services/platform-log.js";
 import { dashboardCopy } from "../config/dashboard-copy.js";
 import { isSafeUrl, isImageUrl } from "../services/security.js";
-import { selectPrimarySource, sanitizePrimarySource } from "../services/source-provenance.js";
+import { sanitizePrimarySource } from "../services/source-provenance.js";
+// 4.25111.96: one derivation of the stored record and the primary
+// source for every persisting path (services/post-assembly.js).
+import { resolvePrimarySource, buildStoredContext } from "../services/post-assembly.js";
+// 4.25111.96: the model the generation pipeline will use, for the
+// dashboard's AI Model card (llmModel on /api/status).
+import { resolveTenantLlmSelection } from "../llm/client.js";
+import { isLlmError } from "../llm/errors.js";
 import { getAnthropicModel } from "../config/ai.js";
 import { getPublishMode } from "../services/linkedin-publisher.js";
 import { handleImageProxy } from "./image-proxy.js";
@@ -169,6 +176,10 @@ router.get("/api/status", optionalAuth, async (req, res) => {
     let tokenStatus = { valid: false };
     let linkedinTokenStored = null;
     let anthropicModel = null;
+    // 4.25111.96: the provider and model the generation pipeline
+    // resolves for this workspace (null, null when it has no usable
+    // selection). The AI Model card reads llmModel.
+    let llmProvider = null, llmModel = null;
     let tenantMeta = null;
     let tenantRole = null;
     let organizationManager = "enabled";
@@ -226,10 +237,15 @@ router.get("/api/status", optionalAuth, async (req, res) => {
             const settings = await readAutomationSettings();
             mode = toLegacy(state.mode);
             paused = state.paused;
+            // 4.25111.96: the object carries the PRESENTED state (the
+            // interpreter's presentedMode: manual while paused), the
+            // same answer the automation route gives, so the page's
+            // radio and header never disagree with what the loops do.
+            const presented = presentedMode(state);
             automation = {
-              mode: state.mode,
-              generation: canAutoGenerate(state.mode),
-              publishing: canAutoPublish(state.mode),
+              mode: presented,
+              generation: canAutoGenerate(presented),
+              publishing: canAutoPublish(presented),
               paused: state.paused,
               source: state.source,
               reviewWindowHours: settings.reviewWindowHours
@@ -279,6 +295,23 @@ router.get("/api/status", optionalAuth, async (req, res) => {
               linkedinTokenStored = await hasLinkedInAccessToken();
             } catch { /* stays null: unknown, not asserted */ }
             anthropicModel = await getAnthropicModel();
+            // 4.25111.96 (defect D3): the model the generation pipeline
+            // will actually use, resolved by the SAME function the
+            // pipeline and /api/compose/model-info call. The legacy
+            // chain above (agent_state anthropic_model, ANTHROPIC_MODEL,
+            // the "not set" sentinel) is not what generates when the
+            // workspace selected a provider and model, so the card read
+            // "not set" while cycles succeeded. A selection error (not
+            // provisioned, unknown model or provider) is "not
+            // configured": nulls, not asserted; any other failure is
+            // reported and the status still answers.
+            try {
+              const sel = await resolveTenantLlmSelection();
+              llmProvider = sel.provider;
+              llmModel = sel.model;
+            } catch (selErr) {
+              if (!isLlmError(selErr)) platformLog("warn", "llm_selection_read_failed", { tenantId: tenant.id, error: selErr && selErr.message ? selErr.message : String(selErr) });
+            }
             // 2.6.1: workspace readiness flags, computed by a quick
             // credential-presence lookup on the first authenticated
             // call after login (and refreshed by the dashboard poll,
@@ -346,6 +379,8 @@ router.get("/api/status", optionalAuth, async (req, res) => {
       permissions,
       linkedinOrgConfigured,
       anthropicModel,
+      llmProvider,
+      llmModel,
       tenantMeta,
       publishMode: getPublishMode()
     });
@@ -880,12 +915,14 @@ async function handleGeneratePreview(req, res) {
       const g = await generatePost(topicId, null, actionToken, angle);
       if (g.blocked) return { generated: g, quality: null, postId: null };
 
-      // Resolve the primary source for attribution. Prefer the lead
-      // article image's source so the cited link agrees with the
-      // image. Fail closed: an otherwise-successful generation with
-      // no attributable source is blocked rather than queued.
-      const preferUrl = (Array.isArray(g.articleImages) && g.articleImages[0] && g.articleImages[0].link) || null;
-      const primarySource = selectPrimarySource((g.researchSummary && g.researchSummary.sourceList) || [], { preferUrl });
+      // Resolve the primary source for attribution (post-assembly.js:
+      // the lead article image's source is preferred so the cited link
+      // agrees with the image). Fail closed: an otherwise-successful
+      // generation with no attributable source is blocked rather than
+      // queued. 4.25111.96: the automated cycle resolves through the
+      // same function and stores the same record; it queues and warns
+      // where this path refuses.
+      const primarySource = resolvePrimarySource(g);
       if (!primarySource) {
         await logActivity("info", "post_blocked_no_primary_source", { cycleId: g.cycleId, topicId: g.topicId }, req.user?.sub || null);
         return {
@@ -898,32 +935,20 @@ async function handleGeneratePreview(req, res) {
       // {domain}" credibility link shown in the queue and modal.
       platformLog("info", "primary_source_selected", {
         cycleId: g.cycleId, topicId: g.topicId,
-        domain: primarySource.domain, name: primarySource.name, url: primarySource.url,
-        imageArticlePreferred: !!preferUrl
+        domain: primarySource.domain, name: primarySource.name, url: primarySource.url
       });
 
       const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
 
       // Auto-save as draft — content persists even if the session
       // expires before the user clicks "Queue for Approval."
-      const storedContext = {
-        angle: g.angle || "",
-        sourcesUsed: g.sourcesUsed || [],
-        researchSummary: g.researchSummary || null,
-        qualityScores: q?.scores,
-        qualityOverall: q?.overall,
-        qualityPass: q?.pass,
-        factualFlags: q?.factual_flags,
-        primarySource,
-        articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
-      };
-
+      // 4.25111.96: the stored record is the shared one.
       const postId = await createPost({
         topicId: g.topicId,
         title: g.title,
         content: g.content,
         hashtags: g.hashtags || [],
-        newsContext: storedContext,
+        newsContext: buildStoredContext({ generated: g, quality: q, primarySource }),
         scheduledFor: null,
         imageUrl: null
       });
@@ -1005,20 +1030,17 @@ router.post("/api/save-preview", requirePermission("edit_post"), async (req, res
         throw new Error("Missing required fields: topicId, title, content");
       }
 
-      const storedContext = {
-        angle: angle || "",
-        sourcesUsed: sourcesUsed || [],
-        researchSummary: researchSummary || null,
-        qualityScores: quality?.scores,
-        qualityOverall: quality?.overall,
-        qualityPass: quality?.pass,
-        factualFlags: quality?.factual_flags,
-        // Zero Trust: primarySource arrives in req.body — revalidate it
-        // (canonical url, re-derived domain) before persisting. A value
-        // that fails validation is stored as null, never raw.
-        primarySource: sanitizePrimarySource(primarySource),
-        articleImages: Array.isArray(articleImages) ? articleImages.slice(0, 20) : []
-      };
+      // Zero Trust: primarySource arrives in req.body — revalidate it
+      // (canonical url, re-derived domain) before persisting. A value
+      // that fails validation is stored as null, never raw.
+      // 4.25111.96: the record itself is the shared one; the body's
+      // fields are handed over in the generated shape and the builder
+      // type-checks each of them (a non-array image list is no images).
+      const storedContext = buildStoredContext({
+        generated: { angle, sourcesUsed, researchSummary, articleImages },
+        quality,
+        primarySource: sanitizePrimarySource(primarySource)
+      });
 
       const id = await createPost({
         topicId,

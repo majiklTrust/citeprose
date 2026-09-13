@@ -14,6 +14,12 @@
 // own save/quality/approval flow lands in a later cycle. Genre reaches
 // ONLY the content_generator template (enforced inside generatePost);
 // research, verification, and injection-defense prompts stay invariant.
+//
+// 4.25111.96: the record a composed post stores and the primary
+// source it is attributed to come from services/post-assembly.js,
+// one more of the stable primitives named above (like generatePost),
+// shared with Preview and the automated cycle. Still no import of
+// api.js, still the same refusal of a sourceless post.
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
@@ -30,7 +36,7 @@ import { genreExists, listGenresForKey, templateUsesMetricBlock } from "../servi
 import { getTopicBySlug } from "../tenant/topic-store.js";
 import { getMetricsForTopic } from "../services/metric-store.js";
 import { createPost, logActivity, getPost } from "../services/database.js";
-import { selectPrimarySource } from "../services/source-provenance.js";
+import { resolvePrimarySource, buildStoredContext } from "../services/post-assembly.js";
 import { annotateActivation } from "../spend/activation-middleware.js";
 
 const router = Router();
@@ -111,8 +117,7 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
       const g = await generatePost(topicId, null, actionToken, angle, genre);
       if (g.blocked) return { generated: g, quality: null, postId: null };
 
-      const preferUrl = (Array.isArray(g.articleImages) && g.articleImages[0] && g.articleImages[0].link) || null;
-      const primarySource = selectPrimarySource((g.researchSummary && g.researchSummary.sourceList) || [], { preferUrl });
+      const primarySource = resolvePrimarySource(g);
       if (!primarySource) {
         await logActivity("info", "compose_blocked_no_primary_source", { cycleId: g.cycleId, topicId: g.topicId }, req.user?.sub || null);
         return {
@@ -123,24 +128,12 @@ router.post("/generate", requirePermission("preview_post"), async (req, res) => 
 
       const q = await qualityCheck(g.content, g.researchSummary, null, actionToken);
 
-      const storedContext = {
-        angle: g.angle || "",
-        sourcesUsed: g.sourcesUsed || [],
-        researchSummary: g.researchSummary || null,
-        qualityScores: q?.scores,
-        qualityOverall: q?.overall,
-        qualityPass: q?.pass,
-        factualFlags: q?.factual_flags,
-        primarySource,
-        articleImages: Array.isArray(g.articleImages) ? g.articleImages.slice(0, 20) : []
-      };
-
       const postId = await createPost({
         topicId: g.topicId,
         title: g.title,
         content: g.content,
         hashtags: g.hashtags || [],
-        newsContext: storedContext,
+        newsContext: buildStoredContext({ generated: g, quality: q, primarySource }),
         scheduledFor: null,
         imageUrl: null,
         genre

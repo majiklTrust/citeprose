@@ -32,6 +32,13 @@
 // from GET /state to decide whether the auto-post choice exists on
 // the page at all, and storedMode, so an operator can see a store
 // that says auto-post being treated as auto-generate.
+//
+// 4.25111.96: `mode` is the PRESENTED state (the interpreter's
+// presentedMode: manual while paused, the stored mode otherwise),
+// and generation and publishing follow it; storedMode keeps carrying
+// the store. A workspace an operator paused therefore shows MANUAL
+// on the dashboard, with Force Cycle disabled, until a member
+// chooses an automated state (which resumes it, 4.25111.94).
 // ═══════════════════════════════════════════════════════════════
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
@@ -42,7 +49,7 @@ import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { setAgentState, logActivity, logActivityBestEffort } from "../services/database.js";
-import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes, pausedForMode } from "../automation/automation-mode.js";
+import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes, pausedForMode, presentedMode } from "../automation/automation-mode.js";
 import { readGenerationRuns } from "../automation/generation-run.js";
 import { readAutomationSettings, parseReviewWindowHours, SETTING_KEYS, RETIRED_SETTING_KEYS, REVIEW_WINDOW_MAX_HOURS } from "../automation/settings.js";
 
@@ -70,10 +77,12 @@ async function automationObject() {
   // this object on every poll, so the page knows a cycle is running
   // without holding a request open for it.
   const runs = await readGenerationRuns();
+  // 4.25111.96: the presented state (manual while paused).
+  const mode = presentedMode(state);
   return {
-    mode: state.mode,
-    generation: canAutoGenerate(state.mode),
-    publishing: canAutoPublish(state.mode),
+    mode,
+    generation: canAutoGenerate(mode),
+    publishing: canAutoPublish(mode),
     paused: state.paused,
     source: state.source,
     reviewWindowHours: settings.reviewWindowHours,

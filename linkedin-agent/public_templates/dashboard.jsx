@@ -23,6 +23,25 @@
     const POSTS_API_FETCH_URI = DASHBOARD_COPY.POSTS_API_FETCH_URI;
     const LOGS_API_FETCH_URI = DASHBOARD_COPY.LOGS_API_FETCH_URI;
     const FORCE_CYCLE_API_FETCH_URI = DASHBOARD_COPY.FORCE_CYCLE_API_FETCH_URI;
+    // 4.25111.96: what the page says when the Force Cycle it started
+    // has finished, keyed by the outcome the server stored on the run
+    // row (its reasonCode; the generated action has none). Each text
+    // is a literal member so the build validates it; {reason} in a
+    // text is replaced by the server's own words for the decision.
+    const FORCE_CYCLE_OUTCOME_COPY = {
+      generated: DASHBOARD_COPY.forceCycleOutcomeGenerated,
+      paused: DASHBOARD_COPY.forceCycleOutcomePaused,
+      cadence: DASHBOARD_COPY.forceCycleOutcomeCadence,
+      blocked_insufficient_sources: DASHBOARD_COPY.forceCycleOutcomeBlocked,
+      generation_failed: DASHBOARD_COPY.forceCycleOutcomeFailed
+    };
+    function forceCycleOutcomeText(outcome) {
+      const o = outcome && typeof outcome === 'object' ? outcome : {};
+      const key = o.action === 'generated' ? 'generated' : o.reasonCode;
+      const text = typeof key === 'string' && Object.prototype.hasOwnProperty.call(FORCE_CYCLE_OUTCOME_COPY, key)
+        ? FORCE_CYCLE_OUTCOME_COPY[key] : DASHBOARD_COPY.forceCycleOutcomeOther;
+      return String(text).split('{reason}').join(typeof o.reason === 'string' ? o.reason : '').trim();
+    }
     // 4.25111.66: whether this server offers auto-post at all
     // (ENABLE_AUTO_POST, default no). The answer travels in the
     // automation object the automation route returns
@@ -766,6 +785,22 @@
         return () => clearInterval(interval);
       }, [fetchAll]);
 
+      // 4.25111.96: the Force Cycle this page started and has not yet
+      // told the outcome of. The server is the record (the run row,
+      // read on every poll as automation.lastRun); the page keeps only
+      // which run was its own click, so a cron cycle's outcome is never
+      // announced to someone who did not ask for it. A ref, not state:
+      // nothing renders from it. Told once, then forgotten. The poll is
+      // the existing 15 s one; a run that finishes between polls is told
+      // at the next.
+      const forcedRunRef = React.useRef(null);
+      useEffect(() => {
+        const last = status && status.automation ? status.automation.lastRun : null;
+        if (!forcedRunRef.current || !last || last.runId !== forcedRunRef.current) return;
+        forcedRunRef.current = null;
+        alert(forceCycleOutcomeText(last.outcome));
+      }, [status]);
+
       // 4.25111.62: one state change at a time. The ref, not the
       // loading flag, is the guard: a second click before the first
       // re-render would otherwise send a second request.
@@ -1057,12 +1092,17 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topicId: selectedTopic || undefined })
           });
+          // 4.25111.96: the 202 names the run; remember it so the poll
+          // that sees it finished can say how it ended (effect above).
+          let started = null;
+          try { started = await res.json(); } catch (e) { started = null; }
+          if (started && typeof started.runId === 'string') forcedRunRef.current = started.runId;
           // 4.25111.94: the run row is committed before the 202, so an
           // immediate refresh already sees activeRun and keeps the
           // button disabled until the poll sees the run finish.
           fetchAll({ background: true });
         } catch (err) {
-          alert('Failed to start cycle: ' + (err.detail || err.message));
+          alert(DASHBOARD_COPY.forceCycleStartFailedAlertPrefix + (err.detail || err.message));
         } finally {
           setLoading(l => ({ ...l, forceCycle: false }));
         }
@@ -1738,12 +1778,19 @@
                   here and nothing else; now the server sends null and
                   the card says so in the amber the header uses for
                   manual, so the missing model is visible before any
-                  click. */}
+                  click.
+                  4.25111.96 (defect D3): the card reads llmModel, the
+                  model the generation pipeline resolves for this
+                  workspace (the same answer Compose shows), never the
+                  legacy chain (agent_state anthropic_model, then the
+                  ANTHROPIC_MODEL variable, then the sentinel), which
+                  could read "not set" while cycles succeeded on the
+                  selected model. */}
               <div className="sidebar-panel ai-model-card">
                 <div className="ai-model-row">
                   <span className="ai-model-label">AI Model</span>
-                  <span className={`ai-model-value ${status.anthropicModel ? '' : 'ai-model-missing'}`}>
-                    {status.anthropicModel || 'not configured'}
+                  <span className={`ai-model-value ${status.llmModel ? '' : 'ai-model-missing'}`}>
+                    {status.llmModel || 'not configured'}
                   </span>
                 </div>
               </div>
@@ -1785,7 +1832,13 @@
                       automation object reports a run in flight
                       (activeRun, refreshed by the poll) the button is
                       disabled and shows the spinner, and a second click
-                      is refused by the server (409) with its reason. */}
+                      is refused by the server (409) with its reason.
+                      4.25111.96: the server presents a paused workspace
+                      as manual (automation.mode), so this button is
+                      disabled there like the radio shows MANUAL; when
+                      the run this page started finishes, the outcome
+                      is told once from the run row (the effect by the
+                      poll), in the configured words. */}
                   <button
                     className={`btn btn-force-cycle ${automationModeOf(status) && automationModeOf(status) !== 'manual' ? 'btn-primary' : 'btn-ghost'}`}
                     onClick={handleForceCycle}

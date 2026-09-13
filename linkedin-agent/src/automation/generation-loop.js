@@ -57,12 +57,38 @@
 // longer written by anything (4.25111.87): a scheduler_waiting line
 // on a tenant trail dates from before that delivery.
 //
+// 4.25111.96 (defect D1, 2026-09-13): what the queued post STORES.
+// Steps 5 and 6 built news_context by hand and stored the quality
+// scores only: no qualityOverall, no qualityPass, no primarySource,
+// no articleImages, and the scores of the first attempt even when
+// the retry had won. The dashboard's modal rebuilds its Quality
+// Assessment from those stored fields, so every post this loop
+// wrote opened with "Overall: /10" and no source link, while a post
+// from Create Post (Preview, api.js) opened complete. The record is
+// now built by services/post-assembly.js, the one derivation every
+// persisting path uses, and `quality` is the result that won.
+//
+// What did NOT change (owner's ruling, same day): the cycle's flow.
+// Preview and Compose refuse to queue a post whose primary source
+// cannot be resolved; this loop never did, and still queues it. The
+// difference is no longer silent: the refusal the manual paths
+// would have made is a warn line on the tenant's trail and a warn
+// event on the platform log (generation_primary_source_missing,
+// same name on both), with the post id, so an operator can find the
+// post and a reader of the log can see that the automated path let
+// through what the manual paths would not. Steps 5 and 6 are one
+// exported function, queueGeneratedPost, so a suite can exercise
+// the storage contract with a synthetic generated object and no
+// Model Provider; the cycle calls it once.
+//
 // Must be called inside a tenant scope (withTenant or the leased
 // workflow envelope). Throws propagate to the caller's envelope.
 // ═══════════════════════════════════════════════════════════════
 
 import { createPost, updatePostStatus, logActivity } from "../services/database.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
+import { platformLog } from "../services/platform-log.js";
+import { resolvePrimarySource, buildStoredContext } from "../services/post-assembly.js";
 import { readMode, automationGate } from "./automation-mode.js";
 import { readAutomationSettings } from "./settings.js";
 
@@ -137,8 +163,9 @@ export async function runGenerationCycle({ topicId = null, forced = false } = {}
     return { action: "blocked", reasonCode: "blocked_insufficient_sources", reason: generated.reason, cycleId };
   }
 
-  // Step 4: Quality check
-  const quality = await qualityCheck(generated.content, generated.researchSummary, cycleId);
+  // Step 4: Quality check. `quality` is the result for the content
+  // that is stored: the retry's when the retry wins (4.25111.96).
+  let quality = await qualityCheck(generated.content, generated.researchSummary, cycleId);
   await logActivity("info", "quality_check", {
     cycleId,
     overall: quality.overall,
@@ -160,35 +187,66 @@ export async function runGenerationCycle({ topicId = null, forced = false } = {}
       const retryQuality = await qualityCheck(retry.content, retry.researchSummary, retry.cycleId);
       if (retryQuality.overall > quality.overall) {
         Object.assign(generated, retry);
+        quality = retryQuality;
         await logActivity("info", "quality_retry_improved", { cycleId: retry.cycleId, newScore: retryQuality.overall });
       }
     }
   }
 
+  // Steps 5 and 6: store and queue (queueGeneratedPost below). The
+  // queued line keeps naming the run's first cycle, as before; the
+  // stored record names the cycle whose content it holds.
+  const postId = await queueGeneratedPost(generated, quality);
+  await logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
+  return { action: "generated", postId, cycleId, topicId: generated.topicId };
+}
+
+// ── Steps 5 and 6: the stored record, the queue, the warning ──
+// Must be called inside a tenant scope. `generated` is what
+// generatePost returned (after a winning retry was merged in),
+// `quality` the quality result for that content. Returns the post
+// id; the post is pending_approval. Never refuses (see the header).
+export async function queueGeneratedPost(generated, quality) {
+  const cycleId = generated.cycleId || null;
+  const primarySource = resolvePrimarySource(generated);
+
   // createPost stores news_context as JSONB, pass the object
   // directly, no JSON.stringify wrapping.
-  const storedContext = {
-    cycleId,
-    angle: generated.angle,
-    sourcesUsed: generated.sourcesUsed || [],
-    researchSummary: generated.researchSummary || null,
-    qualityScores: quality.scores,
-    factualFlags: quality.factual_flags
-  };
-
-  // Step 5: Save to database
   const postId = await createPost({
     topicId: generated.topicId,
     title: generated.title,
     content: generated.content,
     hashtags: generated.hashtags,
-    newsContext: storedContext,
+    newsContext: buildStoredContext({ generated, quality, primarySource }),
     scheduledFor: null
   });
 
-  // Step 6: queue for review. Every automation state queues; the
-  // publishing loop is the only automated path to LinkedIn.
+  // Every automation state queues; the publishing loop is the only
+  // automated path to LinkedIn.
   await updatePostStatus(postId, "pending_approval");
-  await logActivity("info", "post_queued_for_approval", { cycleId, postId, title: generated.title });
-  return { action: "generated", postId, cycleId, topicId: generated.topicId };
+
+  const tenantId = await tenantIdOrNull();
+  if (primarySource) {
+    // The attribution this post will carry (the "via {domain}" link on
+    // the queue card and in the modal), announced as Preview announces it.
+    platformLog("info", "primary_source_selected", {
+      tenantId, cycleId, postId, topicId: generated.topicId,
+      domain: primarySource.domain, name: primarySource.name, url: primarySource.url
+    });
+  } else {
+    const summary = generated.researchSummary && typeof generated.researchSummary === "object" ? generated.researchSummary : {};
+    const sourceCount = Array.isArray(summary.sourceList) ? summary.sourceList.length : 0;
+    const details = {
+      cycleId, postId, topicId: generated.topicId, sourceCount,
+      reason: "no source with a usable http(s) url; Preview and Compose refuse to queue such a post, the automated cycle queues it without a source link"
+    };
+    await logActivity("warn", "generation_primary_source_missing", details);
+    platformLog("warn", "generation_primary_source_missing", { tenantId, ...details });
+  }
+  return postId;
+}
+
+async function tenantIdOrNull() {
+  const { currentTenantId } = await import("../db/with-tenant.js");
+  try { return currentTenantId(); } catch { return null; }
 }

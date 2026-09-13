@@ -205,6 +205,31 @@ export const QUERY_REGISTRY = Object.freeze({
     readOnly: true
   },
 
+  // ── Generation runs (4.25111.96) ─────────────────────────────
+  // The generation_runs table (DDL 50.0) is the record of every
+  // generation cycle since 4.25111.94: one row per claimed run, open
+  // while the cycle runs, closed with the bounded decision. An
+  // operator reads here what a workspace's cycles did and why a
+  // Force Cycle ended without a post, without the tenant's trail.
+  "generation-runs-by-tenant": {
+    label: "Generation Runs (By Tenant)",
+    description: "The 50 newest generation cycles for one tenant, newest first: trigger (cron or force_cycle), who asked, the instance that ran it, when it started and finished, and the outcome (action, reason code, post id). A row with no finished_at is the cycle in flight; an outcome of action 'abandoned' is a row a later claimant closed as stale.",
+    capability: "GENERATION RUNS",
+    sql: `SELECT run_id, trigger, requested_by, topic_id, instance, started_at, finished_at,
+                 EXTRACT(EPOCH FROM (COALESCE(finished_at, now()) - started_at))::int AS seconds,
+                 outcome->>'action' AS action, outcome->>'reasonCode' AS reason_code,
+                 outcome->>'postId' AS post_id, outcome->>'reason' AS reason
+          FROM generation_runs
+          WHERE tenant_id = $1::uuid
+          ORDER BY started_at DESC
+          LIMIT 50`,
+    params: [
+      { name: "tenant_id", label: "Tenant", type: "select", source: "tenants", required: true }
+    ],
+    destructive: false,
+    readOnly: true
+  },
+
   "platform-event-metrics": {
     label: "Usage Metrics (Event Counts)",
     description: "Event volume by type and level over the last N days. Usage metrics from the event stream: what runs, how often, and how loudly.",

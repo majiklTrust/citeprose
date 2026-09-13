@@ -33,6 +33,12 @@
 // pausedForMode below; the mode writers call it, the readers and
 // the loops are unchanged.
 //
+// 4.25111.96: a paused workspace is PRESENTED as manual. See
+// presentedMode below; the two builders of the automation object
+// (the automation route, /api/status) call it, so the dashboard's
+// radio, header and Force Cycle button show the state the loops
+// act on. The readers and the loops are still unchanged.
+//
 // Fail safe. An absent or unrecognized stored value resolves to
 // 'manual' (nothing automated) and is reported once per process per
 // tenant. After 46.0 every tenant has a row, so this is a guard,
@@ -134,6 +140,27 @@ export function canAutoPublish(mode) {
 // mode change or the next override.
 export function pausedForMode(mode) {
   return mode === "manual" ? "true" : "false";
+}
+
+// 4.25111.96 (defect D2, 2026-09-13): the state a person is SHOWN.
+// The rule above makes pause and manual one lever, so a workspace
+// whose paused flag is true behaves as manual whatever its stored
+// mode says (both loops hold on the pause first, Force Cycle ends
+// with "the agent is paused"). Until now the automation object
+// reported the stored mode, so a workspace an operator had paused
+// through "Set Agent Paused" showed AUTO-GENERATE with a live Force
+// Cycle button that did nothing visible. The automation object now
+// reports this function's answer as `mode` (storedMode still carries
+// the store), the dashboard shows MANUAL, the button is disabled,
+// and choosing AUTO-GENERATE resumes the workspace through the
+// writers above. Reading presents; it never writes: the store is
+// changed only by a mode choice or an operator.
+//
+// Only the boolean true pauses (readMode returns a boolean); any
+// other value presents the mode as it is. Loops and gates do not
+// call this: they read paused and mode separately, as before.
+export function presentedMode(state) {
+  return state && state.paused === true ? "manual" : state && state.mode;
 }
 
 // Legacy translation for the two-way toggle: 'manual' (the old

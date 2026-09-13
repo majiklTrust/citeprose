@@ -15,9 +15,23 @@
 //      `mode === "auto"` (publish inline). Now automationGate()
 //      from automation-mode.js: manual holds outright, the two
 //      automated modes proceed, pause wins over everything.
-//   2. The pending hold is the tenant setting hold_while_pending
-//      (default true, the old manual-mode behavior) and applies to
-//      both automated modes.
+//   2. (4.25111.60, REMOVED in 4.25111.87.) The .60 delivery lifted
+//      the old manual-only pending hold out of that branch, made it
+//      the tenant setting hold_while_pending (default true) and
+//      applied it to both automated modes, describing that as "the
+//      old manual-mode behavior". It was not: under the old tick a
+//      tenant whose stored mode was anything but the literal string
+//      "manual" (including no row at all) generated on every tick
+//      regardless of the queue. Applying the hold to auto-generate
+//      froze every such tenant with a non-empty review queue on the
+//      first tick of the new code, silently (scheduler_waiting on
+//      the tenant trail, nothing on the dashboard). Owner's ruling
+//      (2026-09-12): nothing holds generation on the state of the
+//      review queue; the ONLY hold in the system is auto-post's
+//      review window (review_window_hours, publishing-loop.js).
+//      Generation no longer reads pending_approval at all; the
+//      setting is retired (DDL 49.0 removes the registry key and
+//      any stored rows; the routes refuse the name).
 //   3. Under auto-post the cadence floor is asked with a look-ahead
 //      of the review window plus one publishing sweep (see
 //      canPostNow in scheduler.js), so the window overlaps the floor instead of
@@ -27,8 +41,8 @@
 //      publishes from the queue through the publishing loop after
 //      the review window (Decision 1, confirmed).
 //   5. Force Cycle passes { forced: true }: it skips the mode gate
-//      (a human pressed it) and keeps pause, the pending hold, and
-//      the cadence floor exactly as the old tick kept them.
+//      (a human pressed it) and keeps pause and the cadence floor
+//      exactly as the old tick kept them.
 //
 // Every exit returns a decision object so a caller (the cron, the
 // force-cycle route, a suite) can see why nothing happened:
@@ -36,16 +50,18 @@
 //   { action: "generated", postId, cycleId, topicId }
 //   { action: "blocked", reasonCode, reason, cycleId }
 // The trail lines the old tick wrote (scheduler_skipped,
-// scheduler_waiting, scheduler_cadence_hold, scheduler_generating,
-// post_blocked, quality_check, quality_below_threshold,
-// quality_retry_improved, post_queued_for_approval) are written
-// unchanged; the new generation_held line names the mode hold.
+// scheduler_cadence_hold, scheduler_generating, post_blocked,
+// quality_check, quality_below_threshold, quality_retry_improved,
+// post_queued_for_approval) are written unchanged; the
+// generation_held line names the mode hold. scheduler_waiting is no
+// longer written by anything (4.25111.87): a scheduler_waiting line
+// on a tenant trail dates from before that delivery.
 //
 // Must be called inside a tenant scope (withTenant or the leased
 // workflow envelope). Throws propagate to the caller's envelope.
 // ═══════════════════════════════════════════════════════════════
 
-import { getPostsByStatus, createPost, updatePostStatus, logActivity } from "../services/database.js";
+import { createPost, updatePostStatus, logActivity } from "../services/database.js";
 import { generatePost, qualityCheck } from "../services/content-generator.js";
 import { readMode, automationGate } from "./automation-mode.js";
 import { readAutomationSettings } from "./settings.js";
@@ -83,16 +99,10 @@ export async function runGenerationCycle({ topicId = null, forced = false } = {}
     }
   }
 
-  // Step 1: hold while posts await review (the old manual-mode
-  // hold, now the tenant setting, applied under both automated
-  // modes and under a forced cycle alike).
-  if (settings.holdWhilePending) {
-    const pending = await getPostsByStatus("pending_approval");
-    if (pending.length > 0) {
-      await logActivity("info", "scheduler_waiting", `${pending.length} post(s) awaiting manual approval`);
-      return hold("awaiting_review", `${pending.length} post(s) awaiting review`);
-    }
-  }
+  // Step 1 (the review-queue hold) was removed in 4.25111.87; see
+  // item 2 in the header. The state of the review queue is not an
+  // input to generation. Nothing between the mode gate and the
+  // cadence check reads posts.
 
   // Step 2: cadence check. Under auto-post, look ahead by the review
   // window plus one sweep (the post will wait that long before it

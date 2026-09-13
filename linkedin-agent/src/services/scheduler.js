@@ -111,9 +111,11 @@ function estimateNextWindow(recentPosts) {
 // Must be called inside withTenant.
 
 async function schedulerTick(topicId = null, opts = {}) {
-  // 4.25111.60: the tick's body (the automation gate, the pending
-  // hold, the cadence floor, generation, quality, storage, queueing)
-  // lives in automation/generation-loop.js. This envelope is what
+  // 4.25111.60: the tick's body (the automation gate, the cadence
+  // floor, generation, quality, storage, queueing) lives in
+  // automation/generation-loop.js. 4.25111.87: the pending-review
+  // hold that .60 had placed between the gate and the floor is gone;
+  // generation-loop.js item 2 records why. This envelope is what
   // remains of the old tick: the catch that turns a Model Provider
   // failure into a scheduler_error line carrying the complete
   // record. forceCycle passes { forced: true }; the cron passes
@@ -493,6 +495,7 @@ export function stopScheduler() {
 export async function forceCycle(topicId = null, userSub = null) {
   await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" }, userSub);
   // 4.25111.60: a human pressed it, so the automation gate does not
-  // apply; pause, the pending hold and the cadence floor still do.
+  // apply; pause and the cadence floor still do (4.25111.87: the
+  // pending-review hold no longer exists for anyone).
   return schedulerTick(topicId, { forced: true });
 }

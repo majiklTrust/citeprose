@@ -232,8 +232,7 @@ router.get("/api/status", optionalAuth, async (req, res) => {
               publishing: canAutoPublish(state.mode),
               paused: state.paused,
               source: state.source,
-              reviewWindowHours: settings.reviewWindowHours,
-              holdWhilePending: settings.holdWhilePending
+              reviewWindowHours: settings.reviewWindowHours
             };
             corroboration = (await getAgentState("corroboration")) || "enabled";
             organizationManager = ((await getAgentState("organization_manager")) === "disabled") ? "disabled" : "enabled";

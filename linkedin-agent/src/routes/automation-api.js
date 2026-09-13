@@ -7,8 +7,13 @@
 // scoped, read-only outside good standing, no-store.
 //
 //   POST /api/automation/mode      { mode }  canonical vocabulary only
-//   PUT  /api/automation/settings  { reviewWindowHours?, holdWhilePending? }
+//   PUT  /api/automation/settings  { reviewWindowHours }
 //   GET  /api/automation/state     the automation object /api/status carries
+//
+// 4.25111.87: holdWhilePending is retired (see automation/settings.js
+// and generation-loop.js item 2). A PUT that names it is refused with
+// 400 INVALID_SETTING and the retirement reason, whatever value it
+// carries; the automation object no longer carries the field.
 //
 // Writes need change_mode (the same permission the two-way toggle
 // has always needed; rules and slots will ride the same one). The
@@ -38,7 +43,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { setAgentState, logActivity, logActivityBestEffort } from "../services/database.js";
 import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes } from "../automation/automation-mode.js";
-import { readAutomationSettings, parseReviewWindowHours, parseHoldWhilePending, SETTING_KEYS, REVIEW_WINDOW_MAX_HOURS } from "../automation/settings.js";
+import { readAutomationSettings, parseReviewWindowHours, SETTING_KEYS, RETIRED_SETTING_KEYS, REVIEW_WINDOW_MAX_HOURS } from "../automation/settings.js";
 
 const router = Router();
 
@@ -66,7 +71,6 @@ async function automationObject() {
     paused: state.paused,
     source: state.source,
     reviewWindowHours: settings.reviewWindowHours,
-    holdWhilePending: settings.holdWhilePending,
     autoPostEnabled: state.autoPostEnabled,
     storedMode: state.storedMode
   };
@@ -124,6 +128,13 @@ router.put("/settings", requirePermission("change_mode"), async (req, res) => {
   try {
     const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
     const changes = {};
+    // A retired name is refused before anything else is read, with
+    // the reason, so the request cannot half-apply.
+    for (const name of Object.keys(RETIRED_SETTING_KEYS)) {
+      if (Object.prototype.hasOwnProperty.call(body, name)) {
+        return res.status(400).json({ error: `${name} ${RETIRED_SETTING_KEYS[name]}`, code: "INVALID_SETTING", setting: name, retired: true });
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(body, "reviewWindowHours")) {
       const v = body.reviewWindowHours;
       const parsed = typeof v === "number" ? parseReviewWindowHours(v) : null;
@@ -132,23 +143,14 @@ router.put("/settings", requirePermission("change_mode"), async (req, res) => {
       }
       changes.reviewWindowHours = parsed;
     }
-    if (Object.prototype.hasOwnProperty.call(body, "holdWhilePending")) {
-      const v = body.holdWhilePending;
-      const parsed = typeof v === "boolean" ? parseHoldWhilePending(v) : null;
-      if (parsed === null) {
-        return res.status(400).json({ error: "holdWhilePending must be true or false", code: "INVALID_SETTING", setting: "holdWhilePending" });
-      }
-      changes.holdWhilePending = parsed;
-    }
     if (Object.keys(changes).length === 0) {
-      return res.status(400).json({ error: "nothing to set: provide reviewWindowHours and/or holdWhilePending", code: "INVALID_SETTING" });
+      return res.status(400).json({ error: "nothing to set: provide reviewWindowHours", code: "INVALID_SETTING" });
     }
     const automation = await withTenant(req.tenant.id, async () => {
       const before = await readAutomationSettings();
       if (changes.reviewWindowHours !== undefined) await setAgentState(SETTING_KEYS.reviewWindowHours, String(changes.reviewWindowHours));
-      if (changes.holdWhilePending !== undefined) await setAgentState(SETTING_KEYS.holdWhilePending, String(changes.holdWhilePending));
       await logActivity("info", "automation_settings_changed", {
-        changes, before: { reviewWindowHours: before.reviewWindowHours, holdWhilePending: before.holdWhilePending }
+        changes, before: { reviewWindowHours: before.reviewWindowHours }
       }, req.user?.sub || null);
       return automationObject();
     });

@@ -102,16 +102,25 @@
         </label>
         <div class="form-row">
           <label>AI Vendor</label>
-          <select id="reg-provider">
-            <option value="anthropic" selected>Anthropic (Claude)</option>
-            <option value="openai">OpenAI</option>
-            <option value="grok">Grok (xAI)</option>
-            <option value="custom">Custom</option>
-          </select>
+          <!-- 4.25111.98 (D84-2): the vendor list is the registry's
+               configured providers, delivered on the registration
+               init answer (the same list the /app/admin card shows);
+               nothing is hardcoded here. register.js fills it. -->
+          <select id="reg-provider"></select>
+          <p id="reg-vendor-note" class="msg msg-info" hidden></p>
           <div class="hint">Bring your own key from the vendor of your choice</div>
         <div class="hint">Your key is encrypted before storage. <a id="key-help-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:#3b82f6;">Get a key</a></div>
         </div>
-        <input type="password" id="reg-key" placeholder="Your vendor API key">
+        <!-- 4.25111.98 (D84-1): the password field lives in a form of
+             its own, as on /app/admin, so the browser stops flagging
+             it and password managers see a field that never submits;
+             the hidden username slot keeps autofill from pairing the
+             key with the email above. Enter still verifies through
+             register.js; onsubmit refuses the form itself. -->
+        <form class="key-field" autocomplete="off" onsubmit="return false">
+          <input type="text" autocomplete="username" value="" tabindex="-1" aria-hidden="true" style="display:none">
+          <input type="password" id="reg-key" placeholder="Your vendor API key" autocomplete="off">
+        </form>
       </div>
 
       <div class="actions" id="verify-actions">
@@ -124,7 +133,7 @@
           <select id="reg-model">
             <option value="">Choose a model...</option>
           </select>
-          <div class="hint">Determines which Claude model generates your content</div>
+          <div class="hint">Determines which model generates your content</div>
         </div>
 
         <div class="actions">

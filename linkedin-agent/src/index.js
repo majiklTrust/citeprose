@@ -1,7 +1,7 @@
 // // ════════════════════════════════════════════════
 // LinkedIn AI Agent — Main Entry Point
 // // ════════════════════════════════════════════════
-// v4.25111.96
+// v4.25111.98
 //
 // Split into three phases:
 //   - createApp()  : builds and returns the Express app with
@@ -1175,7 +1175,7 @@ export async function start() {
     const addr = getServerAddress();
     console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           LinkedIn AI Content Agent  4.25111.96
+║           LinkedIn AI Content Agent  4.25111.98
 ║
 ║           Mode:  ${(process.env.AGENT_MODE || "manual").toUpperCase().padEnd(0)}
 ║           Auth:  ${isAuthEnabled() ? "ENABLED" : "DISABLED (no providers configured)"}

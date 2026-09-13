@@ -34,6 +34,9 @@ import {
 } from "../tenant/platform-db.js";
 import { validateProviderKey } from "../llm/client.js";
 import { isTextProviderAvailable, textGenerationNotice, TEXT_GENERATION_NOTICE } from "../llm/registry.js";
+// 4.25111.98 (D84-2): the vendor and model catalog the register page
+// offers, the same list the /app/admin card shows (see the module).
+import { registrationProviderCatalog } from "./registration-catalog.js";
 import { validateModelProviderSelection, isModelProviderSelectionError } from "../llm/model-provider-selection.js";
 import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
@@ -72,6 +75,18 @@ function inferAuthProvider(sub) {
 }
 
 // ── Helper: safe error — never leak internals ────────────────
+
+// 4.25111.98: the shape of a token the store mints (base64url of 32
+// random bytes, 43 characters; bounded generously). Anything else is
+// answered as an unknown link BEFORE the database sees it: a NUL byte
+// or a kilobyte of noise used to reach the query and come back as a
+// 500, which is both a needless error and a shape oracle. Same 404
+// wording as an unknown token, so nothing is learned from the split.
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{16,256}$/;
+async function lookupRegistrationToken(token) {
+  if (typeof token !== "string" || !TOKEN_SHAPE.test(token)) return null;
+  return validateRegistrationToken(token);
+}
 
 function safeError(res, status, message) {
   return res.status(status).json({ error: message });
@@ -391,7 +406,7 @@ router.post("/init", async (req, res) => {
       return safeError(res, 400, "Registration token required");
     }
 
-    const reg = await validateRegistrationToken(token);
+    const reg = await lookupRegistrationToken(token);
     if (!reg) {
       return safeError(res, 404, "Invalid or expired registration link");
     }
@@ -401,12 +416,15 @@ router.post("/init", async (req, res) => {
       await activateRegistrationToken(token);
     }
 
-    // Return non-sensitive registration info
+    // Return non-sensitive registration info. 4.25111.98: plus the
+    // vendor and model catalog the page offers (the admin card's
+    // list), answered only here, behind the validated token.
     res.json({
       email: reg.email,
       expiresAt: reg.expires_at,
       keyProvided: reg.key_provided || false,
-      modelId: reg.model_id || null
+      modelId: reg.model_id || null,
+      providers: registrationProviderCatalog()
     });
   } catch (err) {
     platformLog("error", "registration_init_failed", { error: err.message });
@@ -464,7 +482,7 @@ router.post("/validate-key", optionalAuth, async (req, res) => {
         return safeError(res, 400, "Registration token required");
       }
 
-      const reg = await validateRegistrationToken(token);
+      const reg = await lookupRegistrationToken(token);
       if (!reg) {
         return safeError(res, 404, "Invalid or expired registration link");
       }
@@ -543,7 +561,7 @@ router.post("/complete", async (req, res) => {
     }
 
     // Validate token is still active
-    const reg = await validateRegistrationToken(token);
+    const reg = await lookupRegistrationToken(token);
     if (!reg) {
       return safeError(res, 404, "Invalid or expired registration link");
     }

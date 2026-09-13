@@ -3,11 +3,24 @@
 // ═══════════════════════════════════════════════════════════════
 // Token-based authentication. No session cookie. The registration
 // token in the URL fragment is the sole authorization.
+//
+// 4.25111.98 (D84-2): the vendor and model choices are the catalog
+// the init answer carries (providers: the registry's configured
+// providers with availability, notice and registry models, the same
+// list the /app/admin card renders from GET /api/admin/ai-config).
+// The page renders that catalog and nothing else: no hardcoded
+// vendor list, no free-text model, and the model list is never
+// rebuilt from the live catalog validate-key returns. A parked
+// (coming soon) vendor shows its notice and disables Verify and
+// Create, exactly as the admin card does; the server refuses it
+// again at /api/register/complete. Catalog values reach the DOM
+// through createElement and textContent only.
 // ═══════════════════════════════════════════════════════════════
 
 (function () {
   var API = window.location.origin;
   var registrationToken = null;
+  var _providers = [];
 
   function $(id) { return document.getElementById(id); }
 
@@ -88,9 +101,17 @@
         $('step-form').style.display = 'block';
         $('reg-email').value = data.email;
 
-        // If admin pre-provided the API key, hide key section
+        // 4.25111.98: the catalog, rendered before anything else so the
+        // vendor and model lists are on the page with the form.
+        _providers = Array.isArray(data.providers) ? data.providers.filter(function (p) { return p && typeof p === 'object' && typeof p.id === 'string' && p.id; }) : [];
+        renderProviders();
+        applyVendorUx();
+
+        // If admin pre-provided the API key, hide the whole key block
+        // (vendor choice included: the invitation made it). closest()
+        // because the key field now lives in its own form (D84-1).
         if (data.keyProvided) {
-          $('reg-key').parentElement.style.display = 'none';
+          $('reg-key').closest('.form-row').style.display = 'none';
           $('verify-actions').style.display = 'none';
           // Show "provided" message and the register button directly
           var infoDiv = document.createElement('div');
@@ -125,8 +146,17 @@
 
   function verifyKey() {
     var key = $('reg-key').value.trim();
+    var provider = $('reg-provider').value;
+    if (vendorComingSoon(provider)) {
+      showMessage(vendorNoticeFor(provider), 'error');
+      return;
+    }
+    if (!provider) {
+      showMessage('Choose an AI vendor first', 'error');
+      return;
+    }
     if (!key) {
-      showMessage('Please enter your Anthropic API key', 'error');
+      showMessage('Please enter your vendor API key', 'error');
       return;
     }
 
@@ -137,7 +167,7 @@
     fetch(API + '/api/register/validate-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: registrationToken, apiKey: key, provider: $('reg-provider').value })
+      body: JSON.stringify({ token: registrationToken, apiKey: key, provider: provider })
     })
       .then(function (res) {
         if (res.status === 401) {
@@ -154,21 +184,13 @@
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Verification failed'); });
         return res.json();
       })
-      .then(function (data) {
-        if (!data) return;
+      .then(function (verified) {
+        if (!verified) return;
         $('key-status').innerHTML = '<span class="key-status key-valid">verified</span>';
 
-        // Populate model selector
-        var select = $('reg-model');
-        select.innerHTML = '<option value="">Choose a model...</option>';
-        (data.models || []).forEach(function (m) {
-          var opt = document.createElement('option');
-          opt.value = m.id;
-          opt.textContent = m.name;
-          select.appendChild(opt);
-        });
-
-        // Show model section
+        // 4.25111.98: the model list stays the registry's (rendered from
+        // the catalog on load and on every vendor change); the live
+        // catalog in this answer is not offered.
         $('model-section').classList.add('visible');
         $('verify-actions').style.display = 'none';
 
@@ -190,9 +212,13 @@
     var orgName = $('reg-org').value.trim();
     var apiKey = $('reg-key') ? $('reg-key').value.trim() : '';
     var modelSelect = $('reg-model');
-    var customModel = document.getElementById('reg-model-custom');
-    var modelId = customModel ? customModel.value.trim() : modelSelect ? modelSelect.value : '';
+    var modelId = modelSelect ? modelSelect.value : '';
+    var provider = $('reg-provider').value;
 
+    if (vendorComingSoon(provider)) {
+      showMessage(vendorNoticeFor(provider), 'error');
+      return;
+    }
     if (!orgName || orgName.length < 2) {
       showMessage('Organization name is required (min 2 characters)', 'error');
       return;
@@ -204,7 +230,7 @@
       org_name: orgName
     };
     if (apiKey) payload.apiKey = apiKey;
-    payload.provider = $('reg-provider').value;
+    payload.provider = provider;
     if (modelId) payload.model_id = modelId;
 
     var btn = $('register-btn');
@@ -244,11 +270,68 @@
       });
   }
 
+  // ── The catalog on the page (4.25111.98, mirrors admin.js) ──
+
+  function providerById(id) {
+    for (var i = 0; i < _providers.length; i++) {
+      if (_providers[i].id === id) return _providers[i];
+    }
+    return null;
+  }
+  function vendorComingSoon(id) {
+    var p = providerById(id);
+    return !!p && p.textGeneration === 'coming_soon';
+  }
+  function vendorNoticeFor(id) {
+    var p = providerById(id);
+    return (p && typeof p.textGenerationNotice === 'string' && p.textGenerationNotice) || 'Support for other language generation models is coming soon.';
+  }
+  // Vendor options: the catalog's order, label from the catalog, the
+  // parked ones marked as the admin card marks them. createElement
+  // and textContent only: a label is never markup.
+  function renderProviders() {
+    var select = $('reg-provider');
+    select.innerHTML = '';
+    _providers.forEach(function (p) {
+      var opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = String(p.label || p.id) + (p.textGeneration === 'coming_soon' ? ' (coming soon)' : '');
+      select.appendChild(opt);
+    });
+  }
+  // Model options: the registry models of the selected vendor.
+  function renderModels(providerId) {
+    var select = $('reg-model');
+    select.innerHTML = '<option value="">Choose a model...</option>';
+    var p = providerById(providerId);
+    var models = p && Array.isArray(p.models) ? p.models : [];
+    models.forEach(function (m) {
+      if (!m || typeof m !== 'object' || typeof m.id !== 'string') return;
+      var opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label || m.id;
+      select.appendChild(opt);
+    });
+  }
+  // The parked-vendor note: shown with the vendor's own notice while
+  // a coming-soon vendor is selected; Verify and Create are parked
+  // with it (the server refuses the vendor again at completion).
+  function updateVendorNote() {
+    var note = $('reg-vendor-note');
+    var selected = $('reg-provider').value;
+    var parked = vendorComingSoon(selected) || !selected;
+    if (note) {
+      note.hidden = !vendorComingSoon(selected);
+      note.textContent = vendorComingSoon(selected) ? vendorNoticeFor(selected) : '';
+    }
+    $('verify-btn').disabled = parked;
+    $('register-btn').disabled = parked;
+  }
+
   // ── Bind events ────────────────────────────────────────────
 
-  // Per-vendor key help. Custom has no target and needs no
-  // verification: the model becomes free entry and Create is
-  // enabled directly.
+  // Per-vendor key help link; a vendor without a known console keeps
+  // the text without a link.
   var KEY_URLS = {
     anthropic: 'https://console.anthropic.com/settings/keys',
     openai: 'https://platform.openai.com/api-keys',
@@ -259,29 +342,14 @@
     var link = $('key-help-link');
     if (KEY_URLS[v]) { link.href = KEY_URLS[v]; link.style.display = ''; }
     else { link.removeAttribute('href'); link.style.display = 'none'; }
-    var isCustom = v === 'custom';
-    $('verify-actions').style.display = isCustom ? 'none' : '';
-    if (isCustom) {
-      $('model-section').classList.add('visible');
-      var sel = $('reg-model');
-      if (!document.getElementById('reg-model-custom')) {
-        var inp = document.createElement('input');
-        inp.type = 'text';
-        inp.id = 'reg-model-custom';
-        inp.placeholder = 'Model identifier for your endpoint';
-        sel.parentNode.insertBefore(inp, sel);
-      }
-      sel.style.display = 'none';
-      $('register-btn').disabled = false;
-    } else {
-      var custom = document.getElementById('reg-model-custom');
-      if (custom) custom.remove();
-      $('reg-model').style.display = '';
-      $('model-section').classList.remove('visible');
-    }
+    renderModels(v);
+    updateVendorNote();
+    // A vendor change asks for a fresh verification.
+    $('model-section').classList.remove('visible');
+    $('verify-actions').style.display = '';
+    $('key-status').innerHTML = '';
   }
   $('reg-provider').addEventListener('change', applyVendorUx);
-  applyVendorUx();
 
   $('verify-btn').addEventListener('click', verifyKey);
   $('reg-key').addEventListener('keydown', function (e) {

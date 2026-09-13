@@ -1077,7 +1077,10 @@ function loadSpendSummary() {
             '<td>' + escapeHtml(a.label || '') + '</td>' +
             '<td>' + escapeHtml(a.key_source || '-') + '</td>' +
             '<td class="num">' + escapeHtml(String(a.calls)) + '</td>' +
-            '<td class="num">' + escapeHtml(money(a.cost_estimate_usd)) + '</td>' +
+            // 4.25111.98 (D84-3): the server's total_tokens per activation
+            // (input plus output, summed in the spend-summary SQL); the
+            // page never derives it. Absent means n/a, never 0.
+            '<td class="num">' + escapeHtml(a.total_tokens === null || a.total_tokens === undefined ? 'n/a' : String(a.total_tokens)) + '</td>' +
             '</tr>';
         }).join('');
         recentBody.innerHTML = recent || '<tr><td colspan="6">No activity yet.</td></tr>';

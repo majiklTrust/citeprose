@@ -406,6 +406,9 @@ router.put("/image-storage", async (req, res) => {
 // GET /api/admin/spend-summary: the Spend card. Read-only ledger
 // sums (30-day window) by provider, recent activations, and the
 // trial indicator (existence + burn, never key material).
+// 4.25111.98 (D84-3): each recent activation also carries
+// total_tokens (input plus output), summed here so the Recent
+// Activity table shows the server's number, not a page-side sum.
 router.get("/spend-summary", async (req, res) => {
   try {
     const out = await withTenant(req.tenant.id, async (client) => {
@@ -425,6 +428,7 @@ router.get("/spend-summary", async (req, res) => {
         `SELECT a.id, a.workflow::text, a.label, a.created_at,
                 COALESCE(SUM(e.input_tokens),0)::bigint AS input_tokens,
                 COALESCE(SUM(e.output_tokens),0)::bigint AS output_tokens,
+                (COALESCE(SUM(e.input_tokens),0) + COALESCE(SUM(e.output_tokens),0))::bigint AS total_tokens,
                 SUM(e.cost_estimate_usd) AS cost_estimate_usd,
                 COUNT(e.id)::int AS calls,
                 COALESCE(string_agg(DISTINCT e.key_source::text, '/'), '-') AS key_source

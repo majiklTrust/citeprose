@@ -1057,7 +1057,10 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topicId: selectedTopic || undefined })
           });
-          setTimeout(fetchAll, 2000);
+          // 4.25111.94: the run row is committed before the 202, so an
+          // immediate refresh already sees activeRun and keeps the
+          // button disabled until the poll sees the run finish.
+          fetchAll({ background: true });
         } catch (err) {
           alert('Failed to start cycle: ' + (err.detail || err.message));
         } finally {
@@ -1776,14 +1779,20 @@
                 )}
                   {/* 4.25111.62: enabled in the two automated states,
                       disabled in manual (owner's ruling); wording from
-                      the copy keys. */}
+                      the copy keys.
+                      4.25111.94: the server answers the click at once
+                      (202) and runs the cycle detached; while the
+                      automation object reports a run in flight
+                      (activeRun, refreshed by the poll) the button is
+                      disabled and shows the spinner, and a second click
+                      is refused by the server (409) with its reason. */}
                   <button
                     className={`btn btn-force-cycle ${automationModeOf(status) && automationModeOf(status) !== 'manual' ? 'btn-primary' : 'btn-ghost'}`}
                     onClick={handleForceCycle}
-                    disabled={!(status.automation && automationModeOf(status) && automationModeOf(status) !== 'manual')}
+                    disabled={!(status.automation && automationModeOf(status) && automationModeOf(status) !== 'manual') || !!(status.automation && status.automation.activeRun)}
                     title={automationModeOf(status) && automationModeOf(status) !== 'manual' ? DASHBOARD_COPY.forceCycleTitle : DASHBOARD_COPY.forceCycleDisabledTitle}
                   >
-                    {loading.forceCycle ? <span className="loading-spinner"></span> : DASHBOARD_COPY.forceCycleButton}
+                    {loading.forceCycle || (status.automation && status.automation.activeRun) ? <span className="loading-spinner"></span> : DASHBOARD_COPY.forceCycleButton}
                   </button>
               </div>
               {/* Quick Actions */}

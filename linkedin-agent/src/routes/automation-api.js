@@ -42,7 +42,8 @@ import { requirePermission } from "../tenant/permissions.js";
 import { withTenant } from "../db/with-tenant.js";
 import { platformLog } from "../services/platform-log.js";
 import { setAgentState, logActivity, logActivityBestEffort } from "../services/database.js";
-import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes } from "../automation/automation-mode.js";
+import { MODES, isMode, readMode, canAutoGenerate, canAutoPublish, availableModes, pausedForMode } from "../automation/automation-mode.js";
+import { readGenerationRuns } from "../automation/generation-run.js";
 import { readAutomationSettings, parseReviewWindowHours, SETTING_KEYS, RETIRED_SETTING_KEYS, REVIEW_WINDOW_MAX_HOURS } from "../automation/settings.js";
 
 const router = Router();
@@ -64,6 +65,11 @@ router.use((req, res, next) => {
 async function automationObject() {
   const state = await readMode();
   const settings = await readAutomationSettings();
+  // 4.25111.94: the generation run in flight (if any) and the newest
+  // finished one, from the run table (DDL 50.0). The dashboard reads
+  // this object on every poll, so the page knows a cycle is running
+  // without holding a request open for it.
+  const runs = await readGenerationRuns();
   return {
     mode: state.mode,
     generation: canAutoGenerate(state.mode),
@@ -72,7 +78,9 @@ async function automationObject() {
     source: state.source,
     reviewWindowHours: settings.reviewWindowHours,
     autoPostEnabled: state.autoPostEnabled,
-    storedMode: state.storedMode
+    storedMode: state.storedMode,
+    activeRun: runs.activeRun ? { runId: runs.activeRun.runId, trigger: runs.activeRun.trigger, startedAt: runs.activeRun.startedAt } : null,
+    lastRun: runs.lastRun ? { runId: runs.lastRun.runId, trigger: runs.lastRun.trigger, startedAt: runs.lastRun.startedAt, finishedAt: runs.lastRun.finishedAt, outcome: runs.lastRun.outcome } : null
   };
 }
 
@@ -110,7 +118,11 @@ router.post("/mode", requirePermission("change_mode"), async (req, res) => {
     const automation = await withTenant(req.tenant.id, async () => {
       const before = await readMode();
       await setAgentState("mode", mode);
-      await logActivity("info", "automation_mode_changed", { from: before.mode, to: mode, via: "automation_api" }, req.user?.sub || null);
+      // 4.25111.94: paused follows the mode, in the same transaction
+      // (owner's ruling; the interpreter owns the rule).
+      const paused = pausedForMode(mode);
+      await setAgentState("paused", paused);
+      await logActivity("info", "automation_mode_changed", { from: before.mode, to: mode, paused: paused === "true", via: "automation_api" }, req.user?.sub || null);
       return automationObject();
     });
     platformLog("info", "automation_mode_changed", { tenantId: req.tenant.id, to: mode, via: "automation_api", sub: req.user?.sub || null });

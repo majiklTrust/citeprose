@@ -15,6 +15,19 @@
 //      The cron callback iterates every active tenant and wraps
 //      each tenant's schedulerTick() in its own withTenant.
 //      Tenant A's failure does not stop tenant B's tick.
+//
+// 4.25111.94: one cycle per tenant at a time, across every trigger
+// and every application instance. Both entry paths go through
+// runClaimedCycle: a generation_runs row is claimed and COMMITTED
+// before any Model Provider call (the batch publisher's discipline,
+// on the table DDL 50.0 creates), the cycle runs under the leased
+// envelope, and the row is finished with the decision in success and
+// in failure. A second trigger while a run is open (the cron while a
+// Force Cycle runs, two instances' crons, two clicks) is refused with
+// cycle_in_progress and does no work. The Force Cycle route no longer
+// waits for the cycle: startForcedCycle claims synchronously, answers
+// the request, and runs the cycle detached under the same envelope
+// the cron uses; the trail and the run row carry the outcome.
 
 import cron from "node-cron";
 import {
@@ -30,13 +43,14 @@ import { PRE_PUB_STATUSES } from "./post-status.js";
 import { publishPost, checkPublishCredentials } from "./linkedin-publisher.js";
 import { composeWireCommentary, getCommentaryMax, commentaryTooLongError } from "./linkedin-post-request.js";
 import { runOutputFilter } from "./output-filter.js";
-import { withTenant } from "../db/with-tenant.js";
-import { withTenantWorkflow } from "../db/tenant-workflow.js";
+import { withTenant, currentTenantId } from "../db/with-tenant.js";
+import { withTenantWorkflow, yieldDb } from "../db/tenant-workflow.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
 import { listActiveTenants } from "../tenant/platform-db.js";
 import { dashboardCopy } from "../config/dashboard-copy.js";
 import { platformLog } from "./platform-log.js";
 import { runGenerationCycle } from "../automation/generation-loop.js";
+import { claimGenerationRun, finishGenerationRun } from "../automation/generation-run.js";
 
 let schedulerJob = null;
 
@@ -133,6 +147,85 @@ async function schedulerTick(topicId = null, opts = {}) {
     await logActivity("error", "scheduler_error", providerFailureLogDetails(err, pf));
     return { action: "failed", reasonCode: "generation_failed", reason: err.message };
   }
+}
+
+// ── The claimed cycle ────────────────────────────────────────
+// Two steps with one body. claimCycle() takes the generation_runs
+// row (or reports whose it is) and, when it took over an abandoned
+// row, says so on the trail. executeClaimedRun() writes the trigger
+// line, runs schedulerTick, and finishes the row in a finally, so
+// whatever the cycle did (a decision, a classified failure inside
+// schedulerTick's own catch, a throw past it) the lock is released
+// by this one path. A finish that itself fails (the database is
+// gone) is reported and the row is left open for the next claimant's
+// stale takeover; nothing is retried from memory.
+//
+// runClaimedCycle() is the two steps in one LEASED envelope: the
+// claim is committed at the yieldDb between them, so every other
+// instance sees the open run before the first Model Provider call.
+// startForcedCycle() below splits them across a short transaction
+// and a detached envelope so a request can answer at once.
+async function claimCycle({ trigger, userSub = null, topicId = null }) {
+  const claim = await claimGenerationRun({ trigger, requestedBy: userSub, topicId });
+  if (claim.abandoned) {
+    await logActivity("warn", "generation_run_abandoned", {
+      runId: claim.abandoned.runId, trigger: claim.abandoned.trigger,
+      startedAt: claim.abandoned.startedAt, instance: claim.abandoned.instance
+    });
+    platformLog("warn", "generation_run_abandoned", {
+      tenantId: currentTenantIdOrNull(), runId: claim.abandoned.runId, instance: claim.abandoned.instance
+    });
+  }
+  if (!claim.claimed) {
+    const a = claim.activeRun || {};
+    await logActivity("info", trigger === "cron" ? "scheduler_tick_skipped" : "force_cycle_skipped", {
+      reasonCode: "cycle_in_progress", runId: a.runId || null, trigger: a.trigger || null, startedAt: a.startedAt || null
+    }, userSub);
+  }
+  return claim;
+}
+
+function skipped(claim) {
+  return {
+    action: "skipped", reasonCode: "cycle_in_progress",
+    reason: "a generation cycle is already running for this workspace",
+    activeRun: claim.activeRun || null
+  };
+}
+
+async function executeClaimedRun({ runId, trigger, userSub = null, topicId = null, forced = false }) {
+  let decision = { action: "failed", reasonCode: "generation_failed", reason: "cycle ended without a decision" };
+  try {
+    await logActivity("info", trigger === "cron" ? "scheduler_tick" : "force_cycle",
+      trigger === "cron" ? { runId } : { runId, manual: true, topicId: topicId || "auto" }, userSub);
+    decision = await schedulerTick(topicId, { forced });
+    return { ...decision, runId };
+  } catch (err) {
+    decision = { action: "failed", reasonCode: "generation_failed", reason: err.message };
+    throw err;
+  } finally {
+    try {
+      await finishGenerationRun(runId, decision);
+    } catch (finishErr) {
+      platformLog("error", "generation_run_finish_failed", { tenantId: currentTenantIdOrNull(), runId, error: finishErr.message });
+    }
+  }
+}
+
+// Must be called inside the LEASED envelope (withTenantWorkflow).
+//   { action: "skipped", reasonCode: "cycle_in_progress", activeRun }
+//   or the loop's decision object plus runId.
+async function runClaimedCycle({ trigger, userSub = null, topicId = null, forced = false }) {
+  const claim = await claimCycle({ trigger, userSub, topicId });
+  if (!claim.claimed) return skipped(claim);
+  // Commit the claim before any work: closes the current lease; the
+  // next query opens a fresh one.
+  await yieldDb();
+  return executeClaimedRun({ runId: claim.run.runId, trigger, userSub, topicId, forced });
+}
+
+function currentTenantIdOrNull() {
+  try { return currentTenantId(); } catch { return null; }
 }
 
 // ── Post Execution ───────────────────────────────────────────
@@ -455,10 +548,18 @@ async function runTickForAllTenants() {
       // here: this tick already caught its own errors and committed
       // its activity trail, so failure behavior is identical, minus
       // the pinned client and the run-long transaction.
-      await withTenantWorkflow(tenant.id, async () => {
-        await logActivity("info", "scheduler_tick", `Cron fired for tenant ${tenant.slug}`);
-        await schedulerTick();
-      });
+      // 4.25111.94: the tick is a claimed cycle. A tenant whose cycle
+      // is already open (a Force Cycle in flight, or another instance's
+      // tick) is skipped with a trail line and a platform line, and
+      // the sweep moves on.
+      const decision = await withTenantWorkflow(tenant.id, async () => runClaimedCycle({ trigger: "cron" }));
+      if (decision && decision.reasonCode === "cycle_in_progress") {
+        platformLog("info", "scheduler_tick_skipped_in_progress", {
+          tenantId: tenant.id, tenant: tenant.slug || null,
+          runId: decision.activeRun ? decision.activeRun.runId : null,
+          runTrigger: decision.activeRun ? decision.activeRun.trigger : null
+        });
+      }
     } catch (err) {
       // A tick that died OUTSIDE schedulerTick's own catch (the
       // envelope could not open, the entitlement read threw, the
@@ -489,13 +590,62 @@ export function stopScheduler() {
   }
 }
 
-// ── Force a cycle (for testing/manual trigger) ───────────────
-// Called from /api/force-cycle which wraps this in withTenant.
+// ── Force a cycle (the dashboard button) ─────────────────────
+// 4.25111.60: a human pressed it, so the automation gate does not
+// apply; pause and the cadence floor still do (4.25111.87: the
+// pending-review hold no longer exists for anyone).
+//
+// 4.25111.94: two shapes.
+//
+// forceCycle(topicId, userSub) runs the claimed cycle to completion
+// inside the caller's LEASED envelope and returns its decision (or
+// the cycle_in_progress skip). For callers that want the answer in
+// hand: suites, tooling, a future job runner.
+//
+// startForcedCycle(tenantId, { topicId, userSub }) is what the route
+// uses. It claims in its own short transaction (so the caller learns
+// at once whether the cycle is its own or someone else's), then runs
+// the cycle DETACHED under the same envelope the cron uses, and
+// returns { accepted, runId } or { accepted: false, activeRun }
+// without waiting. The route answers 202 and the request ends; the
+// cycle's outcome lands on the tenant's trail and on the run row,
+// where the dashboard's poll reads it. Nothing about the run lives
+// in this process beyond the promise: a restart mid-cycle leaves an
+// open row that the next claimant closes as abandoned.
+//
+// The detached promise always has a catch (a rejection here must
+// never become an unhandled rejection that takes the server down)
+// and is tracked so a test or a shutdown hook can await quiescence
+// (awaitForcedCycles); production never waits on it.
 
 export async function forceCycle(topicId = null, userSub = null) {
-  await logActivity("info", "force_cycle", { manual: true, topicId: topicId || "auto" }, userSub);
-  // 4.25111.60: a human pressed it, so the automation gate does not
-  // apply; pause and the cadence floor still do (4.25111.87: the
-  // pending-review hold no longer exists for anyone).
-  return schedulerTick(topicId, { forced: true });
+  return runClaimedCycle({ trigger: "force_cycle", userSub, topicId, forced: true });
+}
+
+const inFlightForcedCycles = new Set();
+
+export async function startForcedCycle(tenantId, { topicId = null, userSub = null } = {}) {
+  // The claim in its own short transaction: committed when withTenant
+  // returns, before the request is answered.
+  const claim = await withTenant(tenantId, async () =>
+    claimCycle({ trigger: "force_cycle", userSub, topicId }));
+  if (!claim.claimed) {
+    return { accepted: false, activeRun: claim.activeRun || null };
+  }
+  const runId = claim.run.runId;
+  const running = withTenantWorkflow(tenantId, async () =>
+    executeClaimedRun({ runId, trigger: "force_cycle", userSub, topicId, forced: true })
+  ).catch((err) => {
+    platformLog("error", "force_cycle_failed", { tenantId, runId, error: err && err.message ? err.message : String(err) });
+    return { action: "failed", reasonCode: "generation_failed", reason: err && err.message, runId };
+  });
+  inFlightForcedCycles.add(running);
+  running.finally(() => inFlightForcedCycles.delete(running));
+  return { accepted: true, runId, startedAt: claim.run.startedAt };
+}
+
+// Resolves when every detached forced cycle started by this process
+// has settled. Suites and shutdown hooks only.
+export async function awaitForcedCycles() {
+  await Promise.allSettled([...inFlightForcedCycles]);
 }

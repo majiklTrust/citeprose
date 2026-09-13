@@ -29,6 +29,10 @@
 // projects the canonical value back for the same toggle to render.
 // Both go away with the dashboard control delivery.
 //
+// 4.25111.94: paused follows the mode (owner's ruling). See
+// pausedForMode below; the mode writers call it, the readers and
+// the loops are unchanged.
+//
 // Fail safe. An absent or unrecognized stored value resolves to
 // 'manual' (nothing automated) and is reported once per process per
 // tenant. After 46.0 every tenant has a row, so this is a guard,
@@ -114,6 +118,22 @@ export function canAutoGenerate(mode) {
 }
 export function canAutoPublish(mode) {
   return mode === "auto-post";
+}
+
+// 4.25111.94 (owner's ruling, 2026-09-13): the paused flag FOLLOWS
+// the mode. Choosing manual pauses the agent; choosing either
+// automated state resumes it. Every writer of the mode (the
+// automation route, the legacy shim, the registration seed) writes
+// agent_state 'paused' from this function in the same transaction,
+// so a mode change can never leave a workspace automated-but-paused.
+// The value is the registry's boolean text ('true' / 'false').
+//
+// paused stays readable as its own key (readMode) and the loops
+// still honor it first: a platform admin's "Set Agent Paused" or a
+// direct write is an operator override that holds until the next
+// mode change or the next override.
+export function pausedForMode(mode) {
+  return mode === "manual" ? "true" : "false";
 }
 
 // Legacy translation for the two-way toggle: 'manual' (the old

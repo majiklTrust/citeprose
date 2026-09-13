@@ -14,7 +14,7 @@
 
 import { suspendedWriteGuard } from "../services/entitlements.js";
 import { Router } from "express";
-import { readMode, fromLegacy, toLegacy, canAutoGenerate, canAutoPublish } from "../automation/automation-mode.js";
+import { readMode, fromLegacy, toLegacy, canAutoGenerate, canAutoPublish, pausedForMode } from "../automation/automation-mode.js";
 import { readAutomationSettings } from "../automation/settings.js";
 import {
   getPostStats,
@@ -35,7 +35,7 @@ import {
   approvePost,
   rejectPost,
   canPostNow,
-  forceCycle,
+  startForcedCycle,
   transitionStatus
 } from "../services/scheduler.js";
 import { getPostsWindowDays, getMaxPostsPerWindowDays } from "../config/posts-window.js";
@@ -764,7 +764,10 @@ router.post("/api/mode", requirePermission("change_mode"), async (req, res) => {
     await withTenant(req.tenant.id, async () => {
       const before = await readMode();
       await setAgentState("mode", canonical);
-      await logActivity("info", "automation_mode_changed", { from: before.mode, to: canonical, via: "legacy_toggle", legacyValue: mode }, req.user?.sub || null);
+      // 4.25111.94: paused follows the mode here too (owner's ruling).
+      const paused = pausedForMode(canonical);
+      await setAgentState("paused", paused);
+      await logActivity("info", "automation_mode_changed", { from: before.mode, to: canonical, paused: paused === "true", via: "legacy_toggle", legacyValue: mode }, req.user?.sub || null);
     });
     platformLog("info", "automation_mode_changed", { tenantId: req.tenant.id, to: canonical, via: "legacy_toggle", sub: req.user?.sub || null });
     res.json({ mode });
@@ -1046,12 +1049,25 @@ router.post("/api/force-cycle", requirePermission("force_cycle"), async (req, re
     // another trigger, so it runs on the SAME leased envelope the
     // cron path uses. One pipeline, one transaction discipline,
     // whoever pulls the lever.
-    await withTenantWorkflow(req.tenant.id, async () => {
-      return forceCycle(topicId, req.user?.sub || null);
-    });
-    res.json({ success: true, message: "Scheduler cycle executed", topicId: topicId || "auto" });
+    // 4.25111.94: the request no longer waits for the cycle. The
+    // scheduler claims the tenant's generation run (one per tenant at
+    // a time, across instances) and runs the cycle detached; the
+    // answer is 202 with the run id, or 409 when a cycle is already
+    // open. The outcome lands on the tenant's trail and on the run
+    // row, which the dashboard's poll reads.
+    const started = await startForcedCycle(req.tenant.id, { topicId, userSub: req.user?.sub || null });
+    if (!started.accepted) {
+      const a = started.activeRun || {};
+      return res.status(409).json({
+        error: "A generation cycle is already running for this workspace.",
+        code: "CYCLE_IN_PROGRESS",
+        runId: a.runId || null,
+        trigger: a.trigger || null,
+        startedAt: a.startedAt || null
+      });
+    }
+    res.status(202).json({ accepted: true, runId: started.runId, startedAt: started.startedAt, topicId: topicId || "auto" });
   } catch (err) {
-    if (respondProviderFailure(req, res, err)) return;
     logApiError(req, err);
     res.status(500).json({ error: "An internal error occurred" });
   }

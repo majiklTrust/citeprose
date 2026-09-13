@@ -39,7 +39,7 @@ import { withTenant } from "../db/with-tenant.js";
 import { query } from "../db/pool.js";
 import { storeCredential } from "../tenant/credential-store.js";
 import { seedTenantDefaults } from "../tenant/seed-defaults.js";
-import { DEFAULT_MODE } from "../automation/automation-mode.js";
+import { DEFAULT_MODE, pausedForMode } from "../automation/automation-mode.js";
 
 const router = Router();
 
@@ -628,6 +628,9 @@ router.post("/complete", async (req, res) => {
         // (nothing automated), not the old 'manual' that generated
         // on cadence; the interpreter owns the string.
         await setAgentState("mode", DEFAULT_MODE);
+        // 4.25111.94: paused follows the mode from the first row on
+        // (owner's ruling): a new tenant is manual, therefore paused.
+        await setAgentState("paused", pausedForMode(DEFAULT_MODE));
         await setAgentState("corroboration", "disabled");
         // Model Provider selection through the SAME primitives the Model Provider
         // card uses: llmCredentialKeyFor names the credential,

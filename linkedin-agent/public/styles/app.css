@@ -315,7 +315,10 @@ body::after {
 .post-title-text {
   font-weight: 600;
   font-size: 0.95rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .post-preview {
@@ -323,8 +326,8 @@ body::after {
   font-size: 0.85rem;
   line-height: 1.5;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -332,7 +335,7 @@ body::after {
 .post-footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
@@ -347,9 +350,13 @@ body::after {
 }
 
 .post-date {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.03em;
 }
 
 .post-actions { display: flex; gap: 0.5rem; }

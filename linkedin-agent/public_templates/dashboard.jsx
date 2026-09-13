@@ -49,7 +49,7 @@
       const h = status && status.automation ? status.automation.reviewWindowHours : null;
       return Number.isInteger(h) && h >= 0 && h <= 24 * 366 ? h : null;
     }
-    const DASHBOARD_POLL_INTERVAL_MS = 15000;
+    const DASHBOARD_POLL_INTERVAL_MS = DASHBOARD_COPY.DASHBOARD_POLL_INTERVAL_MS;
     // 2.6.1: MIRROR SEAM: mirrors TENANT_FLAG.LLM_KEY_PRESENT in
     // src/services/tenant-meta.js. Consumers mask bits, never
     // compare the whole flags integer.
@@ -1316,7 +1316,7 @@
         setLoading(l => ({ ...l, statusChange: false }));
       }
 
-      const pendingStatusRank = (s) => (s === 'draft' ? 0 : s === 'pending_approval' ? 1 : s === 'scheduled' ? 2 : s === 'failed' ? 3 : 4);
+      const pendingStatusRank = (s) => (s === 'draft' ? 1 : s === 'pending_approval' ? 0 : s === 'scheduled' ? 3 : s === 'failed' ? 2 : 4);
       const pendingPosts = posts
         .filter(p => p.status === 'draft' || p.status === 'pending_approval' || p.status === 'scheduled' || p.status === 'failed')
         .sort((a, b) => pendingStatusRank(a.status) - pendingStatusRank(b.status));

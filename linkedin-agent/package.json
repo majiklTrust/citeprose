@@ -7,8 +7,9 @@
     "dashboard": {
       "copy": {
         "POSTS_API_FETCH_URI": "/api/posts?limit=500",
-        "LOGS_API_FETCH_URI": "/api/logs?limit=100",
+        "LOGS_API_FETCH_URI": "/api/logs?limit=20",
         "FORCE_CYCLE_API_FETCH_URI": "/api/force-cycle",
+        "DASHBOARD_POLL_INTERVAL_MS": "300000",
         "approveFailedAlertPrefix": "Failed to approve: ",
         "requeueFailedAlertPrefix": "Failed to requeue: ",
         "cardRequeueButton": "↩ Requeue",

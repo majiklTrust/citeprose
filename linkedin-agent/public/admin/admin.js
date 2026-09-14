@@ -1063,7 +1063,6 @@ function loadSpendSummary() {
             '<td class="num">' + escapeHtml(String(p.calls)) + '</td>' +
             '<td class="num">' + escapeHtml(String(p.input_tokens)) + '</td>' +
             '<td class="num">' + escapeHtml(String(p.output_tokens)) + '</td>' +
-            '<td class="num">' + escapeHtml(money(p.cost_estimate_usd)) + '</td>' +
             '</tr>';
         }).join('');
         aggBody.innerHTML = rows || '<tr><td colspan="7">No spend recorded in the last 30 days.</td></tr>';

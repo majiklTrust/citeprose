@@ -1,8 +1,8 @@
 {
   "name": "linkedin-ai-agent",
-  "version": "4.25111.98",
+  "version": "4.250111.71",
   "config": {
-    "cssversion": "121",
+    "cssversion": "122",
     "appname": "Market Intelligence",
     "dashboard": {
       "copy": {

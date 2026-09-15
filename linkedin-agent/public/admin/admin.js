@@ -960,6 +960,7 @@
     loadImageModel();
     loadImageDestination();
     loadSpendSummary();
+    loadWorkspaceDetails();
 
     $('invite-btn').addEventListener('click', createInvite);
     $('invite-email').addEventListener('keydown', function (e) {
@@ -1032,6 +1033,34 @@
       $('reg-verify-key-btn').addEventListener('click', verifyAdminKey);
     }
   });
+
+function loadWorkspaceDetails() {
+  // Own admin endpoint, mirroring loadSpendSummary and the other admin
+  // cards; behind the same owner gate. Does not ride on /api/status.
+  var el = $('workspace-details');
+  if (!el) return;
+  fetch(API + '/api/admin/workspace', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) { el.innerHTML = '<span class="empty">Unavailable</span>'; return; }
+      function dash(v) { return (v === null || v === undefined || v === '') ? '\u2014' : String(v); }
+      var rows = [
+        ['Workspace Name', dash(d.name)],
+        ['Tenant ID', dash(d.id)],
+        ['Plan', dash(d.plan)],
+        ['Org manager', dash(d.organizationManager)],
+        ['Advocacy', dash(d.advocacy)]
+      ];
+      var html = '<table class="kv-table"><tbody>';
+      rows.forEach(function (r) {
+        html += '<tr><td class="kv-key">' + escapeHtml(r[0]) + '</td>' +
+                '<td class="kv-val">' + escapeHtml(r[1]) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    })
+    .catch(function () { el.innerHTML = '<span class="empty">Unavailable</span>'; });
+}
 
 function loadSpendSummary() {
   fetch(API + '/api/admin/spend-summary', { credentials: 'include' })

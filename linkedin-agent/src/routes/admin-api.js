@@ -30,6 +30,7 @@ import {
 import { createAiConfigRoutes } from "./admin-ai-api.js";
 import { getBudgetStatus, dollarsToCents, MAX_BUDGET_DOLLARS } from "../services/image-budget.js";
 import { setAgentState, getAgentState } from "../services/database.js";
+import { subscriptionStatus } from "../services/entitlements.js";
 // 2.6.1: the Image Model section is now also the home for the image
 // vendor's API key (the shared credential store serves both seams).
 import { validateProviderKey } from "../llm/client.js";
@@ -453,6 +454,51 @@ router.get("/spend-summary", async (req, res) => {
     res.json({ windowDays: 30, byProvider: out.byProvider, recent: out.recent, activeTrials: trial });
   } catch (err) {
     platformLog("error", "spend_summary_failed", { error: err && err.message });
+    res.status(500).json({ error: "An internal error occurred" });
+  }
+});
+
+// ── Workspace details (owner only) ───────────────────────────
+// Read-only identity + entitlement summary for the admin page's
+// Workspace Details card. Inherits the owner gate from the router
+// stack above (auth, tenant, no dev bypass, manage_users).
+//
+// name and id come straight off req.tenant, resolved by the tenant
+// middleware, so no query. organization_manager is a tenant-scoped
+// agent_state read; plan and advocacy derive from the subscription,
+// whose capabilities default to [] so advocacy reads "disabled"
+// unless the tier grants it.
+router.get("/workspace", async (req, res) => {
+  try {
+    const orgManager = await withTenant(req.tenant.id, async () => {
+      return (await getAgentState("organization_manager")) === "disabled"
+        ? "disabled" : "enabled";
+    });
+
+    let plan = null;
+    let advocacy = "disabled";
+    try {
+      const sub = await subscriptionStatus(req.tenant.id, req.user ? req.user.sub : null);
+      const caps = (sub && sub.capabilities) || [];
+      plan = sub && sub.tier
+        ? (sub.tier + (sub.state && sub.state !== "active" ? " (" + sub.state + ")" : ""))
+        : (sub ? sub.state : null);
+      advocacy = caps.indexOf("employee_advocacy") !== -1 ? "enabled" : "disabled";
+    } catch (subErr) {
+      // A subscription lookup failure must not fail the whole card:
+      // plan stays null (renders as a dash), advocacy stays disabled.
+      platformLog("warn", "workspace_subscription_failed", { error: subErr && subErr.message });
+    }
+
+    res.json({
+      name: req.tenant.name || null,
+      id: req.tenant.id,
+      plan,
+      organizationManager: orgManager,
+      advocacy
+    });
+  } catch (err) {
+    platformLog("error", "workspace_details_failed", { error: err && err.message });
     res.status(500).json({ error: "An internal error occurred" });
   }
 });

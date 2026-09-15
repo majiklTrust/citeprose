@@ -19,6 +19,24 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
     th { font-weight: 600; color: #666; font-size: 0.85rem; text-transform: uppercase; }
+    /* Workspace details: a simple key/value table. */
+    .kv-table td { vertical-align: top; padding: 0.5rem; border-bottom: 1px solid #eee; }
+    .kv-table tr:last-child td { border-bottom: none; }
+    .kv-table td.kv-key { color: #666; font-weight: 600; white-space: nowrap; padding-right: 1rem; }
+    .kv-table td.kv-val { color: #222; word-break: break-word; }
+    /* Sub-heading for the members block nested under Workspace Details. */
+    .subsection-title { margin: 1.5rem 0 0.75rem; font-size: 0.95rem; color: #444;
+                        border-top: 1px solid #eee; padding-top: 1rem; }
+    /* Desktop: the wrapper is inert; the table sizes to the card. */
+    .table-scroll { overflow-x: visible; }
+    /* MOBILE ONLY: contain a wide table (e.g. a long auth id) inside the
+       card by scrolling horizontally, instead of overflowing the viewport. */
+    @media (max-width: 600px) {
+      .section { padding: 1rem; }
+      .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .table-scroll table { min-width: 100%; }
+      #members-list td:first-child { white-space: nowrap; }
+    }
     .role-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }
     .role-owner { background: #e8f5e9; color: #2e7d32; }
     .role-editor { background: #e3f2fd; color: #1565c0; }
@@ -236,9 +254,19 @@
         </div>
       </div>
 
+      <!-- Workspace details is the primary card; current members sit
+           beneath it in the same section, from GET /api/admin/workspace
+           and GET /api/admin/members respectively. -->
       <div class="section">
-        <h2>Current Members</h2>
-        <div id="members-list"><span class="empty">Loading...</span></div>
+        <h2>Workspace Details</h2>
+        <div class="table-scroll">
+          <div id="workspace-details"><span class="empty">Loading...</span></div>
+        </div>
+
+        <h3 class="subsection-title">Current Members</h3>
+        <div class="table-scroll">
+          <div id="members-list"><span class="empty">Loading...</span></div>
+        </div>
       </div>
 
       <div class="section">

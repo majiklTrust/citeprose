@@ -1356,7 +1356,7 @@
         setLoading(l => ({ ...l, statusChange: false }));
       }
 
-      const pendingStatusRank = (s) => (s === 'draft' ? 1 : s === 'pending_approval' ? 0 : s === 'scheduled' ? 3 : s === 'failed' ? 2 : 4);
+      const pendingStatusRank = (s) => (s === 'draft' ? 2 : s === 'pending_approval' ? 1 : s === 'scheduled' ? 0 : s === 'failed' ? 3 : 4);
       const pendingPosts = posts
         .filter(p => p.status === 'draft' || p.status === 'pending_approval' || p.status === 'scheduled' || p.status === 'failed')
         .sort((a, b) => pendingStatusRank(a.status) - pendingStatusRank(b.status));

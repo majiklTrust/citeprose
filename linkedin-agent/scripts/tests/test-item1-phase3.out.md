@@ -2,7 +2,7 @@
 ## BEFORE
 ```
 hk_LinkedIn_Agent-development (ubuntu) (4.250111.x/generation-lab/integration-master)
-brandonindia-mcs-progress-id_rsa: ***REMOVED***
+brandonindia-mcs-progress-id_rsa: git@github.com:brandonindia-mcs/LinkedIn_Agent.git
 2026-08-27 13:33 -0500 (CDT) | 18:33:32 UTC development[~/appdev/src/LinkedIn_Agent/linkedin-agent/scripts/tests]
  tests/$ PHASE=before RUN_PAID=1 ./test-item1-phase3.sh
 == test-item1-phase3: PHASE=before BASE_URL=http://localhost:3001 sample_every=2s xact_age_limit=2500ms preview_cap_expect=3 app_root=/home/ubuntu/appdev/src/LinkedIn_Agent/linkedin-agent ==

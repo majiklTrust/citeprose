@@ -1,13 +1,13 @@
-# robots.txt for www.***REMOVED***
+# robots.txt for www.majikl.com
 # Scope: hide ONLY the single ghost page from compliant crawlers. The rest of the
 # site stays crawlable and indexable as normal.
 #
-# Place this file at the site root so it is served at https://www.***REMOVED***/robots.txt
+# Place this file at the site root so it is served at https://www.majikl.com/robots.txt
 #
 # ============================================================================
 # READ THIS FIRST: path-disclosure tradeoff
 # ============================================================================
-# robots.txt is world-readable. Anyone can open https://www.***REMOVED***/robots.txt
+# robots.txt is world-readable. Anyone can open https://www.majikl.com/robots.txt
 # and see every path listed below. Scrapers routinely harvest robots.txt to
 # discover "interesting" paths. That means naming your ghost page here publicly
 # advertises its exact URL, which partially works against keeping it secret.

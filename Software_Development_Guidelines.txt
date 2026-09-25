@@ -11,7 +11,7 @@ LIVE APPLICATION
 - deployed to an AWS VPC EC2 instance of Ubuntu 24.04 and sits behind an ALB and has a static S3 website on Cloudfront.
 - The data layer is a Postgresql OLTP database running on a rootless Podmain container and hosted on the local EC2 instance.
 - connects to a postgres OLTP database that is served via Podman.
-- The live URL is alpha.***REMOVED***.
+- The live URL is alpha.majikl.com.
 
 SYSTEM FACTS
 - Code generation will be installed first in a local devenv on the devtest environment.  No Cloud services are in scope unless I explicitly say they are.

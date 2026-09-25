@@ -19,7 +19,7 @@
 // RLS bypass:
 //   All queries execute inside a transaction with SET LOCAL ROLE
 //   to the platform admin database role (env: PLATFORM_ADMIN_DB_ROLE,
-//   default: ***REMOVED***). This role bypasses RLS so the super
+//   default: agent_super). This role bypasses RLS so the super
 //   user sees all tenant data without per-tenant context switching.
 //   SET LOCAL is transaction-scoped — the pooled connection reverts
 //   to the app role on COMMIT/ROLLBACK. No leaked privileges.
@@ -52,7 +52,7 @@ const router = Router();
 
 // Database role for platform admin queries. Must have privileges
 // to read/write tenant tables and bypass RLS. The app role needs:
-//   GRANT ***REMOVED*** TO linkedin_agent_app;
+//   GRANT agent_super TO linkedin_agent_app;
 // so SET LOCAL ROLE succeeds.
 // Resolved lazily on first call to createPlatformAdminRoutes()
 // so that dotenv.config() has already run.

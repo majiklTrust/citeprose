@@ -6,9 +6,9 @@ services:
     ports:
       - 5432:5432
     environment:
-      POSTGRES_USER: ***REMOVED***
-      POSTGRES_PASSWORD: ***REMOVED***
-      POSTGRES_DB: ***REMOVED***
+      POSTGRES_USER: agent_super
+      POSTGRES_PASSWORD: P@ssw0rd!
+      POSTGRES_DB: linkedin_posting_database
     volumes:
       - pgdata_marketing_ai_application:/var/lib/postgresql/data
       - ./bootstrap:/docker-entrypoint-initdb.d

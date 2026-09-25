@@ -10,10 +10,10 @@
 
 ## APPLICATION ENVIRONMENTS
 
-- The "live" environment is a full-featured hosted on AWS at URL `***REMOVED***`. Static web content stored on S3, served through CloudFront. Use Cloudflare for DNS with CNAME flattening with a canonical redirect to resolve `www.`, `app0.`, and `***REMOVED***` all the same.
+- The "live" environment is a full-featured hosted on AWS at URL `majikl.com`. Static web content stored on S3, served through CloudFront. Use Cloudflare for DNS with CNAME flattening with a canonical redirect to resolve `www.`, `app0.`, and `majikl.com` all the same.
 - The "devenv" environment is a full-featured local development, devtest, environment that goes through Auth0 for authentication.
 - The "override" environment is a full-featured local development environment that has `DEV_BYPASS_ORIGINS` and `DEV_BYPASS_SUB` set.
-- The "alpha" environment is a full-featured hosted on AWS at URL `***REMOVED***`. Static web content stored on S3, served through CloudFront.
+- The "alpha" environment is a full-featured hosted on AWS at URL `majikl.com`. Static web content stored on S3, served through CloudFront.
 
 ## MANDATORY AI "SOFT SKILLS"
 

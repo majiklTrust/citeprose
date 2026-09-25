@@ -10,8 +10,8 @@
 set -euo pipefail
 
 CONTAINER_NAME="${CONTAINER_NAME:-marketing_ai_instance}"
-POSTGRES_USER="${POSTGRES_USER:-***REMOVED***}"
-POSTGRES_DB="${POSTGRES_DB:-***REMOVED***}"
+POSTGRES_USER="${POSTGRES_USER:-agent_super}"
+POSTGRES_DB="${POSTGRES_DB:-linkedin_posting_database}"
 EXPECTED_BIND="${EXPECTED_BIND:-127.0.0.1:5432}"
 
 PASS=0

@@ -6,7 +6,7 @@
 // "which tenant does this logged-in user belong to?"
 //
 // Uses the shared pool directly. No withTenant wrapper needed.
-// The ***REMOVED*** role has SELECT-only access to these
+// The liagt_app_runtime role has SELECT-only access to these
 // tables via the grants in 04-roles.sql.
 // ═══════════════════════════════════════════════════════════════
 

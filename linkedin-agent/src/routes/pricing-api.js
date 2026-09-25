@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// pricing-api.js: the public plan read for ***REMOVED***/pricing.html
+// pricing-api.js: the public plan read for alpha-site/pricing.html
 // ═══════════════════════════════════════════════════════════════
 // GET /api/pricing needs no session and resolves no tenant. It
 // answers the tier list and the same display catalog GET /api/billing

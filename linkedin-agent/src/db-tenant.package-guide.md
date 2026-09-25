@@ -86,7 +86,7 @@ import { query } from './db/pool.js';
 
 // One-shot read, no tenant context
 const result = await query('SELECT current_user AS u');
-console.log(result.rows[0].u);  // → '***REMOVED***'
+console.log(result.rows[0].u);  // → 'liagt_app_runtime'
 ```
 
 **When NOT to use:** For any query against tenant-scoped tables (`posts`, `articles`, `agent_state`, etc.), use `withTenant()` instead — RLS will return zero rows otherwise.

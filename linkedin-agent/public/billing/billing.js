@@ -194,7 +194,7 @@
         // 2.5.101: the portal CTAs speak for themselves; the hint
         // renders only when there is no self-serve path.
         if (!sub.portalUrl) {
-          html += '<p class="hint">To change your plan, contact us at accountadmin@***REMOVED***.</p>';
+          html += '<p class="hint">To change your plan, contact us at accountadmin@majikl.com.</p>';
         }
       }
       if (sub.state === 'suspended') html += '<button class="btn" id="reactivate">Reactivate</button>';

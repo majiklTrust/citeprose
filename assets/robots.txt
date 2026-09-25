@@ -1,6 +1,6 @@
-# robots.txt for www.***REMOVED***
+# robots.txt for www.majikl.com
 # Purpose: ask all well-behaved crawlers, search engines, and AI scrapers to stay away.
-# Place this file at the site root so it is served at https://www.***REMOVED***/robots.txt
+# Place this file at the site root so it is served at https://www.majikl.com/robots.txt
 #
 # IMPORTANT tradeoff, read before using:
 # robots.txt requests crawlers NOT to fetch the page. The X-Robots-Tag HTTP header

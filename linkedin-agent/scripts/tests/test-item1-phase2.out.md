@@ -169,7 +169,7 @@ The fix is small and delivery-ready: `await yieldDb();` before the orchestrated 
 ## BEFORE
 ```bash
 hk_LinkedIn_Agent-development (ubuntu) (HEAD)
-brandonindia-mcs-progress-id_rsa: ***REMOVED***
+brandonindia-mcs-progress-id_rsa: git@github.com:brandonindia-mcs/LinkedIn_Agent.git
 2026-08-26 09:40 -0500 (CDT) | 14:40:32 UTC development[~/appdev/src/LinkedIn_Agent/linkedin-agent/scripts/tests]
  tests/$ PHASE=before RUN_PAID=1 ./test-item1-phase2.sh
 == test-item1-phase2: PHASE=before BASE_URL=http://localhost:3001 sample_every=2s xact_age_limit=2500ms app_root=/home/ubuntu/appdev/src/LinkedIn_Agent/linkedin-agent ==
@@ -244,7 +244,7 @@ METRIC suite_spend_usd=0.043315
 ## AFTER
 ```bash
 hk_LinkedIn_Agent-development (ubuntu) (HEAD)
-brandonindia-mcs-progress-id_rsa: ***REMOVED***
+brandonindia-mcs-progress-id_rsa: git@github.com:brandonindia-mcs/LinkedIn_Agent.git
 2026-08-26 09:42 -0500 (CDT) | 14:42:18 UTC development[~/appdev/src/LinkedIn_Agent/linkedin-agent/scripts/tests]
  tests/$ PHASE=after RUN_PAID=1 ./test-item1-phase2.sh
 == test-item1-phase2: PHASE=after BASE_URL=http://localhost:3001 sample_every=2s xact_age_limit=2500ms app_root=/home/ubuntu/appdev/src/LinkedIn_Agent/linkedin-agent ==

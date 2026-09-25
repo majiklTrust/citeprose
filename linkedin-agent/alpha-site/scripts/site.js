@@ -177,7 +177,7 @@
   //   encodeURIComponent is applied to every field. A raw newline,
   //   ampersand or hash in the message would otherwise truncate the
   //   body or forge extra mailto headers such as cc or bcc.
-  var CONTACT_TO = 'brandon@***REMOVED***';
+  var CONTACT_TO = 'brandon@majikl.com';
   var CONTACT_REDIRECT = 'about.html';
   var CONTACT_HANDOFF_MS = 400;
 

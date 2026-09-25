@@ -1,7 +1,7 @@
 ## BEFORE
 ```bash
 hk_LinkedIn_Agent-development (ubuntu) (4.250111.x/generation-lab/integration-master)
-brandonindia-mcs-progress-id_rsa: ***REMOVED***
+brandonindia-mcs-progress-id_rsa: git@github.com:brandonindia-mcs/LinkedIn_Agent.git
 2026-08-25 16:17 -0500 (CDT) | 21:17:57 UTC development[~/appdev/src/LinkedIn_Agent/linkedin-agent/scripts/tests]
  tests/$ PHASE=before RUN_PAID=1 ./test-item1-phase2.sh
 == test-item1-phase2: PHASE=before BASE_URL=http://localhost:3001 sample_every=2s xact_age_limit=2500ms app_root=/home/ubuntu/appdev/src/LinkedIn_Agent/linkedin-agent ==
@@ -78,7 +78,7 @@ METRIC suite_spend_usd=0.042891
 ## AFTER
 ```bash
 hk_LinkedIn_Agent-development (ubuntu) (4.250111.x/generation-lab/integration-master)
-brandonindia-mcs-progress-id_rsa: ***REMOVED***
+brandonindia-mcs-progress-id_rsa: git@github.com:brandonindia-mcs/LinkedIn_Agent.git
 2026-08-25 16:19 -0500 (CDT) | 21:19:27 UTC development[~/appdev/src/LinkedIn_Agent/linkedin-agent/scripts/tests]
  tests/$ PHASE=after RUN_PAID=1 ./test-item1-phase2.sh
 == test-item1-phase2: PHASE=after BASE_URL=http://localhost:3001 sample_every=2s xact_age_limit=2500ms app_root=/home/ubuntu/appdev/src/LinkedIn_Agent/linkedin-agent ==

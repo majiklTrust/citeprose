@@ -1,4 +1,4 @@
-# Making www.***REMOVED*** an "internet ghost"
+# Making www.majikl.com an "internet ghost"
 
 Goal: the page stays fully public with no login, but search engines and crawlers do not
 index it, do not list it, and ideally never fetch it. It is reachable only by someone who
@@ -81,18 +81,18 @@ Netlify also serves your robots.txt automatically if it is in the publish direct
 ### Cloudflare in front of any origin (Transform Rule)
 
 If Cloudflare proxies the domain, add a Response Header Transform Rule:
-set X-Robots-Tag to the value above for all requests on ***REMOVED***.
+set X-Robots-Tag to the value above for all requests on majikl.com.
 
 ## Verify it is working
 
 After deploy, from a terminal:
 
-    curl -sI https://www.***REMOVED***/ | grep -i x-robots-tag
-    curl -s  https://www.***REMOVED***/robots.txt
+    curl -sI https://www.majikl.com/ | grep -i x-robots-tag
+    curl -s  https://www.majikl.com/robots.txt
 
 The first should print the X-Robots-Tag line. The second should print the disallow rules.
 You can also paste the URL into a search engine with a site: query, for example
-`site:***REMOVED***`, and confirm nothing shows up once crawlers have re-processed the site.
+`site:majikl.com`, and confirm nothing shows up once crawlers have re-processed the site.
 If the page was ever indexed before, use Google Search Console's Removals tool and Bing
 Webmaster Tools to speed up removal; the noindex header will keep it out going forward.
 
@@ -111,7 +111,7 @@ Being honest so there are no surprises.
    and even that is an ongoing cat-and-mouse effort. The genuinely reliable hard control is
    authentication, which you have ruled out.
 
-3. The hostname is not a secret. When you get a TLS certificate for www.***REMOVED***, the
+3. The hostname is not a secret. When you get a TLS certificate for www.majikl.com, the
    hostname is published in public Certificate Transparency logs. Anyone can discover that
    the hostname exists by searching those logs, for example on crt.sh. They will not get the
    page content or the path, but the existence of the host is public. If even the hostname

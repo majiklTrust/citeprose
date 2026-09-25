@@ -72,9 +72,9 @@ Comma-separated CORS allowlist. Split, trimmed, trailing slashes stripped, then 
 **If unset / missing:** The explicit cross-origin contribution is empty, so the CORS allowlist reduces to just the normalized `AUTH0_PUBLIC_ORIGIN` plus the resolved server origin (the empty entry is dropped by `.filter(Boolean)`). CORS stays default-deny — nothing is opened — but any *legitimately separate* front-end origin (e.g. the CloudFront/S3 site calling the ALB API on a different host) is CORS-blocked until you add it here. Safe by default; a silent functional outage only for a genuinely cross-origin front end.
 
 **Example settings** — comma-separated origins; no numeric range.
-1. *Standard / safe* — `ALLOWED_ORIGINS=https://app.***REMOVED***` — adds one extra browser origin to the default-deny allowlist.
+1. *Standard / safe* — `ALLOWED_ORIGINS=https://app.majikl.com` — adds one extra browser origin to the default-deny allowlist.
 2. *Null / empty* — `ALLOWED_ORIGINS=` (or unset) — allowlist reduces to `AUTH0_PUBLIC_ORIGIN` + the server's own origin.
-3. *Several* — `ALLOWED_ORIGINS=https://app.***REMOVED***,https://admin.***REMOVED***` — multiple front-end origins.
+3. *Several* — `ALLOWED_ORIGINS=https://app.majikl.com,https://admin.majikl.com` — multiple front-end origins.
 
 ---
 
@@ -170,7 +170,7 @@ export function getServerAddress() {
 **If unset / missing:** `getServerAddress()` takes Path 2 and *infers* the origin from the bound socket (using `DASHBOARD_PORT`, default 3001). In dev that yields a correct `localhost:3001` origin. In production behind the ALB/CloudFront the inferred origin is the internal bind address, not the public URL, so any other consumer of `getServerAddress()` would see an internal origin. CORS is not broken by this as long as `AUTH0_PUBLIC_ORIGIN` is set (it is added to the allowlist separately), but you should set `APP_BASE_URL` in production so derived URLs are canonical.
 
 **Example settings** — a base URL; no numeric range.
-1. *Standard* — `APP_BASE_URL=https://alpha.***REMOVED***` — explicit public origin (recommended in production).
+1. *Standard* — `APP_BASE_URL=https://alpha.majikl.com` — explicit public origin (recommended in production).
 2. *Null* — `APP_BASE_URL=` (or unset) — origin is inferred from the bound socket via `DASHBOARD_PORT`.
 
 ---
@@ -311,7 +311,7 @@ Post-logout redirect target. When unset, derived from the public origin (`${orig
 **If unset / missing:** Derived from the public origin as `${origin}/`. Benign as long as the origin resolves. If the origin is *also* empty (production with `AUTH0_PUBLIC_ORIGIN` unset), the logout URI becomes `""` and `init()` fails loud by design. So unset alone is fine — it only matters jointly with a missing origin.
 
 **Example settings** — a URL; no numeric range.
-1. *Standard* — `AUTH0_LOGOUT_URI=https://alpha.***REMOVED***/` — explicit post-logout target.
+1. *Standard* — `AUTH0_LOGOUT_URI=https://alpha.majikl.com/` — explicit post-logout target.
 2. *Null* — `AUTH0_LOGOUT_URI=` (or unset) — derived as `${origin}/` (empty in production if the origin is also unset → fail-loud).
 
 ---
@@ -339,7 +339,7 @@ The public origin users load the app from — source of truth for redirect/logou
 **If unset / missing:** In dev it defaults to `http://localhost:${DASHBOARD_PORT}` and everything works. In **production** (`isProd`) it resolves to `""`, which cascades the redirect/logout URIs to empty and makes `init()` **fail loud** — intentional, to prevent a localhost value leaking into production. It is also dropped from the CORS allowlist when empty. Net: a required production variable whose absence is caught loudly rather than silently.
 
 **Example settings** — a URL; no numeric range.
-1. *Standard* — `AUTH0_PUBLIC_ORIGIN=https://alpha.***REMOVED***` — required in production.
+1. *Standard* — `AUTH0_PUBLIC_ORIGIN=https://alpha.majikl.com` — required in production.
 2. *Null* — `AUTH0_PUBLIC_ORIGIN=` (or unset) — dev: defaults to `http://localhost:${DASHBOARD_PORT}`; production: fails loud.
 
 ---
@@ -357,7 +357,7 @@ OAuth callback URL. Overrides the origin-derived `${origin}/auth/callback` when 
 **If unset / missing:** Derived as `${origin}/auth/callback`. Benign provided the origin resolves *and* the derived URL is registered as an Allowed Callback URL in Auth0. If the origin is empty (production without `AUTH0_PUBLIC_ORIGIN`) it becomes `""` and `init()` fails loud. Unset alone is acceptable; the derived value must match Auth0's configuration.
 
 **Example settings** — a URL; no numeric range.
-1. *Standard* — `AUTH0_REDIRECT_URI=https://alpha.***REMOVED***/auth/callback` — must be an Auth0 Allowed Callback URL.
+1. *Standard* — `AUTH0_REDIRECT_URI=https://alpha.majikl.com/auth/callback` — must be an Auth0 Allowed Callback URL.
 2. *Null* — `AUTH0_REDIRECT_URI=` (or unset) — derived as `${origin}/auth/callback`.
 
 ---
@@ -1025,7 +1025,7 @@ OAuth `redirect_uri` sent in both the authorize request and the token exchange. 
 **If unset / missing:** There is **no guard**, so `redirect_uri` is `undefined` and `URLSearchParams` serializes it as the literal string `"undefined"` in both the authorize URL and the token-exchange body. The two legs "match each other" but match nothing registered, so LinkedIn rejects the flow with an opaque `redirect_uri` error and no fast-fail. This is the open recommendation: add a one-line startup presence check (it is public config, safe to log).
 
 **Example settings** — a URL (sent verbatim; **no guard**); no numeric range.
-1. *Standard* — `LINKEDIN_REDIRECT_URI=https://alpha.***REMOVED***/auth/linkedin/callback` — must match the value registered in your LinkedIn app.
+1. *Standard* — `LINKEDIN_REDIRECT_URI=https://alpha.majikl.com/auth/linkedin/callback` — must match the value registered in your LinkedIn app.
 2. *Null* — `LINKEDIN_REDIRECT_URI=` (or unset) — the literal string `undefined` is sent to LinkedIn and the flow fails opaquely.
 
 ---
@@ -1395,7 +1395,7 @@ if (!PGDATABASE) die(3, "PGDATABASE missing from .env");
 **If unset / missing:** `("").trim()` is empty → the pool throws `"Missing required environment variable: PGDATABASE"` at load and the app **cannot start** (the `dbshell`/`verify` CLI dies the same way). Fail-closed. Plaintext by design, and intentionally not scrubbed so the banner can display it.
 
 **Example settings** — plaintext (not a secret), required; no numeric range.
-1. *Standard* — `PGDATABASE=***REMOVED***` — the live database name (empty/unset → boot throws).
+1. *Standard* — `PGDATABASE=linkedin_posting_database` — the live database name (empty/unset → boot throws).
 
 ---
 
@@ -1639,7 +1639,7 @@ Public origin used to build the registration link in the invite email. Falls bac
 **If unset / missing:** The registration link is built from the incoming request's own `protocol://host`. Usually fine, but it inherits whatever Express sees: behind a proxy that doesn't set `X-Forwarded-*` (or without `trust proxy` configured), `req.protocol`/`req.get("host")` can be the internal values, producing an invite URL that points at an internal host. Setting it explicitly removes that proxy dependency.
 
 **Example settings** — a URL; no numeric range.
-1. *Standard* — `PUBLIC_ORIGIN=https://alpha.***REMOVED***` — explicit origin for the invite link.
+1. *Standard* — `PUBLIC_ORIGIN=https://alpha.majikl.com` — explicit origin for the invite link.
 2. *Null* — `PUBLIC_ORIGIN=` (or unset) — built from the request's own `protocol://host` (proxy-dependent).
 
 ---

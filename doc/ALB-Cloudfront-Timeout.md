@@ -33,7 +33,7 @@
 
 | Path | Breakdown | Total | How to check which mode is active |
 |---|---|---|---|
-| Corroboration **ON** | research AI call (15s) + wait (65s) + corroboration AI call (15s) + wait (65s) + writing AI call (15s) + quality review AI call (10s) | **~185s** | `sudo -u ubuntu podman exec marketing_ai_instance psql -U ***REMOVED*** -d ***REMOVED*** -c "SELECT tenant_id, value FROM agent_state WHERE key = 'corroboration'"` — result of `disabled` means OFF, `enabled` or missing means ON |
+| Corroboration **ON** | research AI call (15s) + wait (65s) + corroboration AI call (15s) + wait (65s) + writing AI call (15s) + quality review AI call (10s) | **~185s** | `sudo -u ubuntu podman exec marketing_ai_instance psql -U agent_super -d linkedin_posting_database -c "SELECT tenant_id, value FROM agent_state WHERE key = 'corroboration'"` — result of `disabled` means OFF, `enabled` or missing means ON |
 | Corroboration **OFF** | research AI call (15s) + wait (65s) + writing AI call (15s) + quality review AI call (10s) | **~105s** | Same command above |
 
 **The gap:** CloudFront gives up at 120s. With corroboration off, the pipeline takes ~105s (fits, but tight). With corroboration on, ~185s (always fails). Even raising CloudFront to its maximum of 180s only covers the corroboration-off path with comfortable margin — the corroboration-on path still exceeds it.

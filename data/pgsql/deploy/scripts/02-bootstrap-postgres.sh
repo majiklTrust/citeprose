@@ -31,8 +31,8 @@ HOST_PORT_BIND="${HOST_PORT_BIND:-127.0.0.1:5432:5432}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-4g}"
 MEMORY_SWAP="${MEMORY_SWAP:-4g}"
 CPU_LIMIT="${CPU_LIMIT:-1.5}"
-POSTGRES_USER="${POSTGRES_USER:-***REMOVED***}"
-POSTGRES_DB="${POSTGRES_DB:-***REMOVED***}"
+POSTGRES_USER="${POSTGRES_USER:-agent_super}"
+POSTGRES_DB="${POSTGRES_DB:-linkedin_posting_database}"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
 
 # ---- Preflight checks --------------------------------------------------------

@@ -146,8 +146,8 @@ case $i in
     local _15_SECONDS=15
       export PGHOST=localhost
       export PGPORT=5432
-      export PGUSER=***REMOVED***
-      export PGDATABASE=***REMOVED***
+      export PGUSER=agent_super
+      export PGDATABASE=linkedin_posting_database
     BAK=$(do_pgbackup)
     SCPCMD "/home/ubuntu/marketing-ai/db-backup-store/$BAK" "."
     pip install boto3
@@ -156,7 +156,7 @@ import boto3
 s3 = boto3.client("s3")
 url = s3.generate_presigned_url(
     ClientMethod="put_object",
-    Params={"Bucket": "***REMOVED***", "Key": "pgsql/$BAK"},
+    Params={"Bucket": "majikl-com-frontend", "Key": "pgsql/$BAK"},
     ExpiresIn=$_15_SECONDS
 )
 print(url)
@@ -168,7 +168,7 @@ EOF
 
     # RUN THE BACKUP FROM
     backup_agent=developer
-    deploy=/home/${backup_agent}/appdev/active/alpha.***REMOVED***/linkedin-agent/deploy
+    deploy=/home/${backup_agent}/appdev/active/alpha.majikl.com/linkedin-agent/deploy
     INSTANCE_USER=ubuntu
     INSTANCE_ID=$(grep INSTANCE_ID ${deploy}/.deploy-state | tail -1 | cut -d= -f2)
     SSH_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $(grep INSTANCE_ID ${deploy}/.deploy-state | tail -1 | cut -d= -f2) --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)

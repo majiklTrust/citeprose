@@ -8,7 +8,7 @@ caller exists on any input path.
 ## Scope and method
 
 Files analyzed: 103 Node modules under `src/`, `scripts/`, and the repo root.
-Excluded from the primary pass: browser code under `public/` and `***REMOVED***/`
+Excluded from the primary pass: browser code under `public/` and `alpha-site/`
 (reachability there is driven by HTML and DOM events, not module imports), and
 `src_templates/index.js` and `public_templates/` (build-time source copies of
 generated artifacts).

@@ -173,7 +173,7 @@ Stored LinkedIn credentials are encrypted at rest in the `credentials` table via
 - **IV**: 12 random bytes per encryption operation (`crypto.randomBytes(12)`)
 - **Derived-key cache**: in-process `Map<tenantId, Buffer>`, populated on first decrypt for that tenant, never explicitly cleared
 
-The `credentials` table itself is RLS-protected: `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY` plus a `tenant_isolation` policy of `tenant_id = current_tenant_id()`. The application role `***REMOVED***` does not have `BYPASSRLS`.
+The `credentials` table itself is RLS-protected: `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY` plus a `tenant_isolation` policy of `tenant_id = current_tenant_id()`. The application role `liagt_app_runtime` does not have `BYPASSRLS`.
 
 Plaintext access tokens appear in memory three places:
 1. **In `tokens.accessToken`** inside the OAuth callback handler, where they're passed to `storeCredential`, then go out of scope when the request completes.

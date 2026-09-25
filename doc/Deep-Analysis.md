@@ -51,7 +51,7 @@ The codebase has shifted significantly since the `appdev & deploy` transcript en
 
 There are three entry surfaces, each serving a distinct functional purpose:
 
-**`/` — the marketing homepage** (`***REMOVED***/index.html`). Branded "majiklTrust, Market Intelligence". Static HTML+CSS with one JS file (`scripts/site.js`) that does exactly one thing: probes `/auth/status` on page load, then adapts CTAs based on the result. If the visitor is signed in, the "Visit Dashboard" buttons point to `/app` and a user greeting appears in the header; if not, they point to `/auth/login`; if the probe fails, a degraded banner appears and CTAs disable. The hero copy is unusually restrained — "Inspired Research, your thoughts, your terms" — and the footnote says "Private alpha · Invitation only", which is consistent with the registration flow you've actually built (token-based, admin-issued).
+**`/` — the marketing homepage** (`alpha-site/index.html`). Branded "majiklTrust, Market Intelligence". Static HTML+CSS with one JS file (`scripts/site.js`) that does exactly one thing: probes `/auth/status` on page load, then adapts CTAs based on the result. If the visitor is signed in, the "Visit Dashboard" buttons point to `/app` and a user greeting appears in the header; if not, they point to `/auth/login`; if the probe fails, a degraded banner appears and CTAs disable. The hero copy is unusually restrained — "Inspired Research, your thoughts, your terms" — and the footnote says "Private alpha · Invitation only", which is consistent with the registration flow you've actually built (token-based, admin-issued).
 
 **`/app/register` — invitation-based signup** (`public/register/`). Unauthenticated, token-gated. A new tenant arrives via an email link containing a registration token, validates it, optionally enters their own Anthropic API key (BYOK), picks a model, chooses a workspace slug + name, and the system provisions a tenant + initial owner membership in one shot. The token has a TTL (`getRegistrationTTL()` in platform-db.js), the admin-issued API key is itself stored encrypted-at-rest during the registration window (`encryptForRegistration` / `decryptForRegistration` use a registration-id-derived key), and `expireStaleRegistrations` cleans up unfinished invitations. This is a *real* onboarding pipeline, not a placeholder.
 
@@ -111,7 +111,7 @@ ALTER TABLE ... ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ... FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON ... USING (tenant_id = current_tenant_id());
 ```
-`current_tenant_id()` reads `app.current_tenant_id` from `current_setting()`. The Node side (`with-tenant.js`) uses `AsyncLocalStorage` to carry the tenant through the call stack and `set_config('app.current_tenant_id', $1, true)` to set it per transaction. `FORCE ROW LEVEL SECURITY` closes the table-owner-bypass hole. The `***REMOVED***` role explicitly does **not** have `BYPASSRLS` — only `linkedin_agent_admin` does, for migrations.
+`current_tenant_id()` reads `app.current_tenant_id` from `current_setting()`. The Node side (`with-tenant.js`) uses `AsyncLocalStorage` to carry the tenant through the call stack and `set_config('app.current_tenant_id', $1, true)` to set it per transaction. `FORCE ROW LEVEL SECURITY` closes the table-owner-bypass hole. The `liagt_app_runtime` role explicitly does **not** have `BYPASSRLS` — only `linkedin_agent_admin` does, for migrations.
 
 **Defense in depth**, exactly as the SQL comments claim: (1) RLS in the database, (2) composite FK pattern in the schema, (3) explicit tenant scoping in the application via `withTenant`. All three would have to fail simultaneously for cross-tenant data exposure.
 
@@ -165,7 +165,7 @@ Lines 50–80 of `routes/api.js` register a middleware that runs *before* `requi
 
 Twenty-two scripts in `deploy/`, sequentially numbered with `config.sh` sourced by all. Reading them straight through:
 
-`config.sh` → region/domain/CIDR/instance type (`m7i-flex.large`), Ubuntu 24.04 LTS AMI from Canonical (`***REMOVED***`), `ubuntu` SSH user, port 3001, `***REMOVED***` / `alpha.***REMOVED***`.
+`config.sh` → region/domain/CIDR/instance type (`m7i-flex.large`), Ubuntu 24.04 LTS AMI from Canonical (`099720109477`), `ubuntu` SSH user, port 3001, `majikl.com` / `alpha.majikl.com`.
 
 The phases: `01-vpc-network` → `02-security` (security groups) → `03-certificate` + `03b-wait-cert` (ACM) → `04-compute` (EC2 + EBS gp3 20GB + Elastic IP) → `04b-database` (Postgres via Podman on the same EC2; clones the GitHub repo too) → `05-loadbalancer` (ALB) → `06-application` (deploys via SSH + PM2) → `06a-validation` → `07-verify` → `08-cloudfront` → `08b-wait-cloudfront` → `08c-lockdown-alb` (restricts ALB to CloudFront-only after CF is live) → `08x-cloudfront` (the teardown).
 

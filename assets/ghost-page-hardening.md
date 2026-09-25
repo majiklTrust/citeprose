@@ -1,4 +1,4 @@
-# Hardening the secret-URL page (www.***REMOVED***) without adding a login
+# Hardening the secret-URL page (www.majikl.com) without adding a login
 
 Your design is a capability URL: the long unguessable path is the only secret, the page is
 public, and noindex keeps it out of search. This document keeps that model but plugs the
@@ -25,13 +25,13 @@ Nginx:
 
     server {
         listen 80;
-        server_name www.***REMOVED*** ***REMOVED***;
-        return 301 https://www.***REMOVED***$request_uri;
+        server_name www.majikl.com majikl.com;
+        return 301 https://www.majikl.com$request_uri;
     }
 
     server {
         listen 443 ssl;
-        server_name www.***REMOVED***;
+        server_name www.majikl.com;
         # ... ssl_certificate etc ...
         add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     }
@@ -120,7 +120,7 @@ secret.
 
 You then hand out URLs of the form:
 
-    https://www.***REMOVED***/YOUR-SECRET-PATH.html?exp=<unix-expiry>&sig=<base64url-md5-hmac>
+    https://www.majikl.com/YOUR-SECRET-PATH.html?exp=<unix-expiry>&sig=<base64url-md5-hmac>
 
 Generate the signature server-side. Rotating YOUR_SERVER_SIDE_SECRET instantly invalidates
 every link ever issued.

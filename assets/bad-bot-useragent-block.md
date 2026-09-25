@@ -1,4 +1,4 @@
-# Server-level hard block for the worst-behaved scrapers (www.***REMOVED***)
+# Server-level hard block for the worst-behaved scrapers (www.majikl.com)
 
 This is a different layer from robots.txt and the noindex tags. Those are polite requests
 that good crawlers honor. This layer is a hard block: it inspects the User-Agent on every
@@ -118,7 +118,7 @@ that catches many UA-spoofing scrapers the list above cannot.
 Replace the host and try a blocked User-Agent. You should get 403; a normal browser UA should
 get 200.
 
-    curl -s -o /dev/null -w "%{http_code}\n" -A "AhrefsBot/7.0" https://www.***REMOVED***/
-    curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" https://www.***REMOVED***/
+    curl -s -o /dev/null -w "%{http_code}\n" -A "AhrefsBot/7.0" https://www.majikl.com/
+    curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" https://www.majikl.com/
 
 The first should print 403, the second 200.

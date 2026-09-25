@@ -193,7 +193,7 @@ export function createApp(ctx) {
 
   // Static file surfaces
   const dashboardHtml = path.join(__dirname, "../public/index.html");
-  const alphaDir = path.join(__dirname, "../***REMOVED***");
+  const alphaDir = path.join(__dirname, "../alpha-site");
   const alphaHtml = path.join(alphaDir, "index.html");
 
   // Static cache policy (1.8.14). ETags are disabled above and the
@@ -857,7 +857,7 @@ export function createApp(ctx) {
   // exempts this path so a suspended owner can always reactivate.
   instance.use("/api/billing", createBillingRoutes());
 
-  // Public plan read for ***REMOVED***/pricing.html (no auth, no tenant).
+  // Public plan read for alpha-site/pricing.html (no auth, no tenant).
   // Must be before apiRoutes (api.js's guard 404s unknown /api/*).
   instance.use("/api/pricing", createPricingRoutes());
 

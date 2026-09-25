@@ -1,4 +1,4 @@
-!#/bin/bash
+#!/bin/bash
 # npm run endpoints |
 # $(which grep) -E "^router" |
 # # grep -Po '^router\.(get|post|put|patch|delete)\("([^"]+)"(?:,\s*(optionalAuth|requirePermission\("([^"]+)"\)))?,\s*async' |
